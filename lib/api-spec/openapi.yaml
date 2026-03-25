@@ -1,22 +1,35 @@
 openapi: 3.1.0
 info:
-  # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: NoorPath - Muslim Parenting & Quran Learning App API
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: children
+    description: Child profile management
+  - name: progress
+    description: Learning progress tracking
+  - name: memorization
+    description: Quran memorization (hifz) management
+  - name: review
+    description: Review sessions and spaced repetition
+  - name: stories
+    description: Islamic stories
+  - name: duas
+    description: Duaas to learn
+  - name: sessions
+    description: Daily learning sessions
+
 paths:
   /healthz:
     get:
       operationId: healthCheck
       tags: [health]
       summary: Health check
-      description: Returns server health status
       responses:
         "200":
           description: Healthy
@@ -24,6 +37,457 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /children:
+    get:
+      operationId: listChildren
+      tags: [children]
+      summary: List all children profiles
+      responses:
+        "200":
+          description: List of children
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  children:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Child"
+                required: [children]
+    post:
+      operationId: createChild
+      tags: [children]
+      summary: Create a child profile
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateChildRequest"
+      responses:
+        "201":
+          description: Child created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Child"
+
+  /children/{childId}:
+    get:
+      operationId: getChild
+      tags: [children]
+      summary: Get a child profile
+      parameters:
+        - name: childId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Child profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Child"
+    put:
+      operationId: updateChild
+      tags: [children]
+      summary: Update a child profile
+      parameters:
+        - name: childId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateChildRequest"
+      responses:
+        "200":
+          description: Updated child
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Child"
+
+  /children/{childId}/dashboard:
+    get:
+      operationId: getChildDashboard
+      tags: [children]
+      summary: Get complete dashboard for a child
+      parameters:
+        - name: childId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Child dashboard data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChildDashboard"
+
+  /children/{childId}/plan:
+    get:
+      operationId: getChildPlan
+      tags: [children]
+      summary: Get the personalized learning plan for a child
+      parameters:
+        - name: childId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Personalized learning plan
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LearningPlan"
+
+  /children/{childId}/memorization:
+    get:
+      operationId: listMemorization
+      tags: [memorization]
+      summary: Get memorization progress for all surahs
+      parameters:
+        - name: childId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Memorization progress
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  progress:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/MemorizationProgress"
+                required: [progress]
+    post:
+      operationId: updateMemorization
+      tags: [memorization]
+      summary: Update memorization progress for a surah
+      parameters:
+        - name: childId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateMemorizationRequest"
+      responses:
+        "200":
+          description: Updated memorization record
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MemorizationProgress"
+
+  /children/{childId}/reviews:
+    get:
+      operationId: listReviews
+      tags: [review]
+      summary: Get review schedule for a child
+      parameters:
+        - name: childId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Review sessions
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  dueToday:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/ReviewItem"
+                  upcoming:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/ReviewItem"
+                required: [dueToday, upcoming]
+    post:
+      operationId: completeReview
+      tags: [review]
+      summary: Record a completed review
+      parameters:
+        - name: childId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CompleteReviewRequest"
+      responses:
+        "200":
+          description: Review recorded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReviewItem"
+
+  /children/{childId}/sessions:
+    get:
+      operationId: listSessions
+      tags: [sessions]
+      summary: Get session history for a child
+      parameters:
+        - name: childId
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 30
+      responses:
+        "200":
+          description: Session history
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  sessions:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/LearningSession"
+                required: [sessions]
+    post:
+      operationId: createSession
+      tags: [sessions]
+      summary: Log a completed learning session
+      parameters:
+        - name: childId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateSessionRequest"
+      responses:
+        "201":
+          description: Session created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LearningSession"
+
+  /children/{childId}/duas:
+    get:
+      operationId: listChildDuas
+      tags: [duas]
+      summary: Get duaas assigned to a child
+      parameters:
+        - name: childId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: List of duaas
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  duas:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/ChildDua"
+                required: [duas]
+    post:
+      operationId: markDuaLearned
+      tags: [duas]
+      summary: Mark a dua as learned
+      parameters:
+        - name: childId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                duaId:
+                  type: integer
+                learned:
+                  type: boolean
+              required: [duaId, learned]
+      responses:
+        "200":
+          description: Dua status updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChildDua"
+
+  /surahs:
+    get:
+      operationId: listSurahs
+      tags: [memorization]
+      summary: List all Quran surahs with metadata
+      parameters:
+        - name: juz
+          in: query
+          schema:
+            type: integer
+        - name: ageGroup
+          in: query
+          schema:
+            type: string
+            enum: [toddler, child, preteen, teen]
+      responses:
+        "200":
+          description: List of surahs
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  surahs:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Surah"
+                required: [surahs]
+
+  /surahs/{surahId}:
+    get:
+      operationId: getSurah
+      tags: [memorization]
+      summary: Get a specific surah with verses
+      parameters:
+        - name: surahId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Surah with verses
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SurahDetail"
+
+  /stories:
+    get:
+      operationId: listStories
+      tags: [stories]
+      summary: List Islamic stories
+      parameters:
+        - name: ageGroup
+          in: query
+          schema:
+            type: string
+            enum: [toddler, child, preteen, teen]
+        - name: category
+          in: query
+          schema:
+            type: string
+            enum: [prophet, companion, quran, moral]
+      responses:
+        "200":
+          description: List of stories
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  stories:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Story"
+                required: [stories]
+
+  /stories/{storyId}:
+    get:
+      operationId: getStory
+      tags: [stories]
+      summary: Get a specific story
+      parameters:
+        - name: storyId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Story detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StoryDetail"
+
+  /duas:
+    get:
+      operationId: listDuas
+      tags: [duas]
+      summary: List all duaas
+      parameters:
+        - name: ageGroup
+          in: query
+          schema:
+            type: string
+            enum: [toddler, child, preteen, teen]
+        - name: category
+          in: query
+          schema:
+            type: string
+            enum: [morning, evening, eating, sleeping, travel, general, prayer]
+      responses:
+        "200":
+          description: List of duaas
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  duas:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Dua"
+                required: [duas]
+
 components:
   schemas:
     HealthStatus:
@@ -31,6 +495,562 @@ components:
       properties:
         status:
           type: string
-      required:
-        - status
+      required: [status]
 
+    Child:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        age:
+          type: integer
+        ageGroup:
+          type: string
+          enum: [toddler, child, preteen, teen]
+        gender:
+          type: string
+          enum: [male, female]
+        avatarEmoji:
+          type: string
+        streakDays:
+          type: integer
+        totalPoints:
+          type: integer
+        juzCompleted:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, name, age, ageGroup, gender, avatarEmoji, streakDays, totalPoints, juzCompleted, createdAt]
+
+    CreateChildRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        age:
+          type: integer
+          minimum: 3
+          maximum: 18
+        gender:
+          type: string
+          enum: [male, female]
+        avatarEmoji:
+          type: string
+      required: [name, age, gender]
+
+    UpdateChildRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        age:
+          type: integer
+        avatarEmoji:
+          type: string
+
+    ChildDashboard:
+      type: object
+      properties:
+        child:
+          $ref: "#/components/schemas/Child"
+        todaysPlan:
+          $ref: "#/components/schemas/DailyPlan"
+        memorizationStats:
+          $ref: "#/components/schemas/MemorizationStats"
+        recentSessions:
+          type: array
+          items:
+            $ref: "#/components/schemas/LearningSession"
+        reviewsDueToday:
+          type: integer
+        nextSurah:
+          $ref: "#/components/schemas/Surah"
+        achievements:
+          type: array
+          items:
+            $ref: "#/components/schemas/Achievement"
+      required: [child, todaysPlan, memorizationStats, recentSessions, reviewsDueToday, achievements]
+
+    DailyPlan:
+      type: object
+      properties:
+        date:
+          type: string
+          format: date
+        newMemorization:
+          type: object
+          properties:
+            surahName:
+              type: string
+            surahNameArabic:
+              type: string
+            ayahStart:
+              type: integer
+            ayahEnd:
+              type: integer
+            estimatedMinutes:
+              type: integer
+          required: [surahName, surahNameArabic, ayahStart, ayahEnd, estimatedMinutes]
+        reviewSessions:
+          type: array
+          items:
+            type: object
+            properties:
+              surahName:
+                type: string
+              surahNumber:
+                type: integer
+              ayahCount:
+                type: integer
+            required: [surahName, surahNumber, ayahCount]
+        story:
+          type: object
+          properties:
+            id:
+              type: integer
+            title:
+              type: string
+          required: [id, title]
+        dua:
+          type: object
+          properties:
+            id:
+              type: integer
+            arabic:
+              type: string
+            transliteration:
+              type: string
+            translation:
+              type: string
+          required: [id, arabic, transliteration, translation]
+        totalEstimatedMinutes:
+          type: integer
+      required: [date, reviewSessions, totalEstimatedMinutes]
+
+    LearningPlan:
+      type: object
+      properties:
+        ageGroup:
+          type: string
+        description:
+          type: string
+        weeklyGoal:
+          type: object
+          properties:
+            memorizationDays:
+              type: integer
+            reviewDays:
+              type: integer
+            storyDays:
+              type: integer
+            duasDays:
+              type: integer
+          required: [memorizationDays, reviewDays, storyDays, duasDays]
+        currentPhase:
+          type: object
+          properties:
+            phaseName:
+              type: string
+            description:
+              type: string
+            surahs:
+              type: array
+              items:
+                type: string
+          required: [phaseName, description, surahs]
+        milestones:
+          type: array
+          items:
+            $ref: "#/components/schemas/Milestone"
+        tajweedRules:
+          type: array
+          items:
+            type: object
+            properties:
+              rule:
+                type: string
+              description:
+                type: string
+              ageIntroduced:
+                type: integer
+            required: [rule, description, ageIntroduced]
+      required: [ageGroup, description, weeklyGoal, currentPhase, milestones, tajweedRules]
+
+    MemorizationProgress:
+      type: object
+      properties:
+        id:
+          type: integer
+        childId:
+          type: integer
+        surahId:
+          type: integer
+        surahName:
+          type: string
+        surahNumber:
+          type: integer
+        status:
+          type: string
+          enum: [not_started, in_progress, memorized, needs_review]
+        versesMemorized:
+          type: integer
+        totalVerses:
+          type: integer
+        percentComplete:
+          type: integer
+        lastPracticed:
+          type: string
+          format: date-time
+        nextReviewDate:
+          type: string
+          format: date
+        reviewCount:
+          type: integer
+        strength:
+          type: integer
+          description: Memory strength 1-5
+      required: [id, childId, surahId, surahName, surahNumber, status, versesMemorized, totalVerses, percentComplete, reviewCount, strength]
+
+    UpdateMemorizationRequest:
+      type: object
+      properties:
+        surahId:
+          type: integer
+        versesMemorized:
+          type: integer
+        status:
+          type: string
+          enum: [not_started, in_progress, memorized, needs_review]
+        qualityRating:
+          type: integer
+          minimum: 1
+          maximum: 5
+          description: How well the child recited (for spaced repetition)
+      required: [surahId]
+
+    ReviewItem:
+      type: object
+      properties:
+        id:
+          type: integer
+        childId:
+          type: integer
+        surahId:
+          type: integer
+        surahName:
+          type: string
+          nullable: true
+        surahNumber:
+          type: integer
+        dueDate:
+          type: string
+          format: date
+        interval:
+          type: integer
+          description: Days until next review
+        easeFactor:
+          type: number
+          description: Spaced repetition ease factor
+        repetitionCount:
+          type: integer
+        lastReviewed:
+          type: string
+          format: date-time
+          nullable: true
+        isOverdue:
+          type: boolean
+      required: [id, childId, surahId, surahNumber, dueDate, interval, easeFactor, repetitionCount, isOverdue]
+
+    CompleteReviewRequest:
+      type: object
+      properties:
+        surahId:
+          type: integer
+        qualityRating:
+          type: integer
+          minimum: 0
+          maximum: 5
+          description: SM-2 quality rating
+        durationMinutes:
+          type: integer
+      required: [surahId, qualityRating]
+
+    LearningSession:
+      type: object
+      properties:
+        id:
+          type: integer
+        childId:
+          type: integer
+        date:
+          type: string
+          format: date
+        sessionType:
+          type: string
+          enum: [memorization, review, reading, listening, story, dua, mixed]
+        durationMinutes:
+          type: integer
+        pointsEarned:
+          type: integer
+        surahsWorked:
+          type: array
+          items:
+            type: string
+        notes:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, childId, date, sessionType, durationMinutes, pointsEarned, surahsWorked, createdAt]
+
+    CreateSessionRequest:
+      type: object
+      properties:
+        sessionType:
+          type: string
+          enum: [memorization, review, reading, listening, story, dua, mixed]
+        durationMinutes:
+          type: integer
+        surahsWorked:
+          type: array
+          items:
+            type: string
+        notes:
+          type: string
+      required: [sessionType, durationMinutes]
+
+    MemorizationStats:
+      type: object
+      properties:
+        totalSurahsMemorized:
+          type: integer
+        totalVersesMemorized:
+          type: integer
+        juzCompleted:
+          type: number
+        currentSurah:
+          type: string
+          nullable: true
+        longestStreak:
+          type: integer
+        weeklyProgress:
+          type: array
+          items:
+            type: object
+            properties:
+              day:
+                type: string
+              versesMemorized:
+                type: integer
+              minutesPracticed:
+                type: integer
+            required: [day, versesMemorized, minutesPracticed]
+      required: [totalSurahsMemorized, totalVersesMemorized, juzCompleted, longestStreak, weeklyProgress]
+
+    Achievement:
+      type: object
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        description:
+          type: string
+        icon:
+          type: string
+        earned:
+          type: boolean
+        earnedAt:
+          type: string
+          format: date-time
+          nullable: true
+        progress:
+          type: integer
+          nullable: true
+        target:
+          type: integer
+          nullable: true
+      required: [id, title, description, icon, earned]
+
+    Milestone:
+      type: object
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        description:
+          type: string
+        ageGroup:
+          type: string
+        targetSurahs:
+          type: array
+          items:
+            type: string
+        reward:
+          type: string
+      required: [id, title, description, ageGroup, targetSurahs, reward]
+
+    Surah:
+      type: object
+      properties:
+        id:
+          type: integer
+        number:
+          type: integer
+        nameArabic:
+          type: string
+        nameTransliteration:
+          type: string
+        nameTranslation:
+          type: string
+        verseCount:
+          type: integer
+        juzStart:
+          type: integer
+        revelationType:
+          type: string
+          enum: [meccan, medinan]
+        difficulty:
+          type: string
+          enum: [beginner, intermediate, advanced]
+        ageGroup:
+          type: string
+          enum: [toddler, child, preteen, teen, all]
+        recommendedOrder:
+          type: integer
+          description: Recommended memorization order for children
+      required: [id, number, nameArabic, nameTransliteration, nameTranslation, verseCount, juzStart, revelationType, difficulty, ageGroup, recommendedOrder]
+
+    SurahDetail:
+      allOf:
+        - $ref: "#/components/schemas/Surah"
+        - type: object
+          properties:
+            verses:
+              type: array
+              items:
+                $ref: "#/components/schemas/Verse"
+            tafsirBrief:
+              type: string
+              nullable: true
+            tajweedNotes:
+              type: array
+              items:
+                type: string
+          required: [verses]
+
+    Verse:
+      type: object
+      properties:
+        number:
+          type: integer
+        arabic:
+          type: string
+        transliteration:
+          type: string
+        translation:
+          type: string
+        audioUrl:
+          type: string
+          nullable: true
+        tajweedHighlights:
+          type: array
+          items:
+            type: object
+            properties:
+              type:
+                type: string
+              text:
+                type: string
+            required: [type, text]
+      required: [number, arabic, transliteration, translation, tajweedHighlights]
+
+    Story:
+      type: object
+      properties:
+        id:
+          type: integer
+        title:
+          type: string
+        category:
+          type: string
+          enum: [prophet, companion, quran, moral]
+        ageGroup:
+          type: string
+          enum: [toddler, child, preteen, teen]
+        summary:
+          type: string
+        readingTimeMinutes:
+          type: integer
+        featuredCharacter:
+          type: string
+        morals:
+          type: array
+          items:
+            type: string
+      required: [id, title, category, ageGroup, summary, readingTimeMinutes, featuredCharacter, morals]
+
+    StoryDetail:
+      allOf:
+        - $ref: "#/components/schemas/Story"
+        - type: object
+          properties:
+            content:
+              type: string
+            relatedSurahs:
+              type: array
+              items:
+                type: string
+            discussionQuestions:
+              type: array
+              items:
+                type: string
+          required: [content, relatedSurahs, discussionQuestions]
+
+    Dua:
+      type: object
+      properties:
+        id:
+          type: integer
+        arabic:
+          type: string
+        transliteration:
+          type: string
+        translation:
+          type: string
+        occasion:
+          type: string
+        category:
+          type: string
+          enum: [morning, evening, eating, sleeping, travel, general, prayer]
+        ageGroup:
+          type: string
+          enum: [toddler, child, preteen, teen, all]
+        source:
+          type: string
+        importance:
+          type: string
+          enum: [essential, important, recommended]
+        memorizationOrder:
+          type: integer
+      required: [id, arabic, transliteration, translation, occasion, category, ageGroup, source, importance, memorizationOrder]
+
+    ChildDua:
+      type: object
+      properties:
+        dua:
+          $ref: "#/components/schemas/Dua"
+        learned:
+          type: boolean
+        learnedAt:
+          type: string
+          format: date-time
+          nullable: true
+        practicedCount:
+          type: integer
+      required: [dua, learned, practicedCount]
