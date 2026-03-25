@@ -1,109 +1,139 @@
 import { useState } from "react";
 import { useParams, Link } from "wouter";
-import { useListSurahs, useListMemorization } from "@workspace/api-client-react";
-import { Layout } from "@/components/layout";
-import { Card, Badge, Input } from "@/components/ui-elements";
-import { Search, CheckCircle2, Clock, CircleDashed } from "lucide-react";
-import { motion } from "framer-motion";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { listSurahs, listMemorization, updateMemorization } from "@workspace/api-client-react";
+import { Card, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Progress } from "@/components/ui/progress";
+import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
+import { ChildNav } from "@/components/child-nav";
+import { ChevronLeft, CheckCircle, Clock, BookOpen } from "lucide-react";
+import { cn } from "@/lib/utils";
 
-export default function Memorize() {
-  const { childId } = useParams();
-  const id = parseInt(childId || "0");
-  const [search, setSearch] = useState("");
+const STATUS_LABELS: Record<string, { label: string; color: string }> = {
+  not_started: { label: "Not Started", color: "bg-muted text-muted-foreground" },
+  in_progress: { label: "In Progress", color: "bg-amber-100 text-amber-700" },
+  memorized: { label: "Memorized ✓", color: "bg-emerald-100 text-emerald-700" },
+  needs_review: { label: "Needs Review", color: "bg-orange-100 text-orange-700" }
+};
 
-  const { data: surahsData, isLoading: surahsLoading } = useListSurahs();
-  const { data: memData, isLoading: memLoading } = useListMemorization(id);
+const DIFFICULTY_COLORS: Record<string, string> = {
+  beginner: "text-emerald-600",
+  intermediate: "text-amber-600",
+  advanced: "text-rose-600"
+};
 
-  const isLoading = surahsLoading || memLoading;
+export default function MemorizePage() {
+  const { childId } = useParams<{ childId: string }>();
+  const [filter, setFilter] = useState<"all" | "memorized" | "in_progress" | "not_started">("all");
+  const qc = useQueryClient();
 
-  // Merge surahs with progress
+  const { data: surahsData } = useQuery({
+    queryKey: ["surahs"],
+    queryFn: () => listSurahs()
+  });
+
+  const { data: progressData, isLoading } = useQuery({
+    queryKey: ["memorization", childId],
+    queryFn: () => listMemorization(parseInt(childId))
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: (vars: { surahId: number; status: string }) =>
+      updateMemorization(parseInt(childId), { surahId: vars.surahId, status: vars.status as "memorized" }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["memorization", childId] })
+  });
+
+  const progress = progressData?.progress || [];
   const surahs = surahsData?.surahs || [];
-  const progressMap = new Map(memData?.progress?.map(p => [p.surahId, p]) || []);
 
-  const filteredSurahs = surahs.filter(s => 
-    s.nameTransliteration.toLowerCase().includes(search.toLowerCase()) || 
-    s.nameTranslation.toLowerCase().includes(search.toLowerCase())
-  );
+  const filteredProgress = filter === "all"
+    ? progress
+    : progress.filter(p => p.status === filter);
 
-  const getStatusIcon = (status?: string) => {
-    switch(status) {
-      case 'memorized': return <CheckCircle2 className="w-5 h-5 text-green-500" />;
-      case 'in_progress': return <Clock className="w-5 h-5 text-accent" />;
-      case 'needs_review': return <Clock className="w-5 h-5 text-orange-500" />;
-      default: return <CircleDashed className="w-5 h-5 text-muted-foreground/30" />;
-    }
-  };
+  const memorizedCount = progress.filter(p => p.status === "memorized").length;
+  const totalVerses = progress.reduce((s, p) => s + p.versesMemorized, 0);
 
   return (
-    <Layout childId={id} title="Memorization (Hifz)">
-      <div className="py-4 space-y-4">
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground w-5 h-5" />
-          <Input 
-            className="pl-10 bg-white" 
-            placeholder="Search surahs..." 
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-          />
+    <div className="min-h-screen bg-background pb-24">
+      <div className="pattern-bg text-white px-4 pt-8 pb-12">
+        <div className="max-w-lg mx-auto">
+          <Link href={`/child/${childId}`}>
+            <button className="flex items-center gap-1 text-emerald-200 text-sm mb-4"><ChevronLeft size={16} /> Dashboard</button>
+          </Link>
+          <h1 className="text-xl font-bold">Memorization Track</h1>
+          <p className="text-emerald-200 text-sm mt-1">{memorizedCount} surahs · {totalVerses} verses memorized</p>
+        </div>
+      </div>
+
+      <div className="max-w-lg mx-auto px-4 -mt-6 space-y-4">
+        {/* Filter tabs */}
+        <div className="bg-white rounded-2xl border border-border p-1 flex gap-1 shadow-sm overflow-x-auto">
+          {(["all", "not_started", "in_progress", "memorized"] as const).map(f => (
+            <button key={f} onClick={() => setFilter(f)}
+              className={cn("flex-1 text-xs py-2 px-2 rounded-xl font-medium whitespace-nowrap transition-colors",
+                filter === f ? "bg-primary text-white" : "text-muted-foreground hover:text-foreground"
+              )}>
+              {f === "all" ? "All" : f === "not_started" ? "Not Started" : f === "in_progress" ? "In Progress" : "Memorized"}
+            </button>
+          ))}
         </div>
 
         {isLoading ? (
-          <div className="space-y-3 pt-4">
-            {[1,2,3,4].map(i => <div key={i} className="h-20 bg-secondary animate-pulse rounded-2xl" />)}
-          </div>
+          <div className="space-y-3">{[1,2,3,4].map(i => <Skeleton key={i} className="h-24 rounded-2xl" />)}</div>
         ) : (
-          <div className="space-y-3 pb-6">
-            {filteredSurahs.map((surah, index) => {
-              const progress = progressMap.get(surah.id);
-              const percent = progress ? (progress.versesMemorized / surah.verseCount) * 100 : 0;
-              
+          <div className="space-y-3">
+            {filteredProgress.map((item) => {
+              const surahMeta = surahs.find(s => s.id === item.surahId);
+              const statusInfo = STATUS_LABELS[item.status];
               return (
-                <motion.div
-                  key={surah.id}
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: Math.min(index * 0.05, 0.5) }}
-                >
-                  <Link href={`/child/${id}/surah/${surah.id}`}>
-                    <Card className="p-4 hover:border-primary/40 cursor-pointer transition-all hover:shadow-lg active:scale-[0.98]">
-                      <div className="flex items-center justify-between mb-3">
-                        <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-xl bg-secondary flex items-center justify-center font-bold text-primary border border-primary/10">
-                            {surah.number}
-                          </div>
-                          <div>
-                            <h3 className="font-bold font-display">{surah.nameTransliteration}</h3>
-                            <p className="text-xs text-muted-foreground">{surah.nameTranslation} • {surah.verseCount} Ayahs</p>
-                          </div>
+                <Card key={item.surahId} className="border-border">
+                  <CardContent className="p-4">
+                    <div className="flex items-start justify-between mb-3">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center text-xs font-bold text-primary border border-primary/10">
+                          {surahMeta?.number || "?"}
                         </div>
-                        <div className="text-right flex flex-col items-end">
-                          <span className="font-arabic text-xl text-primary">{surah.nameArabic}</span>
-                          <div className="mt-1">
-                            {getStatusIcon(progress?.status)}
-                          </div>
+                        <div>
+                          <p className="font-semibold text-sm text-foreground">{item.surahName}</p>
+                          <p className={cn("text-xs font-medium", DIFFICULTY_COLORS[surahMeta?.difficulty || "beginner"])}>
+                            {surahMeta?.difficulty} · {item.totalVerses} verses
+                          </p>
                         </div>
                       </div>
+                      <div className="text-right">
+                        <p className="arabic-text text-lg text-primary">{surahMeta?.nameArabic}</p>
+                        <Badge className={cn("text-[10px] mt-1 border-0", statusInfo.color)}>{statusInfo.label}</Badge>
+                      </div>
+                    </div>
 
-                      {/* Progress Bar */}
-                      <div className="w-full h-2 bg-secondary rounded-full overflow-hidden">
-                        <motion.div 
-                          className="h-full bg-gradient-to-r from-primary to-accent rounded-full"
-                          initial={{ width: 0 }}
-                          animate={{ width: `${percent}%` }}
-                          transition={{ duration: 0.8, ease: "easeOut" }}
-                        />
+                    <Progress value={item.percentComplete} className="h-2 mb-2" />
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-muted-foreground">{item.versesMemorized}/{item.totalVerses} verses</span>
+                      <div className="flex gap-2">
+                        <Link href={`/surah/${item.surahId}`}>
+                          <Button size="sm" variant="outline" className="h-7 text-xs px-2">
+                            <BookOpen size={11} className="mr-1" /> Study
+                          </Button>
+                        </Link>
+                        {item.status !== "memorized" && (
+                          <Button size="sm" className="h-7 text-xs px-2"
+                            onClick={() => updateMutation.mutate({ surahId: item.surahId, status: "memorized" })}>
+                            <CheckCircle size={11} className="mr-1" /> Mark Done
+                          </Button>
+                        )}
                       </div>
-                      <div className="mt-2 text-[10px] text-right text-muted-foreground font-semibold">
-                        {progress?.versesMemorized || 0} / {surah.verseCount} Memorized
-                      </div>
-                    </Card>
-                  </Link>
-                </motion.div>
+                    </div>
+                  </CardContent>
+                </Card>
               );
             })}
           </div>
         )}
       </div>
-    </Layout>
+
+      <ChildNav childId={childId} />
+    </div>
   );
 }

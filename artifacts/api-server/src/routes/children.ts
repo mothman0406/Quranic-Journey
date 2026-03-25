@@ -1,0 +1,293 @@
+import { Router, type IRouter } from "express";
+import { db } from "@workspace/db";
+import { childrenTable, memorizationProgressTable, reviewScheduleTable, learningSessionsTable, childDuasTable } from "@workspace/db/schema";
+import { eq, desc, and, lte, gte } from "drizzle-orm";
+import { SURAHS } from "../data/surahs.js";
+import { STORIES } from "../data/stories.js";
+import { DUAS } from "../data/duas.js";
+
+const router: IRouter = Router();
+
+function getAgeGroup(age: number): "toddler" | "child" | "preteen" | "teen" {
+  if (age <= 6) return "toddler";
+  if (age <= 10) return "child";
+  if (age <= 14) return "preteen";
+  return "teen";
+}
+
+function getAchievements(child: typeof childrenTable.$inferSelect, memProgress: (typeof memorizationProgressTable.$inferSelect)[]) {
+  const memorizedSurahs = memProgress.filter(m => m.status === "memorized").length;
+  const totalVersesMemorized = memProgress.reduce((sum, m) => sum + m.versesMemorized, 0);
+
+  return [
+    {
+      id: "first_surah",
+      title: "First Surah",
+      description: "Memorize your first surah",
+      icon: "⭐",
+      earned: memorizedSurahs >= 1,
+      earnedAt: memorizedSurahs >= 1 ? new Date().toISOString() : null,
+      progress: Math.min(memorizedSurahs, 1),
+      target: 1
+    },
+    {
+      id: "three_surahs",
+      title: "Growing Star",
+      description: "Memorize 3 surahs",
+      icon: "🌟",
+      earned: memorizedSurahs >= 3,
+      earnedAt: null,
+      progress: Math.min(memorizedSurahs, 3),
+      target: 3
+    },
+    {
+      id: "ten_surahs",
+      title: "Hafidh Journey",
+      description: "Memorize 10 surahs",
+      icon: "📖",
+      earned: memorizedSurahs >= 10,
+      earnedAt: null,
+      progress: Math.min(memorizedSurahs, 10),
+      target: 10
+    },
+    {
+      id: "streak_7",
+      title: "Week Warrior",
+      description: "Practice 7 days in a row",
+      icon: "🔥",
+      earned: child.streakDays >= 7,
+      earnedAt: null,
+      progress: Math.min(child.streakDays, 7),
+      target: 7
+    },
+    {
+      id: "streak_30",
+      title: "Month Champion",
+      description: "Practice 30 days in a row",
+      icon: "🏆",
+      earned: child.streakDays >= 30,
+      earnedAt: null,
+      progress: Math.min(child.streakDays, 30),
+      target: 30
+    },
+    {
+      id: "100_verses",
+      title: "Verse Collector",
+      description: "Memorize 100 verses",
+      icon: "💎",
+      earned: totalVersesMemorized >= 100,
+      earnedAt: null,
+      progress: Math.min(totalVersesMemorized, 100),
+      target: 100
+    }
+  ];
+}
+
+router.get("/children", async (req, res) => {
+  const children = await db.select().from(childrenTable).orderBy(desc(childrenTable.createdAt));
+  res.json({ children: children.map(c => ({ ...c, createdAt: c.createdAt.toISOString() })) });
+});
+
+router.post("/children", async (req, res) => {
+  const { name, age, gender, avatarEmoji } = req.body;
+  const ageGroup = getAgeGroup(age);
+  const [child] = await db.insert(childrenTable).values({
+    name, age, gender, ageGroup,
+    avatarEmoji: avatarEmoji || (gender === "female" ? "🌸" : "⭐"),
+    lastActiveDate: new Date().toISOString().split("T")[0]
+  }).returning();
+  res.status(201).json({ ...child, createdAt: child.createdAt.toISOString() });
+});
+
+router.get("/children/:childId", async (req, res) => {
+  const childId = parseInt(req.params.childId);
+  const [child] = await db.select().from(childrenTable).where(eq(childrenTable.id, childId));
+  if (!child) { res.status(404).json({ error: "Child not found" }); return; }
+  res.json({ ...child, createdAt: child.createdAt.toISOString() });
+});
+
+router.put("/children/:childId", async (req, res) => {
+  const childId = parseInt(req.params.childId);
+  const updates: Record<string, unknown> = {};
+  if (req.body.name) updates.name = req.body.name;
+  if (req.body.age) { updates.age = req.body.age; updates.ageGroup = getAgeGroup(req.body.age); }
+  if (req.body.avatarEmoji) updates.avatarEmoji = req.body.avatarEmoji;
+  const [child] = await db.update(childrenTable).set(updates).where(eq(childrenTable.id, childId)).returning();
+  res.json({ ...child, createdAt: child.createdAt.toISOString() });
+});
+
+router.get("/children/:childId/dashboard", async (req, res) => {
+  const childId = parseInt(req.params.childId);
+  const [child] = await db.select().from(childrenTable).where(eq(childrenTable.id, childId));
+  if (!child) { res.status(404).json({ error: "Child not found" }); return; }
+
+  const memProgress = await db.select().from(memorizationProgressTable).where(eq(memorizationProgressTable.childId, childId));
+  const today = new Date().toISOString().split("T")[0];
+
+  const dueReviews = await db.select().from(reviewScheduleTable).where(
+    and(eq(reviewScheduleTable.childId, childId), lte(reviewScheduleTable.dueDate, today))
+  );
+
+  const recentSessionsRaw = await db.select().from(learningSessionsTable)
+    .where(eq(learningSessionsTable.childId, childId))
+    .orderBy(desc(learningSessionsTable.createdAt))
+    .limit(7);
+
+  const memorizedSurahs = memProgress.filter(m => m.status === "memorized").map(m => m.surahId);
+  const nextSurahData = SURAHS.find(s => !memorizedSurahs.includes(s.id));
+
+  const totalVersesMemorized = memProgress.reduce((sum, m) => sum + m.versesMemorized, 0);
+  const juzCompleted = Math.floor(totalVersesMemorized / 200);
+
+  const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  const weeklyProgress = dayNames.map(day => ({ day, versesMemorized: 0, minutesPracticed: 0 }));
+
+  const randomStory = STORIES.find(s => s.ageGroup === child.ageGroup || s.ageGroup === "child");
+  const randomDua = DUAS[0];
+
+  const memorizedCount = memorizedSurahs.length;
+  const currentSurahName = memProgress.find(m => m.status === "in_progress") ? SURAHS.find(s => s.id === memProgress.find(m => m.status === "in_progress")?.surahId)?.nameTransliteration : null;
+
+  const todaysPlan = {
+    date: today,
+    newMemorization: nextSurahData ? {
+      surahName: nextSurahData.nameTransliteration,
+      surahNameArabic: nextSurahData.nameArabic,
+      ayahStart: (memProgress.find(m => m.surahId === nextSurahData.id)?.versesMemorized || 0) + 1,
+      ayahEnd: Math.min((memProgress.find(m => m.surahId === nextSurahData.id)?.versesMemorized || 0) + 3, nextSurahData.verseCount),
+      estimatedMinutes: 10
+    } : null,
+    reviewSessions: dueReviews.slice(0, 3).map(r => {
+      const surah = SURAHS.find(s => s.id === r.surahId);
+      return { surahName: surah?.nameTransliteration || "Unknown", surahNumber: surah?.number || 0, ayahCount: surah?.verseCount || 0 };
+    }),
+    story: randomStory ? { id: randomStory.id, title: randomStory.title } : null,
+    dua: randomDua ? { id: randomDua.id, arabic: randomDua.arabic, transliteration: randomDua.transliteration, translation: randomDua.translation } : null,
+    totalEstimatedMinutes: 20 + (dueReviews.length * 5)
+  };
+
+  res.json({
+    child: { ...child, createdAt: child.createdAt.toISOString() },
+    todaysPlan,
+    memorizationStats: {
+      totalSurahsMemorized: memorizedCount,
+      totalVersesMemorized,
+      juzCompleted,
+      currentSurah: currentSurahName || null,
+      longestStreak: child.streakDays,
+      weeklyProgress
+    },
+    recentSessions: recentSessionsRaw.map(s => ({
+      ...s,
+      surahsWorked: JSON.parse(s.surahsWorked || "[]"),
+      createdAt: s.createdAt.toISOString()
+    })),
+    reviewsDueToday: dueReviews.length,
+    nextSurah: nextSurahData ? {
+      id: nextSurahData.id,
+      number: nextSurahData.number,
+      nameArabic: nextSurahData.nameArabic,
+      nameTransliteration: nextSurahData.nameTransliteration,
+      nameTranslation: nextSurahData.nameTranslation,
+      verseCount: nextSurahData.verseCount,
+      juzStart: nextSurahData.juzStart,
+      revelationType: nextSurahData.revelationType,
+      difficulty: nextSurahData.difficulty,
+      ageGroup: nextSurahData.ageGroup,
+      recommendedOrder: nextSurahData.recommendedOrder
+    } : null,
+    achievements: getAchievements(child, memProgress)
+  });
+});
+
+router.get("/children/:childId/plan", async (req, res) => {
+  const childId = parseInt(req.params.childId);
+  const [child] = await db.select().from(childrenTable).where(eq(childrenTable.id, childId));
+  if (!child) { res.status(404).json({ error: "Child not found" }); return; }
+
+  const plans: Record<string, object> = {
+    toddler: {
+      ageGroup: "toddler",
+      description: "For ages 3–6: Focus on listening, repetition, and love for the Quran. Short sessions, fun and playful. Begin with Al-Fatihah and the short surahs of Juz Amma.",
+      weeklyGoal: { memorizationDays: 3, reviewDays: 4, storyDays: 5, duasDays: 7 },
+      currentPhase: {
+        phaseName: "Seeds of Faith",
+        description: "Plant the love of Quran through listening and repetition. No pressure, just joy.",
+        surahs: ["Al-Fatihah", "Al-Nas", "Al-Falaq", "Al-Ikhlas", "Al-Kawthar"]
+      },
+      milestones: [
+        { id: "m1", title: "Surah Al-Fatihah", description: "Learn the Opening — recited in every prayer", ageGroup: "toddler", targetSurahs: ["Al-Fatihah"], reward: "🌟 Golden Star Certificate" },
+        { id: "m2", title: "First Juz Amma Surahs", description: "Memorize An-Nas, Al-Falaq, Al-Ikhlas", ageGroup: "toddler", targetSurahs: ["An-Nas", "Al-Falaq", "Al-Ikhlas"], reward: "📜 Mini Hafidh Badge" }
+      ],
+      tajweedRules: [
+        { rule: "Listening First", description: "Listen to beautiful recitation before repeating", ageIntroduced: 3 },
+        { rule: "Clear pronunciation", description: "Say each letter clearly and distinctly", ageIntroduced: 4 },
+        { rule: "Stop and Breathe", description: "Learn where to pause (waqf) in short surahs", ageIntroduced: 5 }
+      ]
+    },
+    child: {
+      ageGroup: "child",
+      description: "For ages 7–10: Build consistent daily practice. Learn Juz Amma systematically. Introduce tajweed rules through games and stories.",
+      weeklyGoal: { memorizationDays: 5, reviewDays: 5, storyDays: 4, duasDays: 7 },
+      currentPhase: {
+        phaseName: "Building the Foundation",
+        description: "Complete Juz Amma with proper tajweed. Review consistently to build strong memory.",
+        surahs: ["Al-Fil", "Al-Maun", "Al-Asr", "Az-Zalzalah", "Al-Bayyinah"]
+      },
+      milestones: [
+        { id: "m1", title: "Half of Juz Amma", description: "Memorize surahs 100-114", ageGroup: "child", targetSurahs: ["An-Nas to Al-Qadr"], reward: "🥇 Hafidh Medal" },
+        { id: "m2", title: "Complete Juz Amma", description: "Memorize all 37 surahs of Juz Amma", ageGroup: "child", targetSurahs: ["All of Juz Amma"], reward: "🏆 Juz Amma Certificate" }
+      ],
+      tajweedRules: [
+        { rule: "Ghunna", description: "Nasalization on noon and meem when doubled (mushaddad)", ageIntroduced: 7 },
+        { rule: "Madd", description: "Elongation — short (2 counts), medium (4 counts), long (6 counts)", ageIntroduced: 7 },
+        { rule: "Idghaam", description: "Merging — when noon sakinah is followed by certain letters", ageIntroduced: 8 },
+        { rule: "Ikhfa", description: "Hiding — soften the noon sound before 15 letters", ageIntroduced: 8 },
+        { rule: "Qalqalah", description: "Echo/bounce on letters ق ط ب ج د when unvoweled", ageIntroduced: 9 }
+      ]
+    },
+    preteen: {
+      ageGroup: "preteen",
+      description: "For ages 11–14: Move to Juz 29 and work through longer surahs. Understand what you're reciting. Study tafsir of memorized surahs.",
+      weeklyGoal: { memorizationDays: 6, reviewDays: 6, storyDays: 3, duasDays: 7 },
+      currentPhase: {
+        phaseName: "Deepening Understanding",
+        description: "Memorize Juz 29, learn tafsir, and understand the messages of each surah.",
+        surahs: ["Al-Mulk", "Al-Haqqah", "Al-Maarij", "Nuh", "Al-Jinn"]
+      },
+      milestones: [
+        { id: "m1", title: "Juz 29 Complete", description: "Memorize the complete 29th Juz", ageGroup: "preteen", targetSurahs: ["All of Juz 29"], reward: "📚 Scholar's Certificate" },
+        { id: "m2", title: "5 Juz Milestone", description: "Memorize 5 complete juz", ageGroup: "preteen", targetSurahs: ["5 Juz"], reward: "🎓 Hafidh Scholar Badge" }
+      ],
+      tajweedRules: [
+        { rule: "Iqlab", description: "Convert noon sakinah to meem sound before ba", ageIntroduced: 11 },
+        { rule: "Idghaam Bila Ghunna", description: "Merging without nasalization before lam and ra", ageIntroduced: 11 },
+        { rule: "Makhaarij al-Huruf", description: "Precise articulation points for every Arabic letter", ageIntroduced: 12 },
+        { rule: "Sifaat al-Huruf", description: "Characteristics of letters — heavy, light, strong, soft", ageIntroduced: 13 }
+      ]
+    },
+    teen: {
+      ageGroup: "teen",
+      description: "For ages 15+: Work through the entire Quran systematically. Strong review cycle. Understand tafsir in depth. Aim for Hifz completion.",
+      weeklyGoal: { memorizationDays: 6, reviewDays: 7, storyDays: 2, duasDays: 7 },
+      currentPhase: {
+        phaseName: "The Path to Hifz",
+        description: "Systematic memorization with daily new pages, daily review, and weekly revision of all memorized content.",
+        surahs: ["Al-Baqarah sections", "Al-Imran sections", "An-Nisa sections"]
+      },
+      milestones: [
+        { id: "m1", title: "10 Juz", description: "Complete first 10 Juz", ageGroup: "teen", targetSurahs: ["10 Juz"], reward: "💫 10 Juz Hafidh Certificate" },
+        { id: "m2", title: "Complete Quran", description: "Memorize the entire Quran", ageGroup: "teen", targetSurahs: ["Full Quran"], reward: "🕌 Hafidh Al-Quran Certificate" }
+      ],
+      tajweedRules: [
+        { rule: "Complete Tajweed Mastery", description: "All rules applied perfectly in recitation", ageIntroduced: 15 },
+        { rule: "Waqf and Ibtida", description: "Proper stopping and starting places", ageIntroduced: 15 },
+        { rule: "Hafs 'an 'Asim", description: "The standard transmission of Quran recitation", ageIntroduced: 16 }
+      ]
+    }
+  };
+
+  res.json(plans[child.ageGroup] || plans.child);
+});
+
+export default router;
