@@ -1,12 +1,12 @@
 import { useState } from "react";
-import { useParams, Link, useLocation } from "wouter";
+import { useParams, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { getSurah } from "@workspace/api-client-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ChevronLeft, Volume2, Info } from "lucide-react";
+import { VersePlayer } from "@/components/verse-player";
+import { ChevronLeft, Info } from "lucide-react";
 
 export default function SurahDetailPage() {
   const { surahId } = useParams<{ surahId: string }>();
@@ -90,15 +90,15 @@ export default function SurahDetailPage() {
           </Card>
         )}
 
-        {/* Bismlillah header for surah (except Al-Fatihah which includes it, and Al-Tawbah) */}
+        {/* Bismillah header (except Al-Fatihah which includes it, and Al-Tawbah) */}
         {surah.number !== 9 && (
-          <div className="text-center py-4">
+          <div className="text-center py-2">
             <p className="arabic-text text-3xl text-primary">بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ</p>
             <p className="text-xs text-muted-foreground mt-1 italic">Bismillahir-rahmanir-raheem</p>
           </div>
         )}
 
-        {/* Verses */}
+        {/* Verses with audio */}
         <div className="space-y-3">
           {surah.verses.map((verse: { number: number; arabic: string; transliteration: string; translation: string }) => (
             <Card key={verse.number} className="verse-card">
@@ -107,18 +107,18 @@ export default function SurahDetailPage() {
                   <div className="w-8 h-8 rounded-full border-2 border-primary/30 flex items-center justify-center text-xs font-bold text-primary">
                     {verse.number}
                   </div>
-                  <button className="flex items-center gap-1 text-xs text-primary bg-primary/10 px-2.5 py-1.5 rounded-full">
-                    <Volume2 size={11} /> Listen
-                  </button>
                 </div>
 
-                {/* Arabic */}
-                <p className="arabic-text text-2xl leading-loose text-foreground text-right mb-4" dir="rtl">
-                  {verse.arabic}
-                </p>
+                {/* Audio player with word highlighting */}
+                <VersePlayer
+                  arabic={verse.arabic}
+                  surahNumber={surah.number}
+                  verseNumber={verse.number}
+                  size="md"
+                />
 
                 {/* Transliteration */}
-                <p className="text-sm text-primary font-medium italic text-center mb-2">{verse.transliteration}</p>
+                <p className="text-sm text-primary font-medium italic text-center mt-3 mb-2">{verse.transliteration}</p>
 
                 {/* Translation */}
                 <p className="text-sm text-muted-foreground text-center leading-relaxed">"{verse.translation}"</p>

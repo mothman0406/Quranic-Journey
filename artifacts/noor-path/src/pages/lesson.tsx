@@ -8,7 +8,8 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ChildNav } from "@/components/child-nav";
-import { ChevronLeft, Volume2, CheckCircle, ChevronRight, Info } from "lucide-react";
+import { VersePlayer } from "@/components/verse-player";
+import { ChevronLeft, CheckCircle, ChevronRight, Info } from "lucide-react";
 
 export default function LessonPage() {
   const { childId } = useParams<{ childId: string }>();
@@ -127,20 +128,25 @@ export default function LessonPage() {
               </Card>
             )}
 
-            {/* Current verse */}
+            {/* Current verse with audio */}
             {currentVerse && (
               <Card className="verse-card shadow-sm">
                 <CardContent className="p-6">
                   <div className="flex items-center justify-between mb-4">
                     <Badge variant="secondary" className="text-xs">Verse {currentVerse.number}</Badge>
-                    <button className="flex items-center gap-1 text-xs text-primary bg-primary/10 px-3 py-1.5 rounded-full">
-                      <Volume2 size={12} /> Listen
-                    </button>
+                    <Badge variant="outline" className="text-xs text-primary border-primary/30">
+                      {surah.nameTransliteration}
+                    </Badge>
                   </div>
 
-                  {/* Arabic — large, RTL */}
-                  <div className="text-center py-4 border-y border-border/50 mb-4">
-                    <p className="arabic-text text-3xl leading-loose text-foreground" dir="rtl">{currentVerse.arabic}</p>
+                  {/* Audio player with word highlighting */}
+                  <div className="py-4 border-y border-border/50 mb-4">
+                    <VersePlayer
+                      arabic={currentVerse.arabic}
+                      surahNumber={surah.number}
+                      verseNumber={currentVerse.number}
+                      size="lg"
+                    />
                   </div>
 
                   {/* Transliteration */}
@@ -180,7 +186,7 @@ export default function LessonPage() {
                 </div>
                 <div className="flex gap-2">
                   {verseIndex < verses.length - 1 ? (
-                    <Button variant="outline" className="flex-1" onClick={() => setVerseIndex(v => v + 1)}>
+                    <Button variant="outline" className="flex-1" onClick={() => { setVerseIndex(v => v + 1); setRating(0); }}>
                       Next Verse <ChevronRight size={14} className="ml-1" />
                     </Button>
                   ) : null}
@@ -196,7 +202,7 @@ export default function LessonPage() {
             <div className="space-y-2">
               <h3 className="text-sm font-semibold text-foreground px-1">All Verses</h3>
               {verses.map((verse, i) => (
-                <button key={verse.number} onClick={() => setVerseIndex(i)} className="w-full text-left">
+                <button key={verse.number} onClick={() => { setVerseIndex(i); setRating(0); }} className="w-full text-left">
                   <Card className={`border transition-colors ${i === verseIndex ? "border-primary bg-primary/5" : "border-border"}`}>
                     <CardContent className="p-3 flex items-center gap-3">
                       <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${i === verseIndex ? "bg-primary text-white" : "bg-muted text-muted-foreground"}`}>{verse.number}</div>

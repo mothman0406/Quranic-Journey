@@ -1,15 +1,17 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link } from "wouter";
-import { listChildren, createChild } from "@workspace/api-client-react";
+import { listChildren } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Flame, Star, BookOpen, ChevronRight } from "lucide-react";
+import { Progress } from "@/components/ui/progress";
+import { Plus, Flame, Star, BookOpen, ChevronRight, ChevronLeft, Check } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
+import { cn } from "@/lib/utils";
 
 const AVATARS = ["⭐", "🌙", "☀️", "🌸", "🌿", "🦋", "🌟", "🕊️", "🌺", "💎"];
 
@@ -20,9 +22,56 @@ const AGE_GROUP_LABELS: Record<string, string> = {
   teen: "Ages 15+ · Path to Hifz"
 };
 
+// Common surahs for onboarding checklist (id matches surahs.ts)
+const COMMON_SURAHS = [
+  { id: 15, name: "Al-Fatihah", arabic: "الْفَاتِحَة", verseCount: 7 },
+  { id: 1,  name: "An-Nas",    arabic: "النَّاس",     verseCount: 6 },
+  { id: 2,  name: "Al-Falaq",  arabic: "الْفَلَق",    verseCount: 5 },
+  { id: 3,  name: "Al-Ikhlas", arabic: "الْإِخْلَاص", verseCount: 4 },
+  { id: 4,  name: "Al-Masad",  arabic: "الْمَسَد",    verseCount: 5 },
+  { id: 5,  name: "An-Nasr",   arabic: "النَّصْر",    verseCount: 3 },
+  { id: 6,  name: "Al-Kafirun",arabic: "الْكَافِرُون", verseCount: 6 },
+  { id: 7,  name: "Al-Kawthar",arabic: "الْكَوْثَر",   verseCount: 3 },
+  { id: 8,  name: "Al-Ma'un",  arabic: "الْمَاعُون",  verseCount: 7 },
+  { id: 9,  name: "Quraysh",   arabic: "قُرَيْش",     verseCount: 4 },
+  { id: 10, name: "Al-Fil",    arabic: "الْفِيل",     verseCount: 5 },
+  { id: 11, name: "Al-Humazah",arabic: "الْهُمَزَة",  verseCount: 9 },
+  { id: 12, name: "Al-'Asr",   arabic: "الْعَصْر",    verseCount: 3 },
+];
+
+const PRACTICE_OPTIONS = [
+  { value: 10, label: "10 min", desc: "Light — just getting started" },
+  { value: 20, label: "20 min", desc: "Regular — steady progress" },
+  { value: 30, label: "30 min", desc: "Focused — strong progress" },
+  { value: 45, label: "45 min", desc: "Intensive — fast track" },
+];
+
+type OnboardingForm = {
+  name: string;
+  age: string;
+  gender: "male" | "female";
+  avatarEmoji: string;
+  preMemorizedSurahIds: number[];
+  memorationStrength: number;
+  practiceMinutesPerDay: number;
+};
+
+const DEFAULT_FORM: OnboardingForm = {
+  name: "",
+  age: "",
+  gender: "male",
+  avatarEmoji: "⭐",
+  preMemorizedSurahIds: [],
+  memorationStrength: 3,
+  practiceMinutesPerDay: 20,
+};
+
+const STEP_LABELS = ["Basic Info", "Memorization", "Strength", "Goals"];
+
 export default function Home() {
   const [showAdd, setShowAdd] = useState(false);
-  const [form, setForm] = useState({ name: "", age: "", gender: "male" as "male" | "female", avatarEmoji: "⭐" });
+  const [step, setStep] = useState(1);
+  const [form, setForm] = useState<OnboardingForm>(DEFAULT_FORM);
   const qc = useQueryClient();
 
   const { data, isLoading } = useQuery({
@@ -31,15 +80,64 @@ export default function Home() {
   });
 
   const createMutation = useMutation({
-    mutationFn: () => createChild({ name: form.name, age: parseInt(form.age), gender: form.gender, avatarEmoji: form.avatarEmoji }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["children"] }); setShowAdd(false); setForm({ name: "", age: "", gender: "male", avatarEmoji: "⭐" }); }
+    mutationFn: () => fetch("/api/children", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: form.name,
+        age: parseInt(form.age),
+        gender: form.gender,
+        avatarEmoji: form.avatarEmoji,
+        preMemorizedSurahIds: form.preMemorizedSurahIds,
+        memorationStrength: form.memorationStrength,
+        practiceMinutesPerDay: form.practiceMinutesPerDay,
+      })
+    }).then(r => r.json()),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["children"] });
+      setShowAdd(false);
+      setStep(1);
+      setForm(DEFAULT_FORM);
+    }
   });
 
   const children = data?.children || [];
 
+  const totalSteps = form.preMemorizedSurahIds.length > 0 ? 4 : 3;
+
+  const canProceedStep1 = form.name.trim().length > 0 && form.age.length > 0 && parseInt(form.age) >= 3;
+
+  function toggleSurah(id: number) {
+    setForm(f => ({
+      ...f,
+      preMemorizedSurahIds: f.preMemorizedSurahIds.includes(id)
+        ? f.preMemorizedSurahIds.filter(s => s !== id)
+        : [...f.preMemorizedSurahIds, id]
+    }));
+  }
+
+  function handleNext() {
+    if (step === 1) { setStep(2); return; }
+    if (step === 2) {
+      if (form.preMemorizedSurahIds.length > 0) { setStep(3); } else { setStep(4); }
+      return;
+    }
+    if (step === 3) { setStep(4); return; }
+    if (step === 4) { createMutation.mutate(); return; }
+  }
+
+  function handleBack() {
+    if (step === 4 && form.preMemorizedSurahIds.length === 0) { setStep(2); return; }
+    setStep(s => s - 1);
+  }
+
+  const displayStep = step === 4 ? (form.preMemorizedSurahIds.length > 0 ? 4 : 3) : step;
+  const displayTotal = form.preMemorizedSurahIds.length > 0 ? 4 : 3;
+
   return (
     <div className="min-h-screen bg-background">
-      <div className="pattern-bg text-white px-4 pt-12 pb-12">
+      {/* Hero header */}
+      <div className="pattern-bg text-white px-4 pt-12 pb-16">
         <div className="max-w-lg mx-auto text-center">
           <p className="arabic-text text-4xl mb-2 text-amber-200">بِسْمِ اللَّهِ الرَّحْمَنِ الرَّحِيمِ</p>
           <h1 className="text-2xl font-bold mt-3 text-white">NoorPath</h1>
@@ -47,13 +145,13 @@ export default function Home() {
         </div>
       </div>
 
-      <div className="max-w-lg mx-auto px-4 -mt-6 pb-12">
+      <div className="max-w-lg mx-auto px-4 -mt-8 pb-12">
         {isLoading ? (
-          <div className="space-y-3 mt-2">
+          <div className="space-y-3">
             {[1,2].map(i => <Skeleton key={i} className="h-24 rounded-2xl" />)}
           </div>
         ) : children.length === 0 ? (
-          <Card className="mt-2 text-center border-border shadow-sm">
+          <Card className="text-center border-border shadow-md">
             <CardContent className="py-12 px-6">
               <div className="text-6xl mb-4">📖</div>
               <h2 className="text-xl font-bold text-foreground mb-2">Begin the Journey</h2>
@@ -67,12 +165,17 @@ export default function Home() {
           </Card>
         ) : (
           <>
-            <div className="flex items-center justify-between mb-3 mt-2">
-              <h2 className="font-semibold text-foreground">Profiles</h2>
-              <Button variant="ghost" size="sm" onClick={() => setShowAdd(true)} className="text-primary text-xs">
-                <Plus size={14} className="mr-1" /> Add Child
-              </Button>
+            {/* Profiles header — fixed alignment */}
+            <div className="bg-background rounded-2xl shadow-md px-4 py-3 mb-3 flex items-center justify-between">
+              <h2 className="font-semibold text-foreground text-base">Profiles</h2>
+              <button
+                onClick={() => setShowAdd(true)}
+                className="flex items-center gap-1 text-xs font-medium text-primary bg-primary/10 px-3 py-1.5 rounded-full hover:bg-primary/20 transition-colors"
+              >
+                <Plus size={13} /> Add Child
+              </button>
             </div>
+
             <div className="space-y-3">
               {children.map((child) => (
                 <Link key={child.id} href={`/child/${child.id}`}>
@@ -106,38 +209,207 @@ export default function Home() {
                 </Link>
               ))}
             </div>
+
             <div className="grid grid-cols-2 gap-3 mt-5">
               <Card className="border-border"><CardContent className="p-4 text-center"><div className="text-2xl mb-2">📿</div><p className="text-xs font-semibold">Smart Review</p><p className="text-xs text-muted-foreground mt-1">Spaced repetition keeps memorization strong</p></CardContent></Card>
-              <Card className="border-border"><CardContent className="p-4 text-center"><div className="text-2xl mb-2">🎯</div><p className="text-xs font-semibold">Age-Based Plans</p><p className="text-xs text-muted-foreground mt-1">Tailored curriculum from age 3 to Hifz</p></CardContent></Card>
+              <Card className="border-border"><CardContent className="p-4 text-center"><div className="text-2xl mb-2">🎯</div><p className="text-xs font-semibold">Ability-Based Progress</p><p className="text-xs text-muted-foreground mt-1">Advance at your own pace, not by age</p></CardContent></Card>
             </div>
           </>
         )}
       </div>
 
-      <Dialog open={showAdd} onOpenChange={setShowAdd}>
-        <DialogContent className="max-w-sm mx-4">
-          <DialogHeader><DialogTitle>Add a Child Profile</DialogTitle></DialogHeader>
-          <div className="space-y-4 pt-2">
-            <div><Label>Name</Label><Input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="Child's name" className="mt-1" /></div>
-            <div><Label>Age</Label><Input type="number" min={3} max={18} value={form.age} onChange={e => setForm(f => ({ ...f, age: e.target.value }))} placeholder="3–18" className="mt-1" /></div>
-            <div>
-              <Label>Gender</Label>
-              <Select value={form.gender} onValueChange={v => setForm(f => ({ ...f, gender: v as "male" | "female" }))}>
-                <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
-                <SelectContent><SelectItem value="male">Male</SelectItem><SelectItem value="female">Female</SelectItem></SelectContent>
-              </Select>
+      {/* Multi-step onboarding dialog */}
+      <Dialog open={showAdd} onOpenChange={open => { setShowAdd(open); if (!open) { setStep(1); setForm(DEFAULT_FORM); } }}>
+        <DialogContent className="max-w-sm mx-4 max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="text-base">
+              {step === 1 ? "Create a Profile" : step === 2 ? "Prior Memorization" : step === 3 ? "How Strong Is the Memorization?" : "Daily Practice Goal"}
+            </DialogTitle>
+          </DialogHeader>
+
+          {/* Step indicator */}
+          <div className="flex items-center gap-1.5 mb-1">
+            {Array.from({ length: displayTotal }, (_, i) => i + 1).map(s => (
+              <div key={s} className={cn(
+                "h-1.5 flex-1 rounded-full transition-colors",
+                s < displayStep ? "bg-primary" : s === displayStep ? "bg-primary/70" : "bg-muted"
+              )} />
+            ))}
+          </div>
+          <p className="text-xs text-muted-foreground mb-3">Step {displayStep} of {displayTotal}</p>
+
+          {/* Step 1: Basic info */}
+          {step === 1 && (
+            <div className="space-y-4">
+              <div>
+                <Label>Child's Name</Label>
+                <Input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="Name" className="mt-1" />
+              </div>
+              <div>
+                <Label>Age</Label>
+                <Input type="number" min={3} max={18} value={form.age} onChange={e => setForm(f => ({ ...f, age: e.target.value }))} placeholder="3–18" className="mt-1" />
+              </div>
+              <div>
+                <Label>Gender</Label>
+                <Select value={form.gender} onValueChange={v => setForm(f => ({ ...f, gender: v as "male" | "female" }))}>
+                  <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="male">Male</SelectItem>
+                    <SelectItem value="female">Female</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Avatar</Label>
+                <div className="flex flex-wrap gap-2 mt-2">
+                  {AVATARS.map(emoji => (
+                    <button key={emoji} onClick={() => setForm(f => ({ ...f, avatarEmoji: emoji }))}
+                      className={cn("text-xl p-2 rounded-xl transition-all", form.avatarEmoji === emoji ? "bg-primary/20 ring-2 ring-primary scale-110" : "bg-muted hover:bg-muted/70")}>
+                      {emoji}
+                    </button>
+                  ))}
+                </div>
+              </div>
             </div>
-            <div>
-              <Label>Avatar</Label>
-              <div className="flex flex-wrap gap-2 mt-2">
-                {AVATARS.map(emoji => (
-                  <button key={emoji} onClick={() => setForm(f => ({ ...f, avatarEmoji: emoji }))}
-                    className={`text-xl p-2 rounded-xl transition-all ${form.avatarEmoji === emoji ? "bg-primary/20 ring-2 ring-primary scale-110" : "bg-muted hover:bg-muted/70"}`}>{emoji}</button>
+          )}
+
+          {/* Step 2: Prior memorization */}
+          {step === 2 && (
+            <div className="space-y-3">
+              <p className="text-sm text-muted-foreground">
+                Which surahs has {form.name || "your child"} already memorized? (Select all that apply — or none to start fresh with Al-Fatihah)
+              </p>
+              <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+                {COMMON_SURAHS.map(s => {
+                  const selected = form.preMemorizedSurahIds.includes(s.id);
+                  return (
+                    <button
+                      key={s.id}
+                      onClick={() => toggleSurah(s.id)}
+                      className={cn(
+                        "w-full flex items-center gap-3 p-3 rounded-xl border text-left transition-all",
+                        selected ? "border-primary bg-primary/5" : "border-border hover:border-border/80 hover:bg-muted/50"
+                      )}
+                    >
+                      <div className={cn(
+                        "w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-all",
+                        selected ? "border-primary bg-primary text-white" : "border-muted-foreground/40"
+                      )}>
+                        {selected && <Check size={11} />}
+                      </div>
+                      <div className="flex-1">
+                        <p className="text-sm font-medium">{s.name}</p>
+                        <p className="text-xs text-muted-foreground">{s.verseCount} verses</p>
+                      </div>
+                      <span className="arabic-text text-base text-muted-foreground">{s.arabic}</span>
+                    </button>
+                  );
+                })}
+              </div>
+              {form.preMemorizedSurahIds.length === 0 && (
+                <p className="text-xs text-primary bg-primary/5 rounded-lg p-2 text-center">
+                  ✨ Starting fresh? We'll begin with Al-Fatihah — the foundation of every prayer.
+                </p>
+              )}
+              {form.preMemorizedSurahIds.length > 0 && (
+                <p className="text-xs text-primary bg-primary/5 rounded-lg p-2 text-center">
+                  {form.preMemorizedSurahIds.length} surah{form.preMemorizedSurahIds.length > 1 ? "s" : ""} selected
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* Step 3: Memorization strength (only if surahs selected) */}
+          {step === 3 && form.preMemorizedSurahIds.length > 0 && (
+            <div className="space-y-4">
+              <p className="text-sm text-muted-foreground">
+                How solid is {form.name || "their"} memorization of the selected surahs?
+              </p>
+              <div className="space-y-2">
+                {[
+                  { value: 5, label: "Very Strong", desc: "Can recite confidently from memory, no hesitation", emoji: "🌟" },
+                  { value: 3, label: "Solid",       desc: "Knows it well but could use occasional review",    emoji: "✅" },
+                  { value: 2, label: "Learning",    desc: "Knows most of it but needs more practice",          emoji: "📖" },
+                  { value: 1, label: "Just Started", desc: "Only partially memorized, still very new",         emoji: "🌱" },
+                ].map(opt => (
+                  <button
+                    key={opt.value}
+                    onClick={() => setForm(f => ({ ...f, memorationStrength: opt.value }))}
+                    className={cn(
+                      "w-full flex items-center gap-3 p-3 rounded-xl border text-left transition-all",
+                      form.memorationStrength === opt.value ? "border-primary bg-primary/5" : "border-border hover:bg-muted/50"
+                    )}
+                  >
+                    <span className="text-2xl">{opt.emoji}</span>
+                    <div>
+                      <p className="text-sm font-medium">{opt.label}</p>
+                      <p className="text-xs text-muted-foreground">{opt.desc}</p>
+                    </div>
+                    {form.memorationStrength === opt.value && (
+                      <Check size={16} className="ml-auto text-primary" />
+                    )}
+                  </button>
                 ))}
               </div>
             </div>
-            <Button className="w-full rounded-full" onClick={() => createMutation.mutate()} disabled={!form.name || !form.age || createMutation.isPending}>
-              {createMutation.isPending ? "Creating..." : "Start Their Journey ✨"}
+          )}
+
+          {/* Step 4: Practice goal */}
+          {step === 4 && (
+            <div className="space-y-4">
+              <p className="text-sm text-muted-foreground">
+                How much time can {form.name || "your child"} practice each day?
+              </p>
+              <div className="grid grid-cols-2 gap-2">
+                {PRACTICE_OPTIONS.map(opt => (
+                  <button
+                    key={opt.value}
+                    onClick={() => setForm(f => ({ ...f, practiceMinutesPerDay: opt.value }))}
+                    className={cn(
+                      "p-3 rounded-xl border text-left transition-all",
+                      form.practiceMinutesPerDay === opt.value ? "border-primary bg-primary/5" : "border-border hover:bg-muted/50"
+                    )}
+                  >
+                    <p className="text-lg font-bold text-primary">{opt.label}</p>
+                    <p className="text-xs text-muted-foreground">{opt.desc}</p>
+                  </button>
+                ))}
+              </div>
+
+              {/* Summary */}
+              <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 space-y-1">
+                <p className="text-xs font-semibold text-primary mb-2">📋 Profile Summary</p>
+                <p className="text-sm"><span className="text-muted-foreground">Name:</span> <span className="font-medium">{form.name}</span></p>
+                <p className="text-sm"><span className="text-muted-foreground">Age:</span> <span className="font-medium">{form.age}</span></p>
+                <p className="text-sm"><span className="text-muted-foreground">Already memorized:</span> <span className="font-medium">
+                  {form.preMemorizedSurahIds.length === 0 ? "Starting fresh" : `${form.preMemorizedSurahIds.length} surah${form.preMemorizedSurahIds.length > 1 ? "s" : ""}`}
+                </span></p>
+                <p className="text-sm"><span className="text-muted-foreground">Daily practice:</span> <span className="font-medium">{form.practiceMinutesPerDay} min/day</span></p>
+              </div>
+            </div>
+          )}
+
+          {/* Navigation buttons */}
+          <div className="flex gap-2 mt-4 pt-2 border-t border-border">
+            {step > 1 && (
+              <Button variant="outline" size="sm" onClick={handleBack} className="gap-1">
+                <ChevronLeft size={14} /> Back
+              </Button>
+            )}
+            <Button
+              className="flex-1 rounded-full"
+              onClick={handleNext}
+              disabled={
+                (step === 1 && !canProceedStep1) ||
+                createMutation.isPending
+              }
+            >
+              {createMutation.isPending ? "Creating..." :
+               step < 4 ? (
+                 <span className="flex items-center gap-1">Next <ChevronRight size={14} /></span>
+               ) : (
+                 "Start Their Journey ✨"
+               )}
             </Button>
           </div>
         </DialogContent>

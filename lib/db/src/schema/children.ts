@@ -16,6 +16,9 @@ export const childrenTable = pgTable("children", {
   totalPoints: integer("total_points").notNull().default(0),
   juzCompleted: integer("juz_completed").notNull().default(0),
   lastActiveDate: text("last_active_date"),
+  practiceMinutesPerDay: integer("practice_minutes_per_day").notNull().default(20),
+  goals: text("goals"),
+  onboardingCompleted: integer("onboarding_completed").notNull().default(0),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
