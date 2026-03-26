@@ -139,9 +139,10 @@ export default function LessonPage() {
                     </Badge>
                   </div>
 
-                  {/* Audio player with word highlighting */}
+                  {/* Audio player with word highlighting — key forces full remount on verse change */}
                   <div className="py-4 border-y border-border/50 mb-4">
                     <VersePlayer
+                      key={`${surah.number}-${currentVerse.number}`}
                       arabic={currentVerse.arabic}
                       surahNumber={surah.number}
                       verseNumber={currentVerse.number}
