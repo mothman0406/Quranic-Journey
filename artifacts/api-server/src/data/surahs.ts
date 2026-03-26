@@ -32,7 +32,7 @@ export const SURAHS: SurahData[] = [
     revelationType: "meccan",
     difficulty: "beginner",
     ageGroup: "toddler",
-    recommendedOrder: 1,
+    recommendedOrder: 2,
     tafsirBrief: "This surah teaches us to seek Allah's protection from all evil, especially the whispers of Shaytan who tries to put bad thoughts in our hearts.",
     tajweedNotes: ["Practice idghaam on 'min sharril'", "Note the qalqalah on 'dal' in al-was-wasil"],
     verses: [
@@ -55,7 +55,7 @@ export const SURAHS: SurahData[] = [
     revelationType: "meccan",
     difficulty: "beginner",
     ageGroup: "toddler",
-    recommendedOrder: 2,
+    recommendedOrder: 3,
     tafsirBrief: "We ask Allah to protect us from the darkness of night, from magic, and from those who are jealous of us. Allah is our protector!",
     tajweedNotes: ["Practice the heavy 'qaf' in 'Qul'", "Note ikhfa' in 'min sharri'"],
     verses: [
@@ -77,7 +77,7 @@ export const SURAHS: SurahData[] = [
     revelationType: "meccan",
     difficulty: "beginner",
     ageGroup: "toddler",
-    recommendedOrder: 3,
+    recommendedOrder: 4,
     tafsirBrief: "This surah is equal to one-third of the Quran! It teaches us that Allah is One, He needs no one, and no one is like Him. He has no parents and no children.",
     tajweedNotes: ["Practice the heavy 'Llah' (laam mufakhkhama)", "Note the madd in 'Ahad'"],
     verses: [
@@ -98,7 +98,7 @@ export const SURAHS: SurahData[] = [
     revelationType: "meccan",
     difficulty: "beginner",
     ageGroup: "child",
-    recommendedOrder: 4,
+    recommendedOrder: 5,
     tafsirBrief: "This surah tells us about Abu Lahab, the uncle of the Prophet ﷺ, who was very mean to him. It teaches us that those who hurt good people will face consequences.",
     tajweedNotes: ["Practice qalqalah on 'ba' in 'Abi'", "Note the hamzah in 'lahab'"],
     verses: [
@@ -120,7 +120,7 @@ export const SURAHS: SurahData[] = [
     revelationType: "medinan",
     difficulty: "beginner",
     ageGroup: "child",
-    recommendedOrder: 5,
+    recommendedOrder: 6,
     tafsirBrief: "When Allah's help comes and you see people entering Islam in large numbers, praise Allah and ask His forgiveness. This surah was revealed near the end of the Prophet's ﷺ life.",
     tajweedNotes: ["Practice ghunna on 'nun' and 'meem'", "Note idghaam in 'ra-aytan nasa'"],
     verses: [
@@ -140,7 +140,7 @@ export const SURAHS: SurahData[] = [
     revelationType: "meccan",
     difficulty: "beginner",
     ageGroup: "child",
-    recommendedOrder: 6,
+    recommendedOrder: 7,
     tafsirBrief: "This surah clearly shows that Muslims worship only Allah. We respect others but we will never worship what they worship. 'For you is your religion, and for me is my religion.'",
     tajweedNotes: ["Practice the light 'lam' in 'la a'budu'", "Note the waqf marks"],
     verses: [
@@ -163,7 +163,7 @@ export const SURAHS: SurahData[] = [
     revelationType: "meccan",
     difficulty: "beginner",
     ageGroup: "toddler",
-    recommendedOrder: 7,
+    recommendedOrder: 8,
     tafsirBrief: "Allah gave the Prophet ﷺ Al-Kawthar, a beautiful river in Jannah! In gratitude, we pray and give to those in need. The one who hates the Prophet ﷺ has nothing.",
     tajweedNotes: ["Practice the madd in 'Al-Kawthar'", "Note the qalqalah on 'ta' in 'wa'nhar'"],
     verses: [
@@ -183,7 +183,7 @@ export const SURAHS: SurahData[] = [
     revelationType: "meccan",
     difficulty: "intermediate",
     ageGroup: "child",
-    recommendedOrder: 8,
+    recommendedOrder: 9,
     tafsirBrief: "This surah talks about those who deny the Day of Judgment. They are harsh to orphans, don't feed the poor, and are careless in their prayers. We should be the opposite — kind and caring!",
     tajweedNotes: ["Practice ikhfa' in 'man yadu'", "Note the elongation in 'al-yatim'"],
     verses: [
@@ -207,7 +207,7 @@ export const SURAHS: SurahData[] = [
     revelationType: "meccan",
     difficulty: "intermediate",
     ageGroup: "child",
-    recommendedOrder: 9,
+    recommendedOrder: 10,
     tafsirBrief: "Allah reminded the Quraysh tribe of His blessings — safe trade journeys in winter and summer. In return, they should worship the One who feeds them and keeps them safe.",
     tajweedNotes: ["Practice the 'lam' in 'li-ilafi'", "Note the waw of 'aw'"],
     verses: [
@@ -228,7 +228,7 @@ export const SURAHS: SurahData[] = [
     revelationType: "meccan",
     difficulty: "intermediate",
     ageGroup: "child",
-    recommendedOrder: 10,
+    recommendedOrder: 11,
     tafsirBrief: "The army of elephants came to destroy the Ka'bah. Allah sent birds with small stones to destroy them completely! The year the Prophet ﷺ was born. Allah always protects His House.",
     tajweedNotes: ["Practice the 'seen' in 'sijjil'", "Note idghaam in 'bi ababiil'"],
     verses: [
@@ -250,7 +250,7 @@ export const SURAHS: SurahData[] = [
     revelationType: "meccan",
     difficulty: "intermediate",
     ageGroup: "preteen",
-    recommendedOrder: 11,
+    recommendedOrder: 12,
     tafsirBrief: "This surah warns against those who mock others and think their money will last forever. Real success is in good character, not wealth or status.",
     tajweedNotes: ["Practice the emphatic 'ha' in 'humazah'", "Note the madd in 'Hutamah'"],
     verses: [
@@ -276,7 +276,7 @@ export const SURAHS: SurahData[] = [
     revelationType: "meccan",
     difficulty: "beginner",
     ageGroup: "child",
-    recommendedOrder: 12,
+    recommendedOrder: 13,
     tafsirBrief: "By time itself, all people are at a loss except those who: believe, do good deeds, encourage each other to truth, and encourage each other to be patient. Imam Ash-Shafi'i said if people only reflected on this surah, it would be enough for them.",
     tajweedNotes: ["Practice the 'ayn' in 'Al-Asr'", "Note the waw in 'wal-'asr'"],
     verses: [
@@ -296,7 +296,7 @@ export const SURAHS: SurahData[] = [
     revelationType: "meccan",
     difficulty: "intermediate",
     ageGroup: "preteen",
-    recommendedOrder: 13,
+    recommendedOrder: 15,
     tafsirBrief: "On the Day of Judgment, everything will be shaken. Our deeds will be weighed on a scale. If our good deeds are heavy, we will have a blessed life. If they are light, our home will be the Pit.",
     tajweedNotes: ["Practice the qalqalah on 'qaf'", "Note the madd in 'al-qari'ah'"],
     verses: [
@@ -324,7 +324,7 @@ export const SURAHS: SurahData[] = [
     revelationType: "medinan",
     difficulty: "intermediate",
     ageGroup: "child",
-    recommendedOrder: 14,
+    recommendedOrder: 17,
     tafsirBrief: "When the great earthquake comes, the Earth will reveal its secrets and people will see all their deeds. Even an atom's weight of good or bad will be shown. Every small deed matters!",
     tajweedNotes: ["Practice 'zal' in 'zalzalat'", "Note the qalqalah on 'dal' at end"],
     verses: [
@@ -349,7 +349,7 @@ export const SURAHS: SurahData[] = [
     revelationType: "meccan",
     difficulty: "beginner",
     ageGroup: "toddler",
-    recommendedOrder: 0,
+    recommendedOrder: 1,
     tafsirBrief: "Al-Fatihah is the most important surah — we recite it in every rakah of prayer! It is a complete prayer to Allah: praising Him, declaring He is Lord of everything, and asking Him to guide us to the right path.",
     tajweedNotes: ["Must master before any other surah", "Practice the 'dh' in 'al-hamdu'", "Note the elongation of 'Ar-Rahman Ar-Raheem'", "Clear 'al-mustaqeem' with full madd"],
     verses: [
@@ -373,7 +373,7 @@ export const SURAHS: SurahData[] = [
     revelationType: "medinan",
     difficulty: "advanced",
     ageGroup: "teen",
-    recommendedOrder: 100,
+    recommendedOrder: 114,
     tafsirBrief: "The longest surah in the Quran. It covers many important topics: the story of Adam, Bani Israel, prayer, fasting, Hajj, marriage, and much more. It contains Ayatul Kursi, the greatest verse in the Quran.",
     tajweedNotes: ["Recite clearly and at a measured pace", "Listen to a skilled reciter to learn proper pronunciation"],
     verses: []
@@ -389,7 +389,7 @@ export const SURAHS: SurahData[] = [
     revelationType: "medinan",
     difficulty: "advanced",
     ageGroup: "teen",
-    recommendedOrder: 101,
+    recommendedOrder: 113,
     tafsirBrief: "This surah discusses the stories of Maryam and Isa (Jesus), the Battle of Uhud, and the importance of unity among believers. It reminds us to hold fast to the rope of Allah.",
     tajweedNotes: ["Recite clearly and at a measured pace", "Listen to a skilled reciter to learn proper pronunciation"],
     verses: []
@@ -405,7 +405,7 @@ export const SURAHS: SurahData[] = [
     revelationType: "medinan",
     difficulty: "advanced",
     ageGroup: "teen",
-    recommendedOrder: 102,
+    recommendedOrder: 112,
     tafsirBrief: "This surah covers laws regarding women, orphans, inheritance, and justice. It emphasizes treating people fairly and with kindness, especially those who are vulnerable.",
     tajweedNotes: ["Recite clearly and at a measured pace", "Listen to a skilled reciter to learn proper pronunciation"],
     verses: []
@@ -421,7 +421,7 @@ export const SURAHS: SurahData[] = [
     revelationType: "medinan",
     difficulty: "advanced",
     ageGroup: "teen",
-    recommendedOrder: 103,
+    recommendedOrder: 111,
     tafsirBrief: "This surah discusses halal food, justice, the covenants with previous nations, and the final message of Islam. It includes the story of the disciples of Isa asking for a table from heaven.",
     tajweedNotes: ["Recite clearly and at a measured pace", "Listen to a skilled reciter to learn proper pronunciation"],
     verses: []
@@ -437,7 +437,7 @@ export const SURAHS: SurahData[] = [
     revelationType: "meccan",
     difficulty: "advanced",
     ageGroup: "teen",
-    recommendedOrder: 104,
+    recommendedOrder: 110,
     tafsirBrief: "This surah addresses the oneness of Allah and refutes polytheism. It tells the story of Ibrahim's search for the true God and emphasizes that guidance comes only from Allah.",
     tajweedNotes: ["Recite clearly and at a measured pace", "Listen to a skilled reciter to learn proper pronunciation"],
     verses: []
@@ -453,7 +453,7 @@ export const SURAHS: SurahData[] = [
     revelationType: "meccan",
     difficulty: "advanced",
     ageGroup: "teen",
-    recommendedOrder: 105,
+    recommendedOrder: 109,
     tafsirBrief: "This surah tells the stories of Adam, Nuh, Hud, Salih, Lut, Shu'ayb, and Musa. It warns against arrogance and following Shaytan, and reminds us of the consequences of rejecting messengers.",
     tajweedNotes: ["Recite clearly and at a measured pace", "Listen to a skilled reciter to learn proper pronunciation"],
     verses: []
@@ -469,7 +469,7 @@ export const SURAHS: SurahData[] = [
     revelationType: "medinan",
     difficulty: "advanced",
     ageGroup: "teen",
-    recommendedOrder: 106,
+    recommendedOrder: 108,
     tafsirBrief: "Revealed after the Battle of Badr, this surah discusses the spoils of war, the qualities of true believers, and the importance of trusting Allah in difficult times.",
     tajweedNotes: ["Recite clearly and at a measured pace", "Listen to a skilled reciter to learn proper pronunciation"],
     verses: []
@@ -501,7 +501,7 @@ export const SURAHS: SurahData[] = [
     revelationType: "meccan",
     difficulty: "advanced",
     ageGroup: "teen",
-    recommendedOrder: 108,
+    recommendedOrder: 106,
     tafsirBrief: "Named after Prophet Yunus (Jonah), this surah emphasizes that guidance is from Allah alone. It tells how Yunus's people repented and were saved, and how Pharaoh's last-minute repentance was rejected.",
     tajweedNotes: ["Recite clearly and at a measured pace", "Listen to a skilled reciter to learn proper pronunciation"],
     verses: []
@@ -517,7 +517,7 @@ export const SURAHS: SurahData[] = [
     revelationType: "meccan",
     difficulty: "advanced",
     ageGroup: "teen",
-    recommendedOrder: 109,
+    recommendedOrder: 105,
     tafsirBrief: "This surah covers the stories of seven prophets including Nuh, Hud, Salih, Lut, Shu'ayb, and Musa. It shows how each community was warned but many rejected the message.",
     tajweedNotes: ["Recite clearly and at a measured pace", "Listen to a skilled reciter to learn proper pronunciation"],
     verses: []
@@ -533,7 +533,7 @@ export const SURAHS: SurahData[] = [
     revelationType: "meccan",
     difficulty: "advanced",
     ageGroup: "teen",
-    recommendedOrder: 110,
+    recommendedOrder: 104,
     tafsirBrief: "The 'best of stories' — the beautiful life story of Prophet Yusuf (Joseph). It teaches us about patience, forgiveness, trust in Allah, and how He turns hardship into success for those who believe.",
     tajweedNotes: ["Recite clearly and at a measured pace", "Listen to a skilled reciter to learn proper pronunciation"],
     verses: []
@@ -549,7 +549,7 @@ export const SURAHS: SurahData[] = [
     revelationType: "medinan",
     difficulty: "advanced",
     ageGroup: "teen",
-    recommendedOrder: 111,
+    recommendedOrder: 103,
     tafsirBrief: "This surah discusses the signs of Allah in creation — thunder, lightning, plants, rivers. It reminds us that hearts find rest only in the remembrance of Allah.",
     tajweedNotes: ["Recite clearly and at a measured pace", "Listen to a skilled reciter to learn proper pronunciation"],
     verses: []
@@ -565,7 +565,7 @@ export const SURAHS: SurahData[] = [
     revelationType: "meccan",
     difficulty: "advanced",
     ageGroup: "teen",
-    recommendedOrder: 112,
+    recommendedOrder: 102,
     tafsirBrief: "Named after Prophet Ibrahim, this surah tells of his prayers for his family and community. It contains the beautiful metaphor of a good word being like a good tree with firm roots.",
     tajweedNotes: ["Recite clearly and at a measured pace", "Listen to a skilled reciter to learn proper pronunciation"],
     verses: []
@@ -581,7 +581,7 @@ export const SURAHS: SurahData[] = [
     revelationType: "meccan",
     difficulty: "advanced",
     ageGroup: "teen",
-    recommendedOrder: 113,
+    recommendedOrder: 101,
     tafsirBrief: "This surah discusses the creation of man and Shaytan's refusal to prostrate. It also tells of the people of Al-Hijr who carved homes in rocks but still rejected Allah's messenger.",
     tajweedNotes: ["Recite clearly and at a measured pace", "Listen to a skilled reciter to learn proper pronunciation"],
     verses: []
@@ -597,7 +597,7 @@ export const SURAHS: SurahData[] = [
     revelationType: "meccan",
     difficulty: "advanced",
     ageGroup: "teen",
-    recommendedOrder: 114,
+    recommendedOrder: 100,
     tafsirBrief: "Named after the bee, this surah discusses the signs of Allah in nature — bees, cattle, ships, rivers. It emphasizes the blessing of the Quran and calls to justice and excellence.",
     tajweedNotes: ["Recite clearly and at a measured pace", "Listen to a skilled reciter to learn proper pronunciation"],
     verses: []
@@ -613,7 +613,7 @@ export const SURAHS: SurahData[] = [
     revelationType: "meccan",
     difficulty: "advanced",
     ageGroup: "teen",
-    recommendedOrder: 115,
+    recommendedOrder: 99,
     tafsirBrief: "Begins with the miraculous Night Journey of the Prophet ﷺ from Makkah to Jerusalem. It contains important moral guidelines including honoring parents, avoiding waste, and not killing.",
     tajweedNotes: ["Recite clearly and at a measured pace", "Listen to a skilled reciter to learn proper pronunciation"],
     verses: []
@@ -629,7 +629,7 @@ export const SURAHS: SurahData[] = [
     revelationType: "meccan",
     difficulty: "advanced",
     ageGroup: "preteen",
-    recommendedOrder: 116,
+    recommendedOrder: 98,
     tafsirBrief: "Contains four stories: the People of the Cave, the man with two gardens, Musa and Khidr, and Dhul-Qarnayn. Reading it on Fridays protects from the Dajjal. It teaches relying on Allah in all circumstances.",
     tajweedNotes: ["Recite clearly and at a measured pace", "Listen to a skilled reciter to learn proper pronunciation"],
     verses: []
@@ -645,7 +645,7 @@ export const SURAHS: SurahData[] = [
     revelationType: "meccan",
     difficulty: "advanced",
     ageGroup: "preteen",
-    recommendedOrder: 117,
+    recommendedOrder: 97,
     tafsirBrief: "Named after Maryam (Mary), mother of Isa. It tells the miraculous births of Yahya and Isa, and stories of Ibrahim, Musa, Idris, and other prophets. It emphasizes Allah's mercy and the truth of resurrection.",
     tajweedNotes: ["Recite clearly and at a measured pace", "Listen to a skilled reciter to learn proper pronunciation"],
     verses: []
@@ -661,7 +661,7 @@ export const SURAHS: SurahData[] = [
     revelationType: "meccan",
     difficulty: "advanced",
     ageGroup: "teen",
-    recommendedOrder: 118,
+    recommendedOrder: 96,
     tafsirBrief: "Begins with the mysterious letters Ta-Ha. It tells the story of Musa in detail — his call to prophethood, confrontation with Pharaoh, and the story of his people with the golden calf.",
     tajweedNotes: ["Recite clearly and at a measured pace", "Listen to a skilled reciter to learn proper pronunciation"],
     verses: []
@@ -677,7 +677,7 @@ export const SURAHS: SurahData[] = [
     revelationType: "meccan",
     difficulty: "advanced",
     ageGroup: "teen",
-    recommendedOrder: 119,
+    recommendedOrder: 95,
     tafsirBrief: "Mentions many prophets: Ibrahim, Lut, Nuh, Dawud, Sulayman, Ayyub, Yunus, Zakariyya, Maryam, and Isa. All delivered the same message: worship Allah alone.",
     tajweedNotes: ["Recite clearly and at a measured pace", "Listen to a skilled reciter to learn proper pronunciation"],
     verses: []
@@ -693,7 +693,7 @@ export const SURAHS: SurahData[] = [
     revelationType: "medinan",
     difficulty: "advanced",
     ageGroup: "teen",
-    recommendedOrder: 120,
+    recommendedOrder: 94,
     tafsirBrief: "Discusses the rituals of Hajj, the Day of Judgment, and the importance of striving for Allah. It contains powerful verses about the creation and destruction of the universe.",
     tajweedNotes: ["Recite clearly and at a measured pace", "Listen to a skilled reciter to learn proper pronunciation"],
     verses: []
@@ -709,7 +709,7 @@ export const SURAHS: SurahData[] = [
     revelationType: "meccan",
     difficulty: "advanced",
     ageGroup: "teen",
-    recommendedOrder: 121,
+    recommendedOrder: 93,
     tafsirBrief: "Describes the qualities of successful believers: humility in prayer, avoiding vain talk, giving zakat, guarding chastity, and keeping trusts. It also tells the stories of Nuh, Musa, and Isa.",
     tajweedNotes: ["Recite clearly and at a measured pace", "Listen to a skilled reciter to learn proper pronunciation"],
     verses: []
@@ -725,7 +725,7 @@ export const SURAHS: SurahData[] = [
     revelationType: "medinan",
     difficulty: "advanced",
     ageGroup: "teen",
-    recommendedOrder: 122,
+    recommendedOrder: 92,
     tafsirBrief: "Discusses moral purity, modesty, and the punishment for wrongdoing. It contains the famous 'Light Verse' (Ayat an-Nur) comparing Allah's light to a lamp in a niche.",
     tajweedNotes: ["Recite clearly and at a measured pace", "Listen to a skilled reciter to learn proper pronunciation"],
     verses: []
@@ -741,7 +741,7 @@ export const SURAHS: SurahData[] = [
     revelationType: "meccan",
     difficulty: "advanced",
     ageGroup: "teen",
-    recommendedOrder: 123,
+    recommendedOrder: 91,
     tafsirBrief: "The Quran is the criterion between right and wrong. This surah describes the qualities of 'Ibad ar-Rahman (the servants of the Most Merciful): humble, peaceful, and devoted.",
     tajweedNotes: ["Recite clearly and at a measured pace", "Listen to a skilled reciter to learn proper pronunciation"],
     verses: []
@@ -757,7 +757,7 @@ export const SURAHS: SurahData[] = [
     revelationType: "meccan",
     difficulty: "advanced",
     ageGroup: "teen",
-    recommendedOrder: 124,
+    recommendedOrder: 90,
     tafsirBrief: "Contains stories of Musa, Ibrahim, Nuh, Hud, Salih, Lut, and Shu'ayb. It emphasizes that the Quran is not poetry but divine revelation, and warns against following misleading poets.",
     tajweedNotes: ["Recite clearly and at a measured pace", "Listen to a skilled reciter to learn proper pronunciation"],
     verses: []
@@ -773,7 +773,7 @@ export const SURAHS: SurahData[] = [
     revelationType: "meccan",
     difficulty: "advanced",
     ageGroup: "preteen",
-    recommendedOrder: 125,
+    recommendedOrder: 89,
     tafsirBrief: "Named after the ant whose conversation Sulayman heard. It tells the stories of Musa, Sulayman and the Queen of Saba, and Salih and Lut. It contains the beautiful beginning 'Ta Sin'.",
     tajweedNotes: ["Recite clearly and at a measured pace", "Listen to a skilled reciter to learn proper pronunciation"],
     verses: []
@@ -789,7 +789,7 @@ export const SURAHS: SurahData[] = [
     revelationType: "meccan",
     difficulty: "advanced",
     ageGroup: "teen",
-    recommendedOrder: 126,
+    recommendedOrder: 88,
     tafsirBrief: "Tells the detailed story of Musa from birth, his time with Pharaoh, his journey to Madyan, and his call to prophethood. It also warns against the arrogance of Qarun who was given great wealth.",
     tajweedNotes: ["Recite clearly and at a measured pace", "Listen to a skilled reciter to learn proper pronunciation"],
     verses: []
@@ -805,7 +805,7 @@ export const SURAHS: SurahData[] = [
     revelationType: "meccan",
     difficulty: "advanced",
     ageGroup: "teen",
-    recommendedOrder: 127,
+    recommendedOrder: 87,
     tafsirBrief: "Named after the spider whose house is the weakest of all. Those who take other protectors than Allah are like those who rely on a spider's web. The surah tells of various prophets and their trials.",
     tajweedNotes: ["Recite clearly and at a measured pace", "Listen to a skilled reciter to learn proper pronunciation"],
     verses: []
@@ -821,7 +821,7 @@ export const SURAHS: SurahData[] = [
     revelationType: "meccan",
     difficulty: "advanced",
     ageGroup: "teen",
-    recommendedOrder: 128,
+    recommendedOrder: 86,
     tafsirBrief: "Begins with the prophecy that the Romans (Byzantines) would be defeated and then later be victorious — both of which came true. It discusses the signs of Allah and the Day of Judgment.",
     tajweedNotes: ["Recite clearly and at a measured pace", "Listen to a skilled reciter to learn proper pronunciation"],
     verses: []
@@ -837,7 +837,7 @@ export const SURAHS: SurahData[] = [
     revelationType: "meccan",
     difficulty: "intermediate",
     ageGroup: "preteen",
-    recommendedOrder: 129,
+    recommendedOrder: 85,
     tafsirBrief: "Contains the wise advice of Luqman to his son: worship Allah alone, honor your parents, be humble, pray regularly, and be patient. These timeless lessons guide children on the right path.",
     tajweedNotes: ["Recite clearly and at a measured pace", "Listen to a skilled reciter to learn proper pronunciation"],
     verses: []
@@ -853,7 +853,7 @@ export const SURAHS: SurahData[] = [
     revelationType: "meccan",
     difficulty: "intermediate",
     ageGroup: "preteen",
-    recommendedOrder: 130,
+    recommendedOrder: 84,
     tafsirBrief: "This surah discusses the creation of humans and the Quran as a book of truth. It contains a verse of prostration (sajdah), reminding us to prostrate to Allah with humility.",
     tajweedNotes: ["Recite clearly and at a measured pace", "Listen to a skilled reciter to learn proper pronunciation"],
     verses: []
@@ -869,7 +869,7 @@ export const SURAHS: SurahData[] = [
     revelationType: "medinan",
     difficulty: "advanced",
     ageGroup: "teen",
-    recommendedOrder: 131,
+    recommendedOrder: 83,
     tafsirBrief: "Discusses the Battle of the Trench (Khandaq) and the importance of obeying the Prophet ﷺ. It contains guidance on family life, modesty, and the trust (amanah) that was offered to the heavens and earth.",
     tajweedNotes: ["Recite clearly and at a measured pace", "Listen to a skilled reciter to learn proper pronunciation"],
     verses: []
@@ -885,7 +885,7 @@ export const SURAHS: SurahData[] = [
     revelationType: "meccan",
     difficulty: "advanced",
     ageGroup: "teen",
-    recommendedOrder: 132,
+    recommendedOrder: 82,
     tafsirBrief: "Tells of Dawud and Sulayman and their blessings from Allah. It also tells of the people of Saba (Sheba) who had great blessings but became ungrateful, and Allah sent a flood against them.",
     tajweedNotes: ["Recite clearly and at a measured pace", "Listen to a skilled reciter to learn proper pronunciation"],
     verses: []
@@ -901,7 +901,7 @@ export const SURAHS: SurahData[] = [
     revelationType: "meccan",
     difficulty: "advanced",
     ageGroup: "teen",
-    recommendedOrder: 133,
+    recommendedOrder: 81,
     tafsirBrief: "Allah is Al-Fatir — the Creator who originated all of creation from nothing. This surah discusses the beauty of creation, the categories of people, and the rewards of those who believe.",
     tajweedNotes: ["Recite clearly and at a measured pace", "Listen to a skilled reciter to learn proper pronunciation"],
     verses: []
@@ -917,7 +917,7 @@ export const SURAHS: SurahData[] = [
     revelationType: "meccan",
     difficulty: "advanced",
     ageGroup: "preteen",
-    recommendedOrder: 134,
+    recommendedOrder: 80,
     tafsirBrief: "Called 'the heart of the Quran.' It tells the story of a man who believed and was killed for defending the messengers. It discusses resurrection with powerful proofs and the coming of the Day of Judgment.",
     tajweedNotes: ["Recite clearly and at a measured pace", "Listen to a skilled reciter to learn proper pronunciation"],
     verses: []
@@ -933,7 +933,7 @@ export const SURAHS: SurahData[] = [
     revelationType: "meccan",
     difficulty: "advanced",
     ageGroup: "teen",
-    recommendedOrder: 135,
+    recommendedOrder: 79,
     tafsirBrief: "Begins with an oath by the angels arranged in rows. It tells the stories of Nuh, Ibrahim, Isma'il (the sacrifice), Musa, Ilyas, Lut, and Yunus. It ends with a declaration of Allah's glory.",
     tajweedNotes: ["Recite clearly and at a measured pace", "Listen to a skilled reciter to learn proper pronunciation"],
     verses: []
@@ -949,7 +949,7 @@ export const SURAHS: SurahData[] = [
     revelationType: "meccan",
     difficulty: "advanced",
     ageGroup: "teen",
-    recommendedOrder: 136,
+    recommendedOrder: 78,
     tafsirBrief: "Begins with the letter Sad (ص) by oath. It tells of Dawud and his wisdom, Sulayman's blessings, Ayyub's patience, and Ibrahim, Isma'il, and Is-haq. It reminds us that the Quran is a reminder for all.",
     tajweedNotes: ["Recite clearly and at a measured pace", "Listen to a skilled reciter to learn proper pronunciation"],
     verses: []
@@ -965,7 +965,7 @@ export const SURAHS: SurahData[] = [
     revelationType: "meccan",
     difficulty: "advanced",
     ageGroup: "teen",
-    recommendedOrder: 137,
+    recommendedOrder: 77,
     tafsirBrief: "Emphasizes that sincere worship belongs only to Allah. It reminds people that on the Day of Judgment, the wrongdoers and the righteous will be led to Hell and Paradise in groups.",
     tajweedNotes: ["Recite clearly and at a measured pace", "Listen to a skilled reciter to learn proper pronunciation"],
     verses: []
@@ -981,7 +981,7 @@ export const SURAHS: SurahData[] = [
     revelationType: "meccan",
     difficulty: "advanced",
     ageGroup: "teen",
-    recommendedOrder: 138,
+    recommendedOrder: 76,
     tafsirBrief: "Also called Al-Mu'min (The Believer). It tells the story of a believing man from Pharaoh's family who secretly defended Musa. It emphasizes calling on Allah and His mercy.",
     tajweedNotes: ["Recite clearly and at a measured pace", "Listen to a skilled reciter to learn proper pronunciation"],
     verses: []
@@ -997,7 +997,7 @@ export const SURAHS: SurahData[] = [
     revelationType: "meccan",
     difficulty: "advanced",
     ageGroup: "teen",
-    recommendedOrder: 139,
+    recommendedOrder: 75,
     tafsirBrief: "Discusses the detailed explanation of the Quran and calls people to worship Allah. It describes the fate of the people of 'Ad and Thamud who rejected the messengers.",
     tajweedNotes: ["Recite clearly and at a measured pace", "Listen to a skilled reciter to learn proper pronunciation"],
     verses: []
@@ -1013,7 +1013,7 @@ export const SURAHS: SurahData[] = [
     revelationType: "meccan",
     difficulty: "advanced",
     ageGroup: "teen",
-    recommendedOrder: 140,
+    recommendedOrder: 74,
     tafsirBrief: "Emphasizes that all religions came from the same source — Allah. It highlights the importance of consultation (shura) in affairs and that revelation comes only through Allah's permission.",
     tajweedNotes: ["Recite clearly and at a measured pace", "Listen to a skilled reciter to learn proper pronunciation"],
     verses: []
@@ -1029,7 +1029,7 @@ export const SURAHS: SurahData[] = [
     revelationType: "meccan",
     difficulty: "advanced",
     ageGroup: "teen",
-    recommendedOrder: 141,
+    recommendedOrder: 73,
     tafsirBrief: "Warns against being deceived by worldly gold and adornments. It tells of Ibrahim's rejection of idol worship and the story of Isa (Jesus), affirming his message was of pure monotheism.",
     tajweedNotes: ["Recite clearly and at a measured pace", "Listen to a skilled reciter to learn proper pronunciation"],
     verses: []
@@ -1045,7 +1045,7 @@ export const SURAHS: SurahData[] = [
     revelationType: "meccan",
     difficulty: "advanced",
     ageGroup: "teen",
-    recommendedOrder: 142,
+    recommendedOrder: 72,
     tafsirBrief: "Describes the coming of a smoke (dukhan) as a sign before the Day of Judgment. It tells of Pharaoh's people and the tree of Zaqqum in Hell. It reminds us of the Quran's greatness.",
     tajweedNotes: ["Recite clearly and at a measured pace", "Listen to a skilled reciter to learn proper pronunciation"],
     verses: []
@@ -1061,7 +1061,7 @@ export const SURAHS: SurahData[] = [
     revelationType: "meccan",
     difficulty: "advanced",
     ageGroup: "teen",
-    recommendedOrder: 143,
+    recommendedOrder: 71,
     tafsirBrief: "Discusses the signs of Allah in creation and warns those who follow desires without knowledge. On the Day of Judgment, every nation will be seen crouching on their knees.",
     tajweedNotes: ["Recite clearly and at a measured pace", "Listen to a skilled reciter to learn proper pronunciation"],
     verses: []
@@ -1077,7 +1077,7 @@ export const SURAHS: SurahData[] = [
     revelationType: "meccan",
     difficulty: "advanced",
     ageGroup: "teen",
-    recommendedOrder: 144,
+    recommendedOrder: 70,
     tafsirBrief: "Named after the sand dunes of the people of 'Ad. It discusses the fate of those who rejected the message. It also tells of the jinn who listened to the Quran and became believers.",
     tajweedNotes: ["Recite clearly and at a measured pace", "Listen to a skilled reciter to learn proper pronunciation"],
     verses: []
@@ -1093,7 +1093,7 @@ export const SURAHS: SurahData[] = [
     revelationType: "medinan",
     difficulty: "advanced",
     ageGroup: "teen",
-    recommendedOrder: 145,
+    recommendedOrder: 69,
     tafsirBrief: "Named after the Prophet ﷺ. It discusses the believers who fight in Allah's cause, the hypocrites who avoid sacrifice, and calls believers to follow the Quran and not be swayed by desires.",
     tajweedNotes: ["Recite clearly and at a measured pace", "Listen to a skilled reciter to learn proper pronunciation"],
     verses: []
@@ -1109,7 +1109,7 @@ export const SURAHS: SurahData[] = [
     revelationType: "medinan",
     difficulty: "intermediate",
     ageGroup: "teen",
-    recommendedOrder: 146,
+    recommendedOrder: 68,
     tafsirBrief: "Revealed after the Treaty of Hudaybiyyah, which at first seemed like a defeat but was truly a great victory. It praises the believers who pledged allegiance under the tree and promises Allah's pleasure.",
     tajweedNotes: ["Recite clearly and at a measured pace", "Listen to a skilled reciter to learn proper pronunciation"],
     verses: []
@@ -1125,7 +1125,7 @@ export const SURAHS: SurahData[] = [
     revelationType: "medinan",
     difficulty: "intermediate",
     ageGroup: "preteen",
-    recommendedOrder: 147,
+    recommendedOrder: 67,
     tafsirBrief: "A surah of Islamic manners and social ethics: verify news before acting on it, don't mock others, avoid suspicion and backbiting, and know that the most noble person is the most God-fearing.",
     tajweedNotes: ["Recite clearly and at a measured pace", "Listen to a skilled reciter to learn proper pronunciation"],
     verses: []
@@ -1141,7 +1141,7 @@ export const SURAHS: SurahData[] = [
     revelationType: "meccan",
     difficulty: "advanced",
     ageGroup: "teen",
-    recommendedOrder: 148,
+    recommendedOrder: 66,
     tafsirBrief: "Begins with the letter Qaf. It discusses resurrection, the recording of deeds, and the Day of Judgment. The Prophet ﷺ used to recite it in Friday prayers because of its powerful reminders.",
     tajweedNotes: ["Recite clearly and at a measured pace", "Listen to a skilled reciter to learn proper pronunciation"],
     verses: []
@@ -1157,7 +1157,7 @@ export const SURAHS: SurahData[] = [
     revelationType: "meccan",
     difficulty: "advanced",
     ageGroup: "teen",
-    recommendedOrder: 149,
+    recommendedOrder: 65,
     tafsirBrief: "Begins with an oath by the winds. It tells of Ibrahim's guests (the angels), and the stories of Musa, 'Ad, Thamud, and Nuh. It ends with the declaration that humans were created only to worship Allah.",
     tajweedNotes: ["Recite clearly and at a measured pace", "Listen to a skilled reciter to learn proper pronunciation"],
     verses: []
@@ -1173,7 +1173,7 @@ export const SURAHS: SurahData[] = [
     revelationType: "meccan",
     difficulty: "advanced",
     ageGroup: "teen",
-    recommendedOrder: 150,
+    recommendedOrder: 64,
     tafsirBrief: "Begins with an oath by Mount Sinai. It describes the pleasures of Paradise for the believers and the punishment of the wrongdoers. It affirms that the Quran is the true word of Allah.",
     tajweedNotes: ["Recite clearly and at a measured pace", "Listen to a skilled reciter to learn proper pronunciation"],
     verses: []
@@ -1189,7 +1189,7 @@ export const SURAHS: SurahData[] = [
     revelationType: "meccan",
     difficulty: "advanced",
     ageGroup: "teen",
-    recommendedOrder: 151,
+    recommendedOrder: 63,
     tafsirBrief: "Begins with an oath by the falling star. It confirms the Prophet's ﷺ Mi'raj (Ascent) and that the Quran is divine revelation, not personal opinion. It contains a verse of prostration.",
     tajweedNotes: ["Recite clearly and at a measured pace", "Listen to a skilled reciter to learn proper pronunciation"],
     verses: []
@@ -1205,7 +1205,7 @@ export const SURAHS: SurahData[] = [
     revelationType: "meccan",
     difficulty: "advanced",
     ageGroup: "teen",
-    recommendedOrder: 152,
+    recommendedOrder: 62,
     tafsirBrief: "Begins with the splitting of the moon as a sign for the disbelievers. It tells the stories of Nuh, 'Ad, Thamud, Lut, and Pharaoh — all of whom rejected the truth. The Quran is made easy to remember.",
     tajweedNotes: ["Recite clearly and at a measured pace", "Listen to a skilled reciter to learn proper pronunciation"],
     verses: []
@@ -1221,7 +1221,7 @@ export const SURAHS: SurahData[] = [
     revelationType: "medinan",
     difficulty: "intermediate",
     ageGroup: "child",
-    recommendedOrder: 153,
+    recommendedOrder: 61,
     tafsirBrief: "The 'Bride of the Quran' — every verse ends with 'So which of the favors of your Lord will you deny?' It lists the countless blessings of Allah for humans and jinn, and describes the gardens of Paradise.",
     tajweedNotes: ["Recite clearly and at a measured pace", "Listen to a skilled reciter to learn proper pronunciation"],
     verses: []
@@ -1237,7 +1237,7 @@ export const SURAHS: SurahData[] = [
     revelationType: "meccan",
     difficulty: "advanced",
     ageGroup: "teen",
-    recommendedOrder: 154,
+    recommendedOrder: 60,
     tafsirBrief: "Describes the Day of Judgment when people will be divided into three groups: the forerunners (closest to Allah), the companions of the right, and the companions of the left. Whoever recites it will not suffer poverty.",
     tajweedNotes: ["Recite clearly and at a measured pace", "Listen to a skilled reciter to learn proper pronunciation"],
     verses: []
@@ -1253,7 +1253,7 @@ export const SURAHS: SurahData[] = [
     revelationType: "medinan",
     difficulty: "advanced",
     ageGroup: "teen",
-    recommendedOrder: 155,
+    recommendedOrder: 59,
     tafsirBrief: "Discusses the sovereignty of Allah over the universe and the importance of spending in His cause. It mentions that iron was sent down as a great benefit to mankind.",
     tajweedNotes: ["Recite clearly and at a measured pace", "Listen to a skilled reciter to learn proper pronunciation"],
     verses: []
@@ -1269,7 +1269,7 @@ export const SURAHS: SurahData[] = [
     revelationType: "medinan",
     difficulty: "advanced",
     ageGroup: "teen",
-    recommendedOrder: 156,
+    recommendedOrder: 58,
     tafsirBrief: "Named after a woman who came to the Prophet ﷺ complaining about her husband's zihar. It discusses social conduct and warns against secret meetings that involve sinful plotting.",
     tajweedNotes: ["Recite clearly and at a measured pace", "Listen to a skilled reciter to learn proper pronunciation"],
     verses: []
@@ -1285,7 +1285,7 @@ export const SURAHS: SurahData[] = [
     revelationType: "medinan",
     difficulty: "advanced",
     ageGroup: "teen",
-    recommendedOrder: 157,
+    recommendedOrder: 57,
     tafsirBrief: "Discusses the exile of the Banu Nadir tribe and the distribution of war spoils. It ends with beautiful names of Allah including Al-Quddus, Al-Mu'min, Al-'Aziz, Al-Hakeem.",
     tajweedNotes: ["Recite clearly and at a measured pace", "Listen to a skilled reciter to learn proper pronunciation"],
     verses: []
@@ -1301,7 +1301,7 @@ export const SURAHS: SurahData[] = [
     revelationType: "medinan",
     difficulty: "advanced",
     ageGroup: "teen",
-    recommendedOrder: 158,
+    recommendedOrder: 56,
     tafsirBrief: "Guidance about relationships with disbelievers — loyalty is to Allah, His messenger, and believers. It describes the pledge of the believing women and the permissibility of being kind to non-hostile non-Muslims.",
     tajweedNotes: ["Recite clearly and at a measured pace", "Listen to a skilled reciter to learn proper pronunciation"],
     verses: []
@@ -1317,7 +1317,7 @@ export const SURAHS: SurahData[] = [
     revelationType: "medinan",
     difficulty: "intermediate",
     ageGroup: "preteen",
-    recommendedOrder: 159,
+    recommendedOrder: 55,
     tafsirBrief: "Calls believers to fight in Allah's cause in solid rows. It reminds us that Isa (Jesus) prophesied the coming of a messenger named Ahmad (Muhammad ﷺ).",
     tajweedNotes: ["Recite clearly and at a measured pace", "Listen to a skilled reciter to learn proper pronunciation"],
     verses: []
@@ -1333,7 +1333,7 @@ export const SURAHS: SurahData[] = [
     revelationType: "medinan",
     difficulty: "intermediate",
     ageGroup: "child",
-    recommendedOrder: 160,
+    recommendedOrder: 54,
     tafsirBrief: "Commands Muslims to hasten to the Friday prayer and leave all buying and selling. It praises Allah's blessing of sending the unlettered Prophet ﷺ to guide humanity.",
     tajweedNotes: ["Recite clearly and at a measured pace", "Listen to a skilled reciter to learn proper pronunciation"],
     verses: []
@@ -1349,7 +1349,7 @@ export const SURAHS: SurahData[] = [
     revelationType: "medinan",
     difficulty: "advanced",
     ageGroup: "teen",
-    recommendedOrder: 161,
+    recommendedOrder: 53,
     tafsirBrief: "Exposes the characteristics of hypocrites: they say what they don't believe, they are selfish, and they prevent others from spending in the path of Allah. It warns believers not to be deceived by them.",
     tajweedNotes: ["Recite clearly and at a measured pace", "Listen to a skilled reciter to learn proper pronunciation"],
     verses: []
@@ -1365,7 +1365,7 @@ export const SURAHS: SurahData[] = [
     revelationType: "medinan",
     difficulty: "intermediate",
     ageGroup: "teen",
-    recommendedOrder: 162,
+    recommendedOrder: 52,
     tafsirBrief: "Discusses the Day of Mutual Disillusion when all secrets will be revealed. It reminds believers that their spouses and children can be a test, and to be wary of being too attached to worldly things.",
     tajweedNotes: ["Recite clearly and at a measured pace", "Listen to a skilled reciter to learn proper pronunciation"],
     verses: []
@@ -1381,7 +1381,7 @@ export const SURAHS: SurahData[] = [
     revelationType: "medinan",
     difficulty: "advanced",
     ageGroup: "teen",
-    recommendedOrder: 163,
+    recommendedOrder: 51,
     tafsirBrief: "Provides detailed guidance about divorce procedures and treating divorced women with fairness and kindness. It reminds that whoever fears Allah, He will make a way out for them.",
     tajweedNotes: ["Recite clearly and at a measured pace", "Listen to a skilled reciter to learn proper pronunciation"],
     verses: []
@@ -1397,7 +1397,7 @@ export const SURAHS: SurahData[] = [
     revelationType: "medinan",
     difficulty: "advanced",
     ageGroup: "teen",
-    recommendedOrder: 164,
+    recommendedOrder: 50,
     tafsirBrief: "Begins with addressing the Prophet ﷺ about something he made prohibited for himself. It gives examples of righteous and unrighteous women in history and calls believers to sincere repentance.",
     tajweedNotes: ["Recite clearly and at a measured pace", "Listen to a skilled reciter to learn proper pronunciation"],
     verses: []
@@ -1413,7 +1413,7 @@ export const SURAHS: SurahData[] = [
     revelationType: "meccan",
     difficulty: "intermediate",
     ageGroup: "preteen",
-    recommendedOrder: 165,
+    recommendedOrder: 49,
     tafsirBrief: "Called Al-Mani'ah (the protector). The Prophet ﷺ said it would intercede for its reciter on the Day of Judgment. It describes the perfection of Allah's creation and warns of the punishment of the Hellfire.",
     tajweedNotes: ["Recite clearly and at a measured pace", "Listen to a skilled reciter to learn proper pronunciation"],
     verses: []
@@ -1429,7 +1429,7 @@ export const SURAHS: SurahData[] = [
     revelationType: "meccan",
     difficulty: "advanced",
     ageGroup: "teen",
-    recommendedOrder: 166,
+    recommendedOrder: 48,
     tafsirBrief: "Begins with an oath by the pen. It defends the character of the Prophet ﷺ against accusations of madness and warns against arrogance and selfishness through the story of the owners of the garden.",
     tajweedNotes: ["Recite clearly and at a measured pace", "Listen to a skilled reciter to learn proper pronunciation"],
     verses: []
@@ -1445,7 +1445,7 @@ export const SURAHS: SurahData[] = [
     revelationType: "meccan",
     difficulty: "advanced",
     ageGroup: "teen",
-    recommendedOrder: 167,
+    recommendedOrder: 47,
     tafsirBrief: "Describes the inevitable reality of the Day of Judgment and the punishment of previous nations. It distinguishes between the book of deeds given in the right hand (believer) and left hand (disbeliever).",
     tajweedNotes: ["Recite clearly and at a measured pace", "Listen to a skilled reciter to learn proper pronunciation"],
     verses: []
@@ -1461,7 +1461,7 @@ export const SURAHS: SurahData[] = [
     revelationType: "meccan",
     difficulty: "advanced",
     ageGroup: "teen",
-    recommendedOrder: 168,
+    recommendedOrder: 46,
     tafsirBrief: "Discusses the Day of Judgment and the qualities of true believers: patient in hardship, giving from their wealth, honest, and modest. They are the ones who will reach Paradise.",
     tajweedNotes: ["Recite clearly and at a measured pace", "Listen to a skilled reciter to learn proper pronunciation"],
     verses: []
@@ -1477,7 +1477,7 @@ export const SURAHS: SurahData[] = [
     revelationType: "meccan",
     difficulty: "intermediate",
     ageGroup: "child",
-    recommendedOrder: 169,
+    recommendedOrder: 45,
     tafsirBrief: "The story of Prophet Nuh's long and patient mission to his people. He called them night and day for 950 years but most refused. He prayed for the believers and against those who persisted in disbelief.",
     tajweedNotes: ["Recite clearly and at a measured pace", "Listen to a skilled reciter to learn proper pronunciation"],
     verses: []
@@ -1493,7 +1493,7 @@ export const SURAHS: SurahData[] = [
     revelationType: "meccan",
     difficulty: "intermediate",
     ageGroup: "preteen",
-    recommendedOrder: 170,
+    recommendedOrder: 44,
     tafsirBrief: "Tells the story of the jinn who listened to the Quran being recited and immediately believed. Among the jinn there are Muslims and wrongdoers. It confirms that true worship belongs only to Allah.",
     tajweedNotes: ["Recite clearly and at a measured pace", "Listen to a skilled reciter to learn proper pronunciation"],
     verses: []
@@ -1509,7 +1509,7 @@ export const SURAHS: SurahData[] = [
     revelationType: "meccan",
     difficulty: "intermediate",
     ageGroup: "preteen",
-    recommendedOrder: 171,
+    recommendedOrder: 43,
     tafsirBrief: "Addresses the Prophet ﷺ who was wrapped in his cloak. It commands rising at night for prayer (tahajjud) and reciting the Quran carefully. It encourages patience and remembrance of Allah.",
     tajweedNotes: ["Recite clearly and at a measured pace", "Listen to a skilled reciter to learn proper pronunciation"],
     verses: []
@@ -1525,7 +1525,7 @@ export const SURAHS: SurahData[] = [
     revelationType: "meccan",
     difficulty: "intermediate",
     ageGroup: "preteen",
-    recommendedOrder: 172,
+    recommendedOrder: 42,
     tafsirBrief: "One of the early revelations, commanding the Prophet ﷺ to arise and warn. It describes the punishment awaiting those who reject Allah's signs and the character of Al-Walid ibn Al-Mughirah.",
     tajweedNotes: ["Recite clearly and at a measured pace", "Listen to a skilled reciter to learn proper pronunciation"],
     verses: []
@@ -1541,7 +1541,7 @@ export const SURAHS: SurahData[] = [
     revelationType: "meccan",
     difficulty: "advanced",
     ageGroup: "teen",
-    recommendedOrder: 173,
+    recommendedOrder: 41,
     tafsirBrief: "Affirms the reality of resurrection even though some deny it. Allah is fully capable of reassembling every bone after death. It describes the Day of Judgment and the state of the faces of believers and disbelievers.",
     tajweedNotes: ["Recite clearly and at a measured pace", "Listen to a skilled reciter to learn proper pronunciation"],
     verses: []
@@ -1557,7 +1557,7 @@ export const SURAHS: SurahData[] = [
     revelationType: "medinan",
     difficulty: "intermediate",
     ageGroup: "preteen",
-    recommendedOrder: 174,
+    recommendedOrder: 40,
     tafsirBrief: "Discusses the creation of humans from a drop of fluid, the test of this life, and the reward for the righteous in Paradise. The righteous feed the poor for the sake of Allah alone, seeking no reward.",
     tajweedNotes: ["Recite clearly and at a measured pace", "Listen to a skilled reciter to learn proper pronunciation"],
     verses: []
@@ -1573,7 +1573,7 @@ export const SURAHS: SurahData[] = [
     revelationType: "meccan",
     difficulty: "advanced",
     ageGroup: "teen",
-    recommendedOrder: 175,
+    recommendedOrder: 39,
     tafsirBrief: "Begins with oaths by the winds sent in succession. It repeatedly states 'Woe that Day to the deniers!' to warn against rejecting the Day of Judgment. It affirms creation and resurrection.",
     tajweedNotes: ["Recite clearly and at a measured pace", "Listen to a skilled reciter to learn proper pronunciation"],
     verses: []
@@ -1589,7 +1589,7 @@ export const SURAHS: SurahData[] = [
     revelationType: "meccan",
     difficulty: "intermediate",
     ageGroup: "child",
-    recommendedOrder: 176,
+    recommendedOrder: 38,
     tafsirBrief: "The great news is the Day of Judgment. This surah shows proofs of resurrection in Allah's creation and describes the terrible punishment of Hell and the beautiful reward of Paradise for the righteous.",
     tajweedNotes: ["Recite clearly and at a measured pace", "Listen to a skilled reciter to learn proper pronunciation"],
     verses: []
@@ -1605,7 +1605,7 @@ export const SURAHS: SurahData[] = [
     revelationType: "meccan",
     difficulty: "intermediate",
     ageGroup: "preteen",
-    recommendedOrder: 177,
+    recommendedOrder: 37,
     tafsirBrief: "Begins with oaths by the angels who extract souls. It tells the story of Musa and Pharaoh and describes the Day of Judgment when graves are turned over and every soul will know what it has sent ahead.",
     tajweedNotes: ["Recite clearly and at a measured pace", "Listen to a skilled reciter to learn proper pronunciation"],
     verses: []
@@ -1621,7 +1621,7 @@ export const SURAHS: SurahData[] = [
     revelationType: "meccan",
     difficulty: "intermediate",
     ageGroup: "preteen",
-    recommendedOrder: 178,
+    recommendedOrder: 36,
     tafsirBrief: "Begins with a gentle correction of the Prophet ﷺ for frowning at a blind man who came seeking guidance. It teaches us to never overlook those who are sincere seekers, regardless of their worldly status.",
     tajweedNotes: ["Recite clearly and at a measured pace", "Listen to a skilled reciter to learn proper pronunciation"],
     verses: []
@@ -1637,7 +1637,7 @@ export const SURAHS: SurahData[] = [
     revelationType: "meccan",
     difficulty: "intermediate",
     ageGroup: "preteen",
-    recommendedOrder: 179,
+    recommendedOrder: 35,
     tafsirBrief: "Describes the terrifying events of the Day of Judgment — the sun rolled up, stars scattered, mountains moved. It confirms that the Quran is the true word of Allah brought by a noble angel.",
     tajweedNotes: ["Recite clearly and at a measured pace", "Listen to a skilled reciter to learn proper pronunciation"],
     verses: []
@@ -1653,7 +1653,7 @@ export const SURAHS: SurahData[] = [
     revelationType: "meccan",
     difficulty: "intermediate",
     ageGroup: "preteen",
-    recommendedOrder: 180,
+    recommendedOrder: 34,
     tafsirBrief: "Describes the sky splitting open and graves turned over on the Day of Judgment. It reminds us that noble angels are recording our every deed, and the wrongdoers will face a great punishment.",
     tajweedNotes: ["Recite clearly and at a measured pace", "Listen to a skilled reciter to learn proper pronunciation"],
     verses: []
@@ -1669,7 +1669,7 @@ export const SURAHS: SurahData[] = [
     revelationType: "meccan",
     difficulty: "intermediate",
     ageGroup: "preteen",
-    recommendedOrder: 181,
+    recommendedOrder: 33,
     tafsirBrief: "Warns those who cheat in weights and measures — they take full measure for themselves but give less to others. Their book of deeds is recorded in Sijjin (prison), while the righteous are in 'Illiyyin (the highest).",
     tajweedNotes: ["Recite clearly and at a measured pace", "Listen to a skilled reciter to learn proper pronunciation"],
     verses: []
@@ -1685,7 +1685,7 @@ export const SURAHS: SurahData[] = [
     revelationType: "meccan",
     difficulty: "intermediate",
     ageGroup: "preteen",
-    recommendedOrder: 182,
+    recommendedOrder: 32,
     tafsirBrief: "Describes the sky splitting open on the Day of Judgment. The person who receives their book in their right hand will rejoice, while the one who receives it behind their back will call for destruction.",
     tajweedNotes: ["Recite clearly and at a measured pace", "Listen to a skilled reciter to learn proper pronunciation"],
     verses: []
@@ -1701,7 +1701,7 @@ export const SURAHS: SurahData[] = [
     revelationType: "meccan",
     difficulty: "intermediate",
     ageGroup: "preteen",
-    recommendedOrder: 183,
+    recommendedOrder: 31,
     tafsirBrief: "Tells the story of the People of the Ditch who burned believers alive for their faith. It reassures the believers that Allah is watching and will avenge the oppressed. Allah's grip is severe.",
     tajweedNotes: ["Recite clearly and at a measured pace", "Listen to a skilled reciter to learn proper pronunciation"],
     verses: []
@@ -1717,7 +1717,7 @@ export const SURAHS: SurahData[] = [
     revelationType: "meccan",
     difficulty: "beginner",
     ageGroup: "preteen",
-    recommendedOrder: 184,
+    recommendedOrder: 30,
     tafsirBrief: "An oath by the bright piercing star that appears at night. Just as every soul has a guardian angel, the Quran is a definitive word — nothing can stop Allah's plan. Every deception will be exposed.",
     tajweedNotes: ["Recite clearly and at a measured pace", "Listen to a skilled reciter to learn proper pronunciation"],
     verses: []
@@ -1733,7 +1733,7 @@ export const SURAHS: SurahData[] = [
     revelationType: "meccan",
     difficulty: "beginner",
     ageGroup: "child",
-    recommendedOrder: 185,
+    recommendedOrder: 29,
     tafsirBrief: "Commands to glorify the name of your Lord, the Most High. Allah created and proportioned everything. The Prophet ﷺ was promised he would not forget the Quran. Success is for those who purify themselves.",
     tajweedNotes: ["Recite clearly and at a measured pace", "Listen to a skilled reciter to learn proper pronunciation"],
     verses: []
@@ -1749,7 +1749,7 @@ export const SURAHS: SurahData[] = [
     revelationType: "meccan",
     difficulty: "beginner",
     ageGroup: "child",
-    recommendedOrder: 186,
+    recommendedOrder: 28,
     tafsirBrief: "Describes the overwhelming event of the Day of Judgment — faces humiliated in the fire and faces radiant in Paradise. It asks: have you considered the camel, the sky, the mountains, the earth? All point to Allah.",
     tajweedNotes: ["Recite clearly and at a measured pace", "Listen to a skilled reciter to learn proper pronunciation"],
     verses: []
@@ -1765,7 +1765,7 @@ export const SURAHS: SurahData[] = [
     revelationType: "meccan",
     difficulty: "intermediate",
     ageGroup: "child",
-    recommendedOrder: 187,
+    recommendedOrder: 27,
     tafsirBrief: "Begins with an oath by the dawn. It tells of 'Ad, Thamud, and Pharaoh who were destroyed for their wrongdoing. It ends beautifully: 'O reassured soul, return to your Lord, well-pleased and pleasing to Him.'",
     tajweedNotes: ["Recite clearly and at a measured pace", "Listen to a skilled reciter to learn proper pronunciation"],
     verses: []
@@ -1781,7 +1781,7 @@ export const SURAHS: SurahData[] = [
     revelationType: "meccan",
     difficulty: "intermediate",
     ageGroup: "child",
-    recommendedOrder: 188,
+    recommendedOrder: 26,
     tafsirBrief: "An oath by the sacred city (Makkah). Life is full of hardship (aqabah — a steep path). To climb it means freeing a slave, feeding the hungry orphan or poor person, and being among those who believe and advise each other.",
     tajweedNotes: ["Recite clearly and at a measured pace", "Listen to a skilled reciter to learn proper pronunciation"],
     verses: []
@@ -1797,7 +1797,7 @@ export const SURAHS: SurahData[] = [
     revelationType: "meccan",
     difficulty: "beginner",
     ageGroup: "child",
-    recommendedOrder: 189,
+    recommendedOrder: 25,
     tafsirBrief: "Eleven oaths by creation — sun, moon, day, night, sky, earth, and the soul — all building up to the key lesson: whoever purifies their soul succeeds, and whoever corrupts it fails.",
     tajweedNotes: ["Recite clearly and at a measured pace", "Listen to a skilled reciter to learn proper pronunciation"],
     verses: []
@@ -1813,7 +1813,7 @@ export const SURAHS: SurahData[] = [
     revelationType: "meccan",
     difficulty: "beginner",
     ageGroup: "child",
-    recommendedOrder: 190,
+    recommendedOrder: 24,
     tafsirBrief: "An oath by the night and day and creation of male and female. People have different goals: those who give and fear Allah will find ease, while those who are greedy will face hardship.",
     tajweedNotes: ["Recite clearly and at a measured pace", "Listen to a skilled reciter to learn proper pronunciation"],
     verses: []
@@ -1829,7 +1829,7 @@ export const SURAHS: SurahData[] = [
     revelationType: "meccan",
     difficulty: "beginner",
     ageGroup: "child",
-    recommendedOrder: 191,
+    recommendedOrder: 23,
     tafsirBrief: "A comforting message to the Prophet ﷺ when revelation paused briefly. Allah had not abandoned him — the future would be better than the past. He was an orphan whom Allah protected, and now he must help the needy.",
     tajweedNotes: ["Recite clearly and at a measured pace", "Listen to a skilled reciter to learn proper pronunciation"],
     verses: []
@@ -1845,7 +1845,7 @@ export const SURAHS: SurahData[] = [
     revelationType: "meccan",
     difficulty: "beginner",
     ageGroup: "toddler",
-    recommendedOrder: 192,
+    recommendedOrder: 22,
     tafsirBrief: "Allah opened the Prophet's ﷺ chest and relieved his burden. A great promise: with every hardship comes ease — and it is mentioned twice! After struggle comes relief. So turn to Allah when you are free.",
     tajweedNotes: ["Recite clearly and at a measured pace", "Listen to a skilled reciter to learn proper pronunciation"],
     verses: []
@@ -1861,7 +1861,7 @@ export const SURAHS: SurahData[] = [
     revelationType: "meccan",
     difficulty: "beginner",
     ageGroup: "child",
-    recommendedOrder: 193,
+    recommendedOrder: 21,
     tafsirBrief: "An oath by the fig, olive, Mount Sinai, and the Sacred City. Allah created humans in the best form, but those who reject faith and good deeds will be the lowest of the low. The reward of the righteous is endless.",
     tajweedNotes: ["Recite clearly and at a measured pace", "Listen to a skilled reciter to learn proper pronunciation"],
     verses: []
@@ -1877,7 +1877,7 @@ export const SURAHS: SurahData[] = [
     revelationType: "meccan",
     difficulty: "beginner",
     ageGroup: "child",
-    recommendedOrder: 194,
+    recommendedOrder: 20,
     tafsirBrief: "The very first revelation! 'Read in the name of your Lord who created.' Allah taught humans with the pen what they did not know. It then warns those who prevent others from worshipping — Allah sees all.",
     tajweedNotes: ["Recite clearly and at a measured pace", "Listen to a skilled reciter to learn proper pronunciation"],
     verses: []
@@ -1893,7 +1893,7 @@ export const SURAHS: SurahData[] = [
     revelationType: "meccan",
     difficulty: "beginner",
     ageGroup: "toddler",
-    recommendedOrder: 195,
+    recommendedOrder: 19,
     tafsirBrief: "The Night of Power (Laylat al-Qadr) is better than a thousand months! Angels and the Ruh descend on this blessed night. It is the night the Quran was revealed. Seek it in the last ten nights of Ramadan.",
     tajweedNotes: ["Recite clearly and at a measured pace", "Listen to a skilled reciter to learn proper pronunciation"],
     verses: []
@@ -1909,7 +1909,7 @@ export const SURAHS: SurahData[] = [
     revelationType: "medinan",
     difficulty: "beginner",
     ageGroup: "child",
-    recommendedOrder: 196,
+    recommendedOrder: 18,
     tafsirBrief: "The clear proof came in the form of a messenger reciting purified scriptures with correct teachings. The best of creation are those who believe and do righteous deeds — Allah is pleased with them.",
     tajweedNotes: ["Recite clearly and at a measured pace", "Listen to a skilled reciter to learn proper pronunciation"],
     verses: []
@@ -1925,7 +1925,7 @@ export const SURAHS: SurahData[] = [
     revelationType: "meccan",
     difficulty: "intermediate",
     ageGroup: "child",
-    recommendedOrder: 197,
+    recommendedOrder: 16,
     tafsirBrief: "An oath by the charging warhorses. Humans are ungrateful to their Lord and love wealth intensely. On the Day of Judgment, what is in hearts will be exposed and the deeds of all will be known.",
     tajweedNotes: ["Recite clearly and at a measured pace", "Listen to a skilled reciter to learn proper pronunciation"],
     verses: []
@@ -1941,7 +1941,7 @@ export const SURAHS: SurahData[] = [
     revelationType: "meccan",
     difficulty: "beginner",
     ageGroup: "child",
-    recommendedOrder: 198,
+    recommendedOrder: 14,
     tafsirBrief: "Competing for more wealth, children, and status distracts people until they reach their graves. Then they will be shown Hell and asked about the blessings they enjoyed. Every blessing is a test.",
     tajweedNotes: ["Recite clearly and at a measured pace", "Listen to a skilled reciter to learn proper pronunciation"],
     verses: []
