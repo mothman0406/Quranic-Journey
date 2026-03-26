@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Progress } from "@/components/ui/progress";
-import { Plus, Flame, Star, BookOpen, ChevronRight, ChevronLeft, Check } from "lucide-react";
+import { Plus, Flame, Star, BookOpen, ChevronRight, ChevronLeft, Check, Book } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 
@@ -151,18 +151,35 @@ export default function Home() {
             {[1,2].map(i => <Skeleton key={i} className="h-24 rounded-2xl" />)}
           </div>
         ) : children.length === 0 ? (
-          <Card className="text-center border-border shadow-md">
-            <CardContent className="py-12 px-6">
-              <div className="text-6xl mb-4">📖</div>
-              <h2 className="text-xl font-bold text-foreground mb-2">Begin the Journey</h2>
-              <p className="text-muted-foreground mb-6 text-sm leading-relaxed">
-                Add your child's profile to receive a personalized Quran and Islamic learning plan — from their very first surah all the way to completing the Quran, in sha Allah.
-              </p>
-              <Button onClick={() => setShowAdd(true)} className="rounded-full px-8">
-                <Plus size={16} className="mr-2" /> Add Your First Child
-              </Button>
-            </CardContent>
-          </Card>
+          <div className="space-y-3">
+            <Card className="text-center border-border shadow-md">
+              <CardContent className="py-12 px-6">
+                <div className="text-6xl mb-4">📖</div>
+                <h2 className="text-xl font-bold text-foreground mb-2">Begin the Journey</h2>
+                <p className="text-muted-foreground mb-6 text-sm leading-relaxed">
+                  Add your child's profile to receive a personalized Quran and Islamic learning plan — from their very first surah all the way to completing the Quran, in sha Allah.
+                </p>
+                <Button onClick={() => setShowAdd(true)} className="rounded-full px-8">
+                  <Plus size={16} className="mr-2" /> Add Your First Child
+                </Button>
+              </CardContent>
+            </Card>
+
+            <Link href="/mushaf">
+              <Card className="border-amber-200 bg-gradient-to-r from-amber-50 to-amber-100/60 hover:shadow-md transition-all cursor-pointer active:scale-[0.99]">
+                <CardContent className="p-4 flex items-center gap-4">
+                  <div className="w-12 h-12 rounded-xl bg-amber-200/60 flex items-center justify-center flex-shrink-0 shadow-inner">
+                    <Book size={22} className="text-amber-800" />
+                  </div>
+                  <div className="flex-1">
+                    <p className="font-semibold text-amber-900 text-sm">Read Quran</p>
+                    <p className="text-xs text-amber-700 mt-0.5">Mushaf-style — page by page, 604 pages</p>
+                  </div>
+                  <ChevronRight size={16} className="text-amber-600 flex-shrink-0" />
+                </CardContent>
+              </Card>
+            </Link>
+          </div>
         ) : (
           <>
             {/* Profiles header — fixed alignment */}
@@ -210,7 +227,23 @@ export default function Home() {
               ))}
             </div>
 
-            <div className="grid grid-cols-2 gap-3 mt-5">
+            {/* Read Quran (Mushaf) entry */}
+            <Link href="/mushaf">
+              <Card className="border-amber-200 bg-gradient-to-r from-amber-50 to-amber-100/60 hover:shadow-md transition-all cursor-pointer active:scale-[0.99] mt-5">
+                <CardContent className="p-4 flex items-center gap-4">
+                  <div className="w-12 h-12 rounded-xl bg-amber-200/60 flex items-center justify-center flex-shrink-0 shadow-inner">
+                    <Book size={22} className="text-amber-800" />
+                  </div>
+                  <div className="flex-1">
+                    <p className="font-semibold text-amber-900 text-sm">Read Quran</p>
+                    <p className="text-xs text-amber-700 mt-0.5">Mushaf-style — page by page, 604 pages</p>
+                  </div>
+                  <ChevronRight size={16} className="text-amber-600 flex-shrink-0" />
+                </CardContent>
+              </Card>
+            </Link>
+
+            <div className="grid grid-cols-2 gap-3 mt-3">
               <Card className="border-border"><CardContent className="p-4 text-center"><div className="text-2xl mb-2">📿</div><p className="text-xs font-semibold">Smart Review</p><p className="text-xs text-muted-foreground mt-1">Spaced repetition keeps memorization strong</p></CardContent></Card>
               <Card className="border-border"><CardContent className="p-4 text-center"><div className="text-2xl mb-2">🎯</div><p className="text-xs font-semibold">Ability-Based Progress</p><p className="text-xs text-muted-foreground mt-1">Advance at your own pace, not by age</p></CardContent></Card>
             </div>

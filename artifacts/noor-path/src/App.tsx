@@ -14,6 +14,7 @@ import DuasPage from "@/pages/duas";
 import ProgressPage from "@/pages/progress";
 import PlanPage from "@/pages/plan";
 import SurahDetailPage from "@/pages/surah-detail";
+import MushafPage from "@/pages/mushaf";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -35,6 +36,7 @@ function Router() {
       <Route path="/child/:childId/progress" component={ProgressPage} />
       <Route path="/child/:childId/plan" component={PlanPage} />
       <Route path="/surah/:surahId" component={SurahDetailPage} />
+      <Route path="/mushaf" component={MushafPage} />
       <Route component={NotFound} />
     </Switch>
   );
