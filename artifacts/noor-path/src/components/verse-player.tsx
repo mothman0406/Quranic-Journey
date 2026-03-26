@@ -11,17 +11,18 @@ export interface Reciter {
   fullName: string;
   style: string;
   folder: string;        // everyayah.com data folder
-  quranComId: number;    // Quran.com recitation ID for word timing
+  quranComId: number | null; // Quran.com /api/v4 recitation ID for per-ayah word timing
+  qdcId: number | null;      // qurancdn.com /api/qdc reciter ID for chapter-level word timing
 }
 
 export const RECITERS: Reciter[] = [
-  { id: "husary",    fullName: "Mahmoud Khalil Al-Husary",       style: "Murattal",  folder: "Husary_128kbps",                 quranComId: 7  },
-  { id: "afasy",     fullName: "Mishary Rashid Al-Afasy",         style: "Murattal",  folder: "Alafasy_128kbps",                quranComId: 4  },
-  { id: "sudais",    fullName: "Abdul Rahman Al-Sudais",          style: "Murattal",  folder: "Sudais_192kbps",                 quranComId: 9  },
-  { id: "basit",     fullName: "Abdul Basit Abdul Samad",         style: "Murattal",  folder: "Abdul_Basit_Murattal_192kbps",   quranComId: 2  },
-  { id: "minshawi",  fullName: "Muhammad Siddiq Al-Minshawi",     style: "Murattal",  folder: "Minshawi_Murattal_128kbps",      quranComId: 3  },
-  { id: "ghamdi",    fullName: "Sa'd Al-Ghamdi",                  style: "Murattal",  folder: "Ghamadi_40kbps",                 quranComId: 5  },
-  { id: "ajmi",      fullName: "Ahmad Al-Ajmi",                   style: "Murattal",  folder: "ahmed_ibn_ali_al-ajmy128kbps",   quranComId: 6  },
+  { id: "husary",    fullName: "Mahmoud Khalil Al-Husary",       style: "Murattal",  folder: "Husary_128kbps",                 quranComId: null, qdcId: 6  },
+  { id: "afasy",     fullName: "Mishary Rashid Al-Afasy",         style: "Murattal",  folder: "Alafasy_128kbps",                quranComId: 4,    qdcId: null },
+  { id: "sudais",    fullName: "Abdul Rahman Al-Sudais",          style: "Murattal",  folder: "Sudais_192kbps",                 quranComId: 9,    qdcId: null },
+  { id: "basit",     fullName: "Abdul Basit Abdul Samad",         style: "Murattal",  folder: "Abdul_Basit_Murattal_192kbps",   quranComId: 2,    qdcId: null },
+  { id: "minshawi",  fullName: "Muhammad Siddiq Al-Minshawi",     style: "Murattal",  folder: "Minshawi_Murattal_128kbps",      quranComId: 3,    qdcId: null },
+  { id: "ghamdi",    fullName: "Sa'd Al-Ghamdi",                  style: "Murattal",  folder: "Ghamadi_40kbps",                 quranComId: 5,    qdcId: null },
+  { id: "ajmi",      fullName: "Ahmad Al-Ajmi",                   style: "Murattal",  folder: "ahmed_ibn_ali_al-ajmy128kbps",   quranComId: 6,    qdcId: null },
 ];
 
 const DEFAULT_RECITER_ID = "husary";
@@ -47,10 +48,14 @@ function buildWordAudioUrl(surah: number, verse: number, wordPosition: number): 
   return `https://audio.qurancdn.com/wbw/${pad(surah, 3)}_${pad(verse, 3)}_${pad(wordPosition, 3)}.mp3`;
 }
 
-// Fetch word-timing segments from Quran.com (optional — fails gracefully)
-type Segment = [number, number, number]; // [wordIndex1based, startMs, endMs]
+// Fetch word-timing segments (optional — fails gracefully)
+// Segments store normalised fractions [wordIndex1based, startFrac, endFrac] where
+// fractions are 0–1 relative to the verse span so they can be mapped to ANY audio
+// file duration, eliminating drift caused by duration mismatches between the
+// chapter-level recording and per-ayah audio files.
+type Segment = [number, number, number]; // [wordIndex1based, startFrac, endFrac]
 
-async function fetchWordTiming(quranComId: number, surah: number, verse: number): Promise<Segment[]> {
+async function fetchWordTimingV4(quranComId: number, surah: number, verse: number): Promise<Segment[]> {
   try {
     const res = await fetch(
       `https://api.quran.com/api/v4/recitations/${quranComId}/by_ayah/${surah}:${verse}`,
@@ -58,11 +63,65 @@ async function fetchWordTiming(quranComId: number, surah: number, verse: number)
     );
     if (!res.ok) return [];
     const data = await res.json();
-    const segs = data.audio_files?.[0]?.segments;
-    return Array.isArray(segs) ? segs : [];
+    const segs: Array<[number, number, number]> = data.audio_files?.[0]?.segments;
+    if (!Array.isArray(segs) || segs.length === 0) return [];
+    const last = segs[segs.length - 1];
+    const span = last[2];
+    if (span <= 0) return segs;
+    return segs.map(s => [s[0], s[1] / span, s[2] / span] as Segment);
   } catch {
     return [];
   }
+}
+
+const qdcCache = new Map<string, Promise<Map<string, Segment[]>>>();
+
+function fetchQdcChapterTimings(qdcId: number, surah: number): Promise<Map<string, Segment[]>> {
+  const key = `${qdcId}:${surah}`;
+  const cached = qdcCache.get(key);
+  if (cached) return cached;
+
+  const promise = (async (): Promise<Map<string, Segment[]>> => {
+    try {
+      const res = await fetch(
+        `https://api.qurancdn.com/api/qdc/audio/reciters/${qdcId}/audio_files?chapter=${surah}&segments=true`,
+        { signal: AbortSignal.timeout(8000) }
+      );
+      if (!res.ok) return new Map();
+      const data = await res.json();
+      const timings = data.audio_files?.[0]?.verse_timings;
+      if (!Array.isArray(timings)) return new Map();
+
+      const result = new Map<string, Segment[]>();
+      for (const vt of timings) {
+        const offset: number = vt.timestamp_from;
+        const verseDur: number = vt.timestamp_to - offset;
+        if (verseDur <= 0) continue;
+        const segs: Segment[] = (vt.segments || []).map(
+          (s: [number, number, number]) =>
+            [s[0], (s[1] - offset) / verseDur, (s[2] - offset) / verseDur] as Segment
+        );
+        result.set(vt.verse_key, segs);
+      }
+      return result;
+    } catch {
+      return new Map();
+    }
+  })();
+
+  qdcCache.set(key, promise);
+  return promise;
+}
+
+async function fetchWordTiming(reciter: Reciter, surah: number, verse: number): Promise<Segment[]> {
+  if (reciter.qdcId !== null) {
+    const chapterMap = await fetchQdcChapterTimings(reciter.qdcId, surah);
+    return chapterMap.get(`${surah}:${verse}`) ?? [];
+  }
+  if (reciter.quranComId !== null) {
+    return fetchWordTimingV4(reciter.quranComId, surah, verse);
+  }
+  return [];
 }
 
 // ——————————————————————————————————————————————————
@@ -201,27 +260,25 @@ export function VersePlayer({ arabic, surahNumber, verseNumber, size = "md", rec
     const audio = audioRef.current;
     if (!audio || audio.paused) return;
 
-    const currentMs = audio.currentTime * 1000;
+    const dur = audio.duration || 0;
+    const frac = dur > 0 ? audio.currentTime / dur : 0;
     const segs = segmentsRef.current;
 
     if (segs.length > 0) {
       let found = -1;
-      for (const [wordIdx, startMs, endMs] of segs) {
-        if (currentMs >= startMs && currentMs < endMs) {
+      for (const [wordIdx, startFrac, endFrac] of segs) {
+        if (frac >= startFrac && frac < endFrac) {
           found = wordIdx - 1; // 1-based → 0-based
           break;
         }
       }
-      if (found === -1 && currentMs > 0) {
+      if (found === -1 && frac > 0) {
         const last = segs[segs.length - 1];
-        if (last && currentMs >= last[1]) found = words.length - 1;
+        if (last && frac >= last[1]) found = words.length - 1;
       }
       setHighlightedWord(found);
     } else {
-      // Uniform timing: estimate word positions from audio duration
-      const dur = (audio.duration || 1) * 1000;
-      const wordDur = dur / words.length;
-      setHighlightedWord(Math.min(Math.floor(currentMs / wordDur), words.length - 1));
+      setHighlightedWord(Math.min(Math.floor(frac * words.length), words.length - 1));
     }
 
     rafRef.current = requestAnimationFrame(updateHighlight);
@@ -260,7 +317,7 @@ export function VersePlayer({ arabic, surahNumber, verseNumber, size = "md", rec
       audioRef.current = audio;
 
       // Fetch word timing in parallel (don't block audio)
-      fetchWordTiming(reciter.quranComId, surahNumber, verseNumber).then(segs => {
+      fetchWordTiming(reciter, surahNumber, verseNumber).then(segs => {
         segmentsRef.current = segs;
       });
 
