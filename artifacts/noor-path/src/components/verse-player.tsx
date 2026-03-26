@@ -43,6 +43,10 @@ function buildAudioUrl(reciter: Reciter, surah: number, verse: number): string {
   return `https://everyayah.com/data/${reciter.folder}/${pad(surah, 3)}${pad(verse, 3)}.mp3`;
 }
 
+function buildWordAudioUrl(surah: number, verse: number, wordPosition: number): string {
+  return `https://audio.qurancdn.com/wbw/${pad(surah, 3)}_${pad(verse, 3)}_${pad(wordPosition, 3)}.mp3`;
+}
+
 // Fetch word-timing segments from Quran.com (optional — fails gracefully)
 type Segment = [number, number, number]; // [wordIndex1based, startMs, endMs]
 
@@ -143,12 +147,14 @@ export function VersePlayer({ arabic, surahNumber, verseNumber, size = "md", rec
     }
   };
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const wordAudioRef = useRef<HTMLAudioElement | null>(null);
   const rafRef = useRef<number>(0);
   const segmentsRef = useRef<Segment[]>([]);
 
   const [playing, setPlaying] = useState(false);
   const [loading, setLoading] = useState(false);
   const [highlightedWord, setHighlightedWord] = useState(-1);
+  const [tappedWord, setTappedWord] = useState(-1);
   const [error, setError] = useState(false);
 
   const words = arabic.split(/\s+/).filter(Boolean);
@@ -166,8 +172,14 @@ export function VersePlayer({ arabic, surahNumber, verseNumber, size = "md", rec
     segmentsRef.current = [];
     setPlaying(false);
     setHighlightedWord(-1);
+    setTappedWord(-1);
     setError(false);
     setLoading(false);
+    if (wordAudioRef.current) {
+      wordAudioRef.current.pause();
+      wordAudioRef.current.src = "";
+      wordAudioRef.current = null;
+    }
   }, [surahNumber, verseNumber, reciter.id]);
 
   // Unmount cleanup
@@ -177,6 +189,10 @@ export function VersePlayer({ arabic, surahNumber, verseNumber, size = "md", rec
       if (audioRef.current) {
         audioRef.current.pause();
         audioRef.current.src = "";
+      }
+      if (wordAudioRef.current) {
+        wordAudioRef.current.pause();
+        wordAudioRef.current.src = "";
       }
     };
   }, []);
@@ -258,6 +274,33 @@ export function VersePlayer({ arabic, surahNumber, verseNumber, size = "md", rec
     }
   }, [playing, reciter, surahNumber, verseNumber, handleEnded, updateHighlight]);
 
+  const handleWordTap = useCallback((wordIndex: number) => {
+    // Cancel any in-flight word audio
+    if (wordAudioRef.current) {
+      wordAudioRef.current.onended = null;
+      wordAudioRef.current.pause();
+      wordAudioRef.current.src = "";
+      wordAudioRef.current = null;
+    }
+    setTappedWord(wordIndex);
+
+    const wordAudio = new Audio();
+    wordAudio.src = buildWordAudioUrl(surahNumber, verseNumber, wordIndex + 1);
+    wordAudio.onended = () => {
+      setTappedWord(-1);
+      wordAudioRef.current = null;
+    };
+    wordAudio.onerror = () => {
+      setTappedWord(-1);
+      wordAudioRef.current = null;
+    };
+    wordAudioRef.current = wordAudio;
+    wordAudio.play().catch(() => {
+      setTappedWord(-1);
+      wordAudioRef.current = null;
+    });
+  }, [surahNumber, verseNumber]);
+
   const textSize = size === "sm" ? "text-xl" : size === "lg" ? "text-4xl" : "text-3xl";
 
   return (
@@ -271,13 +314,16 @@ export function VersePlayer({ arabic, surahNumber, verseNumber, size = "md", rec
         {words.map((word, i) => (
           <span
             key={i}
+            onClick={() => handleWordTap(i)}
             className={cn(
-              "inline-block transition-all duration-100 rounded-md px-0.5 mx-0.5 cursor-default",
-              highlightedWord === i
-                ? "bg-amber-300 text-amber-900 scale-110 shadow-sm"
-                : playing && highlightedWord > i
-                  ? "text-primary/40"
-                  : "text-foreground"
+              "inline-block transition-all duration-100 rounded-md px-0.5 mx-0.5 cursor-pointer",
+              tappedWord === i
+                ? "bg-teal-300 text-teal-900 scale-110 shadow-md animate-pulse"
+                : highlightedWord === i
+                  ? "bg-amber-300 text-amber-900 scale-110 shadow-sm"
+                  : playing && highlightedWord > i
+                    ? "text-primary/40"
+                    : "text-foreground"
             )}
           >
             {word}
