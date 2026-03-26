@@ -5,13 +5,14 @@ import { getSurah } from "@workspace/api-client-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { VersePlayer } from "@/components/verse-player";
+import { VersePlayer, RECITERS, type Reciter } from "@/components/verse-player";
 import { ChevronLeft, Info } from "lucide-react";
 
 export default function SurahDetailPage() {
   const { surahId } = useParams<{ surahId: string }>();
   const [, setLocation] = useLocation();
   const [showTajweed, setShowTajweed] = useState(false);
+  const [sessionReciter, setSessionReciter] = useState<Reciter>(() => RECITERS.find(r => r.id === "husary")!);
 
   const { data: surah, isLoading } = useQuery({
     queryKey: ["surah", parseInt(surahId)],
@@ -115,6 +116,8 @@ export default function SurahDetailPage() {
                   surahNumber={surah.number}
                   verseNumber={verse.number}
                   size="md"
+                  reciter={sessionReciter}
+                  onReciterChange={setSessionReciter}
                 />
 
                 {/* Transliteration */}

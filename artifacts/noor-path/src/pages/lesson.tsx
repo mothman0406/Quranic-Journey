@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ChildNav } from "@/components/child-nav";
-import { VersePlayer } from "@/components/verse-player";
+import { VersePlayer, RECITERS, type Reciter } from "@/components/verse-player";
 import { ChevronLeft, CheckCircle, ChevronRight, Info } from "lucide-react";
 
 export default function LessonPage() {
@@ -17,6 +17,7 @@ export default function LessonPage() {
   const [showTajweed, setShowTajweed] = useState(false);
   const [rating, setRating] = useState(0);
   const [completed, setCompleted] = useState(false);
+  const [sessionReciter, setSessionReciter] = useState<Reciter>(() => RECITERS.find(r => r.id === "husary")!);
   const qc = useQueryClient();
 
   const { data: dashboard, isLoading: dashLoading } = useQuery({
@@ -147,6 +148,8 @@ export default function LessonPage() {
                       surahNumber={surah.number}
                       verseNumber={currentVerse.number}
                       size="lg"
+                      reciter={sessionReciter}
+                      onReciterChange={setSessionReciter}
                     />
                   </div>
 

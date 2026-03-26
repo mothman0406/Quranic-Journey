@@ -27,14 +27,7 @@ export const RECITERS: Reciter[] = [
 const DEFAULT_RECITER_ID = "husary";
 const STORAGE_KEY = "noorpath-reciter";
 
-function getStoredReciter(): Reciter {
-  try {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored) {
-      const found = RECITERS.find(r => r.id === stored);
-      if (found) return found;
-    }
-  } catch { /* ignore */ }
+function getDefaultReciter(): Reciter {
   return RECITERS.find(r => r.id === DEFAULT_RECITER_ID)!;
 }
 
@@ -132,10 +125,23 @@ interface VersePlayerProps {
   surahNumber: number;
   verseNumber: number;
   size?: "sm" | "md" | "lg";
+  /** Optional controlled reciter — when provided, overrides internal state */
+  reciter?: Reciter;
+  /** Called when the user switches reciters — required when reciter prop is provided */
+  onReciterChange?: (r: Reciter) => void;
 }
 
-export function VersePlayer({ arabic, surahNumber, verseNumber, size = "md" }: VersePlayerProps) {
-  const [reciter, setReciter] = useState<Reciter>(getStoredReciter);
+export function VersePlayer({ arabic, surahNumber, verseNumber, size = "md", reciter: reciterProp, onReciterChange }: VersePlayerProps) {
+  const [internalReciter, setInternalReciter] = useState<Reciter>(getDefaultReciter);
+
+  const reciter = reciterProp ?? internalReciter;
+  const setReciter = (r: Reciter) => {
+    if (onReciterChange) {
+      onReciterChange(r);
+    } else {
+      setInternalReciter(r);
+    }
+  };
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const rafRef = useRef<number>(0);
   const segmentsRef = useRef<Segment[]>([]);
@@ -302,7 +308,7 @@ export function VersePlayer({ arabic, surahNumber, verseNumber, size = "md" }: V
         </Button>
 
         {/* Reciter name (clickable to change) */}
-        <ReciterPicker current={reciter} onChange={r => { setReciter(r); setStoredReciter(r.id); }} />
+        <ReciterPicker current={reciter} onChange={r => setReciter(r)} />
 
         {/* Error state */}
         {error && (

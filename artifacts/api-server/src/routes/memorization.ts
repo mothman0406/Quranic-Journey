@@ -4,6 +4,74 @@ import { memorizationProgressTable, reviewScheduleTable } from "@workspace/db/sc
 import { eq, and } from "drizzle-orm";
 import { SURAHS } from "../data/surahs.js";
 
+// In-memory cache for dynamically fetched verses (surah number → verses array)
+const versesCache = new Map<number, { number: number; arabic: string; transliteration: string; translation: string }[]>();
+
+type QuranComVerse = {
+  verse_number: number;
+  verse_key: string;
+  words?: Array<{
+    char_type_name: string;
+    transliteration?: { text: string | null };
+    text_uthmani?: string;
+  }>;
+};
+
+async function fetchVersesFromApi(surahNumber: number): Promise<{ number: number; arabic: string; transliteration: string; translation: string }[]> {
+  try {
+    // Fetch Arabic text with word-level data (for transliteration) and English translation in parallel
+    const perPage = 300; // max verses in a surah is 286 (Al-Baqarah)
+    const [versesRes, translationRes] = await Promise.all([
+      fetch(
+        `https://api.quran.com/api/v4/verses/by_chapter/${surahNumber}?words=true&word_fields=transliteration%2Ctext_uthmani&per_page=${perPage}&fields=text_uthmani`,
+        { signal: AbortSignal.timeout(10000) }
+      ),
+      fetch(
+        `https://api.quran.com/api/v4/quran/translations/20?chapter_number=${surahNumber}`,
+        { signal: AbortSignal.timeout(8000) }
+      )
+    ]);
+
+    if (!versesRes.ok) throw new Error(`Verses fetch failed: ${versesRes.status}`);
+
+    const versesData = await versesRes.json();
+    const verses: QuranComVerse[] = versesData.verses || [];
+
+    let translationVerses: Array<{ text: string }> = [];
+    if (translationRes.ok) {
+      const translationData = await translationRes.json();
+      translationVerses = translationData.translations || [];
+    }
+
+    return verses.map((verse, i) => {
+      // Build transliteration by joining word-level transliterations (skip "end" marker words)
+      const translit = (verse.words || [])
+        .filter(w => w.char_type_name === "word" && w.transliteration?.text)
+        .map(w => w.transliteration!.text!)
+        .join(" ");
+
+      // Build Arabic from word-level text_uthmani (or fall back to verse-level)
+      const arabicWords = (verse.words || [])
+        .filter(w => w.char_type_name === "word" && w.text_uthmani)
+        .map(w => w.text_uthmani!);
+      const arabic = arabicWords.length > 0 ? arabicWords.join(" ") : "";
+
+      const rawTranslation = translationVerses[i]?.text || "";
+      const cleanTranslation = rawTranslation.replace(/<[^>]+>/g, "").trim();
+
+      return {
+        number: verse.verse_number,
+        arabic,
+        transliteration: translit,
+        translation: cleanTranslation
+      };
+    });
+  } catch (err) {
+    console.error(`Failed to fetch verses for surah ${surahNumber}:`, err);
+    return [];
+  }
+}
+
 const router: IRouter = Router();
 
 function formatDate(date: Date): string {
@@ -46,9 +114,25 @@ router.get("/surahs/:surahId", async (req, res) => {
   const surahId = parseInt(req.params.surahId);
   const surah = SURAHS.find(s => s.id === surahId);
   if (!surah) { res.status(404).json({ error: "Surah not found" }); return; }
+
+  let verses = surah.verses;
+
+  // If the surah has no static verses (placeholder), fetch dynamically from Quran.com
+  if (!verses || verses.length === 0) {
+    if (versesCache.has(surah.number)) {
+      verses = versesCache.get(surah.number)!;
+    } else {
+      const fetched = await fetchVersesFromApi(surah.number);
+      if (fetched.length > 0) {
+        versesCache.set(surah.number, fetched);
+        verses = fetched;
+      }
+    }
+  }
+
   res.json({
     ...surah,
-    verses: surah.verses.map(v => ({ ...v, audioUrl: null, tajweedHighlights: [] }))
+    verses: verses.map(v => ({ ...v, audioUrl: null, tajweedHighlights: [] }))
   });
 });
 
