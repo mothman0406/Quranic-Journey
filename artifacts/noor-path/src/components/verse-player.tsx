@@ -1,4 +1,4 @@
-import { useRef, useState, useEffect, useCallback } from "react";
+import { useRef, useState, useEffect, useCallback, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Play, Pause, Loader2, ChevronDown, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -34,6 +34,12 @@ function getDefaultReciter(): Reciter {
 
 function setStoredReciter(id: string) {
   try { localStorage.setItem(STORAGE_KEY, id); } catch { /* ignore */ }
+}
+
+const ARABIC_LETTER_RE = /[\u0621-\u063A\u0641-\u064A\u0671-\u06D3]/;
+
+function isQuranWord(token: string): boolean {
+  return ARABIC_LETTER_RE.test(token);
 }
 
 function pad(n: number, len: number) {
@@ -97,10 +103,20 @@ function fetchQdcChapterTimings(qdcId: number, surah: number): Promise<Map<strin
         const offset: number = vt.timestamp_from;
         const verseDur: number = vt.timestamp_to - offset;
         if (verseDur <= 0) continue;
-        const segs: Segment[] = (vt.segments || []).map(
+        const raw: Segment[] = (vt.segments || []).map(
           (s: [number, number, number]) =>
             [s[0], (s[1] - offset) / verseDur, (s[2] - offset) / verseDur] as Segment
         );
+        const segs: Segment[] = [];
+        for (const seg of raw) {
+          if (segs.length > 0 && segs[segs.length - 1][0] === seg[0]) continue;
+          segs.push(seg);
+        }
+        for (let i = 0; i < segs.length - 1; i++) {
+          if (segs[i][2] > segs[i + 1][1]) {
+            segs[i] = [segs[i][0], segs[i][1], segs[i + 1][1]];
+          }
+        }
         result.set(vt.verse_key, segs);
       }
       return result;
@@ -218,6 +234,20 @@ export function VersePlayer({ arabic, surahNumber, verseNumber, size = "md", rec
 
   const words = arabic.split(/\s+/).filter(Boolean);
 
+  const { qdcToDisplay, displayToQdc } = useMemo(() => {
+    const q2d = new Map<number, number>();
+    const d2q = new Map<number, number>();
+    let qdcIdx = 1;
+    for (let i = 0; i < words.length; i++) {
+      if (isQuranWord(words[i])) {
+        q2d.set(qdcIdx, i);
+        d2q.set(i, qdcIdx);
+        qdcIdx++;
+      }
+    }
+    return { qdcToDisplay: q2d, displayToQdc: d2q };
+  }, [words]);
+
   // Cleanup when surah/verse/reciter changes
   useEffect(() => {
     cancelAnimationFrame(rafRef.current);
@@ -268,13 +298,15 @@ export function VersePlayer({ arabic, surahNumber, verseNumber, size = "md", rec
       let found = -1;
       for (const [wordIdx, startFrac, endFrac] of segs) {
         if (frac >= startFrac && frac < endFrac) {
-          found = wordIdx - 1; // 1-based → 0-based
+          found = qdcToDisplay.get(wordIdx) ?? -1;
           break;
         }
       }
       if (found === -1 && frac > 0) {
         const last = segs[segs.length - 1];
-        if (last && frac >= last[1]) found = words.length - 1;
+        if (last && frac >= last[1]) {
+          found = qdcToDisplay.get(last[0]) ?? words.length - 1;
+        }
       }
       setHighlightedWord(found);
     } else {
@@ -282,7 +314,7 @@ export function VersePlayer({ arabic, surahNumber, verseNumber, size = "md", rec
     }
 
     rafRef.current = requestAnimationFrame(updateHighlight);
-  }, [words.length]);
+  }, [words.length, qdcToDisplay]);
 
   const handleEnded = useCallback(() => {
     setPlaying(false);
@@ -332,7 +364,9 @@ export function VersePlayer({ arabic, surahNumber, verseNumber, size = "md", rec
   }, [playing, reciter, surahNumber, verseNumber, handleEnded, updateHighlight]);
 
   const handleWordTap = useCallback((wordIndex: number) => {
-    // Cancel any in-flight word audio
+    const qdcPos = displayToQdc.get(wordIndex);
+    if (qdcPos === undefined) return;
+
     if (wordAudioRef.current) {
       wordAudioRef.current.onended = null;
       wordAudioRef.current.pause();
@@ -342,7 +376,7 @@ export function VersePlayer({ arabic, surahNumber, verseNumber, size = "md", rec
     setTappedWord(wordIndex);
 
     const wordAudio = new Audio();
-    wordAudio.src = buildWordAudioUrl(surahNumber, verseNumber, wordIndex + 1);
+    wordAudio.src = buildWordAudioUrl(surahNumber, verseNumber, qdcPos);
     wordAudio.onended = () => {
       setTappedWord(-1);
       wordAudioRef.current = null;
@@ -356,7 +390,7 @@ export function VersePlayer({ arabic, surahNumber, verseNumber, size = "md", rec
       setTappedWord(-1);
       wordAudioRef.current = null;
     });
-  }, [surahNumber, verseNumber]);
+  }, [surahNumber, verseNumber, displayToQdc]);
 
   const textSize = size === "sm" ? "text-xl" : size === "lg" ? "text-4xl" : "text-3xl";
 
@@ -373,7 +407,8 @@ export function VersePlayer({ arabic, surahNumber, verseNumber, size = "md", rec
             key={i}
             onClick={() => handleWordTap(i)}
             className={cn(
-              "inline-block transition-all duration-100 rounded-md px-0.5 mx-0.5 cursor-pointer",
+              "inline-block transition-all duration-100 rounded-md px-0.5 mx-0.5",
+              isQuranWord(word) ? "cursor-pointer" : "cursor-default",
               tappedWord === i
                 ? "bg-teal-300 text-teal-900 scale-110 shadow-md animate-pulse"
                 : highlightedWord === i
