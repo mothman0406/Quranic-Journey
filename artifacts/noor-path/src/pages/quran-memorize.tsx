@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { useParams, Link } from "wouter";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { updateMemorization } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
@@ -18,6 +19,7 @@ import {
   SkipForward,
   ChevronsRight,
   RotateCcw,
+  CheckCircle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -469,6 +471,7 @@ interface PlayerProps {
   cumulativeReview: boolean;
   reviewRepeatCount: number;
   onBack: () => void;
+  onSessionComplete: () => void;
 }
 
 function MemorizationPlayer({
@@ -484,6 +487,7 @@ function MemorizationPlayer({
   cumulativeReview,
   reviewRepeatCount,
   onBack,
+  onSessionComplete,
 }: PlayerProps) {
   const reciter = RECITERS.find((r) => r.id === "husary")!;
 
@@ -520,6 +524,9 @@ function MemorizationPlayer({
   const reviewRepeatCountRef = useRef(reviewRepeatCount);
   reviewRepeatCountRef.current = reviewRepeatCount;
 
+  const onSessionCompleteRef = useRef(onSessionComplete);
+  onSessionCompleteRef.current = onSessionComplete;
+
   const playRef = useRef<(() => Promise<void>) | null>(null);
   const currentVerseRef = useRef<HTMLSpanElement>(null);
   // 0 = play immediately (cumulative flow); 150 = wait for hook reset (single-ayah advance)
@@ -550,10 +557,8 @@ function MemorizationPlayer({
   }, [childId, chapter, fromAyah, toAyah, currentAyahNum, repeatCount, autoAdvance, cumulativeReview, reviewRepeatCount]);
 
   const handleAllRepeatsDone = useCallback(() => {
-    if (!autoAdvanceRef.current) return;
-
     if (internalPhaseRef.current === "single") {
-      if (cumulativeReviewRef.current && currentAyahNumRef.current > fromAyahRef.current) {
+      if (autoAdvanceRef.current && cumulativeReviewRef.current && currentAyahNumRef.current > fromAyahRef.current) {
         // Enter cumulative review for ayahs fromAyah..currentAyahNum (only when >1 ayah covered)
         const upTo = currentAyahNumRef.current;
         setCumUpTo(upTo);
@@ -566,10 +571,13 @@ function MemorizationPlayer({
         internalPhaseRef.current = "cumulative";
         pendingPlayDelayRef.current = 150; // small gap entering review
         setPendingAutoPlay(true);
-      } else if (currentAyahNumRef.current < toAyahRef.current) {
+      } else if (autoAdvanceRef.current && currentAyahNumRef.current < toAyahRef.current) {
         pendingPlayDelayRef.current = 150;
         setPendingAutoPlay(true);
         setCurrentAyahNum((n) => n + 1);
+      } else if (currentAyahNumRef.current >= toAyahRef.current) {
+        // Last ayah finished — session complete
+        onSessionCompleteRef.current();
       }
     } else {
       // cumulative phase — advance through ayahs, then passes, then return to single
@@ -604,6 +612,7 @@ function MemorizationPlayer({
             // finished entire session
             setInternalPhase("single");
             internalPhaseRef.current = "single";
+            onSessionCompleteRef.current();
           }
         }
       }
@@ -669,13 +678,15 @@ function MemorizationPlayer({
         pendingPlayDelayRef.current = 150;
         setPendingAutoPlay(true);
       } else {
-        // Last pass done — advance to next single ayah
+        // Last pass done — advance to next single ayah or complete session
         setInternalPhase("single");
         internalPhaseRef.current = "single";
         if (currentAyahNum < toAyah) {
           pendingPlayDelayRef.current = 150;
           setCurrentAyahNum((n) => n + 1);
           setPendingAutoPlay(true);
+        } else {
+          onSessionCompleteRef.current();
         }
       }
     }
@@ -683,7 +694,6 @@ function MemorizationPlayer({
 
   const skipAyah = () => {
     if (internalPhase === "single") {
-      if (currentAyahNum >= toAyah) return;
       // Only enter cumulative when more than 1 ayah has been covered
       if (cumulativeReview && currentAyahNum > fromAyah) {
         const upTo = currentAyahNum;
@@ -697,12 +707,16 @@ function MemorizationPlayer({
         internalPhaseRef.current = "cumulative";
         pendingPlayDelayRef.current = 150;
         setPendingAutoPlay(true);
-      } else {
+      } else if (currentAyahNum < toAyah) {
         pendingPlayDelayRef.current = 150;
         setCurrentAyahNum((n) => n + 1);
+      } else {
+        // Last ayah, no cumulative review — session complete
+        stopAudio();
+        onSessionCompleteRef.current();
       }
     } else {
-      // Cumulative phase: skip the entire review, go straight to next single ayah
+      // Cumulative phase: skip the entire review
       stopAudio();
       setInternalPhase("single");
       internalPhaseRef.current = "single";
@@ -710,6 +724,9 @@ function MemorizationPlayer({
         pendingPlayDelayRef.current = 150;
         setCurrentAyahNum((n) => n + 1);
         setPendingAutoPlay(true);
+      } else {
+        // Was reviewing the last ayah — session complete
+        onSessionCompleteRef.current();
       }
     }
   };
@@ -989,7 +1006,7 @@ function MemorizationPlayer({
               variant="outline"
               size="sm"
               onClick={skipAyah}
-              disabled={!isCumulative && currentAyahNum >= toAyah}
+              disabled={!isCumulative && currentAyahNum >= toAyah && !cumulativeReview}
               className="rounded-full w-11 h-11 p-0"
               title={isCumulative ? "Skip cumulative review" : "Skip ayah (advance to next ayah)"}
             >
@@ -1030,8 +1047,9 @@ function MemorizationPlayer({
 
 export default function QuranMemorizePage() {
   const { childId } = useParams<{ childId: string }>();
+  const qc = useQueryClient();
 
-  const [phase, setPhase] = useState<"pick" | "setup" | "play">("pick");
+  const [phase, setPhase] = useState<"pick" | "setup" | "play" | "check">("pick");
   const [selectedChapter, setSelectedChapter] = useState<Chapter | null>(null);
   const [fromAyah, setFromAyah] = useState(1);
   const [toAyah, setToAyah] = useState(10);
@@ -1041,6 +1059,23 @@ export default function QuranMemorizePage() {
   const [reviewRepeatCount, setReviewRepeatCount] = useState(3);
   const [startAyah, setStartAyah] = useState(1);
   const [searchQuery, setSearchQuery] = useState("");
+  const [checkRating, setCheckRating] = useState<"needs_work" | "good" | "excellent" | null>(null);
+  const [saveSuccess, setSaveSuccess] = useState(false);
+
+  const saveMutation = useMutation({
+    mutationFn: (qualityRating: number) =>
+      updateMemorization(parseInt(childId), {
+        surahId: selectedChapter!.id,
+        versesMemorized: toAyah,
+        qualityRating,
+        status: "memorized",
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["memorization", childId] });
+      qc.invalidateQueries({ queryKey: ["dashboard", childId] });
+      setSaveSuccess(true);
+    },
+  });
 
   const { data: chaptersData, isLoading: chaptersLoading } = useQuery({
     queryKey: ["chapters"],
@@ -1081,6 +1116,12 @@ export default function QuranMemorizePage() {
     setStartAyah(fromAyah);
     setPhase("play");
   };
+
+  const handleSessionComplete = useCallback(() => {
+    setCheckRating(null);
+    setSaveSuccess(false);
+    setPhase("check");
+  }, []);
 
   const handleResumeBookmark = () => {
     if (!bookmark) return;
@@ -1420,6 +1461,131 @@ export default function QuranMemorizePage() {
   }
 
   // ══════════════════════════════════════════════════════════════════════════
+  // PHASE: CHECK — Recitation check after session completes
+  // ══════════════════════════════════════════════════════════════════════════
+
+  if (phase === "check" && selectedChapter) {
+    const ratingOptions: { value: "needs_work" | "good" | "excellent"; label: string; quality: number; color: string; bg: string; border: string }[] = [
+      { value: "needs_work", label: "Needs Work", quality: 2, color: "text-red-600", bg: "bg-red-50", border: "border-red-300" },
+      { value: "good",       label: "Good",        quality: 4, color: "text-amber-600", bg: "bg-amber-50", border: "border-amber-300" },
+      { value: "excellent",  label: "Excellent",   quality: 5, color: "text-emerald-600", bg: "bg-emerald-50", border: "border-emerald-300" },
+    ];
+    const selectedOption = ratingOptions.find((r) => r.value === checkRating);
+
+    return (
+      <div className="min-h-screen bg-background flex flex-col">
+        {/* Header */}
+        <div className="pattern-bg text-white px-4 pt-8 pb-10">
+          <div className="max-w-lg mx-auto">
+            <button
+              onClick={() => setPhase("setup")}
+              className="flex items-center gap-1 text-emerald-200 text-sm mb-4"
+            >
+              <ChevronLeft size={16} /> Settings
+            </button>
+            <h1 className="text-xl font-bold">Recitation Check</h1>
+            <p className="text-emerald-200 text-sm mt-1">
+              {selectedChapter.name_simple} · Ayahs {fromAyah}–{toAyah}
+            </p>
+          </div>
+        </div>
+
+        <div className="max-w-lg mx-auto w-full px-4 -mt-6 space-y-5 pb-24">
+          {/* Instruction card */}
+          <div className="bg-white rounded-2xl border border-border shadow-sm p-5">
+            <p className="text-sm font-semibold text-foreground mb-1">
+              Listen to your child recite
+            </p>
+            <p className="text-muted-foreground text-sm">
+              Ask them to recite{" "}
+              <span className="font-medium text-foreground">
+                {fromAyah === toAyah
+                  ? `Ayah ${fromAyah}`
+                  : `Ayahs ${fromAyah}–${toAyah}`}
+              </span>{" "}
+              of{" "}
+              <span className="font-medium text-foreground arabic-text">
+                {selectedChapter.name_simple}
+              </span>{" "}
+              from memory, then rate their recitation below.
+            </p>
+          </div>
+
+          {/* Rating selector */}
+          <div className="bg-white rounded-2xl border border-border shadow-sm p-5 space-y-3">
+            <p className="text-sm font-semibold text-foreground">
+              How did they do?
+            </p>
+            <div className="grid grid-cols-3 gap-3">
+              {ratingOptions.map((opt) => (
+                <button
+                  key={opt.value}
+                  onClick={() => setCheckRating(opt.value)}
+                  className={cn(
+                    "rounded-xl border-2 py-4 flex flex-col items-center gap-1.5 text-sm font-semibold transition-all",
+                    checkRating === opt.value
+                      ? `${opt.bg} ${opt.border} ${opt.color} shadow-sm scale-105`
+                      : "border-border text-muted-foreground hover:border-border/80 hover:bg-muted/40"
+                  )}
+                >
+                  <span className="text-xl">
+                    {opt.value === "needs_work" ? "😔" : opt.value === "good" ? "😊" : "🌟"}
+                  </span>
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Actions */}
+          {saveSuccess ? (
+            <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-5 flex items-center gap-3">
+              <CheckCircle size={24} className="text-emerald-600 flex-shrink-0" />
+              <div>
+                <p className="font-semibold text-emerald-800">Progress saved!</p>
+                <p className="text-sm text-emerald-600">
+                  {selectedChapter.name_simple} ayahs {fromAyah}–{toAyah} marked as memorized.
+                </p>
+              </div>
+            </div>
+          ) : (
+            <Button
+              className="w-full h-12 text-base"
+              disabled={!checkRating || saveMutation.isPending}
+              onClick={() => {
+                if (!selectedOption) return;
+                saveMutation.mutate(selectedOption.quality);
+              }}
+            >
+              {saveMutation.isPending ? (
+                <>
+                  <Loader2 size={18} className="mr-2 animate-spin" />
+                  Saving…
+                </>
+              ) : (
+                "Mark as Memorized"
+              )}
+            </Button>
+          )}
+
+          {saveMutation.isError && (
+            <p className="text-sm text-red-500 text-center">
+              Failed to save — please try again.
+            </p>
+          )}
+
+          <button
+            onClick={() => setPhase("setup")}
+            className="w-full text-sm text-muted-foreground py-2 hover:text-foreground transition-colors"
+          >
+            Keep Practicing
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
   // PHASE: PLAY — delegate entirely to MemorizationPlayer
   // ══════════════════════════════════════════════════════════════════════════
 
@@ -1440,6 +1606,7 @@ export default function QuranMemorizePage() {
       cumulativeReview={cumulativeReview}
       reviewRepeatCount={reviewRepeatCount}
       onBack={() => setPhase("setup")}
+      onSessionComplete={handleSessionComplete}
     />
   );
 }
