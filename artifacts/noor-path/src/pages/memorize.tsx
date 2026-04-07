@@ -8,7 +8,7 @@ import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ChildNav } from "@/components/child-nav";
-import { ChevronLeft, CheckCircle, Clock, BookOpen } from "lucide-react";
+import { ChevronLeft, CheckCircle, Clock, BookOpen, Layers } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const STATUS_LABELS: Record<string, { label: string; color: string }> = {
@@ -62,8 +62,18 @@ export default function MemorizePage() {
           <Link href={`/child/${childId}`}>
             <button className="flex items-center gap-1 text-emerald-200 text-sm mb-4"><ChevronLeft size={16} /> Dashboard</button>
           </Link>
-          <h1 className="text-xl font-bold">Memorization Track</h1>
-          <p className="text-emerald-200 text-sm mt-1">{memorizedCount} surahs · {totalVerses} verses memorized</p>
+          <div className="flex items-start justify-between">
+            <div>
+              <h1 className="text-xl font-bold">Memorization Track</h1>
+              <p className="text-emerald-200 text-sm mt-1">{memorizedCount} surahs · {totalVerses} verses memorized</p>
+            </div>
+            <Link href={`/child/${childId}/quran-memorize`}>
+              <button className="flex items-center gap-1.5 bg-white/15 hover:bg-white/25 transition-colors text-white text-xs font-medium px-3 py-1.5 rounded-full border border-white/20">
+                <Layers size={13} />
+                Full Quran
+              </button>
+            </Link>
+          </div>
         </div>
       </div>
 

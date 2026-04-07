@@ -18,6 +18,7 @@ import ProgressPage from "@/pages/progress";
 import PlanPage from "@/pages/plan";
 import SurahDetailPage from "@/pages/surah-detail";
 import MushafPage from "@/pages/mushaf";
+import QuranMemorizePage from "@/pages/quran-memorize";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -69,6 +70,7 @@ function Router() {
       <Route path="/child/:childId/plan" component={() => <ProtectedRoute component={PlanPage} />} />
       <Route path="/surah/:surahId" component={() => <ProtectedRoute component={SurahDetailPage} />} />
       <Route path="/mushaf" component={() => <ProtectedRoute component={MushafPage} />} />
+      <Route path="/child/:childId/quran-memorize" component={() => <ProtectedRoute component={QuranMemorizePage} />} />
       <Route component={NotFound} />
     </Switch>
   );
