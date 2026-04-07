@@ -5,10 +5,17 @@ import { eq, desc } from "drizzle-orm";
 import { DUAS } from "../data/duas.js";
 import { STORIES } from "../data/stories.js";
 
+async function ownsChild(parentId: string, childId: number): Promise<boolean> {
+  const [child] = await db.select({ parentId: childrenTable.parentId })
+    .from(childrenTable).where(eq(childrenTable.id, childId));
+  return child?.parentId === parentId;
+}
+
 const router: IRouter = Router();
 
 router.get("/children/:childId/sessions", async (req, res) => {
   const childId = parseInt(req.params.childId);
+  if (!await ownsChild(req.user.id, childId)) { res.status(403).json({ error: "Forbidden" }); return; }
   const limit = parseInt(req.query.limit as string) || 30;
   const sessions = await db.select().from(learningSessionsTable)
     .where(eq(learningSessionsTable.childId, childId))
@@ -25,6 +32,7 @@ router.get("/children/:childId/sessions", async (req, res) => {
 
 router.post("/children/:childId/sessions", async (req, res) => {
   const childId = parseInt(req.params.childId);
+  if (!await ownsChild(req.user.id, childId)) { res.status(403).json({ error: "Forbidden" }); return; }
   const { sessionType, durationMinutes, surahsWorked, notes } = req.body;
   const points = durationMinutes * 2;
   const today = new Date().toISOString().split("T")[0];
@@ -63,6 +71,7 @@ router.post("/children/:childId/sessions", async (req, res) => {
 
 router.get("/children/:childId/duas", async (req, res) => {
   const childId = parseInt(req.params.childId);
+  if (!await ownsChild(req.user.id, childId)) { res.status(403).json({ error: "Forbidden" }); return; }
   const childDuaRecords = await db.select().from(childDuasTable).where(eq(childDuasTable.childId, childId));
 
   const result = DUAS.map(dua => {
@@ -80,6 +89,7 @@ router.get("/children/:childId/duas", async (req, res) => {
 
 router.post("/children/:childId/duas", async (req, res) => {
   const childId = parseInt(req.params.childId);
+  if (!await ownsChild(req.user.id, childId)) { res.status(403).json({ error: "Forbidden" }); return; }
   const { duaId, learned } = req.body;
   const dua = DUAS.find(d => d.id === duaId);
   if (!dua) { res.status(404).json({ error: "Dua not found" }); return; }

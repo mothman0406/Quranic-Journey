@@ -10,12 +10,16 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@opentelemetry/api": "^1.9.1",
+    "@opentelemetry/semantic-conventions": "^1.40.0",
     "@workspace/api-zod": "workspace:*",
     "@workspace/db": "workspace:*",
+    "better-auth": "^1.6.0",
     "cookie-parser": "^1.4.7",
     "cors": "^2",
     "drizzle-orm": "catalog:",
     "express": "^5",
+    "kysely": "^0.28.15",
     "pino": "^9",
     "pino-http": "^10"
   },

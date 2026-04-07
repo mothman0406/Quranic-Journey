@@ -1,8 +1,14 @@
 import { Router, type IRouter } from "express";
 import { db } from "@workspace/db";
-import { memorizationProgressTable, reviewScheduleTable } from "@workspace/db/schema";
+import { childrenTable, memorizationProgressTable, reviewScheduleTable } from "@workspace/db/schema";
 import { eq, and } from "drizzle-orm";
 import { SURAHS } from "../data/surahs.js";
+
+async function ownsChild(parentId: string, childId: number): Promise<boolean> {
+  const [child] = await db.select({ parentId: childrenTable.parentId })
+    .from(childrenTable).where(eq(childrenTable.id, childId));
+  return child?.parentId === parentId;
+}
 
 // In-memory cache for dynamically fetched verses (surah number → verses array)
 const versesCache = new Map<number, { number: number; arabic: string; transliteration: string; translation: string }[]>();
@@ -138,6 +144,7 @@ router.get("/surahs/:surahId", async (req, res) => {
 
 router.get("/children/:childId/memorization", async (req, res) => {
   const childId = parseInt(req.params.childId);
+  if (!await ownsChild(req.user.id, childId)) { res.status(403).json({ error: "Forbidden" }); return; }
   const progress = await db.select().from(memorizationProgressTable)
     .where(eq(memorizationProgressTable.childId, childId));
 
@@ -165,6 +172,7 @@ router.get("/children/:childId/memorization", async (req, res) => {
 
 router.post("/children/:childId/memorization", async (req, res) => {
   const childId = parseInt(req.params.childId);
+  if (!await ownsChild(req.user.id, childId)) { res.status(403).json({ error: "Forbidden" }); return; }
   const { surahId, versesMemorized, status, qualityRating } = req.body;
 
   const surah = SURAHS.find(s => s.id === surahId);
@@ -238,6 +246,7 @@ router.post("/children/:childId/memorization", async (req, res) => {
 
 router.get("/children/:childId/reviews", async (req, res) => {
   const childId = parseInt(req.params.childId);
+  if (!await ownsChild(req.user.id, childId)) { res.status(403).json({ error: "Forbidden" }); return; }
   const today = new Date().toISOString().split("T")[0];
 
   const allReviews = await db.select().from(reviewScheduleTable)
@@ -282,6 +291,7 @@ router.get("/children/:childId/reviews", async (req, res) => {
 
 router.post("/children/:childId/reviews", async (req, res) => {
   const childId = parseInt(req.params.childId);
+  if (!await ownsChild(req.user.id, childId)) { res.status(403).json({ error: "Forbidden" }); return; }
   const { surahId, qualityRating, durationMinutes } = req.body;
 
   const [review] = await db.select().from(reviewScheduleTable)

@@ -1,9 +1,12 @@
-import { Switch, Route, Router as WouterRouter } from "wouter";
+import { Switch, Route, Router as WouterRouter, Redirect } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { useSession } from "@/lib/auth-client";
 import NotFound from "@/pages/not-found";
 import Home from "@/pages/home";
+import LoginPage from "@/pages/login";
+import RegisterPage from "@/pages/register";
 import ChildDashboard from "@/pages/child-dashboard";
 import MemorizePage from "@/pages/memorize";
 import ReviewPage from "@/pages/review";
@@ -22,21 +25,50 @@ const queryClient = new QueryClient({
   }
 });
 
+function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
+  const { data: session, isPending } = useSession();
+
+  if (isPending) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-muted-foreground text-sm">Loading…</div>
+      </div>
+    );
+  }
+
+  if (!session?.user) {
+    return <Redirect to="/login" />;
+  }
+
+  return <Component />;
+}
+
+function PublicOnlyRoute({ component: Component }: { component: React.ComponentType }) {
+  const { data: session, isPending } = useSession();
+
+  if (isPending) return null;
+  if (session?.user) return <Redirect to="/" />;
+
+  return <Component />;
+}
+
 function Router() {
   return (
     <Switch>
-      <Route path="/" component={Home} />
-      <Route path="/child/:childId" component={ChildDashboard} />
-      <Route path="/child/:childId/memorize" component={MemorizePage} />
-      <Route path="/child/:childId/review" component={ReviewPage} />
-      <Route path="/child/:childId/lesson" component={LessonPage} />
-      <Route path="/child/:childId/stories" component={StoriesPage} />
-      <Route path="/child/:childId/stories/:storyId" component={StoryDetailPage} />
-      <Route path="/child/:childId/duas" component={DuasPage} />
-      <Route path="/child/:childId/progress" component={ProgressPage} />
-      <Route path="/child/:childId/plan" component={PlanPage} />
-      <Route path="/surah/:surahId" component={SurahDetailPage} />
-      <Route path="/mushaf" component={MushafPage} />
+      <Route path="/login" component={() => <PublicOnlyRoute component={LoginPage} />} />
+      <Route path="/register" component={() => <PublicOnlyRoute component={RegisterPage} />} />
+      <Route path="/" component={() => <ProtectedRoute component={Home} />} />
+      <Route path="/child/:childId" component={() => <ProtectedRoute component={ChildDashboard} />} />
+      <Route path="/child/:childId/memorize" component={() => <ProtectedRoute component={MemorizePage} />} />
+      <Route path="/child/:childId/review" component={() => <ProtectedRoute component={ReviewPage} />} />
+      <Route path="/child/:childId/lesson" component={() => <ProtectedRoute component={LessonPage} />} />
+      <Route path="/child/:childId/stories" component={() => <ProtectedRoute component={StoriesPage} />} />
+      <Route path="/child/:childId/stories/:storyId" component={() => <ProtectedRoute component={StoryDetailPage} />} />
+      <Route path="/child/:childId/duas" component={() => <ProtectedRoute component={DuasPage} />} />
+      <Route path="/child/:childId/progress" component={() => <ProtectedRoute component={ProgressPage} />} />
+      <Route path="/child/:childId/plan" component={() => <ProtectedRoute component={PlanPage} />} />
+      <Route path="/surah/:surahId" component={() => <ProtectedRoute component={SurahDetailPage} />} />
+      <Route path="/mushaf" component={() => <ProtectedRoute component={MushafPage} />} />
       <Route component={NotFound} />
     </Switch>
   );

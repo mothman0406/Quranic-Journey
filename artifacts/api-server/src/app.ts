@@ -1,8 +1,11 @@
 import express, { type Express } from "express";
 import cors from "cors";
 import pinoHttp from "pino-http";
-import router from "./routes";
-import { logger } from "./lib/logger";
+import { toNodeHandler } from "better-auth/node";
+import { auth } from "./auth.js";
+import router from "./routes/index.js";
+import { requireAuth } from "./middlewares/requireAuth.js";
+import { logger } from "./lib/logger.js";
 
 const app: Express = express();
 
@@ -25,10 +28,16 @@ app.use(
     },
   }),
 );
-app.use(cors());
+
+// Allow requests from the Vite dev server
+app.use(cors({ origin: "http://localhost:5173", credentials: true }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-app.use("/api", router);
+// Better Auth handles all /api/auth/* routes (sign-in, sign-up, sign-out, session)
+app.all("/api/auth/*splat", toNodeHandler(auth));
+
+// All other /api/* routes require a valid session
+app.use("/api", requireAuth, router);
 
 export default app;

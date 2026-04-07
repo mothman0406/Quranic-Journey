@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
+import { signOut, useSession } from "@/lib/auth-client";
 import { listChildren } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -73,6 +74,8 @@ export default function Home() {
   const [step, setStep] = useState(1);
   const [form, setForm] = useState<OnboardingForm>(DEFAULT_FORM);
   const qc = useQueryClient();
+  const [, navigate] = useLocation();
+  const { data: session } = useSession();
 
   const { data, isLoading } = useQuery({
     queryKey: ["children"],
@@ -142,6 +145,20 @@ export default function Home() {
           <p className="arabic-text text-4xl mb-2 text-amber-200">بِسْمِ اللَّهِ الرَّحْمَنِ الرَّحِيمِ</p>
           <h1 className="text-2xl font-bold mt-3 text-white">NoorPath</h1>
           <p className="text-emerald-200 text-sm mt-1">Guiding children to the Quran — one verse at a time</p>
+          {session?.user && (
+            <div className="mt-4 flex items-center justify-center gap-3">
+              <span className="text-emerald-200 text-xs">{session.user.email}</span>
+              <button
+                onClick={async () => {
+                  await signOut();
+                  navigate("/login");
+                }}
+                className="text-xs text-white/70 hover:text-white underline underline-offset-2"
+              >
+                Sign out
+              </button>
+            </div>
+          )}
         </div>
       </div>
 

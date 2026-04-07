@@ -156,7 +156,9 @@ function generateAutoGoals(child: typeof childrenTable.$inferSelect, memorizedCo
 }
 
 router.get("/children", async (req, res) => {
-  const children = await db.select().from(childrenTable).orderBy(desc(childrenTable.createdAt));
+  const children = await db.select().from(childrenTable)
+    .where(eq(childrenTable.parentId, req.user.id))
+    .orderBy(desc(childrenTable.createdAt));
   res.json({ children: children.map(c => ({ ...c, createdAt: c.createdAt.toISOString() })) });
 });
 
@@ -166,6 +168,7 @@ router.post("/children", async (req, res) => {
   const practiceMinutes = practiceMinutesPerDay || 20;
 
   const [child] = await db.insert(childrenTable).values({
+    parentId: req.user.id,
     name, age, gender, ageGroup,
     avatarEmoji: avatarEmoji || (gender === "female" ? "🌸" : "⭐"),
     lastActiveDate: new Date().toISOString().split("T")[0],
@@ -214,11 +217,15 @@ router.get("/children/:childId", async (req, res) => {
   const childId = parseInt(req.params.childId);
   const [child] = await db.select().from(childrenTable).where(eq(childrenTable.id, childId));
   if (!child) { res.status(404).json({ error: "Child not found" }); return; }
+  if (child.parentId !== req.user.id) { res.status(403).json({ error: "Forbidden" }); return; }
   res.json({ ...child, createdAt: child.createdAt.toISOString() });
 });
 
 router.put("/children/:childId", async (req, res) => {
   const childId = parseInt(req.params.childId);
+  const [existing] = await db.select().from(childrenTable).where(eq(childrenTable.id, childId));
+  if (!existing) { res.status(404).json({ error: "Child not found" }); return; }
+  if (existing.parentId !== req.user.id) { res.status(403).json({ error: "Forbidden" }); return; }
   const updates: Record<string, unknown> = {};
   if (req.body.name) updates.name = req.body.name;
   if (req.body.age) { updates.age = req.body.age; updates.ageGroup = getAgeGroup(req.body.age); }
@@ -233,6 +240,7 @@ router.get("/children/:childId/goals", async (req, res) => {
   const childId = parseInt(req.params.childId);
   const [child] = await db.select().from(childrenTable).where(eq(childrenTable.id, childId));
   if (!child) { res.status(404).json({ error: "Child not found" }); return; }
+  if (child.parentId !== req.user.id) { res.status(403).json({ error: "Forbidden" }); return; }
 
   const memProgress = await db.select().from(memorizationProgressTable).where(eq(memorizationProgressTable.childId, childId));
   const memorizedCount = memProgress.filter(m => m.status === "memorized").length;
@@ -259,6 +267,7 @@ router.get("/children/:childId/dashboard", async (req, res) => {
   const childId = parseInt(req.params.childId);
   const [child] = await db.select().from(childrenTable).where(eq(childrenTable.id, childId));
   if (!child) { res.status(404).json({ error: "Child not found" }); return; }
+  if (child.parentId !== req.user.id) { res.status(403).json({ error: "Forbidden" }); return; }
 
   const memProgress = await db.select().from(memorizationProgressTable).where(eq(memorizationProgressTable.childId, childId));
   const today = new Date().toISOString().split("T")[0];
@@ -352,6 +361,7 @@ router.get("/children/:childId/plan", async (req, res) => {
   const childId = parseInt(req.params.childId);
   const [child] = await db.select().from(childrenTable).where(eq(childrenTable.id, childId));
   if (!child) { res.status(404).json({ error: "Child not found" }); return; }
+  if (child.parentId !== req.user.id) { res.status(403).json({ error: "Forbidden" }); return; }
 
   const memProgress = await db.select().from(memorizationProgressTable).where(eq(memorizationProgressTable.childId, childId));
   const memorizedCount = memProgress.filter(m => m.status === "memorized").length;
