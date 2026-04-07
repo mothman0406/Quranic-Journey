@@ -445,6 +445,7 @@ function MemorizationPlayer({
   const toAyahRef = useRef(toAyah);
   toAyahRef.current = toAyah;
   const playRef = useRef<(() => Promise<void>) | null>(null);
+  const currentVerseRef = useRef<HTMLSpanElement>(null);
 
   const currentVerse = verses.find((v) => v.verse_number === currentAyahNum);
   const currentArabic = currentVerse?.text_uthmani ?? "";
@@ -493,6 +494,11 @@ function MemorizationPlayer({
     return () => clearTimeout(timer);
   }, [currentAyahNum, pendingAutoPlay]);
 
+  // Scroll current ayah into view whenever it changes
+  useEffect(() => {
+    currentVerseRef.current?.scrollIntoView({ block: "center", behavior: "smooth" });
+  }, [currentAyahNum]);
+
   const rangeLength = toAyah - fromAyah + 1;
   const currentIndexInRange = currentAyahNum - fromAyah;
   const progressPercent =
@@ -506,7 +512,7 @@ function MemorizationPlayer({
   };
 
   const showBismillah =
-    currentAyahNum === 1 && chapter.id !== 1 && chapter.id !== 9;
+    fromAyah === 1 && chapter.id !== 1 && chapter.id !== 9;
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
@@ -558,51 +564,77 @@ function MemorizationPlayer({
         </div>
       </div>
 
-      {/* Arabic text area */}
-      <div className="flex-1 flex flex-col items-center justify-center px-6 py-4 max-w-lg mx-auto w-full">
-        {versesLoading || !currentArabic ? (
-          <div className="w-full space-y-4">
-            <Skeleton className="h-10 w-full rounded-xl" />
-            <Skeleton className="h-10 w-4/5 rounded-xl mx-auto" />
-            <Skeleton className="h-10 w-3/5 rounded-xl mx-auto" />
-          </div>
-        ) : (
-          <>
-            {showBismillah && (
-              <p className="arabic-text text-2xl text-primary/50 text-center mb-6 leading-loose">
-                بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ
-              </p>
-            )}
-
-            <div
-              className="arabic-text text-4xl leading-[2.2] text-right select-none w-full"
-              dir="rtl"
-              lang="ar"
-            >
-              {words.map((word, i) => (
-                <span
-                  key={i}
-                  className={cn(
-                    "inline-block transition-all duration-100 rounded-md px-0.5 mx-0.5",
-                    highlightedWord === i
-                      ? "bg-amber-300 text-amber-900 scale-110 shadow-sm"
-                      : playing && highlightedWord > i
-                        ? "text-primary/40"
-                        : "text-foreground"
-                  )}
-                >
-                  {word}
-                </span>
-              ))}
+      {/* Arabic text area — mushaf-style continuous flow */}
+      <div className="flex-1 overflow-y-auto px-5 py-5">
+        <div className="max-w-lg mx-auto">
+          {versesLoading || !currentArabic ? (
+            <div className="w-full space-y-4 pt-8">
+              <Skeleton className="h-10 w-full rounded-xl" />
+              <Skeleton className="h-10 w-4/5 rounded-xl mx-auto" />
+              <Skeleton className="h-10 w-3/5 rounded-xl mx-auto" />
             </div>
+          ) : (
+            <>
+              {showBismillah && (
+                <p className="arabic-text text-xl text-primary/40 text-center mb-5 leading-loose">
+                  بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ
+                </p>
+              )}
 
-            <div className="flex justify-center mt-3">
-              <span className="arabic-text text-xl text-primary/30">
-                ﴿{currentAyahNum}﴾
-              </span>
-            </div>
-          </>
-        )}
+              <div
+                className="arabic-text text-3xl leading-[2.6] text-right select-none w-full"
+                dir="rtl"
+                lang="ar"
+              >
+                {verses
+                  .filter(
+                    (v) => v.verse_number >= fromAyah && v.verse_number <= toAyah
+                  )
+                  .map((verse) => {
+                    const isCurrent = verse.verse_number === currentAyahNum;
+                    const vWords = verse.text_uthmani.split(/\s+/).filter(Boolean);
+                    return (
+                      <span key={verse.verse_number}>
+                        <span
+                          ref={isCurrent ? currentVerseRef : undefined}
+                          className={cn(
+                            "rounded-md transition-colors duration-300",
+                            isCurrent ? "bg-emerald-50" : ""
+                          )}
+                        >
+                          {vWords.map((word, i) => (
+                            <span
+                              key={i}
+                              className={cn(
+                                "inline-block transition-all duration-100 rounded-md px-0.5 mx-0.5",
+                                isCurrent && highlightedWord === i
+                                  ? "bg-amber-300 text-amber-900 scale-110 shadow-sm"
+                                  : isCurrent && playing && highlightedWord > i
+                                    ? "text-primary/40"
+                                    : isCurrent
+                                      ? "text-foreground"
+                                      : "text-foreground/45"
+                              )}
+                            >
+                              {word}
+                            </span>
+                          ))}
+                        </span>
+                        <span
+                          className={cn(
+                            "inline-block arabic-text text-base mx-1.5 transition-colors duration-300",
+                            isCurrent ? "text-amber-500/70" : "text-primary/25"
+                          )}
+                        >
+                          ﴿{verse.verse_number}﴾
+                        </span>
+                      </span>
+                    );
+                  })}
+              </div>
+            </>
+          )}
+        </div>
       </div>
 
       {/* Player controls */}
