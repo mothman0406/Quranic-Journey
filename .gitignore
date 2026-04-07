@@ -47,3 +47,7 @@ Thumbs.db
 # Replit
 .cache/
 .local/
+
+# Environment files
+artifacts/api-server/.env
+artifacts/noor-path/.env
