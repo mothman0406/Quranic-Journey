@@ -52,6 +52,8 @@ interface Bookmark {
   currentAyah: number;
   repeatCount: number;
   autoAdvance: boolean;
+  cumulativeReview?: boolean;
+  reviewRepeatCount?: number;
   savedAt: number;
 }
 
@@ -417,6 +419,8 @@ interface PlayerProps {
   repeatCount: number;
   initialAyah: number;
   initialAutoAdvance: boolean;
+  cumulativeReview: boolean;
+  reviewRepeatCount: number;
   onBack: () => void;
 }
 
@@ -430,6 +434,8 @@ function MemorizationPlayer({
   repeatCount,
   initialAyah,
   initialAutoAdvance,
+  cumulativeReview,
+  reviewRepeatCount,
   onBack,
 }: PlayerProps) {
   const reciter = RECITERS.find((r) => r.id === "husary")!;
@@ -438,19 +444,49 @@ function MemorizationPlayer({
   const [pendingAutoPlay, setPendingAutoPlay] = useState(false);
   const [autoAdvance, setAutoAdvance] = useState(initialAutoAdvance);
 
+  // Cumulative review state
+  type InternalPhase = "single" | "cumulative";
+  const [internalPhase, setInternalPhase] = useState<InternalPhase>("single");
+  const [cumAyahIdx, setCumAyahIdx] = useState(0); // 0-based index within fromAyah..cumUpTo
+  const [cumPass, setCumPass] = useState(1);
+  const [cumUpTo, setCumUpTo] = useState(initialAyah);
+
+  // Refs for stale-closure-safe access inside callbacks
   const autoAdvanceRef = useRef(autoAdvance);
   autoAdvanceRef.current = autoAdvance;
   const currentAyahNumRef = useRef(currentAyahNum);
   currentAyahNumRef.current = currentAyahNum;
   const toAyahRef = useRef(toAyah);
   toAyahRef.current = toAyah;
+  const fromAyahRef = useRef(fromAyah);
+  fromAyahRef.current = fromAyah;
+  const internalPhaseRef = useRef<InternalPhase>("single");
+  internalPhaseRef.current = internalPhase;
+  const cumAyahIdxRef = useRef(0);
+  cumAyahIdxRef.current = cumAyahIdx;
+  const cumPassRef = useRef(1);
+  cumPassRef.current = cumPass;
+  const cumUpToRef = useRef(initialAyah);
+  cumUpToRef.current = cumUpTo;
+  const cumulativeReviewRef = useRef(cumulativeReview);
+  cumulativeReviewRef.current = cumulativeReview;
+  const reviewRepeatCountRef = useRef(reviewRepeatCount);
+  reviewRepeatCountRef.current = reviewRepeatCount;
+
   const playRef = useRef<(() => Promise<void>) | null>(null);
   const currentVerseRef = useRef<HTMLSpanElement>(null);
+  // 0 = play immediately (cumulative flow); 150 = wait for hook reset (single-ayah advance)
+  const pendingPlayDelayRef = useRef(150);
 
-  const currentVerse = verses.find((v) => v.verse_number === currentAyahNum);
-  const currentArabic = currentVerse?.text_uthmani ?? "";
+  // Derive the verse number and repeat count the audio hook should use
+  const activeVerseNumber =
+    internalPhase === "single" ? currentAyahNum : fromAyah + cumAyahIdx;
+  const activeTotalRepeats = internalPhase === "single" ? repeatCount : 1;
 
-  // Save bookmark whenever the current ayah changes
+  const activeVerse = verses.find((v) => v.verse_number === activeVerseNumber);
+  const currentArabic = activeVerse?.text_uthmani ?? "";
+
+  // Save bookmark whenever the main single-study ayah changes
   useEffect(() => {
     saveBookmark(childId, {
       surahId: chapter.id,
@@ -460,44 +496,103 @@ function MemorizationPlayer({
       currentAyah: currentAyahNum,
       repeatCount,
       autoAdvance,
+      cumulativeReview,
+      reviewRepeatCount,
       savedAt: Date.now(),
     });
-  }, [childId, chapter, fromAyah, toAyah, currentAyahNum, repeatCount, autoAdvance]);
+  }, [childId, chapter, fromAyah, toAyah, currentAyahNum, repeatCount, autoAdvance, cumulativeReview, reviewRepeatCount]);
 
   const handleAllRepeatsDone = useCallback(() => {
-    if (autoAdvanceRef.current && currentAyahNumRef.current < toAyahRef.current) {
-      setPendingAutoPlay(true);
-      setCurrentAyahNum((n) => n + 1);
+    if (!autoAdvanceRef.current) return;
+
+    if (internalPhaseRef.current === "single") {
+      if (cumulativeReviewRef.current) {
+        // Enter cumulative review for ayahs fromAyah..currentAyahNum
+        const upTo = currentAyahNumRef.current;
+        setCumUpTo(upTo);
+        cumUpToRef.current = upTo;
+        setCumAyahIdx(0);
+        cumAyahIdxRef.current = 0;
+        setCumPass(1);
+        cumPassRef.current = 1;
+        setInternalPhase("cumulative");
+        internalPhaseRef.current = "cumulative";
+        pendingPlayDelayRef.current = 150; // small gap entering review
+        setPendingAutoPlay(true);
+      } else if (currentAyahNumRef.current < toAyahRef.current) {
+        pendingPlayDelayRef.current = 150;
+        setPendingAutoPlay(true);
+        setCurrentAyahNum((n) => n + 1);
+      }
+    } else {
+      // cumulative phase — advance through ayahs, then passes, then return to single
+      const rangeLen = cumUpToRef.current - fromAyahRef.current + 1;
+      const nextIdx = cumAyahIdxRef.current + 1;
+
+      if (nextIdx < rangeLen) {
+        // flowing to next ayah within cumulative — no pause
+        pendingPlayDelayRef.current = 0;
+        setCumAyahIdx(nextIdx);
+        cumAyahIdxRef.current = nextIdx;
+        setPendingAutoPlay(true);
+      } else {
+        const nextPass = cumPassRef.current + 1;
+        if (nextPass <= reviewRepeatCountRef.current) {
+          // next pass — brief pause at the pass boundary
+          pendingPlayDelayRef.current = 0;
+          setCumAyahIdx(0);
+          cumAyahIdxRef.current = 0;
+          setCumPass(nextPass);
+          cumPassRef.current = nextPass;
+          setPendingAutoPlay(true);
+        } else {
+          // cumulative review complete — advance to next single ayah
+          if (currentAyahNumRef.current < toAyahRef.current) {
+            setInternalPhase("single");
+            internalPhaseRef.current = "single";
+            pendingPlayDelayRef.current = 150;
+            setCurrentAyahNum((n) => n + 1);
+            setPendingAutoPlay(true);
+          } else {
+            // finished entire session
+            setInternalPhase("single");
+            internalPhaseRef.current = "single";
+          }
+        }
+      }
     }
-  }, []);
+  }, []); // all access via refs
 
   const { playing, loading, error, currentRepeat, highlightedWord, words, play } =
     useVerseAudio({
       surahNumber: chapter.id,
-      verseNumber: currentAyahNum,
+      verseNumber: activeVerseNumber,
       arabic: currentArabic,
       reciter,
-      totalRepeats: repeatCount,
+      totalRepeats: activeTotalRepeats,
       onAllRepeatsDone: handleAllRepeatsDone,
     });
 
   // Keep playRef up to date on every render without triggering effects
   playRef.current = play;
 
-  // After auto-advancing to next ayah, start playback once the hook has reset
+  // After auto-advancing (single or cumulative), start playback once the hook has reset.
+  // Cumulative ayah-to-ayah transitions use delay=0 for seamless flow;
+  // single-ayah advances use 150ms to let the hook fully reset first.
   useEffect(() => {
     if (!pendingAutoPlay) return;
     setPendingAutoPlay(false);
+    const delay = pendingPlayDelayRef.current;
     const timer = setTimeout(() => {
       playRef.current?.();
-    }, 150);
+    }, delay);
     return () => clearTimeout(timer);
-  }, [currentAyahNum, pendingAutoPlay]);
+  }, [activeVerseNumber, pendingAutoPlay]);
 
-  // Scroll current ayah into view whenever it changes
+  // Scroll active ayah into view whenever it changes
   useEffect(() => {
     currentVerseRef.current?.scrollIntoView({ block: "center", behavior: "smooth" });
-  }, [currentAyahNum]);
+  }, [activeVerseNumber]);
 
   const rangeLength = toAyah - fromAyah + 1;
   const currentIndexInRange = currentAyahNum - fromAyah;
@@ -505,14 +600,29 @@ function MemorizationPlayer({
     rangeLength > 1 ? (currentIndexInRange / (rangeLength - 1)) * 100 : 100;
 
   const goNext = () => {
-    if (currentAyahNum < toAyah) setCurrentAyahNum((n) => n + 1);
+    if (internalPhase === "single" && currentAyahNum < toAyah) {
+      setInternalPhase("single");
+      setCurrentAyahNum((n) => n + 1);
+    }
   };
   const goPrev = () => {
-    if (currentAyahNum > fromAyah) setCurrentAyahNum((n) => n - 1);
+    if (internalPhase === "single" && currentAyahNum > fromAyah) {
+      setCurrentAyahNum((n) => n - 1);
+    } else if (internalPhase === "cumulative") {
+      // bail out of cumulative review and stay on current single ayah
+      setInternalPhase("single");
+    }
   };
 
   const showBismillah =
     fromAyah === 1 && chapter.id !== 1 && chapter.id !== 9;
+
+  const isCumulative = internalPhase === "cumulative";
+
+  // Descriptive label for controls bar
+  const phaseLabel = isCumulative
+    ? `Ayahs ${fromAyah}–${cumUpTo} · Pass ${cumPass}/${reviewRepeatCount}`
+    : `Ayah ${currentAyahNum} · ${repeatCount}× repeat`;
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
@@ -527,13 +637,29 @@ function MemorizationPlayer({
               <ChevronLeft size={16} /> Settings
             </button>
             <div className="text-right">
-              <p className="text-emerald-200/70 text-[10px] uppercase tracking-wide">
-                Ayah
-              </p>
-              <p className="text-2xl font-bold leading-none">{currentAyahNum}</p>
-              <p className="text-emerald-200/60 text-xs">
-                {fromAyah}–{toAyah}
-              </p>
+              {isCumulative ? (
+                <>
+                  <p className="text-emerald-200/70 text-[10px] uppercase tracking-wide">
+                    Cumulative Review
+                  </p>
+                  <p className="text-2xl font-bold leading-none">
+                    {fromAyah + cumAyahIdx}
+                  </p>
+                  <p className="text-emerald-200/60 text-xs">
+                    Pass {cumPass}/{reviewRepeatCount} · {fromAyah}–{cumUpTo}
+                  </p>
+                </>
+              ) : (
+                <>
+                  <p className="text-emerald-200/70 text-[10px] uppercase tracking-wide">
+                    Ayah
+                  </p>
+                  <p className="text-2xl font-bold leading-none">{currentAyahNum}</p>
+                  <p className="text-emerald-200/60 text-xs">
+                    {fromAyah}–{toAyah}
+                  </p>
+                </>
+              )}
             </div>
           </div>
 
@@ -551,15 +677,31 @@ function MemorizationPlayer({
             </span>
           </div>
 
-          {/* Range progress bar */}
+          {/* Range progress bar — shows single-ayah progress; turns teal in cumulative */}
           <div className="mt-3 h-1.5 bg-white/20 rounded-full overflow-hidden">
-            <div
-              className="h-full bg-amber-300 rounded-full transition-all duration-500"
-              style={{ width: `${progressPercent}%` }}
-            />
+            {isCumulative ? (
+              // cumulative progress: position within the cumulative ayah range
+              <div
+                className="h-full bg-teal-300 rounded-full transition-all duration-300"
+                style={{
+                  width: `${
+                    cumUpTo - fromAyah > 0
+                      ? (cumAyahIdx / (cumUpTo - fromAyah)) * 100
+                      : 100
+                  }%`,
+                }}
+              />
+            ) : (
+              <div
+                className="h-full bg-amber-300 rounded-full transition-all duration-500"
+                style={{ width: `${progressPercent}%` }}
+              />
+            )}
           </div>
           <p className="text-emerald-200/60 text-xs mt-1">
-            {currentIndexInRange + 1} of {rangeLength} ayahs
+            {isCumulative
+              ? `Reviewing ${cumUpTo - fromAyah + 1} ayahs · pass ${cumPass} of ${reviewRepeatCount}`
+              : `${currentIndexInRange + 1} of ${rangeLength} ayahs`}
           </p>
         </div>
       </div>
@@ -591,15 +733,22 @@ function MemorizationPlayer({
                     (v) => v.verse_number >= fromAyah && v.verse_number <= toAyah
                   )
                   .map((verse) => {
-                    const isCurrent = verse.verse_number === currentAyahNum;
+                    const isActive = verse.verse_number === activeVerseNumber;
+                    // In cumulative phase also dim ayahs beyond the review range
+                    const inCumRange =
+                      isCumulative && verse.verse_number <= cumUpTo;
                     const vWords = verse.text_uthmani.split(/\s+/).filter(Boolean);
                     return (
                       <span key={verse.verse_number}>
                         <span
-                          ref={isCurrent ? currentVerseRef : undefined}
+                          ref={isActive ? currentVerseRef : undefined}
                           className={cn(
                             "rounded-md transition-colors duration-300",
-                            isCurrent ? "bg-emerald-50" : ""
+                            isActive
+                              ? isCumulative
+                                ? "bg-teal-50"
+                                : "bg-emerald-50"
+                              : ""
                           )}
                         >
                           {vWords.map((word, i) => (
@@ -607,13 +756,17 @@ function MemorizationPlayer({
                               key={i}
                               className={cn(
                                 "inline-block transition-all duration-100 rounded-md px-0.5 mx-0.5",
-                                isCurrent && highlightedWord === i
-                                  ? "bg-amber-300 text-amber-900 scale-110 shadow-sm"
-                                  : isCurrent && playing && highlightedWord > i
+                                isActive && highlightedWord === i
+                                  ? isCumulative
+                                    ? "bg-teal-300 text-teal-900 scale-110 shadow-sm"
+                                    : "bg-amber-300 text-amber-900 scale-110 shadow-sm"
+                                  : isActive && playing && highlightedWord > i
                                     ? "text-primary/40"
-                                    : isCurrent
+                                    : isActive
                                       ? "text-foreground"
-                                      : "text-foreground/45"
+                                      : isCumulative && !inCumRange
+                                        ? "text-foreground/20"
+                                        : "text-foreground/45"
                               )}
                             >
                               {word}
@@ -623,7 +776,11 @@ function MemorizationPlayer({
                         <span
                           className={cn(
                             "inline-block arabic-text text-base mx-1.5 transition-colors duration-300",
-                            isCurrent ? "text-amber-500/70" : "text-primary/25"
+                            isActive
+                              ? isCumulative
+                                ? "text-teal-500/70"
+                                : "text-amber-500/70"
+                              : "text-primary/25"
                           )}
                         >
                           ﴿{verse.verse_number}﴾
@@ -640,23 +797,38 @@ function MemorizationPlayer({
       {/* Player controls */}
       <div className="bg-white border-t border-border px-4 pt-3 pb-6">
         <div className="max-w-lg mx-auto space-y-3">
-          {/* Repeat dots */}
-          <div className="flex items-center justify-center gap-2">
-            {Array.from({ length: repeatCount }, (_, i) => (
-              <div
-                key={i}
-                className={cn(
-                  "rounded-full transition-all duration-300",
-                  i < currentRepeat
-                    ? "bg-primary w-2.5 h-2.5"
-                    : "bg-muted w-2 h-2",
-                  i === currentRepeat - 1 && playing ? "scale-125 shadow-md" : ""
-                )}
-              />
-            ))}
-            <span className="text-xs text-muted-foreground ml-1.5 tabular-nums">
-              {currentRepeat}/{repeatCount}
-            </span>
+          {/* Phase badge + repeat dots */}
+          <div className="flex items-center justify-center gap-3">
+            {isCumulative ? (
+              <span className="text-[11px] font-semibold px-3 py-1 rounded-full bg-teal-100 text-teal-700 tabular-nums">
+                Cumulative Review · {phaseLabel}
+              </span>
+            ) : (
+              <>
+                <span className="text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full bg-primary/10 text-primary">
+                  Single Ayah
+                </span>
+                <div className="flex items-center gap-1.5">
+                  {Array.from({ length: repeatCount }, (_, i) => (
+                    <div
+                      key={i}
+                      className={cn(
+                        "rounded-full transition-all duration-300",
+                        i < currentRepeat
+                          ? "bg-primary w-2.5 h-2.5"
+                          : "bg-muted w-2 h-2",
+                        i === currentRepeat - 1 && playing
+                          ? "scale-125 shadow-md"
+                          : ""
+                      )}
+                    />
+                  ))}
+                  <span className="text-xs text-muted-foreground ml-1 tabular-nums">
+                    {currentRepeat}/{repeatCount}
+                  </span>
+                </div>
+              </>
+            )}
           </div>
 
           {/* Prev / Play-Pause / Next */}
@@ -665,8 +837,13 @@ function MemorizationPlayer({
               variant="outline"
               size="sm"
               onClick={goPrev}
-              disabled={currentAyahNum <= fromAyah}
+              disabled={
+                isCumulative
+                  ? false // tapping prev exits cumulative
+                  : currentAyahNum <= fromAyah
+              }
               className="rounded-full w-11 h-11 p-0"
+              title={isCumulative ? "Exit cumulative review" : "Previous ayah"}
             >
               <SkipBack size={18} />
             </Button>
@@ -675,7 +852,10 @@ function MemorizationPlayer({
               size="lg"
               onClick={play}
               disabled={loading || versesLoading || !currentArabic}
-              className="rounded-full w-16 h-16 p-0 shadow-lg"
+              className={cn(
+                "rounded-full w-16 h-16 p-0 shadow-lg",
+                isCumulative ? "bg-teal-600 hover:bg-teal-700" : ""
+              )}
             >
               {loading ? (
                 <Loader2 size={24} className="animate-spin" />
@@ -690,7 +870,7 @@ function MemorizationPlayer({
               variant="outline"
               size="sm"
               onClick={goNext}
-              disabled={currentAyahNum >= toAyah}
+              disabled={isCumulative || currentAyahNum >= toAyah}
               className="rounded-full w-11 h-11 p-0"
             >
               <SkipForward size={18} />
@@ -737,6 +917,8 @@ export default function QuranMemorizePage() {
   const [toAyah, setToAyah] = useState(10);
   const [repeatCount, setRepeatCount] = useState(3);
   const [autoAdvance, setAutoAdvance] = useState(true);
+  const [cumulativeReview, setCumulativeReview] = useState(false);
+  const [reviewRepeatCount, setReviewRepeatCount] = useState(3);
   const [startAyah, setStartAyah] = useState(1);
   const [searchQuery, setSearchQuery] = useState("");
 
@@ -789,6 +971,8 @@ export default function QuranMemorizePage() {
     setToAyah(bookmark.to);
     setRepeatCount(bookmark.repeatCount);
     setAutoAdvance(bookmark.autoAdvance);
+    setCumulativeReview(bookmark.cumulativeReview ?? false);
+    setReviewRepeatCount(bookmark.reviewRepeatCount ?? 3);
     setStartAyah(bookmark.currentAyah);
     setPhase("play");
   };
@@ -1041,6 +1225,58 @@ export default function QuranMemorizePage() {
             </div>
           </div>
 
+          {/* Cumulative Review */}
+          <div className="bg-white rounded-2xl border border-border p-5 shadow-sm space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-semibold text-foreground">
+                  Cumulative Review
+                </p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  After each new ayah, replay all ayahs from the start of the
+                  range up to the current one
+                </p>
+              </div>
+              <Switch
+                checked={cumulativeReview}
+                onCheckedChange={setCumulativeReview}
+              />
+            </div>
+            {cumulativeReview && (
+              <div className="flex items-center gap-3 pt-1 border-t border-border/40">
+                <div className="flex-1">
+                  <label className="text-xs text-muted-foreground mb-1 block">
+                    Review repeat count
+                  </label>
+                  <p className="text-[11px] text-muted-foreground/70">
+                    How many times to loop through the cumulative range
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() =>
+                      setReviewRepeatCount((n) => Math.max(1, n - 1))
+                    }
+                    className="w-8 h-8 rounded-full border border-border flex items-center justify-center text-sm font-bold text-muted-foreground hover:text-foreground hover:border-primary/40 transition-colors"
+                  >
+                    −
+                  </button>
+                  <span className="w-8 text-center text-sm font-semibold tabular-nums">
+                    {reviewRepeatCount}×
+                  </span>
+                  <button
+                    onClick={() =>
+                      setReviewRepeatCount((n) => Math.min(10, n + 1))
+                    }
+                    className="w-8 h-8 rounded-full border border-border flex items-center justify-center text-sm font-bold text-muted-foreground hover:text-foreground hover:border-primary/40 transition-colors"
+                  >
+                    +
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
           {/* Start */}
           <Button
             className="w-full h-12 text-base font-semibold rounded-2xl"
@@ -1081,6 +1317,8 @@ export default function QuranMemorizePage() {
       repeatCount={repeatCount}
       initialAyah={startAyah}
       initialAutoAdvance={autoAdvance}
+      cumulativeReview={cumulativeReview}
+      reviewRepeatCount={reviewRepeatCount}
       onBack={() => setPhase("setup")}
     />
   );
