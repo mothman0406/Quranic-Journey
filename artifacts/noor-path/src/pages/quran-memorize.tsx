@@ -16,6 +16,7 @@ import {
   Search,
   SkipBack,
   SkipForward,
+  ChevronsRight,
   RotateCcw,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -403,7 +404,53 @@ function useVerseAudio({
     }
   }, [playing, reciter, surahNumber, verseNumber, updateHighlight]);
 
-  return { playing, loading, error, currentRepeat, highlightedWord, words, play };
+  const skipRepeat = useCallback(() => {
+    const audio = audioRef.current;
+    if (currentRepeatRef.current < totalRepeatsRef.current) {
+      currentRepeatRef.current++;
+      setCurrentRepeat(currentRepeatRef.current);
+      if (audio) {
+        cancelAnimationFrame(rafRef.current);
+        audio.currentTime = 0;
+        audio
+          .play()
+          .then(() => {
+            rafRef.current = requestAnimationFrame(updateHighlight);
+          })
+          .catch(() => {
+            setError(true);
+            setPlaying(false);
+          });
+      }
+    } else {
+      // On the last repeat — treat as all repeats done
+      if (audio) {
+        audio.pause();
+        audio.currentTime = 0;
+      }
+      setPlaying(false);
+      setHighlightedWord(-1);
+      cancelAnimationFrame(rafRef.current);
+      currentRepeatRef.current = 1;
+      setCurrentRepeat(1);
+      onDoneRef.current();
+    }
+  }, [updateHighlight]);
+
+  const stopAudio = useCallback(() => {
+    const audio = audioRef.current;
+    if (audio) {
+      cancelAnimationFrame(rafRef.current);
+      audio.pause();
+      audio.currentTime = 0;
+    }
+    setPlaying(false);
+    setHighlightedWord(-1);
+    currentRepeatRef.current = 1;
+    setCurrentRepeat(1);
+  }, []);
+
+  return { playing, loading, error, currentRepeat, highlightedWord, words, play, skipRepeat, stopAudio };
 }
 
 // ─── MemorizationPlayer ───────────────────────────────────────────────────────
@@ -506,8 +553,8 @@ function MemorizationPlayer({
     if (!autoAdvanceRef.current) return;
 
     if (internalPhaseRef.current === "single") {
-      if (cumulativeReviewRef.current) {
-        // Enter cumulative review for ayahs fromAyah..currentAyahNum
+      if (cumulativeReviewRef.current && currentAyahNumRef.current > fromAyahRef.current) {
+        // Enter cumulative review for ayahs fromAyah..currentAyahNum (only when >1 ayah covered)
         const upTo = currentAyahNumRef.current;
         setCumUpTo(upTo);
         cumUpToRef.current = upTo;
@@ -563,7 +610,7 @@ function MemorizationPlayer({
     }
   }, []); // all access via refs
 
-  const { playing, loading, error, currentRepeat, highlightedWord, words, play } =
+  const { playing, loading, error, currentRepeat, highlightedWord, words, play, skipRepeat, stopAudio } =
     useVerseAudio({
       surahNumber: chapter.id,
       verseNumber: activeVerseNumber,
@@ -603,6 +650,67 @@ function MemorizationPlayer({
     if (internalPhase === "single" && currentAyahNum < toAyah) {
       setInternalPhase("single");
       setCurrentAyahNum((n) => n + 1);
+    }
+  };
+
+  const handleSkipRepeat = () => {
+    if (internalPhase === "single") {
+      // Skip current repeat of the single ayah (hook handles repeat/done logic)
+      skipRepeat();
+    } else {
+      // Cumulative phase: skip current pass → jump to next pass, or exit if last
+      stopAudio();
+      const nextPass = cumPass + 1;
+      if (nextPass <= reviewRepeatCount) {
+        setCumAyahIdx(0);
+        cumAyahIdxRef.current = 0;
+        setCumPass(nextPass);
+        cumPassRef.current = nextPass;
+        pendingPlayDelayRef.current = 150;
+        setPendingAutoPlay(true);
+      } else {
+        // Last pass done — advance to next single ayah
+        setInternalPhase("single");
+        internalPhaseRef.current = "single";
+        if (currentAyahNum < toAyah) {
+          pendingPlayDelayRef.current = 150;
+          setCurrentAyahNum((n) => n + 1);
+          setPendingAutoPlay(true);
+        }
+      }
+    }
+  };
+
+  const skipAyah = () => {
+    if (internalPhase === "single") {
+      if (currentAyahNum >= toAyah) return;
+      // Only enter cumulative when more than 1 ayah has been covered
+      if (cumulativeReview && currentAyahNum > fromAyah) {
+        const upTo = currentAyahNum;
+        setCumUpTo(upTo);
+        cumUpToRef.current = upTo;
+        setCumAyahIdx(0);
+        cumAyahIdxRef.current = 0;
+        setCumPass(1);
+        cumPassRef.current = 1;
+        setInternalPhase("cumulative");
+        internalPhaseRef.current = "cumulative";
+        pendingPlayDelayRef.current = 150;
+        setPendingAutoPlay(true);
+      } else {
+        pendingPlayDelayRef.current = 150;
+        setCurrentAyahNum((n) => n + 1);
+      }
+    } else {
+      // Cumulative phase: skip the entire review, go straight to next single ayah
+      stopAudio();
+      setInternalPhase("single");
+      internalPhaseRef.current = "single";
+      if (currentAyahNum < toAyah) {
+        pendingPlayDelayRef.current = 150;
+        setCurrentAyahNum((n) => n + 1);
+        setPendingAutoPlay(true);
+      }
     }
   };
   const goPrev = () => {
@@ -869,9 +977,21 @@ function MemorizationPlayer({
             <Button
               variant="outline"
               size="sm"
-              onClick={goNext}
-              disabled={isCumulative || currentAyahNum >= toAyah}
+              onClick={handleSkipRepeat}
+              disabled={!isCumulative && repeatCount <= 1}
               className="rounded-full w-11 h-11 p-0"
+              title={isCumulative ? "Skip pass" : "Skip repeat (stay on same ayah)"}
+            >
+              <ChevronsRight size={18} />
+            </Button>
+
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={skipAyah}
+              disabled={!isCumulative && currentAyahNum >= toAyah}
+              className="rounded-full w-11 h-11 p-0"
+              title={isCumulative ? "Skip cumulative review" : "Skip ayah (advance to next ayah)"}
             >
               <SkipForward size={18} />
             </Button>
