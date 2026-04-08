@@ -44,6 +44,7 @@ interface VerseData {
   verse_number: number;
   verse_key: string;
   text_uthmani: string;
+  page_number: number;
 }
 
 type Segment = [number, number, number]; // [wordIndex1based, startFrac, endFrac]
@@ -73,7 +74,7 @@ async function fetchVersesBySurah(
   surahId: number
 ): Promise<{ verses: VerseData[] }> {
   const r = await fetch(
-    `${QURAN_API}/verses/by_chapter/${surahId}?fields=text_uthmani&per_page=300`
+    `${QURAN_API}/verses/by_chapter/${surahId}?fields=text_uthmani,page_number&per_page=300`
   );
   if (!r.ok) throw new Error(`Failed to fetch surah ${surahId}`);
   return r.json();
@@ -299,18 +300,19 @@ function useVerseAudio({
 
     if (segs.length > 0) {
       let found = -1;
+      let lastStarted = -1; // display index of the most recent word whose startFrac we've passed
       for (const [wordIdx, startFrac, endFrac] of segs) {
-        if (frac >= startFrac && frac < endFrac) {
-          found = qdcToDisplay.get(wordIdx) ?? -1;
-          break;
+        if (frac >= startFrac) {
+          lastStarted = qdcToDisplay.get(wordIdx) ?? -1;
+          if (frac < endFrac) {
+            found = lastStarted;
+            break;
+          }
         }
       }
-      if (found === -1 && frac > 0) {
-        const last = segs[segs.length - 1];
-        if (last && frac >= last[1]) {
-          found = qdcToDisplay.get(last[0]) ?? words.length - 1;
-        }
-      }
+      // In any gap between words (or after the last word), hold the last word
+      // that started rather than clearing the highlight.
+      if (found === -1) found = lastStarted;
       setHighlightedWord(found);
     } else {
       setHighlightedWord(
@@ -456,6 +458,272 @@ function useVerseAudio({
   return { playing, loading, error, currentRepeat, highlightedWord, words, play, skipRepeat, stopAudio };
 }
 
+// ─── Mushaf memorize page types & helpers ────────────────────────────────────
+
+interface MemorizeWord {
+  id: number;
+  position: number;
+  text_uthmani: string;
+  text_uthmani_tajweed: string;
+  char_type_name: string;
+  line_number: number;
+}
+
+interface MemorizeVerse {
+  verse_number: number;
+  verse_key: string;
+  words: MemorizeWord[];
+}
+
+interface MemorizePageData {
+  verses: MemorizeVerse[];
+}
+
+interface MemorizeLineWord {
+  id: number;
+  text: string;
+  tajweed: string;
+  type: "word" | "end";
+  verseKey: string;
+  verseNumber: number;
+  position: number; // 1-based for "word", 0 for "end"
+}
+
+async function fetchPageForMemorize(page: number): Promise<MemorizePageData> {
+  const r = await fetch(
+    `${QURAN_API}/verses/by_page/${page}?words=true&fields=text_uthmani` +
+    `&word_fields=text_uthmani,text_uthmani_tajweed,char_type_name,line_number,page_number`
+  );
+  if (!r.ok) throw new Error(`Failed to fetch page ${page}`);
+  return r.json();
+}
+
+function buildMemorizePageLines(verses: MemorizeVerse[]): Map<number, MemorizeLineWord[]> {
+  const lines = new Map<number, MemorizeLineWord[]>();
+  for (const verse of verses) {
+    for (const word of verse.words) {
+      const ln = word.line_number;
+      if (!lines.has(ln)) lines.set(ln, []);
+      lines.get(ln)!.push({
+        id: word.id,
+        text: word.text_uthmani,
+        tajweed: word.text_uthmani_tajweed ?? "",
+        type: word.char_type_name === "end" ? "end" : "word",
+        verseKey: verse.verse_key,
+        verseNumber: verse.verse_number,
+        position: word.char_type_name === "end" ? 0 : word.position,
+      });
+    }
+  }
+  return lines;
+}
+
+function parseTajweedSpans(html: string): Array<{ text: string; rule: string | null }> {
+  if (!html) return [];
+  if (!html.includes("<")) return [{ text: html, rule: null }];
+  // API returns <rule class=ham_wasl> — unquoted attributes, non-standard tag name.
+  // DOMParser handles both HTML5 unquoted attributes and custom element names correctly.
+  const doc = new DOMParser().parseFromString(`<body>${html}</body>`, "text/html");
+  const result: Array<{ text: string; rule: string | null }> = [];
+  for (const node of doc.body.childNodes) {
+    if (node.nodeType === Node.TEXT_NODE) {
+      const text = node.textContent ?? "";
+      if (text) result.push({ text, rule: null });
+    } else if (node.nodeType === Node.ELEMENT_NODE) {
+      const el = node as Element;
+      const text = el.textContent ?? "";
+      if (text) result.push({ text, rule: el.getAttribute("class") });
+    }
+  }
+  return result;
+}
+
+const TAJWEED_COLORS: Record<string, string> = {
+  madda_normal:           "text-blue-400",
+  madda_permissible:      "text-blue-600",
+  madda_necessary:        "text-blue-800",
+  madda_prolonged:        "text-purple-600",
+  ghunnah:                "text-green-500",
+  idgham_ghunnah:         "text-green-600",
+  idgham_wo_ghunnah:      "text-green-400",
+  idghaam_ghunnah:        "text-green-600",
+  idghaam_wo_ghunnah:     "text-green-400",
+  ikhfa:                  "text-orange-400",
+  ikhfa_shafawi:          "text-yellow-600",
+  iqlab:                  "text-red-500",
+  idgham_shafawi:         "text-orange-600",
+  idghaam_shafawi:        "text-orange-600",
+  qalaqalah:              "text-amber-600",
+  lam_shamsiyah:          "text-teal-500",
+  laam_shamsiyah:         "text-teal-500",
+  ham_wasl:               "text-gray-400",
+  slnt:                   "text-gray-300",
+};
+
+interface MushafMemorizePageProps {
+  pageNumber: number;
+  activeVerseKey: string;
+  highlightedWordPosition: number; // 1-based; 0 = none
+  fromAyah: number;
+  toAyah: number;
+  surahId: number;
+  isCumulative: boolean;
+  cumUpTo: number;
+  isPlaying: boolean;
+}
+
+function MushafMemorizePage({
+  pageNumber,
+  activeVerseKey,
+  highlightedWordPosition,
+  fromAyah,
+  toAyah,
+  surahId,
+  isCumulative,
+  cumUpTo,
+  isPlaying,
+}: MushafMemorizePageProps) {
+  const activeLineRef = useRef<HTMLDivElement>(null);
+
+  const { data, isLoading } = useQuery<MemorizePageData>({
+    queryKey: ["memorize-page", pageNumber],
+    queryFn: () => fetchPageForMemorize(pageNumber),
+    staleTime: 1000 * 60 * 60,
+  });
+
+  const { data: chaptersData } = useQuery({
+    queryKey: ["chapters"],
+    queryFn: fetchAllChapters,
+    staleTime: Infinity,
+  });
+  const chapters = chaptersData?.chapters ?? [];
+
+  useEffect(() => {
+    activeLineRef.current?.scrollIntoView({ block: "center", behavior: "smooth" });
+  }, [activeVerseKey]);
+
+  if (isLoading || !data) {
+    return (
+      <div className="w-full space-y-4 pt-8">
+        <Skeleton className="h-10 w-full rounded-xl" />
+        <Skeleton className="h-10 w-4/5 rounded-xl mx-auto" />
+        <Skeleton className="h-10 w-3/5 rounded-xl mx-auto" />
+      </div>
+    );
+  }
+
+  const verses = data.verses ?? [];
+  const pageLines = buildMemorizePageLines(verses);
+  const sortedLineNums = Array.from(pageLines.keys()).sort((a, b) => a - b);
+
+  // Lines where a new surah begins (verse_number === 1)
+  const surahStartLines = new Map<number, number>(); // lineNum → surahId
+  for (const verse of verses) {
+    if (verse.verse_number === 1 && verse.words.length > 0) {
+      surahStartLines.set(verse.words[0].line_number, parseInt(verse.verse_key.split(":")[0]));
+    }
+  }
+
+  const totalLines = sortedLineNums.length;
+  const isDensePage = totalLines >= 10;
+  const lastLineNum = sortedLineNums[sortedLineNums.length - 1];
+
+  return (
+    <div className="mushaf-page-content">
+      {sortedLineNums.map((lineNum) => {
+        const words = pageLines.get(lineNum)!;
+        const lineHasActiveVerse = words.some((w) => w.verseKey === activeVerseKey);
+        const wordCount = words.filter((w) => w.type === "word").length;
+        const shouldJustify = isDensePage && wordCount >= 4 && lineNum !== lastLineNum;
+        const bannerSurahId = surahStartLines.get(lineNum);
+
+        return (
+          <div key={lineNum} ref={lineHasActiveVerse ? activeLineRef : undefined}>
+            {bannerSurahId !== undefined && (() => {
+              const chapter = chapters.find((c) => c.id === bannerSurahId);
+              const showBismillah = chapter?.bismillah_pre && bannerSurahId !== 1 && bannerSurahId !== 9;
+              return (
+                <div className="mushaf-surah-banner">
+                  <div className="mushaf-surah-banner-inner">
+                    <span className="mushaf-surah-name-en">{chapter?.name_simple ?? `Surah ${bannerSurahId}`}</span>
+                    <span className="mushaf-surah-name-ar">{chapter?.name_arabic ?? ""}</span>
+                  </div>
+                  {showBismillah && (
+                    <div className="mushaf-bismillah">بِسۡمِ ٱللَّهِ ٱلرَّحۡمَٰنِ ٱلرَّحِيمِ</div>
+                  )}
+                </div>
+              );
+            })()}
+            <div
+              className="mushaf-line"
+              data-line={lineNum}
+              data-justify={shouldJustify ? "true" : undefined}
+            >
+              {words.map((w) => {
+                const [wSurahStr, wVerseStr] = w.verseKey.split(":");
+                const wSurahNum = parseInt(wSurahStr);
+                const wVerseNum = parseInt(wVerseStr);
+                const isInRange = wSurahNum === surahId && wVerseNum >= fromAyah && wVerseNum <= toAyah;
+                const isOutOfRange = !isInRange || (isCumulative && wVerseNum > cumUpTo);
+                const isActive = w.verseKey === activeVerseKey;
+                const isHighlighted = isActive && w.type === "word" && w.position === highlightedWordPosition;
+                const wasSpoken = isActive && isPlaying && w.type === "word" && highlightedWordPosition > 0 && w.position < highlightedWordPosition;
+
+                if (w.type === "end") {
+                  return (
+                    <span
+                      key={w.id}
+                      className={cn(
+                        "mushaf-end-marker transition-colors duration-300",
+                        isOutOfRange
+                          ? "text-foreground/15"
+                          : isActive
+                            ? isCumulative ? "text-teal-500/70" : "text-amber-500/70"
+                            : "text-primary/25"
+                      )}
+                    >
+                      {w.text}
+                    </span>
+                  );
+                }
+
+                const wordClass = (() => {
+                  if (isOutOfRange) return "text-foreground/15";
+                  if (isHighlighted) return isCumulative
+                    ? "bg-teal-300 text-teal-900 scale-110 shadow-sm"
+                    : "bg-amber-300 text-amber-900 scale-110 shadow-sm";
+                  if (wasSpoken) return "text-primary/40";
+                  return null;
+                })();
+
+                const useTajweed = wordClass === null && !!w.tajweed && w.tajweed.includes("<");
+
+                return (
+                  <span
+                    key={w.id}
+                    className={cn(
+                      "mushaf-word inline-block transition-all duration-100 rounded-md",
+                      wordClass ?? ""
+                    )}
+                  >
+                    {useTajweed
+                      ? parseTajweedSpans(w.tajweed).map((seg, si) => (
+                          <span key={si} className={seg.rule ? (TAJWEED_COLORS[seg.rule] ?? "") : ""}>
+                            {seg.text}
+                          </span>
+                        ))
+                      : w.text}
+                  </span>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 // ─── MemorizationPlayer ───────────────────────────────────────────────────────
 // Extracted as its own component so its hooks only run when mounted (play phase).
 
@@ -533,7 +801,6 @@ function MemorizationPlayer({
   onSessionCompleteRef.current = onSessionComplete;
 
   const playRef = useRef<(() => Promise<void>) | null>(null);
-  const currentVerseRef = useRef<HTMLSpanElement>(null);
   // 0 = play immediately (cumulative flow); 150 = wait for hook reset (single-ayah advance)
   const pendingPlayDelayRef = useRef(150);
 
@@ -650,11 +917,6 @@ function MemorizationPlayer({
     return () => clearTimeout(timer);
   }, [activeVerseNumber, pendingAutoPlay]);
 
-  // Scroll active ayah into view whenever it changes
-  useEffect(() => {
-    currentVerseRef.current?.scrollIntoView({ block: "center", behavior: "smooth" });
-  }, [activeVerseNumber]);
-
   const rangeLength = toAyah - fromAyah + 1;
   const currentIndexInRange = currentAyahNum - fromAyah;
   const progressPercent =
@@ -743,8 +1005,6 @@ function MemorizationPlayer({
       setInternalPhase("single");
     }
   };
-
-  const showBismillah = chapter.id !== 1 && chapter.id !== 9;
 
   const isCumulative = internalPhase === "cumulative";
 
@@ -835,93 +1095,33 @@ function MemorizationPlayer({
         </div>
       </div>
 
-      {/* Arabic text area — mushaf-style continuous flow */}
-      <div className="flex-1 overflow-y-auto px-5 py-5">
-        <div className="max-w-lg mx-auto">
-          {versesLoading || !currentArabic ? (
+      {/* Arabic text area — mushaf page layout */}
+      <div className="flex-1 overflow-y-auto">
+        <div
+          className="mushaf-page bg-[#fdf8f0] mx-auto px-6 sm:px-10 py-6 min-h-[50vh]"
+          style={{
+            backgroundImage: "linear-gradient(to bottom, #fdf8f0, #faf3e8)",
+            maxWidth: "640px",
+          }}
+        >
+          {versesLoading || !activeVerse ? (
             <div className="w-full space-y-4 pt-8">
               <Skeleton className="h-10 w-full rounded-xl" />
               <Skeleton className="h-10 w-4/5 rounded-xl mx-auto" />
               <Skeleton className="h-10 w-3/5 rounded-xl mx-auto" />
             </div>
           ) : (
-            <>
-              {showBismillah && (
-                <p className="arabic-text text-xl text-primary/40 text-center mb-5 leading-loose">
-                  بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ
-                </p>
-              )}
-
-              <div
-                className="arabic-text text-3xl leading-[2.6] text-right select-none w-full"
-                dir="rtl"
-                lang="ar"
-              >
-                {verses.map((verse) => {
-                    const isActive = verse.verse_number === activeVerseNumber;
-                    const inSelectedRange =
-                      verse.verse_number >= fromAyah &&
-                      verse.verse_number <= toAyah;
-                    // In cumulative phase also dim ayahs beyond the review range
-                    const inCumRange =
-                      isCumulative && verse.verse_number <= cumUpTo;
-                    const vWords = verse.text_uthmani.split(/\s+/).filter(Boolean);
-                    return (
-                      <span key={verse.verse_number}>
-                        <span
-                          ref={isActive ? currentVerseRef : undefined}
-                          className={cn(
-                            "rounded-md transition-colors duration-300",
-                            isActive
-                              ? isCumulative
-                                ? "bg-teal-50"
-                                : "bg-emerald-50"
-                              : ""
-                          )}
-                        >
-                          {vWords.map((word, i) => (
-                            <span
-                              key={i}
-                              className={cn(
-                                "inline-block transition-all duration-100 rounded-md px-0.5 mx-0.5",
-                                !inSelectedRange
-                                  ? "text-foreground/15"
-                                  : isActive && highlightedWord === i
-                                    ? isCumulative
-                                      ? "bg-teal-300 text-teal-900 scale-110 shadow-sm"
-                                      : "bg-amber-300 text-amber-900 scale-110 shadow-sm"
-                                    : isActive && playing && highlightedWord > i
-                                      ? "text-primary/40"
-                                      : isActive
-                                        ? "text-foreground"
-                                        : isCumulative && !inCumRange
-                                          ? "text-foreground/20"
-                                          : "text-foreground/45"
-                              )}
-                            >
-                              {word}
-                            </span>
-                          ))}
-                        </span>
-                        <span
-                          className={cn(
-                            "inline-block arabic-text text-base mx-1.5 transition-colors duration-300",
-                            isActive
-                              ? isCumulative
-                                ? "text-teal-500/70"
-                                : "text-amber-500/70"
-                              : inSelectedRange
-                                ? "text-primary/25"
-                                : "text-primary/15"
-                          )}
-                        >
-                          ﴿{verse.verse_number}﴾
-                        </span>
-                      </span>
-                    );
-                  })}
-              </div>
-            </>
+            <MushafMemorizePage
+              pageNumber={activeVerse.page_number}
+              activeVerseKey={activeVerse.verse_key}
+              highlightedWordPosition={highlightedWord + 1}
+              fromAyah={fromAyah}
+              toAyah={toAyah}
+              surahId={chapter.id}
+              isCumulative={isCumulative}
+              cumUpTo={cumUpTo}
+              isPlaying={playing}
+            />
           )}
         </div>
       </div>
