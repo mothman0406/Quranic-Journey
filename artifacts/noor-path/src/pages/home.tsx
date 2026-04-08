@@ -186,7 +186,7 @@ export default function Home() {
         <div className="max-w-lg mx-auto text-center">
           <p className="arabic-text text-4xl mb-2 text-amber-200">بِسْمِ اللَّهِ الرَّحْمَنِ الرَّحِيمِ</p>
           <h1 className="text-2xl font-bold mt-3 text-white">NoorPath</h1>
-          <p className="text-emerald-200 text-sm mt-1">Guiding children to the Quran — one verse at a time</p>
+          <p className="text-emerald-200 text-sm mt-1">Your path to the Quran — one verse at a time</p>
           {session?.user && (
             <div className="mt-4 flex items-center justify-center gap-3">
               <span className="text-emerald-200 text-xs">{session.user.email}</span>
@@ -251,10 +251,10 @@ export default function Home() {
                   <div className="text-6xl mb-4">📖</div>
                   <h2 className="text-xl font-bold text-foreground mb-2">Begin the Journey</h2>
                   <p className="text-muted-foreground mb-6 text-sm leading-relaxed">
-                    Add your child's profile to receive a personalized Quran and Islamic learning plan — from their very first surah all the way to completing the Quran, in sha Allah.
+                    Add a profile to receive a personalized Quran and Islamic learning plan — from the very first surah all the way to completing the Quran, in sha Allah.
                   </p>
                   <Button onClick={() => setShowAdd(true)} className="rounded-full px-8">
-                    <Plus size={16} className="mr-2" /> Add Your First Child
+                    <Plus size={16} className="mr-2" /> Add Your First Profile
                   </Button>
                 </CardContent>
               </Card>
@@ -284,7 +284,7 @@ export default function Home() {
                 onClick={() => setShowAdd(true)}
                 className="flex items-center gap-1 text-xs font-medium text-primary bg-primary/10 px-3 py-1.5 rounded-full hover:bg-primary/20 transition-colors"
               >
-                <Plus size={13} /> Add Child
+                <Plus size={13} /> Add Profile
               </button>
             </div>
 
@@ -324,7 +324,7 @@ export default function Home() {
                   <button
                     onClick={(e) => { e.preventDefault(); setSettingsChildId(child.id); }}
                     className="absolute top-3 right-10 p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors z-10"
-                    title="Child settings"
+                    title="Profile settings"
                   >
                     <Settings size={14} />
                   </button>
@@ -375,7 +375,7 @@ export default function Home() {
           {settingsChild && (
             <div className="space-y-4 pt-1">
               <p className="text-xs text-muted-foreground">
-                Toggle which content types appear in your child's app. These can be changed any time.
+                Toggle which content types appear in this profile. These can be changed any time.
               </p>
               <div className="space-y-3">
                 <div className="flex items-center justify-between p-3 rounded-xl border border-border">
@@ -464,7 +464,7 @@ export default function Home() {
           {step === 1 && (
             <div className="space-y-4">
               <div>
-                <Label>Child's Name</Label>
+                <Label>Name</Label>
                 <Input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="Name" className="mt-1" />
               </div>
               <div>
@@ -499,7 +499,7 @@ export default function Home() {
           {step === 2 && (
             <div className="space-y-3">
               <p className="text-sm text-muted-foreground">
-                Which surahs has {form.name || "your child"} already memorized? Select individually or use Range Selection to mark many at once.
+                Which surahs has {form.name || "this profile"} already memorized? Select individually or use Range Selection to mark many at once.
               </p>
 
               {/* Range picker */}
@@ -639,7 +639,7 @@ export default function Home() {
           {step === 4 && (
             <div className="space-y-4">
               <p className="text-sm text-muted-foreground">
-                How much time can {form.name || "your child"} practice each day?
+                How much time can {form.name || "this profile"} practice each day?
               </p>
               <div className="grid grid-cols-2 gap-2">
                 {PRACTICE_OPTIONS.map(opt => (
