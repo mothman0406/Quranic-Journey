@@ -40,8 +40,8 @@ export default function MemorizePage() {
   });
 
   const updateMutation = useMutation({
-    mutationFn: (vars: { surahId: number; status: string }) =>
-      updateMemorization(parseInt(childId), { surahId: vars.surahId, status: vars.status as "memorized" }),
+    mutationFn: (vars: { surahId: number; status: string; versesMemorized: number }) =>
+      updateMemorization(parseInt(childId), { surahId: vars.surahId, status: vars.status as "memorized", versesMemorized: vars.versesMemorized }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["memorization", childId] })
   });
 
@@ -129,7 +129,7 @@ export default function MemorizePage() {
                         </Link>
                         {item.status !== "memorized" && (
                           <Button size="sm" className="h-7 text-xs px-2"
-                            onClick={() => updateMutation.mutate({ surahId: item.surahId, status: "memorized" })}>
+                            onClick={() => updateMutation.mutate({ surahId: item.surahNumber, status: "memorized", versesMemorized: item.totalVerses })}>
                             <CheckCircle size={11} className="mr-1" /> Mark Done
                           </Button>
                         )}

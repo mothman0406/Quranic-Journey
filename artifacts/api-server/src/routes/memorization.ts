@@ -148,8 +148,11 @@ router.get("/children/:childId/memorization", async (req, res) => {
   const progress = await db.select().from(memorizationProgressTable)
     .where(eq(memorizationProgressTable.childId, childId));
 
+  console.log("[memorization GET] raw DB rows for child", childId, ":", progress.map(p => ({ id: p.id, surahId: p.surahId, status: p.status })));
+
   const result = SURAHS.sort((a, b) => a.recommendedOrder - b.recommendedOrder).map(surah => {
     const existing = progress.find(p => p.surahId === surah.id);
+    if (existing) console.log("[memorization GET] joined surah", surah.id, "(number", surah.number, ") →", existing.status);
     return {
       id: existing?.id || 0,
       childId,
@@ -175,11 +178,20 @@ router.post("/children/:childId/memorization", async (req, res) => {
   if (!await ownsChild(req.user.id, childId)) { res.status(403).json({ error: "Forbidden" }); return; }
   const { surahId, versesMemorized, status, qualityRating } = req.body;
 
-  const surah = SURAHS.find(s => s.id === surahId);
+  console.log("[memorization POST] received body:", { surahId, versesMemorized, status, qualityRating, childId });
+
+  // surahId must be the canonical Quran surah number (1–114)
+  const surah = SURAHS.find(s => s.number === surahId);
+  console.log("[memorization POST] SURAHS lookup by number:", surahId, "→", surah ? `found id=${surah.id} name=${surah.nameTransliteration}` : "NOT FOUND");
   if (!surah) { res.status(404).json({ error: "Surah not found" }); return; }
 
+  // Store using the internal app ID so the GET join works consistently
+  const normalizedSurahId = surah.id;
+  console.log("[memorization POST] normalizedSurahId (internal):", normalizedSurahId);
+
   const [existing] = await db.select().from(memorizationProgressTable)
-    .where(and(eq(memorizationProgressTable.childId, childId), eq(memorizationProgressTable.surahId, surahId)));
+    .where(and(eq(memorizationProgressTable.childId, childId), eq(memorizationProgressTable.surahId, normalizedSurahId)));
+  console.log("[memorization POST] existing DB record:", existing ? `id=${existing.id} status=${existing.status}` : "none (will insert)");
 
   const now = new Date();
   const newVersesMemorized = versesMemorized !== undefined ? versesMemorized : (existing?.versesMemorized || 0);
@@ -201,7 +213,7 @@ router.post("/children/:childId/memorization", async (req, res) => {
   } else {
     [record] = await db.insert(memorizationProgressTable).values({
       childId,
-      surahId,
+      surahId: normalizedSurahId,
       versesMemorized: newVersesMemorized,
       status: newStatus as "not_started" | "in_progress" | "memorized" | "needs_review",
       lastPracticed: now,
@@ -213,11 +225,11 @@ router.post("/children/:childId/memorization", async (req, res) => {
     // Add to review schedule if memorized
     if (newStatus === "memorized") {
       const [existingReview] = await db.select().from(reviewScheduleTable)
-        .where(and(eq(reviewScheduleTable.childId, childId), eq(reviewScheduleTable.surahId, surahId)));
+        .where(and(eq(reviewScheduleTable.childId, childId), eq(reviewScheduleTable.surahId, normalizedSurahId)));
       if (!existingReview) {
         await db.insert(reviewScheduleTable).values({
           childId,
-          surahId,
+          surahId: normalizedSurahId,
           dueDate: formatDate(addDays(now, 1)),
           interval: 1,
           easeFactor: 2.5,
@@ -226,6 +238,8 @@ router.post("/children/:childId/memorization", async (req, res) => {
       }
     }
   }
+
+  console.log("[memorization POST] wrote to DB:", { id: record.id, surahId: record.surahId, status: record.status, versesMemorized: record.versesMemorized });
 
   res.json({
     id: record.id,

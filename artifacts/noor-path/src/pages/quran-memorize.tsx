@@ -1063,17 +1063,29 @@ export default function QuranMemorizePage() {
   const [saveSuccess, setSaveSuccess] = useState(false);
 
   const saveMutation = useMutation({
-    mutationFn: (qualityRating: number) =>
-      updateMemorization(parseInt(childId), {
+    mutationFn: (qualityRating: number) => {
+      const payload = {
         surahId: selectedChapter!.id,
         versesMemorized: toAyah,
         qualityRating,
-        status: "memorized",
-      }),
-    onSuccess: () => {
+        status: "memorized" as const,
+      };
+      console.log("[quran-memorize] Saving memorization:", {
+        childId: parseInt(childId),
+        surahName: selectedChapter!.name_simple,
+        ...payload,
+      });
+      return updateMemorization(parseInt(childId), payload);
+    },
+    onSuccess: (result) => {
+      console.log("[quran-memorize] Save succeeded, API returned:", result);
+      console.log("[quran-memorize] Invalidating query key:", ["memorization", childId]);
       qc.invalidateQueries({ queryKey: ["memorization", childId] });
       qc.invalidateQueries({ queryKey: ["dashboard", childId] });
       setSaveSuccess(true);
+    },
+    onError: (err) => {
+      console.error("[quran-memorize] Save failed:", err);
     },
   });
 
