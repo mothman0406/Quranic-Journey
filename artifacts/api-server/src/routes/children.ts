@@ -469,4 +469,19 @@ router.get("/children/:childId/plan", async (req, res) => {
   });
 });
 
+router.delete("/children/:childId", async (req, res) => {
+  const childId = parseInt(req.params.childId);
+  const [child] = await db.select().from(childrenTable).where(eq(childrenTable.id, childId));
+  if (!child) { res.status(404).json({ error: "Child not found" }); return; }
+  if (child.parentId !== req.user.id) { res.status(403).json({ error: "Forbidden" }); return; }
+
+  await db.delete(memorizationProgressTable).where(eq(memorizationProgressTable.childId, childId));
+  await db.delete(reviewScheduleTable).where(eq(reviewScheduleTable.childId, childId));
+  await db.delete(learningSessionsTable).where(eq(learningSessionsTable.childId, childId));
+  await db.delete(childDuasTable).where(eq(childDuasTable.childId, childId));
+  await db.delete(childrenTable).where(eq(childrenTable.id, childId));
+
+  res.status(204).send();
+});
+
 export default router;

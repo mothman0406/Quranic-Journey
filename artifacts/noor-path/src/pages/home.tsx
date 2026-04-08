@@ -11,7 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Progress } from "@/components/ui/progress";
 import { Switch } from "@/components/ui/switch";
-import { Plus, Flame, Star, BookOpen, ChevronRight, ChevronLeft, Check, Book, Settings } from "lucide-react";
+import { Plus, Flame, Star, BookOpen, ChevronRight, ChevronLeft, Check, Book, Settings, Trash2 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 
@@ -55,9 +55,11 @@ const STEP_LABELS = ["Basic Info", "Memorization", "Strength", "Goals"];
 
 export default function Home() {
   const [showAdd, setShowAdd] = useState(false);
+  const [showWelcome, setShowWelcome] = useState(true);
   const [step, setStep] = useState(1);
   const [form, setForm] = useState<OnboardingForm>(DEFAULT_FORM);
   const [settingsChildId, setSettingsChildId] = useState<number | null>(null);
+  const [deleteChildId, setDeleteChildId] = useState<number | null>(null);
   const [rangeFrom, setRangeFrom] = useState<number | null>(null);
   const [rangeTo, setRangeTo] = useState<number | null>(null);
   const qc = useQueryClient();
@@ -105,6 +107,34 @@ export default function Home() {
     mutationFn: ({ id, field, value }: { id: number; field: "hideStories" | "hideDuas"; value: boolean }) =>
       updateChild(id, { [field]: value }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["children"] }),
+  });
+
+  const selfCreateMutation = useMutation({
+    mutationFn: () => fetch("/api/children", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: session?.user?.name || session?.user?.email?.split("@")[0] || "Me",
+        age: 18,
+        gender: "male",
+        avatarEmoji: "⭐",
+        preMemorizedSurahIds: [],
+        memorationStrength: 3,
+        practiceMinutesPerDay: 20,
+      })
+    }).then(r => r.json()),
+    onSuccess: (data) => {
+      qc.invalidateQueries({ queryKey: ["children"] });
+      navigate(`/child/${data.id}`);
+    }
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (childId: number) => fetch(`/api/children/${childId}`, { method: "DELETE" }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["children"] });
+      setDeleteChildId(null);
+    }
   });
 
   const totalSteps = form.preMemorizedSurahIds.length > 0 ? 4 : 3;
@@ -181,18 +211,54 @@ export default function Home() {
           </div>
         ) : children.length === 0 ? (
           <div className="space-y-3">
-            <Card className="text-center border-border shadow-md">
-              <CardContent className="py-12 px-6">
-                <div className="text-6xl mb-4">📖</div>
-                <h2 className="text-xl font-bold text-foreground mb-2">Begin the Journey</h2>
-                <p className="text-muted-foreground mb-6 text-sm leading-relaxed">
-                  Add your child's profile to receive a personalized Quran and Islamic learning plan — from their very first surah all the way to completing the Quran, in sha Allah.
-                </p>
-                <Button onClick={() => setShowAdd(true)} className="rounded-full px-8">
-                  <Plus size={16} className="mr-2" /> Add Your First Child
-                </Button>
-              </CardContent>
-            </Card>
+            {showWelcome ? (
+              <Card className="text-center border-border shadow-md">
+                <CardContent className="py-10 px-6">
+                  <div className="text-5xl mb-4">🌙</div>
+                  <h2 className="text-xl font-bold text-foreground mb-1">Welcome to NoorPath</h2>
+                  <p className="text-muted-foreground mb-6 text-sm leading-relaxed">Who is this app for?</p>
+                  <div className="flex flex-col gap-3">
+                    <button
+                      onClick={() => selfCreateMutation.mutate()}
+                      disabled={selfCreateMutation.isPending}
+                      className="w-full flex items-center gap-4 p-4 rounded-2xl border-2 border-border hover:border-primary hover:bg-primary/5 transition-all text-left"
+                    >
+                      <span className="text-3xl">🧑</span>
+                      <div>
+                        <p className="font-semibold text-foreground">It's for me</p>
+                        <p className="text-xs text-muted-foreground mt-0.5">I'm learning the Quran for myself</p>
+                      </div>
+                    </button>
+                    <button
+                      onClick={() => { setShowWelcome(false); setShowAdd(true); }}
+                      className="w-full flex items-center gap-4 p-4 rounded-2xl border-2 border-border hover:border-primary hover:bg-primary/5 transition-all text-left"
+                    >
+                      <span className="text-3xl">👶</span>
+                      <div>
+                        <p className="font-semibold text-foreground">It's for a child</p>
+                        <p className="text-xs text-muted-foreground mt-0.5">I'm setting this up for my child</p>
+                      </div>
+                    </button>
+                  </div>
+                  {selfCreateMutation.isPending && (
+                    <p className="text-xs text-muted-foreground mt-4">Setting up your profile…</p>
+                  )}
+                </CardContent>
+              </Card>
+            ) : (
+              <Card className="text-center border-border shadow-md">
+                <CardContent className="py-12 px-6">
+                  <div className="text-6xl mb-4">📖</div>
+                  <h2 className="text-xl font-bold text-foreground mb-2">Begin the Journey</h2>
+                  <p className="text-muted-foreground mb-6 text-sm leading-relaxed">
+                    Add your child's profile to receive a personalized Quran and Islamic learning plan — from their very first surah all the way to completing the Quran, in sha Allah.
+                  </p>
+                  <Button onClick={() => setShowAdd(true)} className="rounded-full px-8">
+                    <Plus size={16} className="mr-2" /> Add Your First Child
+                  </Button>
+                </CardContent>
+              </Card>
+            )}
 
             <Link href="/mushaf">
               <Card className="border-amber-200 bg-gradient-to-r from-amber-50 to-amber-100/60 hover:shadow-md transition-all cursor-pointer active:scale-[0.99]">
@@ -261,6 +327,14 @@ export default function Home() {
                     title="Child settings"
                   >
                     <Settings size={14} />
+                  </button>
+                  {/* Delete button */}
+                  <button
+                    onClick={(e) => { e.preventDefault(); setDeleteChildId(child.id); }}
+                    className="absolute top-3 right-[4.5rem] p-1.5 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors z-10"
+                    title="Delete profile"
+                  >
+                    <Trash2 size={14} />
                   </button>
                 </div>
               ))}
@@ -332,6 +406,37 @@ export default function Home() {
               <Button className="w-full" onClick={() => setSettingsChildId(null)}>Done</Button>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete confirmation dialog */}
+      <Dialog open={deleteChildId !== null} onOpenChange={(open) => { if (!open) setDeleteChildId(null); }}>
+        <DialogContent className="max-w-sm mx-4">
+          <DialogHeader>
+            <DialogTitle className="text-base">Delete Profile</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 pt-1">
+            <p className="text-sm text-muted-foreground">
+              Are you sure? This will delete all progress for{" "}
+              <span className="font-semibold text-foreground">
+                {children.find(c => c.id === deleteChildId)?.name ?? "this profile"}
+              </span>
+              , including memorization history, streaks, and sessions. This cannot be undone.
+            </p>
+            <div className="flex gap-2">
+              <Button variant="outline" className="flex-1" onClick={() => setDeleteChildId(null)}>
+                Cancel
+              </Button>
+              <Button
+                variant="destructive"
+                className="flex-1"
+                disabled={deleteMutation.isPending}
+                onClick={() => deleteChildId !== null && deleteMutation.mutate(deleteChildId)}
+              >
+                {deleteMutation.isPending ? "Deleting…" : "Delete"}
+              </Button>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
 
