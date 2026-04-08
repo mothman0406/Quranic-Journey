@@ -1029,7 +1029,7 @@ function MemorizationPlayer({
             <Skeleton className="h-10 w-3/5 rounded-xl mx-auto" />
           </div>
         ) : (
-          <div className="mushaf-page" style={{ width: "min(680px, 96vw)", flex: 1, margin: "0 auto", padding: "12px", display: "flex", flexDirection: "column" }}>
+          <div className="mushaf-page" style={{ width: "min(680px, 96vw)", margin: "0 auto", padding: "12px" }}>
             {/* Parchment page card */}
             <div
               className="relative"
@@ -1041,9 +1041,6 @@ function MemorizationPlayer({
                   "linear-gradient(175deg,#fefaf2 0%,#fdf5e3 55%,#fcf0d6 100%)",
                 boxShadow: "0 1px 16px rgba(100,60,0,0.14)",
                 borderRadius: "3px",
-                flex: 1,
-                display: "flex",
-                flexDirection: "column",
               }}
             >
               {/* Corner ornaments */}
@@ -1065,7 +1062,6 @@ function MemorizationPlayer({
                   textAlignLast: "right",
                   textJustify: "inter-word",
                   color: "#1a0a00",
-                  flex: 1,
                   overflow: "visible",
                 }}
               >
