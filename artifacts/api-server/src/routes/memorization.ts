@@ -153,6 +153,7 @@ router.get("/children/:childId/memorization", async (req, res) => {
   const result = SURAHS.sort((a, b) => a.recommendedOrder - b.recommendedOrder).map(surah => {
     const existing = progress.find(p => p.surahId === surah.id);
     if (existing) console.log("[memorization GET] joined surah", surah.id, "(number", surah.number, ") →", existing.status);
+    const parsedAyahs: number[] = (() => { try { return JSON.parse(existing?.memorizedAyahs || "[]"); } catch { return []; } })();
     return {
       id: existing?.id || 0,
       childId,
@@ -161,6 +162,7 @@ router.get("/children/:childId/memorization", async (req, res) => {
       surahNumber: surah.number,
       status: existing?.status || "not_started",
       versesMemorized: existing?.versesMemorized || 0,
+      memorizedAyahs: parsedAyahs,
       totalVerses: surah.verseCount,
       percentComplete: existing ? Math.round((existing.versesMemorized / surah.verseCount) * 100) : 0,
       lastPracticed: existing?.lastPracticed?.toISOString() || null,
@@ -176,7 +178,7 @@ router.get("/children/:childId/memorization", async (req, res) => {
 router.post("/children/:childId/memorization", async (req, res) => {
   const childId = parseInt(req.params.childId);
   if (!await ownsChild(req.user.id, childId)) { res.status(403).json({ error: "Forbidden" }); return; }
-  const { surahId, versesMemorized, status, qualityRating } = req.body;
+  const { surahId, versesMemorized, memorizedAyahs: memorizedAyahsInput, status, qualityRating } = req.body;
 
   console.log("[memorization POST] received body:", { surahId, versesMemorized, status, qualityRating, childId });
 
@@ -194,7 +196,27 @@ router.post("/children/:childId/memorization", async (req, res) => {
   console.log("[memorization POST] existing DB record:", existing ? `id=${existing.id} status=${existing.status}` : "none (will insert)");
 
   const now = new Date();
-  const newVersesMemorized = versesMemorized !== undefined ? versesMemorized : (existing?.versesMemorized || 0);
+
+  // If memorizedAyahs array is provided, derive versesMemorized from it
+  // Otherwise fall back to explicit versesMemorized or existing value
+  let newMemoizedAyahs: number[];
+  let newVersesMemorized: number;
+  if (Array.isArray(memorizedAyahsInput)) {
+    newMemoizedAyahs = memorizedAyahsInput;
+    newVersesMemorized = memorizedAyahsInput.length;
+  } else {
+    newVersesMemorized = versesMemorized !== undefined ? versesMemorized : (existing?.versesMemorized || 0);
+    // Reconstruct ayahs array as consecutive range if coming from legacy path
+    const existingAyahs: number[] = (() => { try { return JSON.parse(existing?.memorizedAyahs || "[]"); } catch { return []; } })();
+    if (existingAyahs.length > 0) {
+      newMemoizedAyahs = existingAyahs;
+    } else if (newVersesMemorized > 0) {
+      newMemoizedAyahs = Array.from({ length: newVersesMemorized }, (_, i) => i + 1);
+    } else {
+      newMemoizedAyahs = [];
+    }
+  }
+
   const newStatus = status || (newVersesMemorized >= surah.verseCount ? "memorized" : newVersesMemorized > 0 ? "in_progress" : "not_started");
   const strength = qualityRating || existing?.strength || 1;
   const nextReview = formatDate(addDays(now, strength >= 4 ? 7 : strength >= 3 ? 3 : 1));
@@ -203,6 +225,7 @@ router.post("/children/:childId/memorization", async (req, res) => {
   if (existing) {
     [record] = await db.update(memorizationProgressTable).set({
       versesMemorized: newVersesMemorized,
+      memorizedAyahs: JSON.stringify(newMemoizedAyahs),
       status: newStatus as "not_started" | "in_progress" | "memorized" | "needs_review",
       lastPracticed: now,
       nextReviewDate: nextReview,
@@ -215,6 +238,7 @@ router.post("/children/:childId/memorization", async (req, res) => {
       childId,
       surahId: normalizedSurahId,
       versesMemorized: newVersesMemorized,
+      memorizedAyahs: JSON.stringify(newMemoizedAyahs),
       status: newStatus as "not_started" | "in_progress" | "memorized" | "needs_review",
       lastPracticed: now,
       nextReviewDate: nextReview,
@@ -241,6 +265,7 @@ router.post("/children/:childId/memorization", async (req, res) => {
 
   console.log("[memorization POST] wrote to DB:", { id: record.id, surahId: record.surahId, status: record.status, versesMemorized: record.versesMemorized });
 
+  const returnedAyahs: number[] = (() => { try { return JSON.parse(record.memorizedAyahs || "[]"); } catch { return []; } })();
   res.json({
     id: record.id,
     childId: record.childId,
@@ -249,6 +274,7 @@ router.post("/children/:childId/memorization", async (req, res) => {
     surahNumber: surah.number,
     status: record.status,
     versesMemorized: record.versesMemorized,
+    memorizedAyahs: returnedAyahs,
     totalVerses: surah.verseCount,
     percentComplete: Math.round((record.versesMemorized / surah.verseCount) * 100),
     lastPracticed: record.lastPracticed?.toISOString() || null,

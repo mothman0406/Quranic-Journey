@@ -46,11 +46,11 @@ function pad(n: number, len: number) {
   return String(n).padStart(len, "0");
 }
 
-function buildAudioUrl(reciter: Reciter, surah: number, verse: number): string {
+export function buildAudioUrl(reciter: Reciter, surah: number, verse: number): string {
   return `https://everyayah.com/data/${reciter.folder}/${pad(surah, 3)}${pad(verse, 3)}.mp3`;
 }
 
-function buildWordAudioUrl(surah: number, verse: number, wordPosition: number): string {
+export function buildWordAudioUrl(surah: number, verse: number, wordPosition: number): string {
   return `https://audio.qurancdn.com/wbw/${pad(surah, 3)}_${pad(verse, 3)}_${pad(wordPosition, 3)}.mp3`;
 }
 

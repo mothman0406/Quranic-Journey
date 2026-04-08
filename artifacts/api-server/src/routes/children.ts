@@ -8,6 +8,15 @@ import { DUAS } from "../data/duas.js";
 
 const router: IRouter = Router();
 
+function formatChild(c: typeof childrenTable.$inferSelect) {
+  return {
+    ...c,
+    createdAt: c.createdAt.toISOString(),
+    hideStories: !!c.hideStories,
+    hideDuas: !!c.hideDuas,
+  };
+}
+
 // Sorted by recommended learning order (Al-Fatihah first, then back from 114)
 const SURAHS_IN_ORDER = [...SURAHS].sort((a, b) => a.recommendedOrder - b.recommendedOrder);
 
@@ -159,7 +168,7 @@ router.get("/children", async (req, res) => {
   const children = await db.select().from(childrenTable)
     .where(eq(childrenTable.parentId, req.user.id))
     .orderBy(desc(childrenTable.createdAt));
-  res.json({ children: children.map(c => ({ ...c, createdAt: c.createdAt.toISOString() })) });
+  res.json({ children: children.map(formatChild) });
 });
 
 router.post("/children", async (req, res) => {
@@ -210,7 +219,7 @@ router.post("/children", async (req, res) => {
     }
   }
 
-  res.status(201).json({ ...child, createdAt: child.createdAt.toISOString() });
+  res.status(201).json(formatChild(child));
 });
 
 router.get("/children/:childId", async (req, res) => {
@@ -218,7 +227,7 @@ router.get("/children/:childId", async (req, res) => {
   const [child] = await db.select().from(childrenTable).where(eq(childrenTable.id, childId));
   if (!child) { res.status(404).json({ error: "Child not found" }); return; }
   if (child.parentId !== req.user.id) { res.status(403).json({ error: "Forbidden" }); return; }
-  res.json({ ...child, createdAt: child.createdAt.toISOString() });
+  res.json(formatChild(child));
 });
 
 router.put("/children/:childId", async (req, res) => {
@@ -232,8 +241,10 @@ router.put("/children/:childId", async (req, res) => {
   if (req.body.avatarEmoji) updates.avatarEmoji = req.body.avatarEmoji;
   if (req.body.goals !== undefined) updates.goals = JSON.stringify(req.body.goals);
   if (req.body.practiceMinutesPerDay) updates.practiceMinutesPerDay = req.body.practiceMinutesPerDay;
+  if (req.body.hideStories !== undefined) updates.hideStories = req.body.hideStories ? 1 : 0;
+  if (req.body.hideDuas !== undefined) updates.hideDuas = req.body.hideDuas ? 1 : 0;
   const [child] = await db.update(childrenTable).set(updates).where(eq(childrenTable.id, childId)).returning();
-  res.json({ ...child, createdAt: child.createdAt.toISOString() });
+  res.json(formatChild(child));
 });
 
 router.get("/children/:childId/goals", async (req, res) => {
@@ -292,8 +303,8 @@ router.get("/children/:childId/dashboard", async (req, res) => {
   const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
   const weeklyProgress = dayNames.map(day => ({ day, versesMemorized: 0, minutesPracticed: 0 }));
 
-  const randomStory = STORIES.find(s => s.ageGroup === child.ageGroup || s.ageGroup === "child");
-  const randomDua = DUAS[0];
+  const randomStory = child.hideStories ? null : (STORIES.find(s => s.ageGroup === child.ageGroup || s.ageGroup === "child") ?? null);
+  const randomDua = child.hideDuas ? null : DUAS[0];
 
   const memorizedCount = memorizedSurahIds.length;
   const inProgressSurah = memProgress.find(m => m.status === "in_progress");
@@ -323,7 +334,7 @@ router.get("/children/:childId/dashboard", async (req, res) => {
   };
 
   res.json({
-    child: { ...child, createdAt: child.createdAt.toISOString() },
+    child: formatChild(child),
     todaysPlan,
     memorizationStats: {
       totalSurahsMemorized: memorizedCount,

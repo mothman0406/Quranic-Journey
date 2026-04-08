@@ -1,15 +1,14 @@
 import { Link, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { listReviews } from "@workspace/api-client-react";
-import { BookOpen, RefreshCw, BookMarked, Star, Heart } from "lucide-react";
+import { House, BookMarked, RefreshCw, Grid2X2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const navItems = [
-  { label: "Lesson", icon: BookOpen, path: "lesson" },
-  { label: "Memorize", icon: BookMarked, path: "memorize" },
-  { label: "Review", icon: RefreshCw, path: "review" },
-  { label: "Stories", icon: Star, path: "stories" },
-  { label: "Du'aas", icon: Heart, path: "duas" },
+  { label: "Home",          icon: House,      path: "" },
+  { label: "Memorization",  icon: BookMarked, path: "memorization" },
+  { label: "Review",        icon: RefreshCw,  path: "review" },
+  { label: "More",          icon: Grid2X2,    path: "more" },
 ];
 
 export function ChildNav({ childId }: { childId: string }) {
@@ -22,17 +21,21 @@ export function ChildNav({ childId }: { childId: string }) {
   });
 
   const reviewsDue = reviews?.dueToday?.length ?? 0;
+  const base = `/child/${childId}`;
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-border shadow-lg z-50 bottom-nav-safe">
       <div className="flex items-stretch max-w-lg mx-auto">
         {navItems.map(({ label, icon: Icon, path }) => {
-          const href = `/child/${childId}/${path}`;
-          const isActive = location.includes(`/${path}`);
+          const href = path ? `${base}/${path}` : base;
+          // Home tab: exact match only; others: prefix match
+          const isActive = path === ""
+            ? location === base || location === `${base}/`
+            : location.startsWith(`${base}/${path}`);
           const showBadge = path === "review" && reviewsDue > 0;
 
           return (
-            <Link key={path} href={href} className="flex-1">
+            <Link key={path || "home"} href={href} className="flex-1">
               <div className={cn(
                 "flex flex-col items-center justify-center py-2 px-1 transition-colors min-h-[56px]",
                 isActive ? "text-primary" : "text-muted-foreground"

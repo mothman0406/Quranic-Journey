@@ -10,4 +10,6 @@ export interface UpdateChildRequest {
   name?: string;
   age?: number;
   avatarEmoji?: string;
+  hideStories?: boolean;
+  hideDuas?: boolean;
 }

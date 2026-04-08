@@ -10,6 +10,8 @@ import type { UpdateMemorizationRequestStatus } from "./updateMemorizationReques
 export interface UpdateMemorizationRequest {
   surahId: number;
   versesMemorized?: number;
+  /** Specific ayah numbers memorized (1-based). If provided, versesMemorized is derived from array length. */
+  memorizedAyahs?: number[];
   status?: UpdateMemorizationRequestStatus;
   /**
    * How well the child recited (for spaced repetition)

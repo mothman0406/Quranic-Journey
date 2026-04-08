@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link, useLocation } from "wouter";
 import { signOut, useSession } from "@/lib/auth-client";
-import { listChildren } from "@workspace/api-client-react";
+import { listChildren, updateChild } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -10,7 +10,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Progress } from "@/components/ui/progress";
-import { Plus, Flame, Star, BookOpen, ChevronRight, ChevronLeft, Check, Book } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
+import { Plus, Flame, Star, BookOpen, ChevronRight, ChevronLeft, Check, Book, Settings } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 
@@ -73,6 +74,7 @@ export default function Home() {
   const [showAdd, setShowAdd] = useState(false);
   const [step, setStep] = useState(1);
   const [form, setForm] = useState<OnboardingForm>(DEFAULT_FORM);
+  const [settingsChildId, setSettingsChildId] = useState<number | null>(null);
   const qc = useQueryClient();
   const [, navigate] = useLocation();
   const { data: session } = useSession();
@@ -105,6 +107,13 @@ export default function Home() {
   });
 
   const children = data?.children || [];
+  const settingsChild = children.find((c) => c.id === settingsChildId);
+
+  const toggleMutation = useMutation({
+    mutationFn: ({ id, field, value }: { id: number; field: "hideStories" | "hideDuas"; value: boolean }) =>
+      updateChild(id, { [field]: value }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["children"] }),
+  });
 
   const totalSteps = form.preMemorizedSurahIds.length > 0 ? 4 : 3;
 
@@ -212,35 +221,45 @@ export default function Home() {
 
             <div className="space-y-3">
               {children.map((child) => (
-                <Link key={child.id} href={`/child/${child.id}`}>
-                  <Card className="cursor-pointer hover:shadow-md transition-all border-border active:scale-[0.99]">
-                    <CardContent className="p-4">
-                      <div className="flex items-center gap-3">
-                        <div className="w-14 h-14 rounded-2xl bg-primary/10 flex items-center justify-center text-2xl flex-shrink-0 shadow-inner border border-primary/10">
-                          {child.avatarEmoji}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center justify-between">
-                            <h3 className="font-semibold text-foreground">{child.name}</h3>
-                            <ChevronRight size={16} className="text-muted-foreground" />
+                <div key={child.id} className="relative">
+                  <Link href={`/child/${child.id}`}>
+                    <Card className="cursor-pointer hover:shadow-md transition-all border-border active:scale-[0.99]">
+                      <CardContent className="p-4">
+                        <div className="flex items-center gap-3">
+                          <div className="w-14 h-14 rounded-2xl bg-primary/10 flex items-center justify-center text-2xl flex-shrink-0 shadow-inner border border-primary/10">
+                            {child.avatarEmoji}
                           </div>
-                          <p className="text-xs text-muted-foreground mt-0.5">{AGE_GROUP_LABELS[child.ageGroup]}</p>
-                          <div className="flex items-center gap-4 mt-2">
-                            <div className="flex items-center gap-1 text-xs text-orange-500">
-                              <Flame size={11} /><span className="font-bold">{child.streakDays}</span><span className="text-muted-foreground">streak</span>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center justify-between">
+                              <h3 className="font-semibold text-foreground">{child.name}</h3>
+                              <ChevronRight size={16} className="text-muted-foreground" />
                             </div>
-                            <div className="flex items-center gap-1 text-xs text-amber-600">
-                              <Star size={11} /><span className="font-bold">{child.totalPoints}</span><span className="text-muted-foreground">pts</span>
-                            </div>
-                            <div className="flex items-center gap-1 text-xs text-primary">
-                              <BookOpen size={11} /><span className="font-bold">{child.juzCompleted}</span><span className="text-muted-foreground">juz</span>
+                            <p className="text-xs text-muted-foreground mt-0.5">{AGE_GROUP_LABELS[child.ageGroup]}</p>
+                            <div className="flex items-center gap-4 mt-2">
+                              <div className="flex items-center gap-1 text-xs text-orange-500">
+                                <Flame size={11} /><span className="font-bold">{child.streakDays}</span><span className="text-muted-foreground">streak</span>
+                              </div>
+                              <div className="flex items-center gap-1 text-xs text-amber-600">
+                                <Star size={11} /><span className="font-bold">{child.totalPoints}</span><span className="text-muted-foreground">pts</span>
+                              </div>
+                              <div className="flex items-center gap-1 text-xs text-primary">
+                                <BookOpen size={11} /><span className="font-bold">{child.juzCompleted}</span><span className="text-muted-foreground">juz</span>
+                              </div>
                             </div>
                           </div>
                         </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                </Link>
+                      </CardContent>
+                    </Card>
+                  </Link>
+                  {/* Settings button — outside the Link so it doesn't navigate */}
+                  <button
+                    onClick={(e) => { e.preventDefault(); setSettingsChildId(child.id); }}
+                    className="absolute top-3 right-10 p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors z-10"
+                    title="Child settings"
+                  >
+                    <Settings size={14} />
+                  </button>
+                </div>
               ))}
             </div>
 
@@ -267,6 +286,51 @@ export default function Home() {
           </>
         )}
       </div>
+
+      {/* Per-child content settings dialog (parent only) */}
+      <Dialog open={settingsChildId !== null} onOpenChange={(open) => { if (!open) setSettingsChildId(null); }}>
+        <DialogContent className="max-w-sm mx-4">
+          <DialogHeader>
+            <DialogTitle className="text-base">
+              {settingsChild?.name}'s Content Settings
+            </DialogTitle>
+          </DialogHeader>
+          {settingsChild && (
+            <div className="space-y-4 pt-1">
+              <p className="text-xs text-muted-foreground">
+                Toggle which content types appear in your child's app. These can be changed any time.
+              </p>
+              <div className="space-y-3">
+                <div className="flex items-center justify-between p-3 rounded-xl border border-border">
+                  <div>
+                    <p className="text-sm font-medium">Stories</p>
+                    <p className="text-xs text-muted-foreground">Islamic stories in the More tab</p>
+                  </div>
+                  <Switch
+                    checked={!settingsChild.hideStories}
+                    onCheckedChange={(checked) =>
+                      toggleMutation.mutate({ id: settingsChild.id, field: "hideStories", value: !checked })
+                    }
+                  />
+                </div>
+                <div className="flex items-center justify-between p-3 rounded-xl border border-border">
+                  <div>
+                    <p className="text-sm font-medium">Du'aas</p>
+                    <p className="text-xs text-muted-foreground">Supplications in the More tab</p>
+                  </div>
+                  <Switch
+                    checked={!settingsChild.hideDuas}
+                    onCheckedChange={(checked) =>
+                      toggleMutation.mutate({ id: settingsChild.id, field: "hideDuas", value: !checked })
+                    }
+                  />
+                </div>
+              </div>
+              <Button className="w-full" onClick={() => setSettingsChildId(null)}>Done</Button>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
       {/* Multi-step onboarding dialog */}
       <Dialog open={showAdd} onOpenChange={open => { setShowAdd(open); if (!open) { setStep(1); setForm(DEFAULT_FORM); } }}>

@@ -18,5 +18,7 @@ export interface Child {
   streakDays: number;
   totalPoints: number;
   juzCompleted: number;
+  hideStories: boolean;
+  hideDuas: boolean;
   createdAt: Date;
 }

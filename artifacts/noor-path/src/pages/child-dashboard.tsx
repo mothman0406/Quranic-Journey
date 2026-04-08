@@ -67,7 +67,7 @@ export default function ChildDashboard() {
             </div>
             <div className="space-y-2">
               {todaysPlan.newMemorization && (
-                <Link href={`/child/${childId}/lesson`}>
+                <Link href={`/child/${childId}/memorization`}>
                   <div className="flex items-center gap-3 p-3 rounded-xl bg-primary/5 border border-primary/10 hover:bg-primary/10 transition-colors cursor-pointer">
                     <div className="w-9 h-9 rounded-xl bg-primary/15 flex items-center justify-center"><BookMarked size={16} className="text-primary" /></div>
                     <div className="flex-1">
@@ -165,7 +165,7 @@ export default function ChildDashboard() {
           <Card className="border-border">
             <CardContent className="p-4">
               <h2 className="font-semibold text-foreground mb-3 flex items-center gap-2"><BookOpen size={16} className="text-primary" /> Next to Memorize</h2>
-              <Link href={`/child/${childId}/lesson`}>
+              <Link href={`/child/${childId}/memorization`}>
                 <div className="flex items-center justify-between p-3 rounded-xl bg-primary/5 border border-primary/10 cursor-pointer hover:bg-primary/10 transition-colors">
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 rounded-xl bg-primary/15 flex items-center justify-center text-xs font-bold text-primary">{nextSurah.number}</div>

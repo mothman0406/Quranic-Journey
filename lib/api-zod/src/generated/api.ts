@@ -29,6 +29,8 @@ export const ListChildrenResponse = zod.object({
       streakDays: zod.number(),
       totalPoints: zod.number(),
       juzCompleted: zod.number(),
+      hideStories: zod.boolean(),
+      hideDuas: zod.boolean(),
       createdAt: zod.date(),
     }),
   ),
@@ -64,6 +66,8 @@ export const GetChildResponse = zod.object({
   streakDays: zod.number(),
   totalPoints: zod.number(),
   juzCompleted: zod.number(),
+  hideStories: zod.boolean(),
+  hideDuas: zod.boolean(),
   createdAt: zod.date(),
 });
 
@@ -78,6 +82,8 @@ export const UpdateChildBody = zod.object({
   name: zod.string().optional(),
   age: zod.number().optional(),
   avatarEmoji: zod.string().optional(),
+  hideStories: zod.boolean().optional(),
+  hideDuas: zod.boolean().optional(),
 });
 
 export const UpdateChildResponse = zod.object({
@@ -90,6 +96,8 @@ export const UpdateChildResponse = zod.object({
   streakDays: zod.number(),
   totalPoints: zod.number(),
   juzCompleted: zod.number(),
+  hideStories: zod.boolean(),
+  hideDuas: zod.boolean(),
   createdAt: zod.date(),
 });
 
@@ -111,6 +119,8 @@ export const GetChildDashboardResponse = zod.object({
     streakDays: zod.number(),
     totalPoints: zod.number(),
     juzCompleted: zod.number(),
+    hideStories: zod.boolean(),
+    hideDuas: zod.boolean(),
     createdAt: zod.date(),
   }),
   todaysPlan: zod.object({
@@ -276,6 +286,9 @@ export const ListMemorizationResponse = zod.object({
         "needs_review",
       ]),
       versesMemorized: zod.number(),
+      memorizedAyahs: zod
+        .array(zod.number())
+        .describe("List of memorized ayah numbers (1-based)"),
       totalVerses: zod.number(),
       percentComplete: zod.number(),
       lastPracticed: zod.date().optional(),
@@ -298,6 +311,12 @@ export const updateMemorizationBodyQualityRatingMax = 5;
 export const UpdateMemorizationBody = zod.object({
   surahId: zod.number(),
   versesMemorized: zod.number().optional(),
+  memorizedAyahs: zod
+    .array(zod.number())
+    .optional()
+    .describe(
+      "Specific ayah numbers memorized (1-based). If provided, versesMemorized is derived from array length.",
+    ),
   status: zod
     .enum(["not_started", "in_progress", "memorized", "needs_review"])
     .optional(),
@@ -317,6 +336,9 @@ export const UpdateMemorizationResponse = zod.object({
   surahNumber: zod.number(),
   status: zod.enum(["not_started", "in_progress", "memorized", "needs_review"]),
   versesMemorized: zod.number(),
+  memorizedAyahs: zod
+    .array(zod.number())
+    .describe("List of memorized ayah numbers (1-based)"),
   totalVerses: zod.number(),
   percentComplete: zod.number(),
   lastPracticed: zod.date().optional(),

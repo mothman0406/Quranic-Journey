@@ -35,6 +35,8 @@ export interface Child {
   streakDays: number;
   totalPoints: number;
   juzCompleted: number;
+  hideStories: boolean;
+  hideDuas: boolean;
   createdAt: string;
 }
 
@@ -61,6 +63,8 @@ export interface UpdateChildRequest {
   name?: string;
   age?: number;
   avatarEmoji?: string;
+  hideStories?: boolean;
+  hideDuas?: boolean;
 }
 
 export type DailyPlanNewMemorization = {
@@ -256,6 +260,8 @@ export interface MemorizationProgress {
   surahNumber: number;
   status: MemorizationProgressStatus;
   versesMemorized: number;
+  /** List of memorized ayah numbers (1-based) */
+  memorizedAyahs: number[];
   totalVerses: number;
   percentComplete: number;
   lastPracticed?: string;
@@ -278,6 +284,8 @@ export const UpdateMemorizationRequestStatus = {
 export interface UpdateMemorizationRequest {
   surahId: number;
   versesMemorized?: number;
+  /** Specific ayah numbers memorized (1-based). If provided, versesMemorized is derived from array length. */
+  memorizedAyahs?: number[];
   status?: UpdateMemorizationRequestStatus;
   /**
    * How well the child recited (for spaced repetition)

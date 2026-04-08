@@ -520,10 +520,14 @@ components:
           type: integer
         juzCompleted:
           type: integer
+        hideStories:
+          type: boolean
+        hideDuas:
+          type: boolean
         createdAt:
           type: string
           format: date-time
-      required: [id, name, age, ageGroup, gender, avatarEmoji, streakDays, totalPoints, juzCompleted, createdAt]
+      required: [id, name, age, ageGroup, gender, avatarEmoji, streakDays, totalPoints, juzCompleted, hideStories, hideDuas, createdAt]
 
     CreateChildRequest:
       type: object
@@ -550,6 +554,10 @@ components:
           type: integer
         avatarEmoji:
           type: string
+        hideStories:
+          type: boolean
+        hideDuas:
+          type: boolean
 
     ChildDashboard:
       type: object
@@ -697,6 +705,11 @@ components:
           enum: [not_started, in_progress, memorized, needs_review]
         versesMemorized:
           type: integer
+        memorizedAyahs:
+          type: array
+          items:
+            type: integer
+          description: List of memorized ayah numbers (1-based)
         totalVerses:
           type: integer
         percentComplete:
@@ -712,7 +725,7 @@ components:
         strength:
           type: integer
           description: Memory strength 1-5
-      required: [id, childId, surahId, surahName, surahNumber, status, versesMemorized, totalVerses, percentComplete, reviewCount, strength]
+      required: [id, childId, surahId, surahName, surahNumber, status, versesMemorized, memorizedAyahs, totalVerses, percentComplete, reviewCount, strength]
 
     UpdateMemorizationRequest:
       type: object
@@ -721,6 +734,11 @@ components:
           type: integer
         versesMemorized:
           type: integer
+        memorizedAyahs:
+          type: array
+          items:
+            type: integer
+          description: Specific ayah numbers memorized (1-based). If provided, versesMemorized is derived from array length.
         status:
           type: string
           enum: [not_started, in_progress, memorized, needs_review]

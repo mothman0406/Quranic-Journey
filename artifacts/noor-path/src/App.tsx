@@ -8,9 +8,9 @@ import Home from "@/pages/home";
 import LoginPage from "@/pages/login";
 import RegisterPage from "@/pages/register";
 import ChildDashboard from "@/pages/child-dashboard";
-import MemorizePage from "@/pages/memorize";
+import MemorizationPage from "@/pages/memorization";
 import ReviewPage from "@/pages/review";
-import LessonPage from "@/pages/lesson";
+import MorePage from "@/pages/more";
 import StoriesPage from "@/pages/stories";
 import StoryDetailPage from "@/pages/story-detail";
 import DuasPage from "@/pages/duas";
@@ -60,9 +60,9 @@ function Router() {
       <Route path="/register" component={() => <PublicOnlyRoute component={RegisterPage} />} />
       <Route path="/" component={() => <ProtectedRoute component={Home} />} />
       <Route path="/child/:childId" component={() => <ProtectedRoute component={ChildDashboard} />} />
-      <Route path="/child/:childId/memorize" component={() => <ProtectedRoute component={MemorizePage} />} />
+      <Route path="/child/:childId/memorization" component={() => <ProtectedRoute component={MemorizationPage} />} />
       <Route path="/child/:childId/review" component={() => <ProtectedRoute component={ReviewPage} />} />
-      <Route path="/child/:childId/lesson" component={() => <ProtectedRoute component={LessonPage} />} />
+      <Route path="/child/:childId/more" component={() => <ProtectedRoute component={MorePage} />} />
       <Route path="/child/:childId/stories" component={() => <ProtectedRoute component={StoriesPage} />} />
       <Route path="/child/:childId/stories/:storyId" component={() => <ProtectedRoute component={StoryDetailPage} />} />
       <Route path="/child/:childId/duas" component={() => <ProtectedRoute component={DuasPage} />} />

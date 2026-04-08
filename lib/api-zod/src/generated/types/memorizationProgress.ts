@@ -15,6 +15,8 @@ export interface MemorizationProgress {
   surahNumber: number;
   status: MemorizationProgressStatus;
   versesMemorized: number;
+  /** List of memorized ayah numbers (1-based) */
+  memorizedAyahs: number[];
   totalVerses: number;
   percentComplete: number;
   lastPracticed?: Date;

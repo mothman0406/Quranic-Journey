@@ -23,6 +23,8 @@ export const childrenTable = pgTable("children", {
   practiceMinutesPerDay: integer("practice_minutes_per_day").notNull().default(20),
   goals: text("goals"),
   onboardingCompleted: integer("onboarding_completed").notNull().default(0),
+  hideStories: integer("hide_stories").notNull().default(0),
+  hideDuas: integer("hide_duas").notNull().default(0),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
