@@ -21,6 +21,7 @@ import {
   RotateCcw,
   CheckCircle,
   Flag,
+  EyeOff,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -560,6 +561,8 @@ function MemorizationPlayer({
   const [autoAdvance, setAutoAdvance] = useState(initialAutoAdvance);
   const [showPauseModal, setShowPauseModal] = useState(false);
   const [pauseToAyah, setPauseToAyah] = useState(initialAyah);
+  const [isBlindMode, setIsBlindMode] = useState(false);
+  const [revealedAyahs, setRevealedAyahs] = useState<Set<number>>(new Set());
 
   // Cumulative review state
   type InternalPhase = "single" | "cumulative";
@@ -1184,62 +1187,127 @@ function MemorizationPlayer({
                               isCumulative ? "bg-teal-100/50" : "bg-amber-100/50"
                             )}
                           >
-                            {words.map((_, i) => {
-                              const isHighlighted = highlightedWord === i;
-                              const isPast = playing && highlightedWord > i;
-                              return (
-                                <span
-                                  key={i}
-                                  className={cn(
-                                    "inline-block transition-all duration-100 rounded-sm px-[0.15em] mx-[0.15em]",
-                                    isHighlighted
-                                      ? isCumulative
-                                        ? "bg-teal-300 text-teal-900 scale-110 shadow-sm"
-                                        : "bg-amber-300 text-amber-900 scale-110 shadow-sm"
-                                      : isPast
-                                        ? "opacity-35"
-                                        : ""
-                                  )}
-                                >
-                                  {hasValidTajweed ? (
-                                    <span
-                                      dangerouslySetInnerHTML={{
-                                        __html: tajweedWords[i],
-                                      }}
-                                    />
-                                  ) : (
-                                    stripVerseEnd(
-                                      surahVerse?.text_uthmani ?? currentArabic
-                                    )
-                                      .split(/\s+/)
-                                      .filter(Boolean)[i] ?? ""
-                                  )}
-                                </span>
-                              );
-                            })}
+                            {(() => {
+                              const blindActive = isBlindMode && !revealedAyahs.has(verseNum);
+                              const wordSpans = words.map((_, i) => {
+                                const isHighlighted = highlightedWord === i;
+                                const isPast = playing && highlightedWord > i;
+                                return (
+                                  <span
+                                    key={i}
+                                    className={cn(
+                                      "inline-block transition-all duration-100 rounded-sm px-[0.15em] mx-[0.15em]",
+                                      isHighlighted
+                                        ? isCumulative
+                                          ? "bg-teal-300 text-teal-900 scale-110 shadow-sm"
+                                          : "bg-amber-300 text-amber-900 scale-110 shadow-sm"
+                                        : isPast
+                                          ? "opacity-35"
+                                          : ""
+                                    )}
+                                  >
+                                    {hasValidTajweed ? (
+                                      <span
+                                        dangerouslySetInnerHTML={{
+                                          __html: tajweedWords[i],
+                                        }}
+                                      />
+                                    ) : (
+                                      stripVerseEnd(
+                                        surahVerse?.text_uthmani ?? currentArabic
+                                      )
+                                        .split(/\s+/)
+                                        .filter(Boolean)[i] ?? ""
+                                    )}
+                                  </span>
+                                );
+                              });
+                              const toggleActiveReveal = () =>
+                                setRevealedAyahs((prev) => {
+                                  const next = new Set(prev);
+                                  if (next.has(verseNum)) next.delete(verseNum); else next.add(verseNum);
+                                  return next;
+                                });
+                              if (blindActive) {
+                                return (
+                                  <span
+                                    style={{ filter: "blur(6px)", userSelect: "none", cursor: "pointer" }}
+                                    onClick={toggleActiveReveal}
+                                  >
+                                    {wordSpans}
+                                  </span>
+                                );
+                              }
+                              if (isBlindMode) {
+                                // Revealed active ayah — tap to cover again
+                                return (
+                                  <span style={{ cursor: "pointer" }} onClick={toggleActiveReveal}>
+                                    {wordSpans}
+                                  </span>
+                                );
+                              }
+                              return wordSpans;
+                            })()}
                           </span>
                         ) : (
                           // Non-active verse — full tajweed block, dimmed by range/phase
-                          <span
-                            className="transition-opacity duration-300"
-                            style={{
-                              opacity: !isActiveSurah
-                                ? 0.13
-                                : !inSelectedRange
-                                  ? 0.17
-                                  : isCumulative && !inCumRange
-                                    ? 0.28
-                                    : 0.55,
-                            }}
-                          >
-                            {tajweedHtml ? (
+                          (() => {
+                            const outOfRange = !isActiveSurah || !inSelectedRange;
+                            const toggleReveal = () =>
+                              setRevealedAyahs((prev) => {
+                                const next = new Set(prev);
+                                if (next.has(verseNum)) next.delete(verseNum); else next.add(verseNum);
+                                return next;
+                              });
+                            const inner = (
                               <span
-                                dangerouslySetInnerHTML={{ __html: tajweedHtml }}
-                              />
-                            ) : (
-                              stripVerseEnd(surahVerse?.text_uthmani ?? "")
-                            )}
-                          </span>
+                                className="transition-opacity duration-300"
+                                style={{
+                                  opacity: !isActiveSurah
+                                    ? 0.13
+                                    : !inSelectedRange
+                                      ? 0.17
+                                      : isCumulative && !inCumRange
+                                        ? 0.28
+                                        : 0.55,
+                                }}
+                              >
+                                {tajweedHtml ? (
+                                  <span
+                                    dangerouslySetInnerHTML={{ __html: tajweedHtml }}
+                                  />
+                                ) : (
+                                  stripVerseEnd(surahVerse?.text_uthmani ?? "")
+                                )}
+                              </span>
+                            );
+                            if (!isBlindMode) return inner;
+                            if (outOfRange) {
+                              // Out-of-range: always blurred, not tappable
+                              return (
+                                <span style={{ filter: "blur(6px)", userSelect: "none" }}>
+                                  {inner}
+                                </span>
+                              );
+                            }
+                            if (!revealedAyahs.has(verseNum)) {
+                              // In-range, hidden: tap to reveal
+                              return (
+                                <span
+                                  style={{ filter: "blur(6px)", userSelect: "none", cursor: "pointer" }}
+                                  onClick={toggleReveal}
+                                >
+                                  {inner}
+                                </span>
+                              );
+                            }
+                            // In-range, revealed: tap to cover again
+                            return (
+                              <span style={{ cursor: "pointer" }} onClick={toggleReveal}>
+                                {inner}
+                              </span>
+                            );
+                          })()
                         )}
 
                         {/* Verse-end marker */}
@@ -1469,22 +1537,36 @@ function MemorizationPlayer({
             </Button>
           </div>
 
-          {/* Auto-advance toggle + reciter label */}
+          {/* Auto-advance toggle + blind mode toggle + reciter label */}
           <div className="flex items-center justify-between pt-1">
-            <button
-              onClick={() => setAutoAdvance((a) => !a)}
-              className={cn(
-                "flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs transition-colors",
-                autoAdvance
-                  ? "border-primary/30 text-primary bg-primary/5"
-                  : "border-border text-muted-foreground hover:text-foreground"
-              )}
-            >
-              <RotateCcw size={11} />
-              Auto-advance {autoAdvance ? "on" : "off"}
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setAutoAdvance((a) => !a)}
+                className={cn(
+                  "flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs transition-colors",
+                  autoAdvance
+                    ? "border-primary/30 text-primary bg-primary/5"
+                    : "border-border text-muted-foreground hover:text-foreground"
+                )}
+              >
+                <RotateCcw size={11} />
+                Auto-advance {autoAdvance ? "on" : "off"}
+              </button>
+              <button
+                onClick={() => setIsBlindMode((v) => !v)}
+                className={cn(
+                  "flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs transition-colors",
+                  isBlindMode
+                    ? "border-primary/30 text-primary bg-primary/5"
+                    : "border-border text-muted-foreground hover:text-foreground"
+                )}
+              >
+                <EyeOff size={11} />
+                Blind {isBlindMode ? "on" : "off"}
+              </button>
+            </div>
 
-            <span className="text-xs text-muted-foreground/70 truncate max-w-[160px]">
+            <span className="text-xs text-muted-foreground/70 truncate max-w-[100px]">
               {reciter.fullName}
             </span>
 
@@ -1576,6 +1658,20 @@ function MemorizationPlayer({
         >
           <Flag size={12} />
           Pause &amp; Save
+        </button>
+
+        {/* Blind mode toggle */}
+        <button
+          onClick={() => setIsBlindMode((v) => !v)}
+          className={cn(
+            "flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs transition-colors self-start",
+            isBlindMode
+              ? "border-primary/30 text-primary bg-primary/5"
+              : "border-border text-muted-foreground hover:text-foreground"
+          )}
+        >
+          <EyeOff size={11} />
+          Blind mode {isBlindMode ? "on" : "off"}
         </button>
 
         {/* Settings back link */}
