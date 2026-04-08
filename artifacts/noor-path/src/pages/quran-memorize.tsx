@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
-import { useParams, Link, useSearch } from "wouter";
+import { useParams, Link, useSearch, useLocation } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { updateMemorization } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
@@ -1050,6 +1050,7 @@ function MemorizationPlayer({
 export default function QuranMemorizePage() {
   const { childId } = useParams<{ childId: string }>();
   const search = useSearch();
+  const [, navigate] = useLocation();
   const qc = useQueryClient();
 
   const [phase, setPhase] = useState<"pick" | "setup" | "play" | "check">("pick");
@@ -1506,10 +1507,10 @@ export default function QuranMemorizePage() {
         <div className="pattern-bg text-white px-4 pt-8 pb-10">
           <div className="max-w-lg mx-auto">
             <button
-              onClick={() => setPhase("setup")}
+              onClick={() => navigate(`/child/${childId}/memorization`)}
               className="flex items-center gap-1 text-emerald-200 text-sm mb-4"
             >
-              <ChevronLeft size={16} /> Settings
+              <ChevronLeft size={16} /> Back to Memorization
             </button>
             <h1 className="text-xl font-bold">Recitation Check</h1>
             <p className="text-emerald-200 text-sm mt-1">
@@ -1567,47 +1568,69 @@ export default function QuranMemorizePage() {
 
           {/* Actions */}
           {saveSuccess ? (
-            <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-5 flex items-center gap-3">
-              <CheckCircle size={24} className="text-emerald-600 flex-shrink-0" />
-              <div>
-                <p className="font-semibold text-emerald-800">Progress saved!</p>
-                <p className="text-sm text-emerald-600">
-                  {selectedChapter.name_simple} ayahs {fromAyah}–{toAyah} marked as memorized.
-                </p>
+            <>
+              <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-5 flex items-center gap-3">
+                <CheckCircle size={24} className="text-emerald-600 flex-shrink-0" />
+                <div>
+                  <p className="font-semibold text-emerald-800">Progress saved!</p>
+                  <p className="text-sm text-emerald-600">
+                    {selectedChapter.name_simple} ayahs {fromAyah}–{toAyah} marked as memorized.
+                  </p>
+                </div>
               </div>
-            </div>
+              <Button
+                className="w-full h-12 text-base"
+                onClick={() => navigate(`/child/${childId}/memorization`)}
+              >
+                Back to Memorization
+              </Button>
+              <Button
+                variant="outline"
+                className="w-full h-12 text-base"
+                onClick={() => {
+                  setSaveSuccess(false);
+                  setCheckRating(null);
+                  setPhase("setup");
+                }}
+              >
+                Keep Practicing
+              </Button>
+            </>
           ) : (
-            <Button
-              className="w-full h-12 text-base"
-              disabled={!checkRating || saveMutation.isPending}
-              onClick={() => {
-                if (!selectedOption) return;
-                saveMutation.mutate(selectedOption.quality);
-              }}
-            >
-              {saveMutation.isPending ? (
-                <>
-                  <Loader2 size={18} className="mr-2 animate-spin" />
-                  Saving…
-                </>
-              ) : (
-                "Mark as Memorized"
+            <>
+              <Button
+                className="w-full h-12 text-base"
+                disabled={!checkRating || saveMutation.isPending}
+                onClick={() => {
+                  if (!selectedOption) return;
+                  saveMutation.mutate(selectedOption.quality);
+                }}
+              >
+                {saveMutation.isPending ? (
+                  <>
+                    <Loader2 size={18} className="mr-2 animate-spin" />
+                    Saving…
+                  </>
+                ) : (
+                  "Mark as Memorized"
+                )}
+              </Button>
+
+              {saveMutation.isError && (
+                <p className="text-sm text-red-500 text-center">
+                  Failed to save — please try again.
+                </p>
               )}
-            </Button>
-          )}
 
-          {saveMutation.isError && (
-            <p className="text-sm text-red-500 text-center">
-              Failed to save — please try again.
-            </p>
+              <Button
+                variant="outline"
+                className="w-full h-12 text-base"
+                onClick={() => navigate(`/child/${childId}/memorization`)}
+              >
+                Back to Memorization
+              </Button>
+            </>
           )}
-
-          <button
-            onClick={() => setPhase("setup")}
-            className="w-full text-sm text-muted-foreground py-2 hover:text-foreground transition-colors"
-          >
-            Keep Practicing
-          </button>
         </div>
       </div>
     );
@@ -1634,18 +1657,13 @@ export default function QuranMemorizePage() {
         initialAutoAdvance={autoAdvance}
         cumulativeReview={cumulativeReview}
         reviewRepeatCount={reviewRepeatCount}
-        onBack={() => setPhase("setup")}
+        onBack={() => navigate(`/child/${childId}/memorization`)}
         onSessionComplete={handleSessionComplete}
       />
 
       {showReadyModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-6">
-          <div className="bg-white rounded-2xl shadow-xl max-w-sm w-full p-6 flex flex-col gap-4 text-center">
-            <div className="text-4xl">🌟</div>
-            <h2 className="text-xl font-bold text-gray-900">Ready to Recite?</h2>
-            <p className="text-gray-600 text-sm leading-relaxed">
-              You've completed your practice! Are you ready to recite to someone?
-            </p>
+        <div className="fixed bottom-0 left-0 right-0 z-50 px-4 pb-8 pt-4 bg-gradient-to-t from-black/40 to-transparent pointer-events-none">
+          <div className="max-w-lg mx-auto pointer-events-auto">
             <button
               onClick={() => {
                 setShowReadyModal(false);
@@ -1653,15 +1671,9 @@ export default function QuranMemorizePage() {
                 setSaveSuccess(false);
                 setPhase("check");
               }}
-              className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-xl py-3 transition-colors"
+              className="w-full bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-semibold rounded-2xl py-4 text-base shadow-2xl transition-colors"
             >
-              Yes, let's go
-            </button>
-            <button
-              onClick={() => setShowReadyModal(false)}
-              className="w-full border border-gray-200 hover:bg-gray-50 text-gray-700 font-medium rounded-xl py-3 transition-colors"
-            >
-              Review first
+              Ready to Recite? →
             </button>
           </div>
         </div>
