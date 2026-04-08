@@ -20,6 +20,7 @@ import {
   ChevronsRight,
   RotateCcw,
   CheckCircle,
+  Flag,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -472,6 +473,7 @@ interface PlayerProps {
   reviewRepeatCount: number;
   onBack: () => void;
   onSessionComplete: () => void;
+  onPauseAndSave: (completedToAyah: number) => void;
 }
 
 function MemorizationPlayer({
@@ -488,12 +490,15 @@ function MemorizationPlayer({
   reviewRepeatCount,
   onBack,
   onSessionComplete,
+  onPauseAndSave,
 }: PlayerProps) {
   const reciter = RECITERS.find((r) => r.id === "husary")!;
 
   const [currentAyahNum, setCurrentAyahNum] = useState(initialAyah);
   const [pendingAutoPlay, setPendingAutoPlay] = useState(false);
   const [autoAdvance, setAutoAdvance] = useState(initialAutoAdvance);
+  const [showPauseModal, setShowPauseModal] = useState(false);
+  const [pauseToAyah, setPauseToAyah] = useState(initialAyah);
 
   // Cumulative review state
   type InternalPhase = "single" | "cumulative";
@@ -921,6 +926,70 @@ function MemorizationPlayer({
         </div>
       </div>
 
+      {/* Pause & Save modal */}
+      {showPauseModal && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 px-4 pb-6">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg p-6 space-y-5">
+            <div>
+              <h2 className="text-base font-bold text-foreground">How far did you get?</h2>
+              <p className="text-sm text-muted-foreground mt-1">
+                Choose which ayah you finished so we can check the right range.
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <p className="text-sm text-foreground">
+                I completed ayahs <span className="font-semibold">{fromAyah}</span> to
+              </p>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => setPauseToAyah((n) => Math.max(fromAyah, n - 1))}
+                  className="w-11 h-11 rounded-full border border-border flex items-center justify-center text-lg font-bold text-muted-foreground hover:text-foreground hover:border-primary/40 transition-colors flex-shrink-0"
+                >
+                  −
+                </button>
+                <input
+                  type="number"
+                  min={fromAyah}
+                  max={toAyah}
+                  value={pauseToAyah}
+                  onChange={(e) => {
+                    const v = Math.max(fromAyah, Math.min(toAyah, parseInt(e.target.value) || fromAyah));
+                    setPauseToAyah(v);
+                  }}
+                  className="flex-1 border border-border rounded-xl px-3 py-3 text-2xl text-center font-bold outline-none focus:border-primary"
+                />
+                <button
+                  onClick={() => setPauseToAyah((n) => Math.min(toAyah, n + 1))}
+                  className="w-11 h-11 rounded-full border border-border flex items-center justify-center text-lg font-bold text-muted-foreground hover:text-foreground hover:border-primary/40 transition-colors flex-shrink-0"
+                >
+                  +
+                </button>
+              </div>
+              <p className="text-xs text-muted-foreground text-center">
+                Session range: ayahs {fromAyah}–{toAyah}
+              </p>
+            </div>
+
+            <button
+              onClick={() => {
+                setShowPauseModal(false);
+                onPauseAndSave(pauseToAyah);
+              }}
+              className="w-full bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-semibold rounded-2xl py-4 text-base transition-colors"
+            >
+              Go to Recitation Check →
+            </button>
+            <button
+              onClick={() => setShowPauseModal(false)}
+              className="w-full text-sm text-muted-foreground hover:text-foreground py-2 transition-colors"
+            >
+              Cancel — keep going
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Player controls */}
       <div className="bg-white border-t border-border px-4 pt-3 pb-6">
         <div className="max-w-lg mx-auto space-y-3">
@@ -1039,6 +1108,21 @@ function MemorizationPlayer({
               <span className="text-xs text-red-500">⚠ Audio unavailable</span>
             )}
           </div>
+
+          {/* Pause & Save — always visible shortcut to recitation check */}
+          <div className="flex justify-center pt-1 border-t border-border/40">
+            <button
+              onClick={() => {
+                stopAudio();
+                setPauseToAyah(currentAyahNum);
+                setShowPauseModal(true);
+              }}
+              className="flex items-center gap-1.5 px-4 py-1.5 rounded-full border border-amber-300 text-amber-700 bg-amber-50 text-xs font-semibold hover:bg-amber-100 active:bg-amber-200 transition-colors"
+            >
+              <Flag size={12} />
+              Pause &amp; Save
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -1150,6 +1234,13 @@ export default function QuranMemorizePage() {
 
   const handleSessionComplete = useCallback(() => {
     setShowReadyModal(true);
+  }, []);
+
+  const handlePauseAndSave = useCallback((completedToAyah: number) => {
+    setToAyah(completedToAyah);
+    setCheckRating(null);
+    setSaveSuccess(false);
+    setPhase("check");
   }, []);
 
   const handleResumeBookmark = () => {
@@ -1659,6 +1750,7 @@ export default function QuranMemorizePage() {
         reviewRepeatCount={reviewRepeatCount}
         onBack={() => navigate(`/child/${childId}/memorization`)}
         onSessionComplete={handleSessionComplete}
+        onPauseAndSave={handlePauseAndSave}
       />
 
       {showReadyModal && (
