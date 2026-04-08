@@ -1153,15 +1153,21 @@ export default function QuranMemorizePage() {
 
   const saveMutation = useMutation({
     mutationFn: (qualityRating: number) => {
+      const memorizedAyahs = Array.from({ length: toAyah - fromAyah + 1 }, (_, i) => fromAyah + i);
+      const isComplete = toAyah >= selectedChapter!.verses_count;
       const payload = {
         surahId: selectedChapter!.id,
-        versesMemorized: toAyah,
+        memorizedAyahs,
         qualityRating,
-        status: "memorized" as const,
+        status: (isComplete ? "memorized" : "in_progress") as "memorized" | "in_progress",
       };
       console.log("[quran-memorize] Saving memorization:", {
         childId: parseInt(childId),
         surahName: selectedChapter!.name_simple,
+        fromAyah,
+        toAyah,
+        totalVerses: selectedChapter!.verses_count,
+        isComplete,
         ...payload,
       });
       return updateMemorization(parseInt(childId), payload);
