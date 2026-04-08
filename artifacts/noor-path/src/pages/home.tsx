@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link, useLocation } from "wouter";
 import { signOut, useSession } from "@/lib/auth-client";
-import { listChildren, updateChild } from "@workspace/api-client-react";
+import { listChildren, updateChild, listSurahs } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -23,23 +23,6 @@ const AGE_GROUP_LABELS: Record<string, string> = {
   preteen: "Ages 11–14 · Deepening Knowledge",
   teen: "Ages 15+ · Path to Hifz"
 };
-
-// Common surahs for onboarding checklist (id matches surahs.ts)
-const COMMON_SURAHS = [
-  { id: 15, name: "Al-Fatihah", arabic: "الْفَاتِحَة", verseCount: 7 },
-  { id: 1,  name: "An-Nas",    arabic: "النَّاس",     verseCount: 6 },
-  { id: 2,  name: "Al-Falaq",  arabic: "الْفَلَق",    verseCount: 5 },
-  { id: 3,  name: "Al-Ikhlas", arabic: "الْإِخْلَاص", verseCount: 4 },
-  { id: 4,  name: "Al-Masad",  arabic: "الْمَسَد",    verseCount: 5 },
-  { id: 5,  name: "An-Nasr",   arabic: "النَّصْر",    verseCount: 3 },
-  { id: 6,  name: "Al-Kafirun",arabic: "الْكَافِرُون", verseCount: 6 },
-  { id: 7,  name: "Al-Kawthar",arabic: "الْكَوْثَر",   verseCount: 3 },
-  { id: 8,  name: "Al-Ma'un",  arabic: "الْمَاعُون",  verseCount: 7 },
-  { id: 9,  name: "Quraysh",   arabic: "قُرَيْش",     verseCount: 4 },
-  { id: 10, name: "Al-Fil",    arabic: "الْفِيل",     verseCount: 5 },
-  { id: 11, name: "Al-Humazah",arabic: "الْهُمَزَة",  verseCount: 9 },
-  { id: 12, name: "Al-'Asr",   arabic: "الْعَصْر",    verseCount: 3 },
-];
 
 const PRACTICE_OPTIONS = [
   { value: 10, label: "10 min", desc: "Light — just getting started" },
@@ -75,6 +58,8 @@ export default function Home() {
   const [step, setStep] = useState(1);
   const [form, setForm] = useState<OnboardingForm>(DEFAULT_FORM);
   const [settingsChildId, setSettingsChildId] = useState<number | null>(null);
+  const [rangeFrom, setRangeFrom] = useState<number | null>(null);
+  const [rangeTo, setRangeTo] = useState<number | null>(null);
   const qc = useQueryClient();
   const [, navigate] = useLocation();
   const { data: session } = useSession();
@@ -83,6 +68,13 @@ export default function Home() {
     queryKey: ["children"],
     queryFn: () => listChildren()
   });
+
+  const { data: surahsData, isLoading: surahsLoading } = useQuery({
+    queryKey: ["surahs"],
+    queryFn: () => listSurahs(),
+    enabled: showAdd,
+  });
+  const allSurahs = (surahsData?.surahs ?? []).slice().sort((a, b) => a.number - b.number);
 
   const createMutation = useMutation({
     mutationFn: () => fetch("/api/children", {
@@ -125,6 +117,17 @@ export default function Home() {
       preMemorizedSurahIds: f.preMemorizedSurahIds.includes(id)
         ? f.preMemorizedSurahIds.filter(s => s !== id)
         : [...f.preMemorizedSurahIds, id]
+    }));
+  }
+
+  function applyRange() {
+    if (rangeFrom === null || rangeTo === null) return;
+    const min = Math.min(rangeFrom, rangeTo);
+    const max = Math.max(rangeFrom, rangeTo);
+    const inRange = allSurahs.filter(s => s.number >= min && s.number <= max).map(s => s.id);
+    setForm(f => ({
+      ...f,
+      preMemorizedSurahIds: [...new Set([...f.preMemorizedSurahIds, ...inRange])]
     }));
   }
 
@@ -333,7 +336,7 @@ export default function Home() {
       </Dialog>
 
       {/* Multi-step onboarding dialog */}
-      <Dialog open={showAdd} onOpenChange={open => { setShowAdd(open); if (!open) { setStep(1); setForm(DEFAULT_FORM); } }}>
+      <Dialog open={showAdd} onOpenChange={open => { setShowAdd(open); if (!open) { setStep(1); setForm(DEFAULT_FORM); setRangeFrom(null); setRangeTo(null); } }}>
         <DialogContent className="max-w-sm mx-4 max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="text-base">
@@ -391,43 +394,102 @@ export default function Home() {
           {step === 2 && (
             <div className="space-y-3">
               <p className="text-sm text-muted-foreground">
-                Which surahs has {form.name || "your child"} already memorized? (Select all that apply — or none to start fresh with Al-Fatihah)
+                Which surahs has {form.name || "your child"} already memorized? Select individually or use Range Selection to mark many at once.
               </p>
-              <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
-                {COMMON_SURAHS.map(s => {
-                  const selected = form.preMemorizedSurahIds.includes(s.id);
-                  return (
-                    <button
-                      key={s.id}
-                      onClick={() => toggleSurah(s.id)}
-                      className={cn(
-                        "w-full flex items-center gap-3 p-3 rounded-xl border text-left transition-all",
-                        selected ? "border-primary bg-primary/5" : "border-border hover:border-border/80 hover:bg-muted/50"
-                      )}
-                    >
-                      <div className={cn(
-                        "w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-all",
-                        selected ? "border-primary bg-primary text-white" : "border-muted-foreground/40"
-                      )}>
-                        {selected && <Check size={11} />}
-                      </div>
-                      <div className="flex-1">
-                        <p className="text-sm font-medium">{s.name}</p>
-                        <p className="text-xs text-muted-foreground">{s.verseCount} verses</p>
-                      </div>
-                      <span className="arabic-text text-base text-muted-foreground">{s.arabic}</span>
-                    </button>
-                  );
-                })}
+
+              {/* Range picker */}
+              <div className="p-3 rounded-xl border border-primary/20 bg-primary/5 space-y-2">
+                <p className="text-xs font-semibold text-primary">Range Selection</p>
+                <div className="flex gap-2 items-center">
+                  <Select
+                    value={rangeFrom?.toString() ?? ""}
+                    onValueChange={v => setRangeFrom(parseInt(v))}
+                  >
+                    <SelectTrigger className="h-8 text-xs flex-1"><SelectValue placeholder="From surah" /></SelectTrigger>
+                    <SelectContent className="max-h-52">
+                      {allSurahs.map(s => (
+                        <SelectItem key={s.id} value={s.number.toString()} className="text-xs">
+                          {s.number}. {s.nameTransliteration}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <span className="text-xs text-muted-foreground shrink-0">to</span>
+                  <Select
+                    value={rangeTo?.toString() ?? ""}
+                    onValueChange={v => setRangeTo(parseInt(v))}
+                  >
+                    <SelectTrigger className="h-8 text-xs flex-1"><SelectValue placeholder="To surah" /></SelectTrigger>
+                    <SelectContent className="max-h-52">
+                      {allSurahs.map(s => (
+                        <SelectItem key={s.id} value={s.number.toString()} className="text-xs">
+                          {s.number}. {s.nameTransliteration}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-8 text-xs px-2.5 shrink-0"
+                    onClick={applyRange}
+                    disabled={rangeFrom === null || rangeTo === null}
+                  >
+                    Apply
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground">All surahs between the two selected will be added to the selection.</p>
               </div>
-              {form.preMemorizedSurahIds.length === 0 && (
+
+              {/* Individual selection list */}
+              <div className="space-y-1.5 max-h-52 overflow-y-auto pr-1">
+                {surahsLoading ? (
+                  <div className="space-y-1.5">
+                    {[1,2,3,4,5].map(i => <Skeleton key={i} className="h-11 rounded-xl" />)}
+                  </div>
+                ) : (
+                  allSurahs.map(s => {
+                    const selected = form.preMemorizedSurahIds.includes(s.id);
+                    return (
+                      <button
+                        key={s.id}
+                        onClick={() => toggleSurah(s.id)}
+                        className={cn(
+                          "w-full flex items-center gap-2.5 px-3 py-2 rounded-xl border text-left transition-all",
+                          selected ? "border-primary bg-primary/5" : "border-border hover:border-border/80 hover:bg-muted/50"
+                        )}
+                      >
+                        <div className={cn(
+                          "w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-all",
+                          selected ? "border-primary bg-primary text-white" : "border-muted-foreground/40"
+                        )}>
+                          {selected && <Check size={11} />}
+                        </div>
+                        <span className="text-xs text-muted-foreground w-6 shrink-0 tabular-nums">{s.number}.</span>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium leading-tight">{s.nameTransliteration}</p>
+                          <p className="text-xs text-muted-foreground">{s.verseCount} verses</p>
+                        </div>
+                        <span className="arabic-text text-sm text-muted-foreground shrink-0">{s.nameArabic}</span>
+                      </button>
+                    );
+                  })
+                )}
+              </div>
+
+              {form.preMemorizedSurahIds.length === 0 ? (
                 <p className="text-xs text-primary bg-primary/5 rounded-lg p-2 text-center">
                   ✨ Starting fresh? We'll begin with Al-Fatihah — the foundation of every prayer.
                 </p>
-              )}
-              {form.preMemorizedSurahIds.length > 0 && (
-                <p className="text-xs text-primary bg-primary/5 rounded-lg p-2 text-center">
-                  {form.preMemorizedSurahIds.length} surah{form.preMemorizedSurahIds.length > 1 ? "s" : ""} selected
+              ) : (
+                <p className="text-xs text-primary bg-primary/5 rounded-lg p-2 text-center flex items-center justify-center gap-2">
+                  <span>{form.preMemorizedSurahIds.length} surah{form.preMemorizedSurahIds.length > 1 ? "s" : ""} selected</span>
+                  <button
+                    className="underline underline-offset-2 text-primary/70 hover:text-primary"
+                    onClick={() => setForm(f => ({ ...f, preMemorizedSurahIds: [] }))}
+                  >
+                    Clear all
+                  </button>
                 </p>
               )}
             </div>
