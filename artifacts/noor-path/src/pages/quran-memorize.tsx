@@ -497,6 +497,16 @@ const TAJWEED_CSS = `
 .mushaf-page .ghunna            { color: #169200; }
 `;
 
+
+// Strip trailing verse-end glyph (۝) and Arabic-Indic digits (٠-٩) from Uthmani text.
+const stripVerseEnd = (s: string): string => s.replace(/[\u06DD\u0660-\u0669\s]+$/, "").trimEnd();
+// Same for tajweed HTML — handles both bare text nodes and span-wrapped digits at the end.
+const stripVerseEndHtml = (html: string): string =>
+  html
+    .replace(/(<span[^>]*>[\u06DD\u0660-\u0669\s]+<\/span>\s*)+$/, "")
+    .replace(/[\u06DD\u0660-\u0669\s]+$/, "")
+    .trimEnd();
+
 // Split tajweed HTML into per-word chunks.
 // Words in tajweed HTML are separated by whitespace that falls between a closing >
 // and an opening < — i.e. between span elements, never inside attribute values.
@@ -929,29 +939,48 @@ function MemorizationPlayer({
             <Skeleton className="h-10 w-3/5 rounded-xl mx-auto" />
           </div>
         ) : (
-          <div className="mushaf-page max-w-lg mx-auto px-3 py-5">
+          <div className="mushaf-page mx-auto px-3 py-5" style={{ maxWidth: "min(520px, 92vw)" }}>
             {/* Parchment page card */}
             <div
-              className="relative overflow-hidden"
+              className="relative"
               style={{
+                border: "2px solid #c9a84c",
+                outline: "1px solid #c9a84c",
+                outlineOffset: "-8px",
                 background:
                   "linear-gradient(175deg,#fefaf2 0%,#fdf5e3 55%,#fcf0d6 100%)",
-                boxShadow:
-                  "0 1px 16px rgba(100,60,0,0.14),0 0 0 1px rgba(160,110,30,0.18)",
-                borderRadius: "2px",
+                boxShadow: "0 1px 16px rgba(100,60,0,0.14)",
+                borderRadius: "3px",
               }}
             >
-              {/* Page header */}
+              {/* Corner ornaments */}
+              <span aria-hidden="true" style={{ position: "absolute", top: 5, left: 5, color: "#c9a84c", fontSize: "10px", lineHeight: 1, userSelect: "none", zIndex: 1 }}>◆</span>
+              <span aria-hidden="true" style={{ position: "absolute", top: 5, right: 5, color: "#c9a84c", fontSize: "10px", lineHeight: 1, userSelect: "none", zIndex: 1 }}>◆</span>
+              <span aria-hidden="true" style={{ position: "absolute", bottom: 5, left: 5, color: "#c9a84c", fontSize: "10px", lineHeight: 1, userSelect: "none", zIndex: 1 }}>◆</span>
+              <span aria-hidden="true" style={{ position: "absolute", bottom: 5, right: 5, color: "#c9a84c", fontSize: "10px", lineHeight: 1, userSelect: "none", zIndex: 1 }}>◆</span>
+
+              {/* Ornate surah header banner */}
               <div
-                className="flex items-center justify-between px-6 pt-4 pb-2"
-                style={{ borderBottom: "1px solid rgba(160,110,30,0.18)" }}
+                className="arabic-text mx-4 mt-5 mb-3 flex items-center justify-center gap-3"
+                style={{
+                  background: "#1a5c2a",
+                  border: "2px solid #c9a84c",
+                  boxShadow: "inset 0 0 0 3px #1a5c2a, inset 0 0 0 4px #c9a84c",
+                  borderRadius: "3px",
+                  padding: "7px 16px",
+                }}
               >
-                <span className="text-[9px] tracking-[0.2em] text-[#7a5c12]/50 font-semibold uppercase tabular-nums">
-                  {activePage ?? "—"}
-                </span>
-                <span className="arabic-text text-xs text-[#5a3d08]/55">
+                <span aria-hidden="true" style={{ color: "#c9a84c", fontSize: "18px", lineHeight: 1, flexShrink: 0 }}>✿</span>
+                <span
+                  style={{
+                    color: "#ffffff",
+                    fontSize: "1.1rem",
+                    textShadow: "0 1px 3px rgba(0,0,0,0.4)",
+                  }}
+                >
                   {chapter.name_arabic}
                 </span>
+                <span aria-hidden="true" style={{ color: "#c9a84c", fontSize: "18px", lineHeight: 1, flexShrink: 0 }}>✿</span>
               </div>
 
               {/* Verse body */}
@@ -960,12 +989,13 @@ function MemorizationPlayer({
                 dir="rtl"
                 lang="ar"
                 style={{
+                  fontFamily: '"Amiri Quran", "me_quran", serif',
                   fontSize: "1.6rem",
-                  lineHeight: "3.3",
+                  lineHeight: "2.2",
                   textAlign: "justify",
                   textAlignLast: "right",
+                  textJustify: "inter-word",
                   color: "#1a0a00",
-                  wordSpacing: "0.08em",
                 }}
               >
                 {/* Bismillah — only when verse 1 of this surah is on the page */}
@@ -976,6 +1006,7 @@ function MemorizationPlayer({
                     <span
                       className="block leading-loose mb-2"
                       style={{
+                        fontFamily: '"Amiri Quran", "me_quran", serif',
                         fontSize: "1.3rem",
                         textAlign: "center",
                         color: "#7a5c12",
@@ -1005,10 +1036,11 @@ function MemorizationPlayer({
                     const showSurahSep =
                       listIdx > 0 && surahId !== prevSurahId;
 
-                    const tajweedHtml =
+                    const tajweedHtml = stripVerseEndHtml(
                       surahVerse?.text_uthmani_tajweed ??
                       pageVerse?.text_uthmani_tajweed ??
-                      "";
+                      ""
+                    );
                     // Pre-compute for active verse only (used inside words.map)
                     const tajweedWords = isActive
                       ? splitTajweedIntoWords(tajweedHtml)
@@ -1091,7 +1123,7 @@ function MemorizationPlayer({
                                       }}
                                     />
                                   ) : (
-                                    (
+                                    stripVerseEnd(
                                       surahVerse?.text_uthmani ?? currentArabic
                                     )
                                       .split(/\s+/)
@@ -1120,13 +1152,34 @@ function MemorizationPlayer({
                                 dangerouslySetInnerHTML={{ __html: tajweedHtml }}
                               />
                             ) : (
-                              surahVerse?.text_uthmani ?? ""
+                              stripVerseEnd(surahVerse?.text_uthmani ?? "")
                             )}
                           </span>
                         )}
 
-                        {/* Verse-end ornament */}
-                        <span className={ornamentClass}>﴿{verseNum}﴾</span>
+                        {/* Verse-end marker */}
+                        <span
+                          className={ornamentClass}
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            width: "1.4em",
+                            height: "1.4em",
+                            border: "1px solid #c9a84c",
+                            borderRadius: "2px",
+                            transform: "rotate(45deg)",
+                            fontSize: "0.55em",
+                            direction: "ltr",
+                            margin: "0 0.2em",
+                            flexShrink: 0,
+                            verticalAlign: "middle",
+                          }}
+                        >
+                          <bdo dir="ltr" style={{ transform: "rotate(-45deg)", display: "block" }}>
+                            {verseNum}
+                          </bdo>
+                        </span>
                       </span>
                     );
                   }
@@ -1135,11 +1188,36 @@ function MemorizationPlayer({
 
               {/* Page footer */}
               <div
-                className="flex items-center justify-center px-6 pb-4 pt-2"
+                className="flex items-center justify-center px-6 pb-5 pt-2"
                 style={{ borderTop: "1px solid rgba(160,110,30,0.18)" }}
               >
-                <span className="text-[9px] tabular-nums text-[#7a5c12]/30 tracking-[0.25em]">
-                  {activePage ?? ""}
+                <span
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    width: "44px",
+                    height: "20px",
+                    border: "1px solid #c9a84c",
+                    borderRadius: "2px",
+                    transform: "rotate(45deg)",
+                    direction: "ltr",
+                  }}
+                >
+                  <bdo
+                    dir="ltr"
+                    className="tabular-nums"
+                    style={{
+                      transform: "rotate(-45deg)",
+                      display: "block",
+                      fontSize: "9px",
+                      color: "#c9a84c",
+                      fontWeight: 600,
+                      letterSpacing: "0.2em",
+                    }}
+                  >
+                    {activePage ?? ""}
+                  </bdo>
                 </span>
               </div>
             </div>
