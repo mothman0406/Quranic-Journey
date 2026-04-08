@@ -849,9 +849,98 @@ function MemorizationPlayer({
     : `Ayah ${currentAyahNum} · ${repeatCount}× repeat`;
 
   return (
-    <div className="min-h-screen bg-background flex flex-col">
-      {/* Header */}
-      <div className="pattern-bg text-white px-4 pt-8 pb-4">
+    <div className="h-screen bg-[#f5f0e8] flex flex-col md:flex-row overflow-hidden">
+
+      {/* ── LEFT COLUMN (desktop only) ── */}
+      <div className="hidden md:flex w-52 flex-col gap-6 p-4 justify-center shrink-0 bg-[#f5f0e8]">
+        {/* Surah info + progress */}
+        <div className="flex flex-col gap-2">
+          <div>
+            <h1 className="text-lg font-bold leading-tight text-[#1a5c2a]">
+              {chapter.name_simple}
+            </h1>
+            <p className="text-sm text-muted-foreground">
+              {chapter.translated_name?.name}
+            </p>
+            <span className="arabic-text text-2xl text-amber-700 mt-1 block text-right">
+              {chapter.name_arabic}
+            </span>
+          </div>
+          <div className="h-1.5 bg-border/60 rounded-full overflow-hidden">
+            {isCumulative ? (
+              <div
+                className="h-full bg-teal-500 rounded-full transition-all duration-300"
+                style={{ width: `${cumUpTo - fromAyah > 0 ? (cumAyahIdx / (cumUpTo - fromAyah)) * 100 : 100}%` }}
+              />
+            ) : (
+              <div
+                className="h-full bg-amber-400 rounded-full transition-all duration-500"
+                style={{ width: `${progressPercent}%` }}
+              />
+            )}
+          </div>
+          <p className="text-xs text-muted-foreground">
+            {isCumulative
+              ? `Reviewing ${cumUpTo - fromAyah + 1} ayahs · pass ${cumPass} of ${reviewRepeatCount}`
+              : `${currentIndexInRange + 1} of ${rangeLength} ayahs`}
+          </p>
+        </div>
+
+        {/* Playback buttons */}
+        <div className="flex items-center justify-center gap-2">
+          <Button
+            variant="outline" size="sm" onClick={goPrev}
+            disabled={isCumulative ? false : currentAyahNum <= fromAyah}
+            className="rounded-full w-10 h-10 p-0"
+            title={isCumulative ? "Exit cumulative review" : "Previous ayah"}
+          >
+            <SkipBack size={16} />
+          </Button>
+          <Button
+            size="lg" onClick={play}
+            disabled={loading || versesLoading || !currentArabic}
+            className={cn("rounded-full w-14 h-14 p-0 shadow-lg", isCumulative ? "bg-teal-600 hover:bg-teal-700" : "")}
+          >
+            {loading ? <Loader2 size={22} className="animate-spin" /> : playing ? <Pause size={22} /> : <Play size={22} className="ml-1" />}
+          </Button>
+          <Button
+            variant="outline" size="sm" onClick={handleSkipRepeat}
+            disabled={!isCumulative && repeatCount <= 1}
+            className="rounded-full w-10 h-10 p-0"
+            title={isCumulative ? "Skip pass" : "Skip repeat (stay on same ayah)"}
+          >
+            <ChevronsRight size={16} />
+          </Button>
+          <Button
+            variant="outline" size="sm" onClick={skipAyah}
+            disabled={!isCumulative && currentAyahNum >= toAyah && !cumulativeReview}
+            className="rounded-full w-10 h-10 p-0"
+            title={isCumulative ? "Skip cumulative review" : "Skip ayah (advance to next ayah)"}
+          >
+            <SkipForward size={16} />
+          </Button>
+        </div>
+
+        {/* Auto-advance toggle */}
+        <button
+          onClick={() => setAutoAdvance((a) => !a)}
+          className={cn(
+            "flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs transition-colors self-start",
+            autoAdvance
+              ? "border-primary/30 text-primary bg-primary/5"
+              : "border-border text-muted-foreground hover:text-foreground"
+          )}
+        >
+          <RotateCcw size={11} />
+          Auto-advance {autoAdvance ? "on" : "off"}
+        </button>
+      </div>
+
+      {/* ── CENTER COLUMN ── */}
+      <div className="flex-1 flex flex-col h-full min-h-0 min-w-0">
+
+      {/* Mobile-only header */}
+      <div className="md:hidden pattern-bg text-white px-4 pt-8 pb-4">
         <div className="max-w-lg mx-auto">
           <div className="flex items-center justify-between mb-2">
             <button
@@ -931,7 +1020,7 @@ function MemorizationPlayer({
       </div>
 
       {/* Arabic text area — mushaf page view */}
-      <div className="flex-1 overflow-y-auto bg-[#ede4d0]">
+      <div className="flex-1 overflow-y-auto md:overflow-hidden flex flex-col md:items-center min-h-0 py-4">
         <style>{TAJWEED_CSS}</style>
         {versesLoading || !currentArabic ? (
           <div className="w-full space-y-4 pt-8 px-5">
@@ -940,7 +1029,7 @@ function MemorizationPlayer({
             <Skeleton className="h-10 w-3/5 rounded-xl mx-auto" />
           </div>
         ) : (
-          <div className="mushaf-page mx-auto px-3 py-5" style={{ maxWidth: "min(520px, 92vw)" }}>
+          <div className="mushaf-page" style={{ width: "min(680px, 96vw)", flex: 1, margin: "0 auto", padding: "12px", display: "flex", flexDirection: "column" }}>
             {/* Parchment page card */}
             <div
               className="relative"
@@ -952,6 +1041,9 @@ function MemorizationPlayer({
                   "linear-gradient(175deg,#fefaf2 0%,#fdf5e3 55%,#fcf0d6 100%)",
                 boxShadow: "0 1px 16px rgba(100,60,0,0.14)",
                 borderRadius: "3px",
+                flex: 1,
+                display: "flex",
+                flexDirection: "column",
               }}
             >
               {/* Corner ornaments */}
@@ -967,12 +1059,14 @@ function MemorizationPlayer({
                 lang="ar"
                 style={{
                   fontFamily: '"Amiri Quran", "me_quran", serif',
-                  fontSize: "1.6rem",
-                  lineHeight: "2.2",
+                  fontSize: "1.5rem",
+                  lineHeight: "2.15",
                   textAlign: "justify",
                   textAlignLast: "right",
                   textJustify: "inter-word",
                   color: "#1a0a00",
+                  flex: 1,
+                  overflow: "visible",
                 }}
               >
 
@@ -1285,7 +1379,7 @@ function MemorizationPlayer({
       )}
 
       {/* Player controls */}
-      <div className="bg-white border-t border-border px-4 pt-3 pb-6">
+      <div className="md:hidden bg-white border-t border-border px-4 pt-3 pb-6">
         <div className="max-w-lg mx-auto space-y-3">
           {/* Phase badge + repeat dots */}
           <div className="flex items-center justify-center gap-3">
@@ -1418,6 +1512,83 @@ function MemorizationPlayer({
             </button>
           </div>
         </div>
+      </div>
+      </div>{/* end center column */}
+
+      {/* ── RIGHT COLUMN (desktop only) ── */}
+      <div className="hidden md:flex w-40 flex-col gap-6 p-4 justify-center shrink-0 bg-[#f5f0e8]">
+        {/* Ayah number + range */}
+        <div className="flex flex-col gap-0.5">
+          {isCumulative ? (
+            <>
+              <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Cumulative</p>
+              <p className="text-3xl font-bold tabular-nums">{fromAyah + cumAyahIdx}</p>
+              <p className="text-xs text-muted-foreground">Pass {cumPass}/{reviewRepeatCount}</p>
+              <p className="text-xs text-muted-foreground">{fromAyah}–{cumUpTo}</p>
+            </>
+          ) : (
+            <>
+              <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Ayah</p>
+              <p className="text-3xl font-bold tabular-nums">{currentAyahNum}</p>
+              <p className="text-xs text-muted-foreground">{fromAyah}–{toAyah}</p>
+            </>
+          )}
+        </div>
+
+        {/* Phase badge + repeat dots */}
+        <div className="flex flex-col gap-1.5">
+          {isCumulative ? (
+            <span className="text-[11px] font-semibold px-3 py-1 rounded-full bg-teal-100 text-teal-700 tabular-nums">
+              Cumulative · {phaseLabel}
+            </span>
+          ) : (
+            <>
+              <span className="text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full bg-primary/10 text-primary self-start">
+                Single Ayah
+              </span>
+              <div className="flex items-center gap-1.5">
+                {Array.from({ length: repeatCount }, (_, i) => (
+                  <div
+                    key={i}
+                    className={cn(
+                      "rounded-full transition-all duration-300",
+                      i < currentRepeat ? "bg-primary w-2.5 h-2.5" : "bg-muted w-2 h-2",
+                      i === currentRepeat - 1 && playing ? "scale-125 shadow-md" : ""
+                    )}
+                  />
+                ))}
+                <span className="text-xs text-muted-foreground ml-1 tabular-nums">
+                  {currentRepeat}/{repeatCount}
+                </span>
+              </div>
+            </>
+          )}
+        </div>
+
+        {/* Reciter */}
+        <div className="flex flex-col gap-1">
+          <span className="text-xs text-muted-foreground/70 truncate">
+            {reciter.fullName}
+          </span>
+          {error && <span className="text-xs text-red-500">⚠ Audio unavailable</span>}
+        </div>
+
+        {/* Pause & Save */}
+        <button
+          onClick={() => { stopAudio(); setPauseToAyah(currentAyahNum); setShowPauseModal(true); }}
+          className="flex items-center justify-center gap-1.5 px-4 py-1.5 rounded-full border border-amber-300 text-amber-700 bg-amber-50 text-xs font-semibold hover:bg-amber-100 active:bg-amber-200 transition-colors"
+        >
+          <Flag size={12} />
+          Pause &amp; Save
+        </button>
+
+        {/* Settings back link */}
+        <button
+          onClick={onBack}
+          className="flex items-center gap-1 text-muted-foreground text-sm"
+        >
+          <ChevronLeft size={16} /> Settings
+        </button>
       </div>
     </div>
   );
