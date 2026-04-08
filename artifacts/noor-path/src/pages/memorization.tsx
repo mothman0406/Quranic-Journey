@@ -456,7 +456,7 @@ export default function MemorizationPage() {
   return (
     <div className="min-h-screen bg-background pb-24">
       {/* Header */}
-      <div className="pattern-bg text-white px-4 pt-8 pb-12">
+      <div className="pattern-bg text-white px-4 pt-8 pb-6">
         <div className="max-w-lg mx-auto">
           <Link href={`/child/${childId}`}>
             <button className="flex items-center gap-1 text-emerald-200 text-sm mb-4">
@@ -470,7 +470,7 @@ export default function MemorizationPage() {
         </div>
       </div>
 
-      <div className="max-w-lg mx-auto px-4 -mt-6 space-y-4">
+      <div className="max-w-lg mx-auto px-4 pt-4 space-y-4">
         {/* What's next banner */}
         {nextSurah && (
           <Card className="border-primary/20 bg-primary/5">
