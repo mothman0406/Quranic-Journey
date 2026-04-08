@@ -521,6 +521,7 @@ function splitTajweedIntoWords(html: string): string[] {
 interface PlayerProps {
   childId: string;
   chapter: Chapter;
+  allChapters: Chapter[];
   verses: VerseData[];
   versesLoading: boolean;
   fromAyah: number;
@@ -538,6 +539,7 @@ interface PlayerProps {
 function MemorizationPlayer({
   childId,
   chapter,
+  allChapters,
   verses,
   versesLoading,
   fromAyah,
@@ -814,7 +816,6 @@ function MemorizationPlayer({
     }
   };
 
-  const showBismillah = chapter.id !== 1 && chapter.id !== 9;
 
   const isCumulative = internalPhase === "cumulative";
 
@@ -959,30 +960,6 @@ function MemorizationPlayer({
               <span aria-hidden="true" style={{ position: "absolute", bottom: 5, left: 5, color: "#c9a84c", fontSize: "10px", lineHeight: 1, userSelect: "none", zIndex: 1 }}>◆</span>
               <span aria-hidden="true" style={{ position: "absolute", bottom: 5, right: 5, color: "#c9a84c", fontSize: "10px", lineHeight: 1, userSelect: "none", zIndex: 1 }}>◆</span>
 
-              {/* Ornate surah header banner */}
-              <div
-                className="arabic-text mx-4 mt-5 mb-3 flex items-center justify-center gap-3"
-                style={{
-                  background: "#1a5c2a",
-                  border: "2px solid #c9a84c",
-                  boxShadow: "inset 0 0 0 3px #1a5c2a, inset 0 0 0 4px #c9a84c",
-                  borderRadius: "3px",
-                  padding: "7px 16px",
-                }}
-              >
-                <span aria-hidden="true" style={{ color: "#c9a84c", fontSize: "18px", lineHeight: 1, flexShrink: 0 }}>✿</span>
-                <span
-                  style={{
-                    color: "#ffffff",
-                    fontSize: "1.1rem",
-                    textShadow: "0 1px 3px rgba(0,0,0,0.4)",
-                  }}
-                >
-                  {chapter.name_arabic}
-                </span>
-                <span aria-hidden="true" style={{ color: "#c9a84c", fontSize: "18px", lineHeight: 1, flexShrink: 0 }}>✿</span>
-              </div>
-
               {/* Verse body */}
               <div
                 className="arabic-text px-6 pt-4 pb-5 select-none"
@@ -998,24 +975,6 @@ function MemorizationPlayer({
                   color: "#1a0a00",
                 }}
               >
-                {/* Bismillah — only when verse 1 of this surah is on the page */}
-                {showBismillah &&
-                  displayList.some(
-                    (d) => d.surahId === chapter.id && d.verseNum === 1
-                  ) && (
-                    <span
-                      className="block leading-loose mb-2"
-                      style={{
-                        fontFamily: '"Amiri Quran", "me_quran", serif',
-                        fontSize: "1.3rem",
-                        textAlign: "center",
-                        color: "#7a5c12",
-                        opacity: 0.45,
-                      }}
-                    >
-                      بِسْمِ ٱللَّهِ ٱلرَّحْمَٰنِ ٱلرَّحِيمِ
-                    </span>
-                  )}
 
                 {displayList.map(
                   ({ surahId, verseNum, surahVerse, pageVerse }, listIdx) => {
@@ -1029,12 +988,9 @@ function MemorizationPlayer({
                     const inCumRange =
                       isCumulative && isActiveSurah && verseNum <= cumUpTo;
 
-                    const prevSurahId =
-                      listIdx > 0
-                        ? displayList[listIdx - 1].surahId
-                        : surahId;
-                    const showSurahSep =
-                      listIdx > 0 && surahId !== prevSurahId;
+                    // Show surah banner whenever this verse is verse 1 of its surah
+                    // (the surah starts on this page, either at the top or mid-page).
+                    const showSurahHeader = verseNum === 1;
 
                     const tajweedHtml = stripVerseEndHtml(
                       surahVerse?.text_uthmani_tajweed ??
@@ -1059,33 +1015,72 @@ function MemorizationPlayer({
                           : "text-[#7a5c12]/13"
                     );
 
+                    const surahChapter = allChapters.find(
+                      (c) => c.id === surahId
+                    );
+
                     return (
                       <span key={`${surahId}:${verseNum}`}>
-                        {/* Mid-page surah break */}
-                        {showSurahSep && (
-                          <span
-                            className="block my-3 text-center"
-                            style={{
-                              borderTop: "1px solid rgba(160,110,30,0.25)",
-                              borderBottom: "1px solid rgba(160,110,30,0.25)",
-                              padding: "0.35rem 0",
-                              fontSize: "0.95rem",
-                              color: "#7a5c12",
-                              opacity: 0.5,
-                              textAlign: "center",
-                            }}
-                          >
-                            ۝ سُورَة {surahId} ۝
-                            {surahId !== 1 &&
-                              surahId !== 9 &&
-                              verseNum === 1 && (
-                                <span
-                                  className="block mt-1"
-                                  style={{ fontSize: "1.1rem", opacity: 0.85 }}
-                                >
-                                  بِسْمِ ٱللَّهِ ٱلرَّحْمَٰنِ ٱلرَّحِيمِ
-                                </span>
-                              )}
+                        {/* Inline surah banner — only at the start of a surah */}
+                        {showSurahHeader && (
+                          <span className="block" dir="rtl">
+                            <span
+                              className="arabic-text mx-0 mt-3 mb-2 flex items-center justify-center gap-3"
+                              style={{
+                                background: "#1a5c2a",
+                                border: "2px solid #c9a84c",
+                                boxShadow:
+                                  "inset 0 0 0 3px #1a5c2a, inset 0 0 0 4px #c9a84c",
+                                borderRadius: "3px",
+                                padding: "7px 16px",
+                              }}
+                            >
+                              <span
+                                aria-hidden="true"
+                                style={{
+                                  color: "#c9a84c",
+                                  fontSize: "18px",
+                                  lineHeight: 1,
+                                  flexShrink: 0,
+                                }}
+                              >
+                                ✿
+                              </span>
+                              <span
+                                style={{
+                                  color: "#ffffff",
+                                  fontSize: "1.1rem",
+                                  textShadow: "0 1px 3px rgba(0,0,0,0.4)",
+                                }}
+                              >
+                                {surahChapter?.name_arabic ?? `سُورَة ${surahId}`}
+                              </span>
+                              <span
+                                aria-hidden="true"
+                                style={{
+                                  color: "#c9a84c",
+                                  fontSize: "18px",
+                                  lineHeight: 1,
+                                  flexShrink: 0,
+                                }}
+                              >
+                                ✿
+                              </span>
+                            </span>
+                            {surahId !== 1 && surahId !== 9 && (
+                              <span
+                                className="block leading-loose mb-2"
+                                style={{
+                                  fontFamily: '"Amiri Quran", "me_quran", serif',
+                                  fontSize: "1.3rem",
+                                  textAlign: "center",
+                                  color: "#7a5c12",
+                                  opacity: 0.45,
+                                }}
+                              >
+                                بِسْمِ ٱللَّهِ ٱلرَّحْمَٰنِ ٱلرَّحِيمِ
+                              </span>
+                            )}
                           </span>
                         )}
 
@@ -2044,6 +2039,7 @@ export default function QuranMemorizePage() {
         key={`${selectedChapter.id}-${fromAyah}-${toAyah}-${startAyah}`}
         childId={childId}
         chapter={selectedChapter}
+        allChapters={chapters}
         verses={verses}
         versesLoading={versesLoading}
         fromAyah={fromAyah}
