@@ -19,8 +19,8 @@ import {
   ChevronLeft,
   ChevronRight,
   CheckCircle,
-  Layers,
   BookOpen,
+  Layers,
   Info,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -471,28 +471,6 @@ export default function MemorizationPage() {
       </div>
 
       <div className="max-w-lg mx-auto px-4 -mt-6 space-y-4">
-        {/* Mode cards — equally prominent */}
-        <div className="grid grid-cols-2 gap-3">
-          <button
-            onClick={() => {
-              const target = nextSurah ?? progress.find((p) => p.status === "in_progress");
-              if (target) setStudyingSurahId("surahId" in target ? target.surahId : target.id);
-            }}
-            className="flex flex-col items-center gap-2 p-4 rounded-2xl bg-primary text-white shadow-sm active:scale-[0.98] transition-transform"
-          >
-            <BookOpen size={24} />
-            <span className="text-sm font-semibold">Ayah by Ayah</span>
-            <span className="text-xs text-white/80">Step-by-step study</span>
-          </button>
-          <Link href={`/child/${childId}/quran-memorize`} className="flex-1">
-            <div className="flex flex-col items-center gap-2 p-4 rounded-2xl bg-amber-500 text-white shadow-sm active:scale-[0.98] transition-transform h-full justify-center">
-              <Layers size={24} />
-              <span className="text-sm font-semibold">Full Quran View</span>
-              <span className="text-xs text-white/80">Mushaf-style mode</span>
-            </div>
-          </Link>
-        </div>
-
         {/* What's next banner */}
         {nextSurah && (
           <Card className="border-primary/20 bg-primary/5">
@@ -618,19 +596,24 @@ export default function MemorizationPage() {
                             className="h-7 text-xs px-2 flex-1"
                             onClick={() => setStudyingSurahId(item.surahId)}
                           >
-                            <BookOpen size={11} className="mr-1" /> Study
+                            <BookOpen size={11} className="mr-1" /> Ayah by Ayah
                           </Button>
-                          {item.status !== "memorized" && (
-                            <Button
-                              size="sm"
-                              className="h-7 text-xs px-2 flex-1"
-                              onClick={() => handleMarkAllDone(item)}
-                              disabled={toggleAyahMutation.isPending}
-                            >
-                              <CheckCircle size={11} className="mr-1" /> Mark All Done
+                          <Link href={`/child/${childId}/quran-memorize?surah=${surahMeta?.number}`}>
+                            <Button size="sm" variant="outline" className="h-7 text-xs px-2">
+                              <Layers size={11} className="mr-1" /> Full Quran
                             </Button>
-                          )}
+                          </Link>
                         </div>
+                        {item.status !== "memorized" && (
+                          <Button
+                            size="sm"
+                            className="h-7 text-xs px-2 w-full mt-2"
+                            onClick={() => handleMarkAllDone(item)}
+                            disabled={toggleAyahMutation.isPending}
+                          >
+                            <CheckCircle size={11} className="mr-1" /> Mark All Done
+                          </Button>
+                        )}
                       </div>
                     )}
                   </CardContent>

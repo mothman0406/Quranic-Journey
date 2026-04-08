@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
-import { useParams, Link } from "wouter";
+import { useParams, Link, useSearch } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { updateMemorization } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
@@ -1047,6 +1047,7 @@ function MemorizationPlayer({
 
 export default function QuranMemorizePage() {
   const { childId } = useParams<{ childId: string }>();
+  const search = useSearch();
   const qc = useQueryClient();
 
   const [phase, setPhase] = useState<"pick" | "setup" | "play" | "check">("pick");
@@ -1106,6 +1107,20 @@ export default function QuranMemorizePage() {
 
   const bookmark = useMemo(() => loadBookmark(childId), [childId]);
 
+  const surahParam = useMemo(() => new URLSearchParams(search).get("surah"), [search]);
+
+  useEffect(() => {
+    if (!surahParam || chapters.length === 0 || phase !== "pick") return;
+    const surahNum = parseInt(surahParam, 10);
+    const ch = chapters.find((c) => c.id === surahNum);
+    if (ch) {
+      setSelectedChapter(ch);
+      setFromAyah(1);
+      setToAyah(Math.min(10, ch.verses_count));
+      setPhase("setup");
+    }
+  }, [chapters, surahParam, phase]);
+
   const filteredChapters = useMemo(() => {
     if (!searchQuery.trim()) return chapters;
     const q = searchQuery.toLowerCase();
@@ -1159,9 +1174,9 @@ export default function QuranMemorizePage() {
       <div className="min-h-screen bg-background pb-24">
         <div className="pattern-bg text-white px-4 pt-8 pb-12">
           <div className="max-w-lg mx-auto">
-            <Link href={`/child/${childId}/memorize`}>
+            <Link href={`/child/${childId}/memorization`}>
               <button className="flex items-center gap-1 text-emerald-200 text-sm mb-4">
-                <ChevronLeft size={16} /> Memorize
+                <ChevronLeft size={16} /> Back to Memorization
               </button>
             </Link>
             <h1 className="text-xl font-bold">Full Quran Memorize</h1>
