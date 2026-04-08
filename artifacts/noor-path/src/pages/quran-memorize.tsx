@@ -739,8 +739,7 @@ function MemorizationPlayer({
     }
   };
 
-  const showBismillah =
-    fromAyah === 1 && chapter.id !== 1 && chapter.id !== 9;
+  const showBismillah = chapter.id !== 1 && chapter.id !== 9;
 
   const isCumulative = internalPhase === "cumulative";
 
@@ -853,12 +852,11 @@ function MemorizationPlayer({
                 dir="rtl"
                 lang="ar"
               >
-                {verses
-                  .filter(
-                    (v) => v.verse_number >= fromAyah && v.verse_number <= toAyah
-                  )
-                  .map((verse) => {
+                {verses.map((verse) => {
                     const isActive = verse.verse_number === activeVerseNumber;
+                    const inSelectedRange =
+                      verse.verse_number >= fromAyah &&
+                      verse.verse_number <= toAyah;
                     // In cumulative phase also dim ayahs beyond the review range
                     const inCumRange =
                       isCumulative && verse.verse_number <= cumUpTo;
@@ -881,17 +879,19 @@ function MemorizationPlayer({
                               key={i}
                               className={cn(
                                 "inline-block transition-all duration-100 rounded-md px-0.5 mx-0.5",
-                                isActive && highlightedWord === i
-                                  ? isCumulative
-                                    ? "bg-teal-300 text-teal-900 scale-110 shadow-sm"
-                                    : "bg-amber-300 text-amber-900 scale-110 shadow-sm"
-                                  : isActive && playing && highlightedWord > i
-                                    ? "text-primary/40"
-                                    : isActive
-                                      ? "text-foreground"
-                                      : isCumulative && !inCumRange
-                                        ? "text-foreground/20"
-                                        : "text-foreground/45"
+                                !inSelectedRange
+                                  ? "text-foreground/15"
+                                  : isActive && highlightedWord === i
+                                    ? isCumulative
+                                      ? "bg-teal-300 text-teal-900 scale-110 shadow-sm"
+                                      : "bg-amber-300 text-amber-900 scale-110 shadow-sm"
+                                    : isActive && playing && highlightedWord > i
+                                      ? "text-primary/40"
+                                      : isActive
+                                        ? "text-foreground"
+                                        : isCumulative && !inCumRange
+                                          ? "text-foreground/20"
+                                          : "text-foreground/45"
                               )}
                             >
                               {word}
@@ -905,7 +905,9 @@ function MemorizationPlayer({
                               ? isCumulative
                                 ? "text-teal-500/70"
                                 : "text-amber-500/70"
-                              : "text-primary/25"
+                              : inSelectedRange
+                                ? "text-primary/25"
+                                : "text-primary/15"
                           )}
                         >
                           ﴿{verse.verse_number}﴾
