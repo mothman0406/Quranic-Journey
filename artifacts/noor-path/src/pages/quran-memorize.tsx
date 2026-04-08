@@ -1051,6 +1051,7 @@ export default function QuranMemorizePage() {
   const qc = useQueryClient();
 
   const [phase, setPhase] = useState<"pick" | "setup" | "play" | "check">("pick");
+  const [showReadyModal, setShowReadyModal] = useState(false);
   const [selectedChapter, setSelectedChapter] = useState<Chapter | null>(null);
   const [fromAyah, setFromAyah] = useState(1);
   const [toAyah, setToAyah] = useState(10);
@@ -1145,9 +1146,7 @@ export default function QuranMemorizePage() {
   };
 
   const handleSessionComplete = useCallback(() => {
-    setCheckRating(null);
-    setSaveSuccess(false);
-    setPhase("check");
+    setShowReadyModal(true);
   }, []);
 
   const handleResumeBookmark = () => {
@@ -1619,21 +1618,52 @@ export default function QuranMemorizePage() {
   if (!selectedChapter) return null;
 
   return (
-    <MemorizationPlayer
-      key={`${selectedChapter.id}-${fromAyah}-${toAyah}-${startAyah}`}
-      childId={childId}
-      chapter={selectedChapter}
-      verses={verses}
-      versesLoading={versesLoading}
-      fromAyah={fromAyah}
-      toAyah={toAyah}
-      repeatCount={repeatCount}
-      initialAyah={startAyah}
-      initialAutoAdvance={autoAdvance}
-      cumulativeReview={cumulativeReview}
-      reviewRepeatCount={reviewRepeatCount}
-      onBack={() => setPhase("setup")}
-      onSessionComplete={handleSessionComplete}
-    />
+    <>
+      <MemorizationPlayer
+        key={`${selectedChapter.id}-${fromAyah}-${toAyah}-${startAyah}`}
+        childId={childId}
+        chapter={selectedChapter}
+        verses={verses}
+        versesLoading={versesLoading}
+        fromAyah={fromAyah}
+        toAyah={toAyah}
+        repeatCount={repeatCount}
+        initialAyah={startAyah}
+        initialAutoAdvance={autoAdvance}
+        cumulativeReview={cumulativeReview}
+        reviewRepeatCount={reviewRepeatCount}
+        onBack={() => setPhase("setup")}
+        onSessionComplete={handleSessionComplete}
+      />
+
+      {showReadyModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-6">
+          <div className="bg-white rounded-2xl shadow-xl max-w-sm w-full p-6 flex flex-col gap-4 text-center">
+            <div className="text-4xl">🌟</div>
+            <h2 className="text-xl font-bold text-gray-900">Ready to Recite?</h2>
+            <p className="text-gray-600 text-sm leading-relaxed">
+              You've completed your practice! Are you ready to recite to someone?
+            </p>
+            <button
+              onClick={() => {
+                setShowReadyModal(false);
+                setCheckRating(null);
+                setSaveSuccess(false);
+                setPhase("check");
+              }}
+              className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-xl py-3 transition-colors"
+            >
+              Yes, let's go
+            </button>
+            <button
+              onClick={() => setShowReadyModal(false)}
+              className="w-full border border-gray-200 hover:bg-gray-50 text-gray-700 font-medium rounded-xl py-3 transition-colors"
+            >
+              Review first
+            </button>
+          </div>
+        </div>
+      )}
+    </>
   );
 }
