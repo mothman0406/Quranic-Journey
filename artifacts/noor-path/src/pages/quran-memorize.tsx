@@ -44,7 +44,8 @@ interface VerseData {
   verse_number: number;
   verse_key: string;
   text_uthmani: string;
-  page_number: number;
+  text_uthmani_tajweed?: string;
+  page_number?: number;
 }
 
 type Segment = [number, number, number]; // [wordIndex1based, startFrac, endFrac]
@@ -74,9 +75,25 @@ async function fetchVersesBySurah(
   surahId: number
 ): Promise<{ verses: VerseData[] }> {
   const r = await fetch(
-    `${QURAN_API}/verses/by_chapter/${surahId}?fields=text_uthmani,page_number&per_page=300`
+    `${QURAN_API}/verses/by_chapter/${surahId}?fields=text_uthmani,text_uthmani_tajweed,page_number&per_page=300`
   );
   if (!r.ok) throw new Error(`Failed to fetch surah ${surahId}`);
+  return r.json();
+}
+
+interface PageVerseData {
+  verse_key: string;
+  text_uthmani: string;
+  text_uthmani_tajweed?: string;
+}
+
+async function fetchVersesByPage(
+  pageNumber: number
+): Promise<{ verses: PageVerseData[] }> {
+  const r = await fetch(
+    `${QURAN_API}/verses/by_page/${pageNumber}?fields=text_uthmani,text_uthmani_tajweed&per_page=50`
+  );
+  if (!r.ok) throw new Error(`Failed to fetch page ${pageNumber}`);
   return r.json();
 }
 
@@ -300,19 +317,18 @@ function useVerseAudio({
 
     if (segs.length > 0) {
       let found = -1;
-      let lastStarted = -1; // display index of the most recent word whose startFrac we've passed
       for (const [wordIdx, startFrac, endFrac] of segs) {
-        if (frac >= startFrac) {
-          lastStarted = qdcToDisplay.get(wordIdx) ?? -1;
-          if (frac < endFrac) {
-            found = lastStarted;
-            break;
-          }
+        if (frac >= startFrac && frac < endFrac) {
+          found = qdcToDisplay.get(wordIdx) ?? -1;
+          break;
         }
       }
-      // In any gap between words (or after the last word), hold the last word
-      // that started rather than clearing the highlight.
-      if (found === -1) found = lastStarted;
+      if (found === -1 && frac > 0) {
+        const last = segs[segs.length - 1];
+        if (last && frac >= last[1]) {
+          found = qdcToDisplay.get(last[0]) ?? words.length - 1;
+        }
+      }
       setHighlightedWord(found);
     } else {
       setHighlightedWord(
@@ -458,270 +474,35 @@ function useVerseAudio({
   return { playing, loading, error, currentRepeat, highlightedWord, words, play, skipRepeat, stopAudio };
 }
 
-// ─── Mushaf memorize page types & helpers ────────────────────────────────────
+// ─── Tajweed helpers ──────────────────────────────────────────────────────────
 
-interface MemorizeWord {
-  id: number;
-  position: number;
-  text_uthmani: string;
-  text_uthmani_tajweed: string;
-  char_type_name: string;
-  line_number: number;
-}
+// Standard Quran.com tajweed class → color mapping, scoped to .mushaf-page.
+const TAJWEED_CSS = `
+.mushaf-page .ham_wasl          { color: #AAAAAA; }
+.mushaf-page .slnt              { color: #AAAAAA; }
+.mushaf-page .lam_shamsiyya     { color: #AAAAAA; }
+.mushaf-page .madda_normal      { color: #537FFF; }
+.mushaf-page .madda_permissible { color: #4050FF; }
+.mushaf-page .madda_necessary   { color: #000EBC; }
+.mushaf-page .madda_obligatory  { color: #000EBC; }
+.mushaf-page .qalaqah           { color: #DD0008; }
+.mushaf-page .ikhafa_shafawi    { color: #D500B7; }
+.mushaf-page .ikhafa            { color: #FF7E1E; }
+.mushaf-page .idgham_ghunna        { color: #169200; }
+.mushaf-page .idgham_wo_ghunna     { color: #169200; }
+.mushaf-page .idgham_mutajanisayn  { color: #169200; }
+.mushaf-page .idgham_mutaqaribain  { color: #169200; }
+.mushaf-page .idgham_shafawi       { color: #169200; }
+.mushaf-page .iqlab             { color: #26BFFD; }
+.mushaf-page .ghunna            { color: #169200; }
+`;
 
-interface MemorizeVerse {
-  verse_number: number;
-  verse_key: string;
-  words: MemorizeWord[];
-}
-
-interface MemorizePageData {
-  verses: MemorizeVerse[];
-}
-
-interface MemorizeLineWord {
-  id: number;
-  text: string;
-  tajweed: string;
-  type: "word" | "end";
-  verseKey: string;
-  verseNumber: number;
-  position: number; // 1-based for "word", 0 for "end"
-}
-
-async function fetchPageForMemorize(page: number): Promise<MemorizePageData> {
-  const r = await fetch(
-    `${QURAN_API}/verses/by_page/${page}?words=true&fields=text_uthmani` +
-    `&word_fields=text_uthmani,text_uthmani_tajweed,char_type_name,line_number,page_number`
-  );
-  if (!r.ok) throw new Error(`Failed to fetch page ${page}`);
-  return r.json();
-}
-
-function buildMemorizePageLines(verses: MemorizeVerse[]): Map<number, MemorizeLineWord[]> {
-  const lines = new Map<number, MemorizeLineWord[]>();
-  for (const verse of verses) {
-    for (const word of verse.words) {
-      const ln = word.line_number;
-      if (!lines.has(ln)) lines.set(ln, []);
-      lines.get(ln)!.push({
-        id: word.id,
-        text: word.text_uthmani,
-        tajweed: word.text_uthmani_tajweed ?? "",
-        type: word.char_type_name === "end" ? "end" : "word",
-        verseKey: verse.verse_key,
-        verseNumber: verse.verse_number,
-        position: word.char_type_name === "end" ? 0 : word.position,
-      });
-    }
-  }
-  return lines;
-}
-
-function parseTajweedSpans(html: string): Array<{ text: string; rule: string | null }> {
+// Split tajweed HTML into per-word chunks.
+// Words in tajweed HTML are separated by whitespace that falls between a closing >
+// and an opening < — i.e. between span elements, never inside attribute values.
+function splitTajweedIntoWords(html: string): string[] {
   if (!html) return [];
-  if (!html.includes("<")) return [{ text: html, rule: null }];
-  // API returns <rule class=ham_wasl> — unquoted attributes, non-standard tag name.
-  // DOMParser handles both HTML5 unquoted attributes and custom element names correctly.
-  const doc = new DOMParser().parseFromString(`<body>${html}</body>`, "text/html");
-  const result: Array<{ text: string; rule: string | null }> = [];
-  for (const node of doc.body.childNodes) {
-    if (node.nodeType === Node.TEXT_NODE) {
-      const text = node.textContent ?? "";
-      if (text) result.push({ text, rule: null });
-    } else if (node.nodeType === Node.ELEMENT_NODE) {
-      const el = node as Element;
-      const text = el.textContent ?? "";
-      if (text) result.push({ text, rule: el.getAttribute("class") });
-    }
-  }
-  return result;
-}
-
-const TAJWEED_COLORS: Record<string, string> = {
-  madda_normal:           "text-blue-400",
-  madda_permissible:      "text-blue-600",
-  madda_necessary:        "text-blue-800",
-  madda_prolonged:        "text-purple-600",
-  ghunnah:                "text-green-500",
-  idgham_ghunnah:         "text-green-600",
-  idgham_wo_ghunnah:      "text-green-400",
-  idghaam_ghunnah:        "text-green-600",
-  idghaam_wo_ghunnah:     "text-green-400",
-  ikhfa:                  "text-orange-400",
-  ikhfa_shafawi:          "text-yellow-600",
-  iqlab:                  "text-red-500",
-  idgham_shafawi:         "text-orange-600",
-  idghaam_shafawi:        "text-orange-600",
-  qalaqalah:              "text-amber-600",
-  lam_shamsiyah:          "text-teal-500",
-  laam_shamsiyah:         "text-teal-500",
-  ham_wasl:               "text-gray-400",
-  slnt:                   "text-gray-300",
-};
-
-interface MushafMemorizePageProps {
-  pageNumber: number;
-  activeVerseKey: string;
-  highlightedWordPosition: number; // 1-based; 0 = none
-  fromAyah: number;
-  toAyah: number;
-  surahId: number;
-  isCumulative: boolean;
-  cumUpTo: number;
-  isPlaying: boolean;
-}
-
-function MushafMemorizePage({
-  pageNumber,
-  activeVerseKey,
-  highlightedWordPosition,
-  fromAyah,
-  toAyah,
-  surahId,
-  isCumulative,
-  cumUpTo,
-  isPlaying,
-}: MushafMemorizePageProps) {
-  const activeLineRef = useRef<HTMLDivElement>(null);
-
-  const { data, isLoading } = useQuery<MemorizePageData>({
-    queryKey: ["memorize-page", pageNumber],
-    queryFn: () => fetchPageForMemorize(pageNumber),
-    staleTime: 1000 * 60 * 60,
-  });
-
-  const { data: chaptersData } = useQuery({
-    queryKey: ["chapters"],
-    queryFn: fetchAllChapters,
-    staleTime: Infinity,
-  });
-  const chapters = chaptersData?.chapters ?? [];
-
-  useEffect(() => {
-    activeLineRef.current?.scrollIntoView({ block: "center", behavior: "smooth" });
-  }, [activeVerseKey]);
-
-  if (isLoading || !data) {
-    return (
-      <div className="w-full space-y-4 pt-8">
-        <Skeleton className="h-10 w-full rounded-xl" />
-        <Skeleton className="h-10 w-4/5 rounded-xl mx-auto" />
-        <Skeleton className="h-10 w-3/5 rounded-xl mx-auto" />
-      </div>
-    );
-  }
-
-  const verses = data.verses ?? [];
-  const pageLines = buildMemorizePageLines(verses);
-  const sortedLineNums = Array.from(pageLines.keys()).sort((a, b) => a - b);
-
-  // Lines where a new surah begins (verse_number === 1)
-  const surahStartLines = new Map<number, number>(); // lineNum → surahId
-  for (const verse of verses) {
-    if (verse.verse_number === 1 && verse.words.length > 0) {
-      surahStartLines.set(verse.words[0].line_number, parseInt(verse.verse_key.split(":")[0]));
-    }
-  }
-
-  const totalLines = sortedLineNums.length;
-  const isDensePage = totalLines >= 10;
-  const lastLineNum = sortedLineNums[sortedLineNums.length - 1];
-
-  return (
-    <div className="mushaf-page-content">
-      {sortedLineNums.map((lineNum) => {
-        const words = pageLines.get(lineNum)!;
-        const lineHasActiveVerse = words.some((w) => w.verseKey === activeVerseKey);
-        const wordCount = words.filter((w) => w.type === "word").length;
-        const shouldJustify = isDensePage && wordCount >= 4 && lineNum !== lastLineNum;
-        const bannerSurahId = surahStartLines.get(lineNum);
-
-        return (
-          <div key={lineNum} ref={lineHasActiveVerse ? activeLineRef : undefined}>
-            {bannerSurahId !== undefined && (() => {
-              const chapter = chapters.find((c) => c.id === bannerSurahId);
-              const showBismillah = chapter?.bismillah_pre && bannerSurahId !== 1 && bannerSurahId !== 9;
-              return (
-                <div className="mushaf-surah-banner">
-                  <div className="mushaf-surah-banner-inner">
-                    <span className="mushaf-surah-name-en">{chapter?.name_simple ?? `Surah ${bannerSurahId}`}</span>
-                    <span className="mushaf-surah-name-ar">{chapter?.name_arabic ?? ""}</span>
-                  </div>
-                  {showBismillah && (
-                    <div className="mushaf-bismillah">بِسۡمِ ٱللَّهِ ٱلرَّحۡمَٰنِ ٱلرَّحِيمِ</div>
-                  )}
-                </div>
-              );
-            })()}
-            <div
-              className="mushaf-line"
-              data-line={lineNum}
-              data-justify={shouldJustify ? "true" : undefined}
-            >
-              {words.map((w) => {
-                const [wSurahStr, wVerseStr] = w.verseKey.split(":");
-                const wSurahNum = parseInt(wSurahStr);
-                const wVerseNum = parseInt(wVerseStr);
-                const isInRange = wSurahNum === surahId && wVerseNum >= fromAyah && wVerseNum <= toAyah;
-                const isOutOfRange = !isInRange || (isCumulative && wVerseNum > cumUpTo);
-                const isActive = w.verseKey === activeVerseKey;
-                const isHighlighted = isActive && w.type === "word" && w.position === highlightedWordPosition;
-                const wasSpoken = isActive && isPlaying && w.type === "word" && highlightedWordPosition > 0 && w.position < highlightedWordPosition;
-
-                if (w.type === "end") {
-                  return (
-                    <span
-                      key={w.id}
-                      className={cn(
-                        "mushaf-end-marker transition-colors duration-300",
-                        isOutOfRange
-                          ? "text-foreground/15"
-                          : isActive
-                            ? isCumulative ? "text-teal-500/70" : "text-amber-500/70"
-                            : "text-primary/25"
-                      )}
-                    >
-                      {w.text}
-                    </span>
-                  );
-                }
-
-                const wordClass = (() => {
-                  if (isOutOfRange) return "text-foreground/15";
-                  if (isHighlighted) return isCumulative
-                    ? "bg-teal-300 text-teal-900 scale-110 shadow-sm"
-                    : "bg-amber-300 text-amber-900 scale-110 shadow-sm";
-                  if (wasSpoken) return "text-primary/40";
-                  return null;
-                })();
-
-                const useTajweed = wordClass === null && !!w.tajweed && w.tajweed.includes("<");
-
-                return (
-                  <span
-                    key={w.id}
-                    className={cn(
-                      "mushaf-word inline-block transition-all duration-100 rounded-md",
-                      wordClass ?? ""
-                    )}
-                  >
-                    {useTajweed
-                      ? parseTajweedSpans(w.tajweed).map((seg, si) => (
-                          <span key={si} className={seg.rule ? (TAJWEED_COLORS[seg.rule] ?? "") : ""}>
-                            {seg.text}
-                          </span>
-                        ))
-                      : w.text}
-                  </span>
-                );
-              })}
-            </div>
-          </div>
-        );
-      })}
-    </div>
-  );
+  return html.split(/(?<=>)\s+(?=<)/).filter((s) => s.length > 0);
 }
 
 // ─── MemorizationPlayer ───────────────────────────────────────────────────────
@@ -801,6 +582,7 @@ function MemorizationPlayer({
   onSessionCompleteRef.current = onSessionComplete;
 
   const playRef = useRef<(() => Promise<void>) | null>(null);
+  const currentVerseRef = useRef<HTMLSpanElement>(null);
   // 0 = play immediately (cumulative flow); 150 = wait for hook reset (single-ayah advance)
   const pendingPlayDelayRef = useRef(150);
 
@@ -811,6 +593,17 @@ function MemorizationPlayer({
 
   const activeVerse = verses.find((v) => v.verse_number === activeVerseNumber);
   const currentArabic = activeVerse?.text_uthmani ?? "";
+
+  // Mushaf page context — fetch all verses on the current mushaf page so we can
+  // render the full page with out-of-range verses grayed out.
+  const activePage = activeVerse?.page_number;
+  const { data: pageVersesData } = useQuery({
+    queryKey: ["verses-by-page", activePage],
+    queryFn: () => fetchVersesByPage(activePage!),
+    enabled: activePage !== undefined,
+    staleTime: Infinity,
+  });
+  const pageVerses = pageVersesData?.verses ?? [];
 
   // Save bookmark whenever the main single-study ayah changes
   useEffect(() => {
@@ -917,6 +710,11 @@ function MemorizationPlayer({
     return () => clearTimeout(timer);
   }, [activeVerseNumber, pendingAutoPlay]);
 
+  // Scroll active ayah into view whenever it changes
+  useEffect(() => {
+    currentVerseRef.current?.scrollIntoView({ block: "center", behavior: "smooth" });
+  }, [activeVerseNumber]);
+
   const rangeLength = toAyah - fromAyah + 1;
   const currentIndexInRange = currentAyahNum - fromAyah;
   const progressPercent =
@@ -1006,7 +804,33 @@ function MemorizationPlayer({
     }
   };
 
+  const showBismillah = chapter.id !== 1 && chapter.id !== 9;
+
   const isCumulative = internalPhase === "cumulative";
+
+  // Build the ordered verse list for the mushaf page view.
+  // When page data has loaded, it provides the full-page context (may include
+  // verses from other surahs). Before that, fall back to the per-surah verses.
+  const displayList = useMemo(() => {
+    if (pageVerses.length > 0) {
+      return pageVerses.map((pv) => {
+        const [surahStr, verseStr] = pv.verse_key.split(":");
+        const surahId = parseInt(surahStr, 10);
+        const verseNum = parseInt(verseStr, 10);
+        const surahVerse =
+          surahId === chapter.id
+            ? verses.find((v) => v.verse_number === verseNum)
+            : undefined;
+        return { surahId, verseNum, surahVerse, pageVerse: pv };
+      });
+    }
+    return verses.map((v) => ({
+      surahId: chapter.id,
+      verseNum: v.verse_number,
+      surahVerse: v,
+      pageVerse: undefined as PageVerseData | undefined,
+    }));
+  }, [pageVerses, verses, chapter.id]);
 
   // Descriptive label for controls bar
   const phaseLabel = isCumulative
@@ -1095,35 +919,232 @@ function MemorizationPlayer({
         </div>
       </div>
 
-      {/* Arabic text area — mushaf page layout */}
-      <div className="flex-1 overflow-y-auto">
-        <div
-          className="mushaf-page bg-[#fdf8f0] mx-auto px-6 sm:px-10 py-6 min-h-[50vh]"
-          style={{
-            backgroundImage: "linear-gradient(to bottom, #fdf8f0, #faf3e8)",
-            maxWidth: "640px",
-          }}
-        >
-          {versesLoading || !activeVerse ? (
-            <div className="w-full space-y-4 pt-8">
-              <Skeleton className="h-10 w-full rounded-xl" />
-              <Skeleton className="h-10 w-4/5 rounded-xl mx-auto" />
-              <Skeleton className="h-10 w-3/5 rounded-xl mx-auto" />
+      {/* Arabic text area — mushaf page view */}
+      <div className="flex-1 overflow-y-auto bg-[#ede4d0]">
+        <style>{TAJWEED_CSS}</style>
+        {versesLoading || !currentArabic ? (
+          <div className="w-full space-y-4 pt-8 px-5">
+            <Skeleton className="h-10 w-full rounded-xl" />
+            <Skeleton className="h-10 w-4/5 rounded-xl mx-auto" />
+            <Skeleton className="h-10 w-3/5 rounded-xl mx-auto" />
+          </div>
+        ) : (
+          <div className="mushaf-page max-w-lg mx-auto px-3 py-5">
+            {/* Parchment page card */}
+            <div
+              className="relative overflow-hidden"
+              style={{
+                background:
+                  "linear-gradient(175deg,#fefaf2 0%,#fdf5e3 55%,#fcf0d6 100%)",
+                boxShadow:
+                  "0 1px 16px rgba(100,60,0,0.14),0 0 0 1px rgba(160,110,30,0.18)",
+                borderRadius: "2px",
+              }}
+            >
+              {/* Page header */}
+              <div
+                className="flex items-center justify-between px-6 pt-4 pb-2"
+                style={{ borderBottom: "1px solid rgba(160,110,30,0.18)" }}
+              >
+                <span className="text-[9px] tracking-[0.2em] text-[#7a5c12]/50 font-semibold uppercase tabular-nums">
+                  {activePage ?? "—"}
+                </span>
+                <span className="arabic-text text-xs text-[#5a3d08]/55">
+                  {chapter.name_arabic}
+                </span>
+              </div>
+
+              {/* Verse body */}
+              <div
+                className="arabic-text px-6 pt-4 pb-5 select-none"
+                dir="rtl"
+                lang="ar"
+                style={{
+                  fontSize: "1.6rem",
+                  lineHeight: "3.3",
+                  textAlign: "justify",
+                  textAlignLast: "right",
+                  color: "#1a0a00",
+                  wordSpacing: "0.08em",
+                }}
+              >
+                {/* Bismillah — only when verse 1 of this surah is on the page */}
+                {showBismillah &&
+                  displayList.some(
+                    (d) => d.surahId === chapter.id && d.verseNum === 1
+                  ) && (
+                    <span
+                      className="block leading-loose mb-2"
+                      style={{
+                        fontSize: "1.3rem",
+                        textAlign: "center",
+                        color: "#7a5c12",
+                        opacity: 0.45,
+                      }}
+                    >
+                      بِسْمِ ٱللَّهِ ٱلرَّحْمَٰنِ ٱلرَّحِيمِ
+                    </span>
+                  )}
+
+                {displayList.map(
+                  ({ surahId, verseNum, surahVerse, pageVerse }, listIdx) => {
+                    const isActiveSurah = surahId === chapter.id;
+                    const isActive =
+                      isActiveSurah && verseNum === activeVerseNumber;
+                    const inSelectedRange =
+                      isActiveSurah &&
+                      verseNum >= fromAyah &&
+                      verseNum <= toAyah;
+                    const inCumRange =
+                      isCumulative && isActiveSurah && verseNum <= cumUpTo;
+
+                    const prevSurahId =
+                      listIdx > 0
+                        ? displayList[listIdx - 1].surahId
+                        : surahId;
+                    const showSurahSep =
+                      listIdx > 0 && surahId !== prevSurahId;
+
+                    const tajweedHtml =
+                      surahVerse?.text_uthmani_tajweed ??
+                      pageVerse?.text_uthmani_tajweed ??
+                      "";
+                    // Pre-compute for active verse only (used inside words.map)
+                    const tajweedWords = isActive
+                      ? splitTajweedIntoWords(tajweedHtml)
+                      : [];
+                    const hasValidTajweed =
+                      isActive && tajweedWords.length === words.length;
+
+                    const ornamentClass = cn(
+                      "inline-block arabic-text text-[0.85rem] mx-[0.3em] transition-colors duration-300",
+                      isActive
+                        ? isCumulative
+                          ? "text-teal-600/55"
+                          : "text-amber-600/55"
+                        : isActiveSurah && inSelectedRange
+                          ? "text-[#7a5c12]/28"
+                          : "text-[#7a5c12]/13"
+                    );
+
+                    return (
+                      <span key={`${surahId}:${verseNum}`}>
+                        {/* Mid-page surah break */}
+                        {showSurahSep && (
+                          <span
+                            className="block my-3 text-center"
+                            style={{
+                              borderTop: "1px solid rgba(160,110,30,0.25)",
+                              borderBottom: "1px solid rgba(160,110,30,0.25)",
+                              padding: "0.35rem 0",
+                              fontSize: "0.95rem",
+                              color: "#7a5c12",
+                              opacity: 0.5,
+                              textAlign: "center",
+                            }}
+                          >
+                            ۝ سُورَة {surahId} ۝
+                            {surahId !== 1 &&
+                              surahId !== 9 &&
+                              verseNum === 1 && (
+                                <span
+                                  className="block mt-1"
+                                  style={{ fontSize: "1.1rem", opacity: 0.85 }}
+                                >
+                                  بِسْمِ ٱللَّهِ ٱلرَّحْمَٰنِ ٱلرَّحِيمِ
+                                </span>
+                              )}
+                          </span>
+                        )}
+
+                        {/* Verse content */}
+                        {isActive ? (
+                          // Active verse — word-by-word tracking with tajweed
+                          <span
+                            ref={currentVerseRef}
+                            className={cn(
+                              "rounded-sm transition-colors duration-300",
+                              isCumulative ? "bg-teal-100/50" : "bg-amber-100/50"
+                            )}
+                          >
+                            {words.map((_, i) => {
+                              const isHighlighted = highlightedWord === i;
+                              const isPast = playing && highlightedWord > i;
+                              return (
+                                <span
+                                  key={i}
+                                  className={cn(
+                                    "inline-block transition-all duration-100 rounded-sm px-[0.15em] mx-[0.15em]",
+                                    isHighlighted
+                                      ? isCumulative
+                                        ? "bg-teal-300 text-teal-900 scale-110 shadow-sm"
+                                        : "bg-amber-300 text-amber-900 scale-110 shadow-sm"
+                                      : isPast
+                                        ? "opacity-35"
+                                        : ""
+                                  )}
+                                >
+                                  {hasValidTajweed ? (
+                                    <span
+                                      dangerouslySetInnerHTML={{
+                                        __html: tajweedWords[i],
+                                      }}
+                                    />
+                                  ) : (
+                                    (
+                                      surahVerse?.text_uthmani ?? currentArabic
+                                    )
+                                      .split(/\s+/)
+                                      .filter(Boolean)[i] ?? ""
+                                  )}
+                                </span>
+                              );
+                            })}
+                          </span>
+                        ) : (
+                          // Non-active verse — full tajweed block, dimmed by range/phase
+                          <span
+                            className="transition-opacity duration-300"
+                            style={{
+                              opacity: !isActiveSurah
+                                ? 0.13
+                                : !inSelectedRange
+                                  ? 0.17
+                                  : isCumulative && !inCumRange
+                                    ? 0.28
+                                    : 0.55,
+                            }}
+                          >
+                            {tajweedHtml ? (
+                              <span
+                                dangerouslySetInnerHTML={{ __html: tajweedHtml }}
+                              />
+                            ) : (
+                              surahVerse?.text_uthmani ?? ""
+                            )}
+                          </span>
+                        )}
+
+                        {/* Verse-end ornament */}
+                        <span className={ornamentClass}>﴿{verseNum}﴾</span>
+                      </span>
+                    );
+                  }
+                )}
+              </div>
+
+              {/* Page footer */}
+              <div
+                className="flex items-center justify-center px-6 pb-4 pt-2"
+                style={{ borderTop: "1px solid rgba(160,110,30,0.18)" }}
+              >
+                <span className="text-[9px] tabular-nums text-[#7a5c12]/30 tracking-[0.25em]">
+                  {activePage ?? ""}
+                </span>
+              </div>
             </div>
-          ) : (
-            <MushafMemorizePage
-              pageNumber={activeVerse.page_number}
-              activeVerseKey={activeVerse.verse_key}
-              highlightedWordPosition={highlightedWord + 1}
-              fromAyah={fromAyah}
-              toAyah={toAyah}
-              surahId={chapter.id}
-              isCumulative={isCumulative}
-              cumUpTo={cumUpTo}
-              isPlaying={playing}
-            />
-          )}
-        </div>
+          </div>
+        )}
       </div>
 
       {/* Pause & Save modal */}
