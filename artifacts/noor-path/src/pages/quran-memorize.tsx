@@ -1218,10 +1218,13 @@ function MemorizationPlayer({
                           // Active verse — word-by-word tracking with tajweed
                           <span
                             ref={currentVerseRef}
-                            className={cn(
-                              "rounded-sm transition-colors duration-300",
-                              isCumulative ? "bg-teal-100/50" : "bg-amber-100/50"
-                            )}
+                            style={{
+                              backgroundColor: "rgba(254, 240, 138, 0.35)",
+                              borderRadius: "8px",
+                              padding: "2px 6px",
+                              margin: "0 -6px",
+                              transition: "background-color 0.3s",
+                            }}
                           >
                             {(() => {
                               const blindActive = isBlindMode && !revealedAyahs.has(verseNum);
