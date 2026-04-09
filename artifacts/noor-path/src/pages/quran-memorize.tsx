@@ -1022,7 +1022,6 @@ function MemorizationPlayer({
           </Button>
           <Button
             variant="outline" size="sm" onClick={skipAyah}
-            disabled={!isCumulative && currentAyahNum >= toAyah && !cumulativeReview}
             className="rounded-full w-10 h-10 p-0"
             title={isCumulative ? "Skip cumulative review" : "Skip ayah (advance to next ayah)"}
           >
@@ -1635,7 +1634,6 @@ function MemorizationPlayer({
               variant="outline"
               size="sm"
               onClick={skipAyah}
-              disabled={!isCumulative && currentAyahNum >= toAyah && !cumulativeReview}
               className="rounded-full w-11 h-11 p-0"
               title={isCumulative ? "Skip cumulative review" : "Skip ayah (advance to next ayah)"}
             >
