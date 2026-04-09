@@ -1159,7 +1159,7 @@ function MemorizationPlayer({
                       <span key={`${surahId}:${verseNum}`}>
                         {/* Inline surah banner — only at the start of a surah */}
                         {showSurahHeader && (
-                          <span className="block" dir="rtl" style={{ textAlign: "center" }}>
+                          <span className="block" dir="rtl" style={{ textAlign: "center", isolation: "isolate" }}>
                             <span
                               className="arabic-text mx-0 mt-3 mb-2 flex items-center justify-center gap-3"
                               style={{
@@ -1205,39 +1205,13 @@ function MemorizationPlayer({
                             </span>
                             {surahId !== 1 && surahId !== 9 && (
                               <div style={{ display: "flex", justifyContent: "center", width: "100%", margin: "4px 0" }}>
-                                <span style={{ fontFamily: '"Amiri Quran", "me_quran", serif', fontSize: "1.3rem", color: theme.accent, opacity: 0.45 }}>
+                                <span style={{ fontFamily: '"Amiri Quran", "me_quran", serif', fontSize: "1.3rem", color: theme.accent }}>
                                   بِسْمِ ٱللَّهِ ٱلرَّحْمَٰنِ ٱلرَّحِيمِ
                                 </span>
                               </div>
                             )}
                           </span>
                         )}
-
-                        {/* Verse-end marker — rendered before any blur wrapper to stay sharp */}
-                        <span
-                          className={ornamentClass}
-                          style={{
-                            display: "inline-flex",
-                            alignItems: "center",
-                            justifyContent: "center",
-                            width: "1.8em",
-                            height: "1.8em",
-                            border: `2px solid ${theme.accent}`,
-                            borderRadius: "2px",
-                            transform: "rotate(45deg)",
-                            fontSize: "0.7em",
-                            direction: "ltr",
-                            margin: "0 0.5em",
-                            flexShrink: 0,
-                            verticalAlign: "middle",
-                            color: theme.accent,
-                            opacity: 1,
-                          }}
-                        >
-                          <bdo dir="ltr" style={{ transform: "rotate(-45deg)", display: "block" }}>
-                            {verseNum}
-                          </bdo>
-                        </span>
 
                         {/* Verse content */}
                         {isActive ? (
@@ -1374,6 +1348,32 @@ function MemorizationPlayer({
                             );
                           })()
                         )}
+
+                        {/* Verse-end marker — after verse text so it appears at the END in RTL flow */}
+                        <span
+                          className={ornamentClass}
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            width: "1.8em",
+                            height: "1.8em",
+                            border: `2px solid ${theme.accent}`,
+                            borderRadius: "2px",
+                            transform: "rotate(45deg)",
+                            fontSize: "0.7em",
+                            direction: "ltr",
+                            margin: "0 0.5em",
+                            flexShrink: 0,
+                            verticalAlign: "middle",
+                            color: theme.accent,
+                            opacity: 1,
+                          }}
+                        >
+                          <bdo dir="ltr" style={{ transform: "rotate(-45deg)", display: "block" }}>
+                            {verseNum}
+                          </bdo>
+                        </span>
 
                       </span>
                     );
