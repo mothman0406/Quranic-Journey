@@ -29,6 +29,37 @@ import { cn } from "@/lib/utils";
 
 const QURAN_API = "https://api.quran.com/api/v4";
 
+const MUSHAF_THEMES = {
+  teal: {
+    name: "Madinah",
+    banner: "#1a4a5c",
+    bannerBorder: "#c9a84c",
+    accent: "#c9a84c",
+    parchment: "#fdf6e3",
+  },
+  maroon: {
+    name: "Ottoman",
+    banner: "#4a1a2c",
+    bannerBorder: "#d4a843",
+    accent: "#d4a843",
+    parchment: "#fdf0e0",
+  },
+  navy: {
+    name: "Modern",
+    banner: "#1a2a4a",
+    bannerBorder: "#a8b8c8",
+    accent: "#a8b8c8",
+    parchment: "#f8f6f2",
+  },
+  forest: {
+    name: "Classic",
+    banner: "#0d2b1a",
+    bannerBorder: "#c9a84c",
+    accent: "#c9a84c",
+    parchment: "#fdf6e3",
+  },
+} as const;
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 interface Chapter {
@@ -563,6 +594,17 @@ function MemorizationPlayer({
   const [pauseToAyah, setPauseToAyah] = useState(initialAyah);
   const [isBlindMode, setIsBlindMode] = useState(false);
   const [revealedAyahs, setRevealedAyahs] = useState<Set<number>>(new Set());
+  const [mushafTheme, setMushafThemeState] = useState<keyof typeof MUSHAF_THEMES>(() => {
+    try {
+      const saved = localStorage.getItem("mushaf-theme");
+      return (saved && saved in MUSHAF_THEMES ? saved : "teal") as keyof typeof MUSHAF_THEMES;
+    } catch { return "teal"; }
+  });
+  const theme = MUSHAF_THEMES[mushafTheme];
+  const setMushafTheme = (t: keyof typeof MUSHAF_THEMES) => {
+    try { localStorage.setItem("mushaf-theme", t); } catch { /* ignore */ }
+    setMushafThemeState(t);
+  };
 
   // Cumulative review state
   type InternalPhase = "single" | "cumulative";
@@ -1037,20 +1079,19 @@ function MemorizationPlayer({
             <div
               className="relative"
               style={{
-                border: "2px solid #c9a84c",
-                outline: "1px solid #c9a84c",
+                border: `2px solid ${theme.bannerBorder}`,
+                outline: `1px solid ${theme.bannerBorder}`,
                 outlineOffset: "-8px",
-                background:
-                  "linear-gradient(175deg,#fefaf2 0%,#fdf5e3 55%,#fcf0d6 100%)",
+                background: theme.parchment,
                 boxShadow: "0 1px 16px rgba(100,60,0,0.14)",
                 borderRadius: "3px",
               }}
             >
               {/* Corner ornaments */}
-              <span aria-hidden="true" style={{ position: "absolute", top: 5, left: 5, color: "#c9a84c", fontSize: "10px", lineHeight: 1, userSelect: "none", zIndex: 1 }}>◆</span>
-              <span aria-hidden="true" style={{ position: "absolute", top: 5, right: 5, color: "#c9a84c", fontSize: "10px", lineHeight: 1, userSelect: "none", zIndex: 1 }}>◆</span>
-              <span aria-hidden="true" style={{ position: "absolute", bottom: 5, left: 5, color: "#c9a84c", fontSize: "10px", lineHeight: 1, userSelect: "none", zIndex: 1 }}>◆</span>
-              <span aria-hidden="true" style={{ position: "absolute", bottom: 5, right: 5, color: "#c9a84c", fontSize: "10px", lineHeight: 1, userSelect: "none", zIndex: 1 }}>◆</span>
+              <span aria-hidden="true" style={{ position: "absolute", top: 5, left: 5, color: theme.accent, fontSize: "10px", lineHeight: 1, userSelect: "none", zIndex: 1 }}>◆</span>
+              <span aria-hidden="true" style={{ position: "absolute", top: 5, right: 5, color: theme.accent, fontSize: "10px", lineHeight: 1, userSelect: "none", zIndex: 1 }}>◆</span>
+              <span aria-hidden="true" style={{ position: "absolute", bottom: 5, left: 5, color: theme.accent, fontSize: "10px", lineHeight: 1, userSelect: "none", zIndex: 1 }}>◆</span>
+              <span aria-hidden="true" style={{ position: "absolute", bottom: 5, right: 5, color: theme.accent, fontSize: "10px", lineHeight: 1, userSelect: "none", zIndex: 1 }}>◆</span>
 
               {/* Verse body */}
               <div
@@ -1097,16 +1138,12 @@ function MemorizationPlayer({
                     const hasValidTajweed =
                       isActive && tajweedWords.length === words.length;
 
-                    const ornamentClass = cn(
-                      "inline-block arabic-text text-[0.85rem] mx-[0.3em] transition-colors duration-300",
-                      isActive
-                        ? isCumulative
-                          ? "text-teal-600/55"
-                          : "text-amber-600/55"
-                        : isActiveSurah && inSelectedRange
-                          ? "text-[#7a5c12]/28"
-                          : "text-[#7a5c12]/13"
-                    );
+                    const ornamentClass = "inline-block arabic-text text-[0.85rem] mx-[0.3em] transition-colors duration-300";
+                    const ornamentColor = isActive
+                      ? (isCumulative ? "rgba(13,148,136,0.55)" : "rgba(217,119,6,0.55)")
+                      : isActiveSurah && inSelectedRange
+                        ? `${theme.accent}47`
+                        : `${theme.accent}21`;
 
                     const surahChapter = allChapters.find(
                       (c) => c.id === surahId
@@ -1120,10 +1157,10 @@ function MemorizationPlayer({
                             <span
                               className="arabic-text mx-0 mt-3 mb-2 flex items-center justify-center gap-3"
                               style={{
-                                background: "#1a5c2a",
-                                border: "2px solid #c9a84c",
+                                background: theme.banner,
+                                border: `2px solid ${theme.bannerBorder}`,
                                 boxShadow:
-                                  "inset 0 0 0 3px #1a5c2a, inset 0 0 0 4px #c9a84c",
+                                  `inset 0 0 0 3px ${theme.banner}, inset 0 0 0 4px ${theme.bannerBorder}`,
                                 borderRadius: "3px",
                                 padding: "7px 16px",
                               }}
@@ -1131,7 +1168,7 @@ function MemorizationPlayer({
                               <span
                                 aria-hidden="true"
                                 style={{
-                                  color: "#c9a84c",
+                                  color: theme.accent,
                                   fontSize: "18px",
                                   lineHeight: 1,
                                   flexShrink: 0,
@@ -1151,7 +1188,7 @@ function MemorizationPlayer({
                               <span
                                 aria-hidden="true"
                                 style={{
-                                  color: "#c9a84c",
+                                  color: theme.accent,
                                   fontSize: "18px",
                                   lineHeight: 1,
                                   flexShrink: 0,
@@ -1167,7 +1204,7 @@ function MemorizationPlayer({
                                   fontFamily: '"Amiri Quran", "me_quran", serif',
                                   fontSize: "1.3rem",
                                   textAlign: "center",
-                                  color: "#7a5c12",
+                                  color: theme.accent,
                                   opacity: 0.45,
                                 }}
                               >
@@ -1319,7 +1356,7 @@ function MemorizationPlayer({
                             justifyContent: "center",
                             width: "1.4em",
                             height: "1.4em",
-                            border: "1px solid #c9a84c",
+                            border: `1px solid ${ornamentColor}`,
                             borderRadius: "2px",
                             transform: "rotate(45deg)",
                             fontSize: "0.55em",
@@ -1327,6 +1364,7 @@ function MemorizationPlayer({
                             margin: "0 0.2em",
                             flexShrink: 0,
                             verticalAlign: "middle",
+                            color: ornamentColor,
                           }}
                         >
                           <bdo dir="ltr" style={{ transform: "rotate(-45deg)", display: "block" }}>
@@ -1351,7 +1389,7 @@ function MemorizationPlayer({
                     justifyContent: "center",
                     width: "44px",
                     height: "20px",
-                    border: "1px solid #c9a84c",
+                    border: `1px solid ${theme.accent}`,
                     borderRadius: "2px",
                     transform: "rotate(45deg)",
                     direction: "ltr",
@@ -1364,7 +1402,7 @@ function MemorizationPlayer({
                       transform: "rotate(-45deg)",
                       display: "block",
                       fontSize: "9px",
-                      color: "#c9a84c",
+                      color: theme.accent,
                       fontWeight: 600,
                       letterSpacing: "0.2em",
                     }}
@@ -1537,6 +1575,28 @@ function MemorizationPlayer({
             </Button>
           </div>
 
+          {/* Theme picker (mobile) */}
+          <div className="flex items-center gap-2 pt-1">
+            {(Object.keys(MUSHAF_THEMES) as Array<keyof typeof MUSHAF_THEMES>).map((key) => (
+              <button
+                key={key}
+                onClick={() => setMushafTheme(key)}
+                title={MUSHAF_THEMES[key].name}
+                style={{
+                  width: 18,
+                  height: 18,
+                  borderRadius: "50%",
+                  background: MUSHAF_THEMES[key].banner,
+                  border: mushafTheme === key ? `2px solid #d4af37` : "2px solid transparent",
+                  outline: mushafTheme === key ? "1px solid #d4af37" : "none",
+                  outlineOffset: "1px",
+                  flexShrink: 0,
+                  cursor: "pointer",
+                }}
+              />
+            ))}
+          </div>
+
           {/* Auto-advance toggle + blind mode toggle + reciter label */}
           <div className="flex items-center justify-between pt-1">
             <div className="flex items-center gap-2">
@@ -1659,6 +1719,28 @@ function MemorizationPlayer({
           <Flag size={12} />
           Pause &amp; Save
         </button>
+
+        {/* Theme picker */}
+        <div className="flex items-center gap-1.5">
+          {(Object.keys(MUSHAF_THEMES) as Array<keyof typeof MUSHAF_THEMES>).map((key) => (
+            <button
+              key={key}
+              onClick={() => setMushafTheme(key)}
+              title={MUSHAF_THEMES[key].name}
+              style={{
+                width: 18,
+                height: 18,
+                borderRadius: "50%",
+                background: MUSHAF_THEMES[key].banner,
+                border: mushafTheme === key ? `2px solid #d4af37` : "2px solid transparent",
+                outline: mushafTheme === key ? "1px solid #d4af37" : "none",
+                outlineOffset: "1px",
+                flexShrink: 0,
+                cursor: "pointer",
+              }}
+            />
+          ))}
+        </div>
 
         {/* Blind mode toggle */}
         <button
