@@ -56,7 +56,7 @@ export function Layout({ children, title, showBack, backTo, childId, hideNav }: 
 
       {/* Bottom Nav */}
       {!hideNav && childId && (
-        <nav className="fixed bottom-0 w-full max-w-md bg-white border-t border-border/50 pb-safe z-40 shadow-[0_-10px_40px_rgba(0,0,0,0.05)] rounded-t-3xl">
+        <nav className="fixed bottom-0 w-full max-w-md bg-white dark:bg-gray-900 border-t border-border/50 dark:border-gray-700 pb-safe z-40 shadow-[0_-10px_40px_rgba(0,0,0,0.05)] rounded-t-3xl">
           <div className="flex items-center justify-around p-2">
             {navItems.map((item) => {
               const isActive = location === item.path || (item.path !== `/child/${childId}` && location.startsWith(item.path));

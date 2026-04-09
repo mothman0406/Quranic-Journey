@@ -1,8 +1,9 @@
 import { Link, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { listReviews } from "@workspace/api-client-react";
-import { House, BookMarked, RefreshCw, Grid2X2 } from "lucide-react";
+import { House, BookMarked, RefreshCw, Grid2X2, Sun, Moon } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useDarkMode } from "@/hooks/use-dark-mode";
 
 const navItems = [
   { label: "Home",          icon: House,      path: "" },
@@ -13,6 +14,7 @@ const navItems = [
 
 export function ChildNav({ childId }: { childId: string }) {
   const [location] = useLocation();
+  const { isDarkMode, toggleDarkMode } = useDarkMode();
 
   const { data: reviews } = useQuery({
     queryKey: ["reviews", childId],
@@ -24,7 +26,7 @@ export function ChildNav({ childId }: { childId: string }) {
   const base = `/child/${childId}`;
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-border shadow-lg z-50 bottom-nav-safe">
+    <nav className="fixed bottom-0 left-0 right-0 bg-white dark:bg-gray-900 border-t border-border dark:border-gray-700 shadow-lg z-50 bottom-nav-safe">
       <div className="flex items-stretch max-w-lg mx-auto">
         {navItems.map(({ label, icon: Icon, path }) => {
           const href = path ? `${base}/${path}` : base;
@@ -59,6 +61,17 @@ export function ChildNav({ childId }: { childId: string }) {
             </Link>
           );
         })}
+        {/* Dark mode toggle */}
+        <button
+          onClick={toggleDarkMode}
+          className="flex flex-col items-center justify-center py-2 px-1 min-h-[56px] text-muted-foreground hover:text-foreground transition-colors"
+          title={isDarkMode ? "Light mode" : "Dark mode"}
+        >
+          <div className="rounded-full p-1.5">
+            {isDarkMode ? <Sun size={20} /> : <Moon size={20} />}
+          </div>
+          <span className="text-[10px] font-medium mt-0.5">{isDarkMode ? "Light" : "Dark"}</span>
+        </button>
       </div>
     </nav>
   );

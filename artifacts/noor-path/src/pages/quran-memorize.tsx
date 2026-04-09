@@ -22,12 +22,24 @@ import {
   CheckCircle,
   Flag,
   EyeOff,
+  Sun,
+  Moon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useDarkMode } from "@/hooks/use-dark-mode";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const QURAN_API = "https://api.quran.com/api/v4";
+
+interface MushafThemeConfig {
+  name: string;
+  banner: string;
+  bannerBorder: string;
+  accent: string;
+  parchment: string;
+  textColor?: string;
+}
 
 const MUSHAF_THEMES = {
   teal: {
@@ -58,7 +70,39 @@ const MUSHAF_THEMES = {
     accent: "#c9a84c",
     parchment: "#fdf6e3",
   },
-} as const;
+  madinah_dark: {
+    name: "Madinah Night",
+    banner: "#0d2b38",
+    bannerBorder: "#c9a84c",
+    accent: "#c9a84c",
+    parchment: "#1a1a2e",
+    textColor: "#e8d5b0",
+  },
+  ottoman_dark: {
+    name: "Ottoman Night",
+    banner: "#2b0d1a",
+    bannerBorder: "#d4a843",
+    accent: "#d4a843",
+    parchment: "#1a1208",
+    textColor: "#e8d5b0",
+  },
+  modern_dark: {
+    name: "Modern Night",
+    banner: "#0d1a2b",
+    bannerBorder: "#a8b8c8",
+    accent: "#a8b8c8",
+    parchment: "#0f0f1a",
+    textColor: "#dde8f0",
+  },
+  classic_dark: {
+    name: "Classic Night",
+    banner: "#0d1a0d",
+    bannerBorder: "#c9a84c",
+    accent: "#c9a84c",
+    parchment: "#0d1308",
+    textColor: "#e8d5b0",
+  },
+} satisfies Record<string, MushafThemeConfig>;
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -592,15 +636,34 @@ function MemorizationPlayer({
   const [autoAdvance, setAutoAdvance] = useState(initialAutoAdvance);
   const [showPauseModal, setShowPauseModal] = useState(false);
   const [pauseToAyah, setPauseToAyah] = useState(initialAyah);
+  const { isDarkMode, toggleDarkMode } = useDarkMode();
   const [isBlindMode, setIsBlindMode] = useState(false);
   const [revealedAyahs, setRevealedAyahs] = useState<Set<number>>(new Set());
   const [mushafTheme, setMushafThemeState] = useState<keyof typeof MUSHAF_THEMES>(() => {
     try {
       const saved = localStorage.getItem("mushaf-theme");
-      return (saved && saved in MUSHAF_THEMES ? saved : "teal") as keyof typeof MUSHAF_THEMES;
+      const darkNow = localStorage.getItem("noor-dark-mode") === "true";
+      const isDarkKey = (k: string) => k.endsWith("_dark");
+      if (saved && saved in MUSHAF_THEMES && isDarkKey(saved) === darkNow) {
+        return saved as keyof typeof MUSHAF_THEMES;
+      }
+      return darkNow ? "madinah_dark" : "teal";
     } catch { return "teal"; }
   });
-  const theme = MUSHAF_THEMES[mushafTheme];
+
+  // Auto-switch theme when dark mode toggles
+  useEffect(() => {
+    const isThemeDark = mushafTheme.endsWith("_dark");
+    if (isDarkMode && !isThemeDark) {
+      setMushafThemeState("madinah_dark");
+      try { localStorage.setItem("mushaf-theme", "madinah_dark"); } catch { /* ignore */ }
+    } else if (!isDarkMode && isThemeDark) {
+      setMushafThemeState("teal");
+      try { localStorage.setItem("mushaf-theme", "teal"); } catch { /* ignore */ }
+    }
+  }, [isDarkMode]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const theme = MUSHAF_THEMES[mushafTheme] as MushafThemeConfig;
   const setMushafTheme = (t: keyof typeof MUSHAF_THEMES) => {
     try { localStorage.setItem("mushaf-theme", t); } catch { /* ignore */ }
     setMushafThemeState(t);
@@ -894,14 +957,14 @@ function MemorizationPlayer({
     : `Ayah ${currentAyahNum} · ${repeatCount}× repeat`;
 
   return (
-    <div className="h-screen bg-[#f5f0e8] flex flex-col md:flex-row overflow-hidden">
+    <div className="h-screen bg-[#f5f0e8] dark:bg-gray-950 flex flex-col md:flex-row overflow-hidden">
 
       {/* ── LEFT COLUMN (desktop only) ── */}
-      <div className="hidden md:flex w-52 flex-col gap-6 p-4 justify-center shrink-0 bg-[#f5f0e8]">
+      <div className="hidden md:flex w-52 flex-col gap-6 p-4 justify-center shrink-0 bg-[#f5f0e8] dark:bg-gray-950">
         {/* Surah info + progress */}
         <div className="flex flex-col gap-2">
           <div>
-            <h1 className="text-lg font-bold leading-tight text-[#1a5c2a]">
+            <h1 className="text-lg font-bold leading-tight text-[#1a5c2a] dark:text-emerald-400">
               {chapter.name_simple}
             </h1>
             <p className="text-sm text-muted-foreground">
@@ -1109,7 +1172,7 @@ function MemorizationPlayer({
                   textAlign: "justify",
                   textAlignLast: "right",
                   textJustify: "inter-word",
-                  color: "#1a0a00",
+                  color: theme.textColor ?? "#1a0a00",
                   flex: 1,
                   overflowY: "auto",
                   minHeight: 0,
@@ -1423,7 +1486,7 @@ function MemorizationPlayer({
       {/* Pause & Save modal */}
       {showPauseModal && (
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 px-4 pb-6">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg p-6 space-y-5">
+          <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-lg p-6 space-y-5">
             <div>
               <h2 className="text-base font-bold text-foreground">How far did you get?</h2>
               <p className="text-sm text-muted-foreground mt-1">
@@ -1485,7 +1548,7 @@ function MemorizationPlayer({
       )}
 
       {/* Player controls */}
-      <div className="md:hidden bg-white border-t border-border px-4 pt-3 pb-6">
+      <div className="md:hidden bg-white dark:bg-gray-900 border-t border-border dark:border-gray-700 px-4 pt-3 pb-6">
         <div className="max-w-lg mx-auto space-y-3">
           {/* Phase badge + repeat dots */}
           <div className="flex items-center justify-center gap-3">
@@ -1579,9 +1642,18 @@ function MemorizationPlayer({
             </Button>
           </div>
 
-          {/* Theme picker (mobile) */}
+          {/* Theme picker (mobile) + dark mode toggle */}
           <div className="flex items-center gap-2 pt-1">
-            {(Object.keys(MUSHAF_THEMES) as Array<keyof typeof MUSHAF_THEMES>).map((key) => (
+            <button
+              onClick={toggleDarkMode}
+              className="flex items-center justify-center w-[18px] h-[18px] rounded-full border border-border/60 text-muted-foreground hover:text-foreground transition-colors flex-shrink-0"
+              title={isDarkMode ? "Switch to light mode" : "Switch to dark mode"}
+            >
+              {isDarkMode ? <Sun size={10} /> : <Moon size={10} />}
+            </button>
+            {(Object.keys(MUSHAF_THEMES) as Array<keyof typeof MUSHAF_THEMES>)
+              .filter((key) => isDarkMode ? key.endsWith("_dark") : !key.endsWith("_dark"))
+              .map((key) => (
               <button
                 key={key}
                 onClick={() => setMushafTheme(key)}
@@ -1658,7 +1730,7 @@ function MemorizationPlayer({
       </div>{/* end center column */}
 
       {/* ── RIGHT COLUMN (desktop only) ── */}
-      <div className="hidden md:flex w-40 flex-col gap-6 p-4 justify-center shrink-0 bg-[#f5f0e8]">
+      <div className="hidden md:flex w-40 flex-col gap-6 p-4 justify-center shrink-0 bg-[#f5f0e8] dark:bg-gray-950">
         {/* Ayah number + range */}
         <div className="flex flex-col gap-0.5">
           {isCumulative ? (
@@ -1724,9 +1796,20 @@ function MemorizationPlayer({
           Pause &amp; Save
         </button>
 
+        {/* Dark mode toggle */}
+        <button
+          onClick={toggleDarkMode}
+          className="flex items-center justify-center w-8 h-8 rounded-full border border-border text-muted-foreground hover:text-foreground hover:border-primary/40 transition-colors"
+          title={isDarkMode ? "Switch to light mode" : "Switch to dark mode"}
+        >
+          {isDarkMode ? <Sun size={14} /> : <Moon size={14} />}
+        </button>
+
         {/* Theme picker */}
-        <div className="flex items-center gap-1.5">
-          {(Object.keys(MUSHAF_THEMES) as Array<keyof typeof MUSHAF_THEMES>).map((key) => (
+        <div className="flex items-center gap-1.5 flex-wrap">
+          {(Object.keys(MUSHAF_THEMES) as Array<keyof typeof MUSHAF_THEMES>)
+            .filter((key) => isDarkMode ? key.endsWith("_dark") : !key.endsWith("_dark"))
+            .map((key) => (
             <button
               key={key}
               onClick={() => setMushafTheme(key)}
@@ -1953,7 +2036,7 @@ export default function QuranMemorizePage() {
             </div>
           )}
 
-          <div className="bg-white rounded-2xl border border-border shadow-sm overflow-hidden">
+          <div className="bg-white dark:bg-gray-900 rounded-2xl border border-border dark:border-gray-700 shadow-sm overflow-hidden">
             <div className="flex items-center gap-2 px-4 py-3 border-b border-border">
               <Search size={16} className="text-muted-foreground flex-shrink-0" />
               <input
@@ -2057,7 +2140,7 @@ export default function QuranMemorizePage() {
 
         <div className="max-w-lg mx-auto px-4 -mt-6 space-y-4">
           {/* Ayah range */}
-          <div className="bg-white rounded-2xl border border-border p-5 shadow-sm space-y-4">
+          <div className="bg-white dark:bg-gray-900 rounded-2xl border border-border dark:border-gray-700 p-5 shadow-sm space-y-4">
             <h2 className="text-sm font-semibold text-foreground">
               Select Ayah Range
             </h2>
@@ -2113,7 +2196,7 @@ export default function QuranMemorizePage() {
           </div>
 
           {/* Repeat count */}
-          <div className="bg-white rounded-2xl border border-border p-5 shadow-sm space-y-4">
+          <div className="bg-white dark:bg-gray-900 rounded-2xl border border-border dark:border-gray-700 p-5 shadow-sm space-y-4">
             <div className="flex items-center justify-between">
               <h2 className="text-sm font-semibold text-foreground">
                 Repeat Each Ayah
@@ -2140,7 +2223,7 @@ export default function QuranMemorizePage() {
           </div>
 
           {/* Auto-advance */}
-          <div className="bg-white rounded-2xl border border-border p-5 shadow-sm">
+          <div className="bg-white dark:bg-gray-900 rounded-2xl border border-border dark:border-gray-700 p-5 shadow-sm">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-semibold text-foreground">
@@ -2156,7 +2239,7 @@ export default function QuranMemorizePage() {
           </div>
 
           {/* Cumulative Review */}
-          <div className="bg-white rounded-2xl border border-border p-5 shadow-sm space-y-4">
+          <div className="bg-white dark:bg-gray-900 rounded-2xl border border-border dark:border-gray-700 p-5 shadow-sm space-y-4">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-semibold text-foreground">
@@ -2261,7 +2344,7 @@ export default function QuranMemorizePage() {
 
         <div className="max-w-lg mx-auto w-full px-4 -mt-6 space-y-5 pb-24">
           {/* Instruction card */}
-          <div className="bg-white rounded-2xl border border-border shadow-sm p-5">
+          <div className="bg-white dark:bg-gray-900 rounded-2xl border border-border dark:border-gray-700 shadow-sm p-5">
             <p className="text-sm font-semibold text-foreground mb-1">
               Listen to your child recite
             </p>
@@ -2281,7 +2364,7 @@ export default function QuranMemorizePage() {
           </div>
 
           {/* Rating selector */}
-          <div className="bg-white rounded-2xl border border-border shadow-sm p-5 space-y-3">
+          <div className="bg-white dark:bg-gray-900 rounded-2xl border border-border dark:border-gray-700 shadow-sm p-5 space-y-3">
             <p className="text-sm font-semibold text-foreground">
               How did they do?
             </p>

@@ -157,6 +157,83 @@
   --destructive-border: hsl(from hsl(var(--destructive)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
 }
 
+/* DARK MODE */
+.dark {
+  --button-outline: rgba(255,255,255, .10);
+  --badge-outline: rgba(255,255,255, .05);
+  --opaque-button-border-intensity: 8;
+  --elevate-1: rgba(255,255,255, .03);
+  --elevate-2: rgba(255,255,255, .06);
+
+  /* Dark backgrounds */
+  --background: 222 20% 7%;
+  --foreground: 40 25% 92%;
+  --border: 222 15% 18%;
+  --input: 222 15% 18%;
+  --ring: 150 45% 40%;
+
+  /* Dark card */
+  --card: 222 20% 11%;
+  --card-foreground: 40 25% 92%;
+  --card-border: 222 15% 20%;
+
+  /* Sidebar */
+  --sidebar: 152 35% 10%;
+  --sidebar-foreground: 40 30% 90%;
+  --sidebar-border: 152 30% 14%;
+  --sidebar-primary: 43 65% 50%;
+  --sidebar-primary-foreground: 152 35% 8%;
+  --sidebar-accent: 152 30% 16%;
+  --sidebar-accent-foreground: 40 30% 90%;
+  --sidebar-ring: 43 65% 50%;
+
+  /* Popover */
+  --popover: 222 20% 11%;
+  --popover-foreground: 40 25% 92%;
+  --popover-border: 222 15% 20%;
+
+  /* Emerald primary — slightly lighter so it reads on dark */
+  --primary: 152 50% 38%;
+  --primary-foreground: 40 30% 97%;
+
+  /* Gold secondary — muted */
+  --secondary: 43 30% 18%;
+  --secondary-foreground: 43 65% 80%;
+
+  --muted: 222 15% 14%;
+  --muted-foreground: 222 10% 58%;
+
+  /* Gold accent */
+  --accent: 43 55% 48%;
+  --accent-foreground: 43 30% 95%;
+
+  --destructive: 0 62% 48%;
+  --destructive-foreground: 0 0% 98%;
+
+  --chart-1: 152 50% 38%;
+  --chart-2: 43 65% 55%;
+  --chart-3: 25 60% 55%;
+  --chart-4: 190 45% 45%;
+  --chart-5: 270 40% 55%;
+
+  --shadow-2xs: 0px 1px 2px 0px rgba(0,0,0,0.3);
+  --shadow-xs: 0px 2px 4px 0px rgba(0,0,0,0.4);
+  --shadow-sm: 0px 2px 8px 0px rgba(0,0,0,0.5), 0px 1px 2px -1px rgba(0,0,0,0.3);
+  --shadow: 0px 4px 12px 0px rgba(0,0,0,0.5), 0px 2px 4px -1px rgba(0,0,0,0.3);
+  --shadow-md: 0px 6px 16px 0px rgba(0,0,0,0.5), 0px 2px 6px -1px rgba(0,0,0,0.3);
+  --shadow-lg: 0px 10px 24px 0px rgba(0,0,0,0.55), 0px 4px 8px -2px rgba(0,0,0,0.3);
+  --shadow-xl: 0px 16px 40px 0px rgba(0,0,0,0.6);
+  --shadow-2xl: 0px 24px 64px 0px rgba(0,0,0,0.65);
+
+  --sidebar-primary-border: hsl(var(--sidebar-primary));
+  --sidebar-accent-border: hsl(var(--sidebar-accent));
+  --primary-border: hsl(var(--primary));
+  --secondary-border: hsl(var(--secondary));
+  --muted-border: hsl(var(--muted));
+  --accent-border: hsl(var(--accent));
+  --destructive-border: hsl(var(--destructive));
+}
+
 @layer base {
   * { @apply border-border; }
   body { @apply font-sans antialiased bg-background text-foreground; }

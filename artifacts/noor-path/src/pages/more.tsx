@@ -2,11 +2,14 @@ import { useParams, Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { getChildDashboard } from "@workspace/api-client-react";
 import { Card, CardContent } from "@/components/ui/card";
+import { Switch } from "@/components/ui/switch";
 import { ChildNav } from "@/components/child-nav";
-import { ChevronLeft, ChevronRight, Star, Heart, Trophy, BookOpen } from "lucide-react";
+import { ChevronLeft, ChevronRight, Star, Heart, Trophy, BookOpen, Moon } from "lucide-react";
+import { useDarkMode } from "@/hooks/use-dark-mode";
 
 export default function MorePage() {
   const { childId } = useParams<{ childId: string }>();
+  const { isDarkMode, toggleDarkMode } = useDarkMode();
 
   const { data } = useQuery({
     queryKey: ["dashboard", childId],
@@ -96,6 +99,20 @@ export default function MorePage() {
             Stories and du'aas are hidden. A parent can re-enable them from the profiles page.
           </p>
         )}
+
+        {/* Dark mode toggle */}
+        <Card className="border-border">
+          <CardContent className="p-4 flex items-center gap-4">
+            <div className="w-12 h-12 rounded-xl bg-indigo-100 dark:bg-indigo-900/40 flex items-center justify-center flex-shrink-0">
+              <Moon size={22} className="text-indigo-600 dark:text-indigo-400" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="font-semibold text-foreground">Dark mode</p>
+              <p className="text-xs text-muted-foreground mt-0.5">Easier on the eyes at night</p>
+            </div>
+            <Switch checked={isDarkMode} onCheckedChange={toggleDarkMode} />
+          </CardContent>
+        </Card>
       </div>
 
       <ChildNav childId={childId} />
