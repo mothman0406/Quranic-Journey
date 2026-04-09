@@ -21,6 +21,7 @@ import {
   CheckCircle,
   BookOpen,
   Layers,
+  ListOrdered,
   Info,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -484,12 +485,19 @@ export default function MemorizationPage() {
                   <p className="text-sm font-medium text-foreground">{nextSurah.nameTransliteration}</p>
                 </div>
               </div>
-              <button
-                onClick={() => setStudyingSurahId(nextSurah.id)}
-                className="text-xs text-primary font-medium bg-primary/10 px-3 py-1.5 rounded-full"
-              >
-                Study →
-              </button>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setStudyingSurahId(nextSurah.id)}
+                  className="flex items-center gap-1 text-xs text-primary font-medium border border-primary px-2.5 py-1.5 rounded-full whitespace-nowrap"
+                >
+                  <ListOrdered size={12} /> Ayah by Ayah
+                </button>
+                <Link href={`/child/${childId}/quran-memorize?surah=${nextSurah.number}&mode=mushaf`}>
+                  <button className="flex items-center gap-1 text-xs text-white font-medium bg-primary px-2.5 py-1.5 rounded-full whitespace-nowrap">
+                    <BookOpen size={12} /> Full Mushaf
+                  </button>
+                </Link>
+              </div>
             </CardContent>
           </Card>
         )}
@@ -593,14 +601,14 @@ export default function MemorizationPage() {
                           <Button
                             size="sm"
                             variant="outline"
-                            className="h-7 text-xs px-2 flex-1"
+                            className="h-7 text-xs px-2 flex-1 border-primary text-primary"
                             onClick={() => setStudyingSurahId(item.surahId)}
                           >
-                            <BookOpen size={11} className="mr-1" /> Ayah by Ayah
+                            <ListOrdered size={11} className="mr-1" /> Ayah by Ayah
                           </Button>
-                          <Link href={`/child/${childId}/quran-memorize?surah=${surahMeta?.number}`}>
-                            <Button size="sm" variant="outline" className="h-7 text-xs px-2">
-                              <Layers size={11} className="mr-1" /> Full Quran
+                          <Link href={`/child/${childId}/quran-memorize?surah=${surahMeta?.number}&mode=mushaf`}>
+                            <Button size="sm" className="h-7 text-xs px-2 flex-1">
+                              <BookOpen size={11} className="mr-1" /> Full Mushaf
                             </Button>
                           </Link>
                         </div>
