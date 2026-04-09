@@ -1213,6 +1213,32 @@ function MemorizationPlayer({
                           </span>
                         )}
 
+                        {/* Verse-end marker — rendered before any blur wrapper to stay sharp */}
+                        <span
+                          className={ornamentClass}
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            width: "1.8em",
+                            height: "1.8em",
+                            border: `2px solid ${theme.accent}`,
+                            borderRadius: "2px",
+                            transform: "rotate(45deg)",
+                            fontSize: "0.7em",
+                            direction: "ltr",
+                            margin: "0 0.2em",
+                            flexShrink: 0,
+                            verticalAlign: "middle",
+                            color: theme.accent,
+                            opacity: 1,
+                          }}
+                        >
+                          <bdo dir="ltr" style={{ transform: "rotate(-45deg)", display: "block" }}>
+                            {verseNum}
+                          </bdo>
+                        </span>
+
                         {/* Verse content */}
                         {isActive ? (
                           // Active verse — word-by-word tracking with tajweed
@@ -1349,30 +1375,6 @@ function MemorizationPlayer({
                           })()
                         )}
 
-                        {/* Verse-end marker */}
-                        <span
-                          className={ornamentClass}
-                          style={{
-                            display: "inline-flex",
-                            alignItems: "center",
-                            justifyContent: "center",
-                            width: "1.4em",
-                            height: "1.4em",
-                            border: `1px solid ${ornamentColor}`,
-                            borderRadius: "2px",
-                            transform: "rotate(45deg)",
-                            fontSize: "0.55em",
-                            direction: "ltr",
-                            margin: "0 0.2em",
-                            flexShrink: 0,
-                            verticalAlign: "middle",
-                            color: ornamentColor,
-                          }}
-                        >
-                          <bdo dir="ltr" style={{ transform: "rotate(-45deg)", display: "block" }}>
-                            {verseNum}
-                          </bdo>
-                        </span>
                       </span>
                     );
                   }
