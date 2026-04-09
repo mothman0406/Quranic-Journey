@@ -1847,7 +1847,7 @@ function MemorizationPlayer({
           onClick={onBack}
           className="flex items-center gap-1 text-muted-foreground text-sm"
         >
-          <ChevronLeft size={16} /> Settings
+          <ChevronLeft size={16} /> Memorization
         </button>
       </div>
     </div>
@@ -2119,7 +2119,7 @@ export default function QuranMemorizePage() {
         <div className="pattern-bg text-white px-4 pt-8 pb-12">
           <div className="max-w-lg mx-auto">
             <button
-              onClick={() => setPhase("pick")}
+              onClick={() => navigate(`/child/${childId}/memorization`)}
               className="flex items-center gap-1 text-emerald-200 text-sm mb-4"
             >
               <ChevronLeft size={16} /> Choose Surah
