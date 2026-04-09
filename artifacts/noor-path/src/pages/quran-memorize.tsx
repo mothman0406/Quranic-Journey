@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
+import { CelebrationOverlay } from "@/components/celebration-overlay";
 import { useParams, Link, useSearch, useLocation } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { updateMemorization } from "@workspace/api-client-react";
@@ -1876,6 +1877,7 @@ export default function QuranMemorizePage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [checkRating, setCheckRating] = useState<"needs_work" | "good" | "excellent" | null>(null);
   const [saveSuccess, setSaveSuccess] = useState(false);
+  const [celebration, setCelebration] = useState<{ message: string; subMessage?: string } | null>(null);
 
   const saveMutation = useMutation({
     mutationFn: (qualityRating: number) => {
@@ -1904,6 +1906,10 @@ export default function QuranMemorizePage() {
       qc.invalidateQueries({ queryKey: ["memorization", childId] });
       qc.invalidateQueries({ queryKey: ["dashboard", childId] });
       setSaveSuccess(true);
+      const isComplete = toAyah >= selectedChapter!.verses_count;
+      if (isComplete) {
+        setCelebration({ message: "Surah Complete!", subMessage: "You've memorized the full surah!" });
+      }
     },
     onError: (err) => {
       console.error("[quran-memorize] Save failed:", err);
@@ -1966,6 +1972,7 @@ export default function QuranMemorizePage() {
 
   const handleSessionComplete = useCallback(() => {
     setShowReadyModal(true);
+    setCelebration({ message: "Session Complete!", subMessage: "Keep up the great work" });
   }, []);
 
   const handlePauseAndSave = useCallback((completedToAyah: number) => {
@@ -2316,6 +2323,15 @@ export default function QuranMemorizePage() {
   // PHASE: CHECK — Recitation check after session completes
   // ══════════════════════════════════════════════════════════════════════════
 
+  const celebrationOverlay = (
+    <CelebrationOverlay
+      show={celebration !== null}
+      onDone={() => setCelebration(null)}
+      message={celebration?.message ?? ""}
+      subMessage={celebration?.subMessage}
+    />
+  );
+
   if (phase === "check" && selectedChapter) {
     const ratingOptions: { value: "needs_work" | "good" | "excellent"; label: string; quality: number; color: string; bg: string; border: string }[] = [
       { value: "needs_work", label: "Needs Work", quality: 2, color: "text-red-600", bg: "bg-red-50", border: "border-red-300" },
@@ -2325,6 +2341,7 @@ export default function QuranMemorizePage() {
     const selectedOption = ratingOptions.find((r) => r.value === checkRating);
 
     return (
+      <>
       <div className="min-h-screen bg-background flex flex-col">
         {/* Header */}
         <div className="pattern-bg text-white px-4 pt-8 pb-10">
@@ -2456,6 +2473,8 @@ export default function QuranMemorizePage() {
           )}
         </div>
       </div>
+      {celebrationOverlay}
+      </>
     );
   }
 
@@ -2494,6 +2513,7 @@ export default function QuranMemorizePage() {
                 setShowReadyModal(false);
                 setCheckRating(null);
                 setSaveSuccess(false);
+                setCelebration(null);
                 setPhase("check");
               }}
               className="w-full bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-semibold rounded-2xl py-4 text-base shadow-2xl transition-colors"
@@ -2503,6 +2523,7 @@ export default function QuranMemorizePage() {
           </div>
         </div>
       )}
+      {celebrationOverlay}
     </>
   );
 }

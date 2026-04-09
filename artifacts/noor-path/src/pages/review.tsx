@@ -1,4 +1,5 @@
 import { useState, useRef } from "react";
+import { CelebrationOverlay } from "@/components/celebration-overlay";
 import { useParams, Link } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { listReviews, completeReview, getSurah } from "@workspace/api-client-react";
@@ -276,6 +277,7 @@ export default function ReviewPage() {
   const [flashcardRating, setFlashcardRating] = useState<number | null>(null);
   const [flashcardShowVerses, setFlashcardShowVerses] = useState(false);
   const [sessionDone, setSessionDone] = useState(false);
+  const [showReviewCelebration, setShowReviewCelebration] = useState(false);
   const qc = useQueryClient();
 
   const { data, isLoading } = useQuery({
@@ -308,13 +310,17 @@ export default function ReviewPage() {
         setFlashcardShowVerses(false);
         if (flashcardIndex >= dueToday.length - 1) {
           setSessionDone(true);
+          setShowReviewCelebration(true);
           setFlashcardIndex(null);
         } else {
           setFlashcardIndex((i) => (i ?? 0) + 1);
         }
       } else if (mushafItem) {
         setMushafItem(null);
-        if (dueToday.length <= 1) setSessionDone(true);
+        if (dueToday.length <= 1) {
+          setSessionDone(true);
+          setShowReviewCelebration(true);
+        }
       }
     },
   });
@@ -482,26 +488,34 @@ export default function ReviewPage() {
   // ── Done / none ──
   if (sessionDone || dueToday.length === 0) {
     return (
-      <div className="min-h-screen bg-background pb-24 flex flex-col items-center justify-center px-4">
-        <div className="text-center max-w-sm">
-          <div className="text-6xl mb-4">{sessionDone ? "🏆" : "✅"}</div>
-          <h2 className="text-2xl font-bold text-foreground mb-2">
-            {sessionDone ? "Review Complete!" : "All Caught Up!"}
-          </h2>
-          <p className="text-muted-foreground mb-2">
-            {sessionDone
-              ? `Great job! You reviewed ${dueToday.length} surah${dueToday.length > 1 ? "s" : ""} today.`
-              : "No surahs due for review today. Keep memorizing!"}
-          </p>
-          <p className="text-xs text-muted-foreground mb-6">
-            Consistent review is the key to strong memorization.
-          </p>
-          <Link href={`/child/${childId}`}>
-            <Button className="w-full rounded-full">Back to Dashboard</Button>
-          </Link>
+      <>
+        <div className="min-h-screen bg-background pb-24 flex flex-col items-center justify-center px-4">
+          <div className="text-center max-w-sm">
+            <div className="text-6xl mb-4">{sessionDone ? "🏆" : "✅"}</div>
+            <h2 className="text-2xl font-bold text-foreground mb-2">
+              {sessionDone ? "Review Complete!" : "All Caught Up!"}
+            </h2>
+            <p className="text-muted-foreground mb-2">
+              {sessionDone
+                ? `Great job! You reviewed ${dueToday.length} surah${dueToday.length > 1 ? "s" : ""} today.`
+                : "No surahs due for review today. Keep memorizing!"}
+            </p>
+            <p className="text-xs text-muted-foreground mb-6">
+              Consistent review is the key to strong memorization.
+            </p>
+            <Link href={`/child/${childId}`}>
+              <Button className="w-full rounded-full">Back to Dashboard</Button>
+            </Link>
+          </div>
+          <ChildNav childId={childId} />
         </div>
-        <ChildNav childId={childId} />
-      </div>
+        <CelebrationOverlay
+          show={showReviewCelebration}
+          onDone={() => setShowReviewCelebration(false)}
+          message="Review Complete!"
+          subMessage="Excellent revision!"
+        />
+      </>
     );
   }
 

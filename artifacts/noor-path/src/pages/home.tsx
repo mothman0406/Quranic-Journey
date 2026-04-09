@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
+import { CelebrationOverlay } from "@/components/celebration-overlay";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link, useLocation } from "wouter";
 import { signOut, useSession } from "@/lib/auth-client";
@@ -136,6 +137,24 @@ export default function Home() {
       setDeleteChildId(null);
     }
   });
+
+  const [streakCelebration, setStreakCelebration] = useState<{ message: string; subMessage?: string } | null>(null);
+  const streakShownRef = useRef(false);
+
+  useEffect(() => {
+    if (streakShownRef.current) return;
+    if (!children || children.length === 0) return;
+    for (const child of children) {
+      if (child.streakDays === 7 || child.streakDays === 30) {
+        setStreakCelebration({
+          message: `${child.streakDays} Day Streak! 🔥`,
+          subMessage: "Consistency is key to memorization",
+        });
+        streakShownRef.current = true;
+        break;
+      }
+    }
+  }, [children]);
 
   const totalSteps = form.preMemorizedSurahIds.length > 0 ? 4 : 3;
 
@@ -695,6 +714,13 @@ export default function Home() {
           </div>
         </DialogContent>
       </Dialog>
+
+      <CelebrationOverlay
+        show={streakCelebration !== null}
+        onDone={() => setStreakCelebration(null)}
+        message={streakCelebration?.message ?? ""}
+        subMessage={streakCelebration?.subMessage}
+      />
     </div>
   );
 }
