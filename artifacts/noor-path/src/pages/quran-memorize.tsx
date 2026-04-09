@@ -1227,7 +1227,7 @@ function MemorizationPlayer({
                             transform: "rotate(45deg)",
                             fontSize: "0.7em",
                             direction: "ltr",
-                            margin: "0 0.2em",
+                            margin: "0 0.5em",
                             flexShrink: 0,
                             verticalAlign: "middle",
                             color: theme.accent,
