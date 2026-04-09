@@ -1159,7 +1159,7 @@ function MemorizationPlayer({
                       <span key={`${surahId}:${verseNum}`}>
                         {/* Inline surah banner — only at the start of a surah */}
                         {showSurahHeader && (
-                          <span className="block" dir="rtl">
+                          <span className="block" dir="rtl" style={{ textAlign: "center" }}>
                             <span
                               className="arabic-text mx-0 mt-3 mb-2 flex items-center justify-center gap-3"
                               style={{
@@ -1204,21 +1204,11 @@ function MemorizationPlayer({
                               </span>
                             </span>
                             {surahId !== 1 && surahId !== 9 && (
-                              <span
-                                style={{
-                                  display: "block",
-                                  width: "100%",
-                                  fontFamily: '"Amiri Quran", "me_quran", serif',
-                                  fontSize: "1.3rem",
-                                  lineHeight: "2",
-                                  textAlign: "center",
-                                  color: theme.accent,
-                                  opacity: 0.45,
-                                  marginBottom: "0.5rem",
-                                }}
-                              >
-                                بِسْمِ ٱللَّهِ ٱلرَّحْمَٰنِ ٱلرَّحِيمِ
-                              </span>
+                              <div style={{ display: "flex", justifyContent: "center", width: "100%", margin: "4px 0" }}>
+                                <span style={{ fontFamily: '"Amiri Quran", "me_quran", serif', fontSize: "1.3rem", color: theme.accent, opacity: 0.45 }}>
+                                  بِسْمِ ٱللَّهِ ٱلرَّحْمَٰنِ ٱلرَّحِيمِ
+                                </span>
+                              </div>
                             )}
                           </span>
                         )}
