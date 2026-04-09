@@ -982,7 +982,7 @@ function MemorizationPlayer({
       </div>
 
       {/* ── CENTER COLUMN ── */}
-      <div className="flex-1 flex flex-col h-full min-h-0 min-w-0">
+      <div className="flex-1 h-full overflow-hidden flex flex-col items-center justify-start py-3">
 
       {/* Mobile-only header */}
       <div className="md:hidden pattern-bg text-white px-4 pt-8 pb-4">
@@ -1065,7 +1065,7 @@ function MemorizationPlayer({
       </div>
 
       {/* Arabic text area — mushaf page view */}
-      <div className="flex-1 overflow-y-auto md:overflow-hidden flex flex-col md:items-center min-h-0 py-4">
+      <div className="flex-1 w-full min-h-0 overflow-hidden flex flex-col">
         <style>{TAJWEED_CSS}</style>
         {versesLoading || !currentArabic ? (
           <div className="w-full space-y-4 pt-8 px-5">
@@ -1074,11 +1074,15 @@ function MemorizationPlayer({
             <Skeleton className="h-10 w-3/5 rounded-xl mx-auto" />
           </div>
         ) : (
-          <div className="mushaf-page" style={{ width: "min(680px, 96vw)", margin: "0 auto", padding: "12px" }}>
+          <div className="mushaf-page" style={{ width: "min(680px, 96vw)", height: "100%", margin: "0 auto", padding: "12px", display: "flex", flexDirection: "column" }}>
             {/* Parchment page card */}
             <div
               className="relative"
               style={{
+                flex: 1,
+                overflow: "hidden",
+                display: "flex",
+                flexDirection: "column",
                 border: `2px solid ${theme.bannerBorder}`,
                 outline: `1px solid ${theme.bannerBorder}`,
                 outlineOffset: "-8px",
@@ -1100,13 +1104,15 @@ function MemorizationPlayer({
                 lang="ar"
                 style={{
                   fontFamily: '"Amiri Quran", "me_quran", serif',
-                  fontSize: "1.5rem",
+                  fontSize: "1.57rem",
                   lineHeight: "2.15",
                   textAlign: "justify",
                   textAlignLast: "right",
                   textJustify: "inter-word",
                   color: "#1a0a00",
-                  overflow: "visible",
+                  flex: 1,
+                  overflowY: "auto",
+                  minHeight: 0,
                 }}
               >
 
@@ -1199,13 +1205,16 @@ function MemorizationPlayer({
                             </span>
                             {surahId !== 1 && surahId !== 9 && (
                               <span
-                                className="block leading-loose mb-2"
                                 style={{
+                                  display: "block",
+                                  width: "100%",
                                   fontFamily: '"Amiri Quran", "me_quran", serif',
                                   fontSize: "1.3rem",
+                                  lineHeight: "2",
                                   textAlign: "center",
                                   color: theme.accent,
                                   opacity: 0.45,
+                                  marginBottom: "0.5rem",
                                 }}
                               >
                                 بِسْمِ ٱللَّهِ ٱلرَّحْمَٰنِ ٱلرَّحِيمِ
