@@ -25,6 +25,8 @@ import {
   EyeOff,
   Sun,
   Moon,
+  Mic,
+  MicOff,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useDarkMode } from "@/hooks/use-dark-mode";
@@ -171,7 +173,9 @@ async function fetchVersesByPage(
     `${QURAN_API}/verses/by_page/${pageNumber}?fields=text_uthmani,text_uthmani_tajweed&per_page=50`
   );
   if (!r.ok) throw new Error(`Failed to fetch page ${pageNumber}`);
-  return r.json();
+  const data = await r.json();
+  console.log("[fetchVersesByPage] first verse first word:", data?.verses?.[0]?.words?.[0]);
+  return data;
 }
 
 // ─── Audio utilities (mirrors verse-player.tsx logic) ────────────────────────
@@ -572,8 +576,16 @@ const TAJWEED_CSS = `
 .mushaf-page .idgham_shafawi       { color: #169200; }
 .mushaf-page .iqlab             { color: #26BFFD; }
 .mushaf-page .ghunna            { color: #169200; }
+@keyframes recite-word-pulse {
+  0%, 100% { box-shadow: 0 2px 0 #22c55e; opacity: 1; }
+  50%       { box-shadow: 0 3px 8px #22c55e99; opacity: 0.85; }
+}
 `;
 
+
+// Strip Arabic diacritics (tashkeel) for fuzzy speech-recognition matching.
+const stripTashkeel = (s: string): string =>
+  s.replace(/[\u0610-\u061A\u064B-\u065F\u0670\u06D6-\u06DC\u06DF-\u06E4\u06E7\u06E8\u06EA-\u06ED]/g, "").trim();
 
 // Strip trailing verse-end glyph (۝) and Arabic-Indic digits (٠-٩) from Uthmani text.
 const stripVerseEnd = (s: string): string => s.replace(/[\u06DD\u0660-\u0669\s]+$/, "").trimEnd();
@@ -640,6 +652,15 @@ function MemorizationPlayer({
   const { isDarkMode, toggleDarkMode } = useDarkMode();
   const [isBlindMode, setIsBlindMode] = useState(false);
   const [revealedAyahs, setRevealedAyahs] = useState<Set<number>>(new Set());
+  const [isReciteMode, setIsReciteMode] = useState(false);
+  const [reciteWordIndex, setReciteWordIndex] = useState(0);
+  const [reciteVerseIndex, setReciteVerseIndex] = useState(0);
+  const [reciteAttempts, setReciteAttempts] = useState(0);
+  const [reciteListening, setReciteListening] = useState(false);
+  const recognitionRef = useRef<any>(null);
+  const reciteWordIndexRef = useRef(0);
+  const reciteVerseIndexRef = useRef(0);
+  const isReciteModeRef = useRef(false);
   const [mushafTheme, setMushafThemeState] = useState<keyof typeof MUSHAF_THEMES>(() => {
     try {
       const saved = localStorage.getItem("mushaf-theme");
@@ -699,6 +720,10 @@ function MemorizationPlayer({
   const reviewRepeatCountRef = useRef(reviewRepeatCount);
   reviewRepeatCountRef.current = reviewRepeatCount;
 
+  reciteWordIndexRef.current = reciteWordIndex;
+  reciteVerseIndexRef.current = reciteVerseIndex;
+  isReciteModeRef.current = isReciteMode;
+
   const onSessionCompleteRef = useRef(onSessionComplete);
   onSessionCompleteRef.current = onSessionComplete;
 
@@ -741,6 +766,100 @@ function MemorizationPlayer({
       savedAt: Date.now(),
     });
   }, [childId, chapter, fromAyah, toAyah, currentAyahNum, repeatCount, autoAdvance, cumulativeReview, reviewRepeatCount]);
+
+  // Session verses ordered by verse_number for recite mode indexing.
+  const sessionVerses = useMemo(
+    () =>
+      verses
+        .filter((v) => v.verse_number >= fromAyah && v.verse_number <= toAyah)
+        .sort((a, b) => a.verse_number - b.verse_number),
+    [verses, fromAyah, toAyah]
+  );
+  const sessionVersesRef = useRef<VerseData[]>([]);
+  sessionVersesRef.current = sessionVerses;
+
+  // Speech recognition — runs only while recite mode is active.
+  useEffect(() => {
+    if (!isReciteMode) {
+      recognitionRef.current?.stop();
+      setReciteListening(false);
+      return;
+    }
+    const SR =
+      (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SR) {
+      alert("Speech recognition not supported in this browser. Try Chrome.");
+      setIsReciteMode(false);
+      return;
+    }
+    const rec = new SR();
+    rec.lang = "ar-SA";
+    rec.continuous = true;
+    rec.interimResults = false;
+    rec.maxAlternatives = 3;
+
+    rec.onresult = (e: any) => {
+      const result = e.results[e.results.length - 1];
+      const transcripts: string[] = Array.from(
+        { length: result.length },
+        (_: any, i: number) =>
+          stripTashkeel(result[i].transcript.trim())
+      );
+
+      const activeVerse = sessionVersesRef.current[reciteVerseIndexRef.current];
+      if (!activeVerse) return;
+      const expectedWords = activeVerse.text_uthmani.split(/\s+/).filter(Boolean);
+      const expectedWord = stripTashkeel(
+        expectedWords[reciteWordIndexRef.current] || ""
+      );
+
+      console.log('heard:', transcripts.join(' | '), 'expected:', expectedWord);
+
+      const matched = transcripts.some((transcript) => {
+        const transcriptWords = transcript.split(/\s+/).filter(Boolean);
+        return transcriptWords.some(
+          (t) =>
+            t === expectedWord ||
+            t.includes(expectedWord) ||
+            expectedWord.includes(t)
+        );
+      });
+
+      if (matched) {
+        const wIdx = reciteWordIndexRef.current;
+        setReciteAttempts(0);
+        if (wIdx + 1 >= expectedWords.length) {
+          setReciteVerseIndex((v) => v + 1);
+          setReciteWordIndex(0);
+        } else {
+          setReciteWordIndex((w) => w + 1);
+        }
+      } else if (result.isFinal) {
+        setReciteAttempts((a) => a + 1);
+      }
+    };
+
+    rec.onerror = (e: any) => {
+      if (e.error !== "no-speech") console.error("Speech error:", e.error);
+    };
+
+    rec.onend = () => {
+      if (isReciteModeRef.current) {
+        try {
+          rec.start();
+        } catch {}
+      }
+    };
+
+    recognitionRef.current = rec;
+    rec.start();
+    console.log('recognition started');
+    setReciteListening(true);
+
+    return () => {
+      rec.stop();
+    };
+  }, [isReciteMode]);
 
   const handleAllRepeatsDone = useCallback(() => {
     if (internalPhaseRef.current === "single") {
@@ -999,7 +1118,7 @@ function MemorizationPlayer({
         <div className="flex items-center justify-center gap-2">
           <Button
             variant="outline" size="sm" onClick={goPrev}
-            disabled={isCumulative ? false : currentAyahNum <= fromAyah}
+            disabled={isReciteMode || (isCumulative ? false : currentAyahNum <= fromAyah)}
             className="rounded-full w-10 h-10 p-0"
             title={isCumulative ? "Exit cumulative review" : "Previous ayah"}
           >
@@ -1007,14 +1126,14 @@ function MemorizationPlayer({
           </Button>
           <Button
             size="lg" onClick={play}
-            disabled={loading || versesLoading || !currentArabic}
+            disabled={isReciteMode || loading || versesLoading || !currentArabic}
             className={cn("rounded-full w-14 h-14 p-0 shadow-lg", isCumulative ? "bg-teal-600 hover:bg-teal-700" : "")}
           >
             {loading ? <Loader2 size={22} className="animate-spin" /> : playing ? <Pause size={22} /> : <Play size={22} className="ml-1" />}
           </Button>
           <Button
             variant="outline" size="sm" onClick={handleSkipRepeat}
-            disabled={!isCumulative && repeatCount <= 1}
+            disabled={isReciteMode || (!isCumulative && repeatCount <= 1)}
             className="rounded-full w-10 h-10 p-0"
             title={isCumulative ? "Skip pass" : "Skip repeat (stay on same ayah)"}
           >
@@ -1022,6 +1141,7 @@ function MemorizationPlayer({
           </Button>
           <Button
             variant="outline" size="sm" onClick={skipAyah}
+            disabled={isReciteMode}
             className="rounded-full w-10 h-10 p-0"
             title={isCumulative ? "Skip cumulative review" : "Skip ayah (advance to next ayah)"}
           >
@@ -1291,9 +1411,89 @@ function MemorizationPlayer({
                           >
                             {(() => {
                               const blindActive = isBlindMode && !revealedAyahs.has(verseNum);
+                              // verseIdx of the active verse relative to fromAyah
+                              const reciteVerseIdx = activeVerseNumber - fromAyah;
                               const wordSpans = words.map((_, i) => {
                                 const isHighlighted = highlightedWord === i;
                                 const isPast = playing && highlightedWord > i;
+
+                                if (isReciteMode) {
+                                  // A word is "done" if its verse is past, or same verse and word index is past
+                                  const isWordDone =
+                                    reciteVerseIdx < reciteVerseIndex ||
+                                    (reciteVerseIdx === reciteVerseIndex && i < reciteWordIndex);
+                                  // Current word: this verse + word is exactly the recite cursor
+                                  const isCurrentWord =
+                                    reciteVerseIdx === reciteVerseIndex && i === reciteWordIndex;
+                                  // Future: not done and not current
+                                  const isFutureWord = !isWordDone && !isCurrentWord;
+                                  // Hint only on the current word after 3 failed attempts
+                                  const showHint = isCurrentWord && reciteAttempts >= 3;
+
+                                  // current word: blurred with green outline (target indicator)
+                                  // future word: blurred, no indicator
+                                  // done word: fully visible
+                                  const reciteStyle: React.CSSProperties = isCurrentWord
+                                    ? {
+                                        position: "relative",
+                                        filter: "blur(4px)",
+                                        outline: "2px solid #22c55e",
+                                        borderRadius: "4px",
+                                        animation: "recite-word-pulse 1.2s ease-in-out infinite",
+                                      }
+                                    : isFutureWord
+                                      ? { filter: "blur(6px)", userSelect: "none" }
+                                      : {}; // done words: fully visible
+
+                                  return (
+                                    <span
+                                      key={i}
+                                      className="inline-block transition-all duration-100 rounded-sm px-[0.15em] mx-[0.15em]"
+                                      style={reciteStyle}
+                                    >
+                                      {showHint && (
+                                        <span
+                                          style={{
+                                            position: "absolute",
+                                            top: "-1.4em",
+                                            left: "50%",
+                                            transform: "translateX(-50%)",
+                                            fontSize: "0.6rem",
+                                            whiteSpace: "nowrap",
+                                            color: "#16a34a",
+                                            cursor: "pointer",
+                                            userSelect: "none",
+                                            zIndex: 10,
+                                            background: "rgba(255,255,255,0.85)",
+                                            borderRadius: "3px",
+                                            padding: "1px 3px",
+                                          }}
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setReciteAttempts(0);
+                                            if (i + 1 >= words.length) {
+                                              setReciteVerseIndex((v) => v + 1);
+                                              setReciteWordIndex(0);
+                                            } else {
+                                              setReciteWordIndex((w) => w + 1);
+                                            }
+                                          }}
+                                        >
+                                          👁 Reveal
+                                        </span>
+                                      )}
+                                      {hasValidTajweed ? (
+                                        <span dangerouslySetInnerHTML={{ __html: tajweedWords[i] }} />
+                                      ) : (
+                                        stripVerseEnd(surahVerse?.text_uthmani ?? currentArabic)
+                                          .split(/\s+/)
+                                          .filter(Boolean)[i] ?? ""
+                                      )}
+                                    </span>
+                                  );
+                                }
+
+                                // Normal (non-recite) word span
                                 return (
                                   <span
                                     key={i}
@@ -1330,6 +1530,9 @@ function MemorizationPlayer({
                                   if (next.has(verseNum)) next.delete(verseNum); else next.add(verseNum);
                                   return next;
                                 });
+                              if (isReciteMode) {
+                                return <>{wordSpans}</>;
+                              }
                               if (blindActive) {
                                 return (
                                   <span
@@ -1383,6 +1586,19 @@ function MemorizationPlayer({
                                 )}
                               </span>
                             );
+                            // Recite mode: blur in-session future verses; past verses show normally.
+                            // Out-of-range verses keep existing dim with no special recite treatment.
+                            if (isReciteMode && isActiveSurah && inSelectedRange) {
+                              const verseSessionIdx = verseNum - fromAyah;
+                              if (verseSessionIdx > reciteVerseIndex) {
+                                return (
+                                  <span style={{ filter: "blur(6px)", userSelect: "none" }}>
+                                    {inner}
+                                  </span>
+                                );
+                              }
+                              return inner;
+                            }
                             if (!isBlindMode) return inner;
                             if (outOfRange) {
                               // Out-of-range: always blurred, not tappable
@@ -1591,9 +1807,10 @@ function MemorizationPlayer({
               size="sm"
               onClick={goPrev}
               disabled={
-                isCumulative
+                isReciteMode ||
+                (isCumulative
                   ? false // tapping prev exits cumulative
-                  : currentAyahNum <= fromAyah
+                  : currentAyahNum <= fromAyah)
               }
               className="rounded-full w-11 h-11 p-0"
               title={isCumulative ? "Exit cumulative review" : "Previous ayah"}
@@ -1604,7 +1821,7 @@ function MemorizationPlayer({
             <Button
               size="lg"
               onClick={play}
-              disabled={loading || versesLoading || !currentArabic}
+              disabled={isReciteMode || loading || versesLoading || !currentArabic}
               className={cn(
                 "rounded-full w-16 h-16 p-0 shadow-lg",
                 isCumulative ? "bg-teal-600 hover:bg-teal-700" : ""
@@ -1623,7 +1840,7 @@ function MemorizationPlayer({
               variant="outline"
               size="sm"
               onClick={handleSkipRepeat}
-              disabled={!isCumulative && repeatCount <= 1}
+              disabled={isReciteMode || (!isCumulative && repeatCount <= 1)}
               className="rounded-full w-11 h-11 p-0"
               title={isCumulative ? "Skip pass" : "Skip repeat (stay on same ayah)"}
             >
@@ -1634,6 +1851,7 @@ function MemorizationPlayer({
               variant="outline"
               size="sm"
               onClick={skipAyah}
+              disabled={isReciteMode}
               className="rounded-full w-11 h-11 p-0"
               title={isCumulative ? "Skip cumulative review" : "Skip ayah (advance to next ayah)"}
             >
@@ -1672,9 +1890,9 @@ function MemorizationPlayer({
             ))}
           </div>
 
-          {/* Auto-advance toggle + blind mode toggle + reciter label */}
+          {/* Auto-advance toggle + blind mode toggle + recite mode toggle + reciter label */}
           <div className="flex items-center justify-between pt-1">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <button
                 onClick={() => setAutoAdvance((a) => !a)}
                 className={cn(
@@ -1688,7 +1906,7 @@ function MemorizationPlayer({
                 Auto-advance {autoAdvance ? "on" : "off"}
               </button>
               <button
-                onClick={() => setIsBlindMode((v) => !v)}
+                onClick={() => { setIsBlindMode((v) => !v); setIsReciteMode(false); }}
                 className={cn(
                   "flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs transition-colors",
                   isBlindMode
@@ -1698,6 +1916,43 @@ function MemorizationPlayer({
               >
                 <EyeOff size={11} />
                 Blind {isBlindMode ? "on" : "off"}
+              </button>
+              <button
+                onClick={() => {
+                          setIsReciteMode((v) => {
+                            if (!v) {
+                              // Resetting state when enabling
+                              stopAudio();
+                              setReciteWordIndex(0);
+                              setReciteVerseIndex(0);
+                              setReciteAttempts(0);
+                            }
+                            return !v;
+                          });
+                          setIsBlindMode(false);
+                        }}
+                className={cn(
+                  "flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs transition-colors",
+                  isReciteMode
+                    ? "border-green-500 text-green-700 bg-green-50 dark:bg-green-950 dark:text-green-300"
+                    : "border-border text-muted-foreground hover:text-foreground"
+                )}
+              >
+                {isReciteMode ? <Mic size={11} /> : <MicOff size={11} />}
+                Recite
+                {reciteListening && (
+                  <span
+                    style={{
+                      display: "inline-block",
+                      width: 6,
+                      height: 6,
+                      borderRadius: "50%",
+                      background: "#ef4444",
+                      animation: "recite-word-pulse 1s ease-in-out infinite",
+                      flexShrink: 0,
+                    }}
+                  />
+                )}
               </button>
             </div>
 
@@ -1830,7 +2085,7 @@ function MemorizationPlayer({
 
         {/* Blind mode toggle */}
         <button
-          onClick={() => setIsBlindMode((v) => !v)}
+          onClick={() => { setIsBlindMode((v) => !v); setIsReciteMode(false); }}
           className={cn(
             "flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs transition-colors self-start",
             isBlindMode
@@ -1840,6 +2095,45 @@ function MemorizationPlayer({
         >
           <EyeOff size={11} />
           Blind mode {isBlindMode ? "on" : "off"}
+        </button>
+
+        {/* Recite mode toggle */}
+        <button
+          onClick={() => {
+                          setIsReciteMode((v) => {
+                            if (!v) {
+                              // Resetting state when enabling
+                              stopAudio();
+                              setReciteWordIndex(0);
+                              setReciteVerseIndex(0);
+                              setReciteAttempts(0);
+                            }
+                            return !v;
+                          });
+                          setIsBlindMode(false);
+                        }}
+          className={cn(
+            "flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs transition-colors self-start",
+            isReciteMode
+              ? "border-green-500 text-green-700 bg-green-50 dark:bg-green-950 dark:text-green-300"
+              : "border-border text-muted-foreground hover:text-foreground"
+          )}
+        >
+          {isReciteMode ? <Mic size={11} /> : <MicOff size={11} />}
+          Recite mode
+          {reciteListening && (
+            <span
+              style={{
+                display: "inline-block",
+                width: 6,
+                height: 6,
+                borderRadius: "50%",
+                background: "#ef4444",
+                animation: "recite-word-pulse 1s ease-in-out infinite",
+                flexShrink: 0,
+              }}
+            />
+          )}
         </button>
 
         {/* Settings back link */}
