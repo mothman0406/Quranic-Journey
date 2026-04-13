@@ -587,12 +587,17 @@ const TAJWEED_CSS = `
 // speech-recognition matching.
 const stripTashkeel = (s: string): string =>
   s
-    .replace(/[\u0610-\u061A\u064B-\u065F\u0670\u06D6-\u06DC\u06DF-\u06E4\u06E7\u06E8\u06EA-\u06ED]/g, "")
+    .replace(/\u0670/g, "ا")  // dagger alif → regular alif (must run before diacritic strip)
+    .replace(/[\u0610-\u061A\u064B-\u065F\u06D6-\u06DC\u06DF-\u06E4\u06E7\u06E8\u06EA-\u06ED]/g, "") // strip tashkeel (u0670 excluded — handled above)
+    .replace(/[ـ]/g, "")      // remove tatweel (kashida)
+    .replace(/[\uFB50-\uFDFF]/g, (c) => c.normalize("NFKD").replace(/[\u0300-\u036f]/g, "")) // normalize Arabic presentation forms
     .replace(/[أإآاٱ]/g, "ا")  // normalize all alef variants to plain alef
     .replace(/ى/g, "ي")       // alef maqsura → ya
     .replace(/ة/g, "ه")       // ta marbuta → ha
     .replace(/ؤ/g, "و")       // waw with hamza → waw
     .replace(/ئ/g, "ي")       // ya with hamza → ya
+    .replace(/[^\u0600-\u06FF\s]/g, "") // remove anything not standard Arabic
+    .replace(/^ال/, "")        // strip definite article from start of word
     .trim();
 
 
@@ -806,7 +811,7 @@ function MemorizationPlayer({
     rec.maxAlternatives = 3;
 
     rec.onresult = (e: any) => {
-      const result = e.results[e.results.length - 1];
+      const result = e.results[e.resultIndex];
       if (!result.isFinal) return; // ignore interim results
 
       // Use the best (first) alternative for sequential multi-word matching.
@@ -825,12 +830,15 @@ function MemorizationPlayer({
         const expectedWords = verse.text_uthmani.split(/\s+/).filter(Boolean);
         const expectedAr = stripTashkeel(expectedWords[wIdx] || "");
 
-        console.log("SR word:", heardWord, "| expected:", expectedAr);
+        const hw = heardWord.replace(/^ال/, "");
+        const ew = expectedAr.replace(/^ال/, "");
+
+        console.log("SR word:", hw, "| expected:", ew);
 
         if (
-          heardWord === expectedAr ||
-          heardWord.includes(expectedAr) ||
-          expectedAr.includes(heardWord)
+          hw === ew ||
+          hw.includes(ew) ||
+          ew.includes(hw)
         ) {
           advanced = true;
           if (wIdx + 1 >= expectedWords.length) {
