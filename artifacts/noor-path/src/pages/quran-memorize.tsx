@@ -583,9 +583,18 @@ const TAJWEED_CSS = `
 `;
 
 
-// Strip Arabic diacritics (tashkeel) for fuzzy speech-recognition matching.
+// Strip Arabic diacritics (tashkeel) and normalize letter variants for fuzzy
+// speech-recognition matching.
 const stripTashkeel = (s: string): string =>
-  s.replace(/[\u0610-\u061A\u064B-\u065F\u0670\u06D6-\u06DC\u06DF-\u06E4\u06E7\u06E8\u06EA-\u06ED]/g, "").trim();
+  s
+    .replace(/[\u0610-\u061A\u064B-\u065F\u0670\u06D6-\u06DC\u06DF-\u06E4\u06E7\u06E8\u06EA-\u06ED]/g, "")
+    .replace(/[أإآاٱ]/g, "ا")  // normalize all alef variants to plain alef
+    .replace(/ى/g, "ي")       // alef maqsura → ya
+    .replace(/ة/g, "ه")       // ta marbuta → ha
+    .replace(/ؤ/g, "و")       // waw with hamza → waw
+    .replace(/ئ/g, "ي")       // ya with hamza → ya
+    .trim();
+
 
 // Strip trailing verse-end glyph (۝) and Arabic-Indic digits (٠-٩) from Uthmani text.
 const stripVerseEnd = (s: string): string => s.replace(/[\u06DD\u0660-\u0669\s]+$/, "").trimEnd();
@@ -656,7 +665,6 @@ function MemorizationPlayer({
   const [reciteWordIndex, setReciteWordIndex] = useState(0);
   const [reciteVerseIndex, setReciteVerseIndex] = useState(0);
   const [reciteAttempts, setReciteAttempts] = useState(0);
-  const [reciteListening, setReciteListening] = useState(false);
   const recognitionRef = useRef<any>(null);
   const reciteWordIndexRef = useRef(0);
   const reciteVerseIndexRef = useRef(0);
@@ -782,7 +790,6 @@ function MemorizationPlayer({
   useEffect(() => {
     if (!isReciteMode) {
       recognitionRef.current?.stop();
-      setReciteListening(false);
       return;
     }
     const SR =
@@ -793,50 +800,59 @@ function MemorizationPlayer({
       return;
     }
     const rec = new SR();
-    rec.lang = "ar-SA";
+    rec.lang = "ar";
     rec.continuous = true;
-    rec.interimResults = false;
+    rec.interimResults = true;
     rec.maxAlternatives = 3;
 
     rec.onresult = (e: any) => {
       const result = e.results[e.results.length - 1];
-      const transcripts: string[] = Array.from(
-        { length: result.length },
-        (_: any, i: number) =>
-          stripTashkeel(result[i].transcript.trim())
-      );
+      if (!result.isFinal) return; // ignore interim results
 
-      const activeVerse = sessionVersesRef.current[reciteVerseIndexRef.current];
-      if (!activeVerse) return;
-      const expectedWords = activeVerse.text_uthmani.split(/\s+/).filter(Boolean);
-      const expectedWord = stripTashkeel(
-        expectedWords[reciteWordIndexRef.current] || ""
-      );
+      // Use the best (first) alternative for sequential multi-word matching.
+      const bestTranscript = result[0].transcript.trim();
+      const heardWords = stripTashkeel(bestTranscript).split(/\s+/).filter(Boolean);
 
-      console.log('heard:', transcripts.join(' | '), 'expected:', expectedWord);
+      // Walk heard words against expected words sequentially.
+      // Advance local cursors (not state) so we can batch a single state update.
+      let vIdx = reciteVerseIndexRef.current;
+      let wIdx = reciteWordIndexRef.current;
+      let advanced = false;
 
-      const matched = transcripts.some((transcript) => {
-        const transcriptWords = transcript.split(/\s+/).filter(Boolean);
-        return transcriptWords.some(
-          (t) =>
-            t === expectedWord ||
-            t.includes(expectedWord) ||
-            expectedWord.includes(t)
-        );
-      });
+      for (const heardWord of heardWords) {
+        const verse = sessionVersesRef.current[vIdx];
+        if (!verse) break;
+        const expectedWords = verse.text_uthmani.split(/\s+/).filter(Boolean);
+        const expectedAr = stripTashkeel(expectedWords[wIdx] || "");
 
-      if (matched) {
-        const wIdx = reciteWordIndexRef.current;
-        setReciteAttempts(0);
-        if (wIdx + 1 >= expectedWords.length) {
-          setReciteVerseIndex((v) => v + 1);
-          setReciteWordIndex(0);
+        console.log("SR word:", heardWord, "| expected:", expectedAr);
+
+        if (
+          heardWord === expectedAr ||
+          heardWord.includes(expectedAr) ||
+          expectedAr.includes(heardWord)
+        ) {
+          advanced = true;
+          if (wIdx + 1 >= expectedWords.length) {
+            vIdx++;
+            wIdx = 0;
+          } else {
+            wIdx++;
+          }
         } else {
-          setReciteWordIndex((w) => w + 1);
+          break; // stop on first non-matching word
         }
-      } else if (result.isFinal) {
-        setReciteAttempts((a) => a + 1);
       }
+
+      console.log("match result:", advanced, "| new reciteVerseIndex:", vIdx, "| new reciteWordIndex:", wIdx);
+
+      if (advanced) {
+        setReciteAttempts(0);
+        setReciteVerseIndex(vIdx);
+        setReciteWordIndex(wIdx);
+        return;
+      }
+      setReciteAttempts((a) => a + 1);
     };
 
     rec.onerror = (e: any) => {
@@ -844,20 +860,24 @@ function MemorizationPlayer({
     };
 
     rec.onend = () => {
+      console.log("SR ended, isReciteMode:", isReciteModeRef.current);
+      // Restart through the ref — not the closed-over local — so cleanup can
+      // null it out first and prevent a restart after teardown.
       if (isReciteModeRef.current) {
-        try {
-          rec.start();
-        } catch {}
+        console.log("SR restarting...");
+        try { recognitionRef.current?.start(); } catch {}
       }
     };
 
+    // Assign to ref BEFORE start() so onend can reach it immediately.
     recognitionRef.current = rec;
     rec.start();
-    console.log('recognition started');
-    setReciteListening(true);
 
     return () => {
+      // Null onend first so the handler cannot fire and call start() after we stop.
+      rec.onend = null;
       rec.stop();
+      recognitionRef.current = null;
     };
   }, [isReciteMode]);
 
@@ -1590,7 +1610,7 @@ function MemorizationPlayer({
                             // Out-of-range verses keep existing dim with no special recite treatment.
                             if (isReciteMode && isActiveSurah && inSelectedRange) {
                               const verseSessionIdx = verseNum - fromAyah;
-                              if (verseSessionIdx > reciteVerseIndex) {
+                              if (verseSessionIdx >= reciteVerseIndex) {
                                 return (
                                   <span style={{ filter: "blur(6px)", userSelect: "none" }}>
                                     {inner}
@@ -1940,19 +1960,6 @@ function MemorizationPlayer({
               >
                 {isReciteMode ? <Mic size={11} /> : <MicOff size={11} />}
                 Recite
-                {reciteListening && (
-                  <span
-                    style={{
-                      display: "inline-block",
-                      width: 6,
-                      height: 6,
-                      borderRadius: "50%",
-                      background: "#ef4444",
-                      animation: "recite-word-pulse 1s ease-in-out infinite",
-                      flexShrink: 0,
-                    }}
-                  />
-                )}
               </button>
             </div>
 
@@ -2121,19 +2128,6 @@ function MemorizationPlayer({
         >
           {isReciteMode ? <Mic size={11} /> : <MicOff size={11} />}
           Recite mode
-          {reciteListening && (
-            <span
-              style={{
-                display: "inline-block",
-                width: 6,
-                height: 6,
-                borderRadius: "50%",
-                background: "#ef4444",
-                animation: "recite-word-pulse 1s ease-in-out infinite",
-                flexShrink: 0,
-              }}
-            />
-          )}
         </button>
 
         {/* Settings back link */}
