@@ -1614,18 +1614,44 @@ function MemorizationPlayer({
                                 )}
                               </span>
                             );
-                            // Recite mode: blur in-session future verses; past verses show normally.
+                            // Recite mode: word-by-word blur for in-session verses.
                             // Out-of-range verses keep existing dim with no special recite treatment.
                             if (isReciteMode && isActiveSurah && inSelectedRange) {
                               const verseSessionIdx = verseNum - fromAyah;
-                              if (verseSessionIdx >= reciteVerseIndex) {
+                              // Future verse — blur entire block
+                              if (verseSessionIdx > reciteVerseIndex) {
                                 return (
                                   <span style={{ filter: "blur(6px)", userSelect: "none" }}>
                                     {inner}
                                   </span>
                                 );
                               }
-                              return inner;
+                              // Past verse — fully visible
+                              if (verseSessionIdx < reciteVerseIndex) {
+                                return inner;
+                              }
+                              // Current verse (verseSessionIdx === reciteVerseIndex) — word-by-word
+                              const verseText = stripVerseEnd(surahVerse?.text_uthmani ?? "");
+                              const verseWordList = verseText.split(/\s+/).filter(Boolean);
+                              return (
+                                <>
+                                  {verseWordList.map((word, wi) => {
+                                    const isWordDone = wi < reciteWordIndex;
+                                    const isCurrentWord = wi === reciteWordIndex;
+                                    const isFutureWord = !isWordDone && !isCurrentWord;
+                                    const wordStyle: React.CSSProperties = isCurrentWord
+                                      ? { filter: "blur(4px)", outline: "2px solid #22c55e", borderRadius: "4px", display: "inline-block" }
+                                      : isFutureWord
+                                        ? { filter: "blur(6px)", userSelect: "none", display: "inline-block" }
+                                        : { display: "inline-block" };
+                                    return (
+                                      <span key={wi} className="px-[0.15em] mx-[0.15em]" style={wordStyle}>
+                                        {word}
+                                      </span>
+                                    );
+                                  })}
+                                </>
+                              );
                             }
                             if (!isBlindMode) return inner;
                             if (outOfRange) {
