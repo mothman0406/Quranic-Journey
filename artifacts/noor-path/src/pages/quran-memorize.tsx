@@ -682,6 +682,7 @@ function MemorizationPlayer({
   const reciteWordIndexRef = useRef(0);
   const reciteVerseIndexRef = useRef(0);
   const isReciteModeRef = useRef(false);
+  const matchedWordCountRef = useRef(0);
   const [mushafTheme, setMushafThemeState] = useState<keyof typeof MUSHAF_THEMES>(() => {
     try {
       const saved = localStorage.getItem("mushaf-theme");
@@ -820,13 +821,16 @@ function MemorizationPlayer({
 
     rec.onresult = (e: any) => {
       const result = e.results[e.resultIndex];
-      if (!result.isFinal) return; // ignore interim results
 
-      // Use the best (first) alternative for sequential multi-word matching.
+      // Full accumulated transcript for this utterance.
       const bestTranscript = result[0].transcript.trim();
-      const heardWords = stripTashkeel(bestTranscript).split(/\s+/).filter(Boolean);
+      const allHeardWords = stripTashkeel(bestTranscript).split(/\s+/).filter(Boolean);
 
-      // Walk heard words against expected words sequentially.
+      // Skip words already matched in previous interim events for this utterance
+      // so each event only processes newly spoken words.
+      const heardWords = allHeardWords.slice(matchedWordCountRef.current);
+
+      // Walk new heard words against expected words sequentially.
       // Advance local cursors (not state) so we can batch a single state update.
       let vIdx = reciteVerseIndexRef.current;
       let wIdx = reciteWordIndexRef.current;
@@ -849,6 +853,7 @@ function MemorizationPlayer({
           ew.includes(hw)
         ) {
           advanced = true;
+          matchedWordCountRef.current++;
           if (wIdx + 1 >= expectedWords.length) {
             vIdx++;
             wIdx = 0;
@@ -863,12 +868,24 @@ function MemorizationPlayer({
       console.log("match result:", advanced, "| new reciteVerseIndex:", vIdx, "| new reciteWordIndex:", wIdx);
 
       if (advanced) {
+        // Write back to refs immediately so subsequent interim results start
+        // from the correct verse/word position.
+        reciteVerseIndexRef.current = vIdx;
+        reciteWordIndexRef.current = wIdx;
         setReciteAttempts(0);
         setReciteVerseIndex(vIdx);
         setReciteWordIndex(wIdx);
-        return;
+      } else {
+        // Only penalise on final results; interim mismatches are expected mid-word.
+        if (result.isFinal) {
+          setReciteAttempts((a) => a + 1);
+        }
       }
-      setReciteAttempts((a) => a + 1);
+
+      // Final result closes this utterance — reset so the next starts fresh.
+      if (result.isFinal) {
+        matchedWordCountRef.current = 0;
+      }
     };
 
     rec.onerror = (e: any) => {
@@ -985,6 +1002,7 @@ function MemorizationPlayer({
     setRevealedWords(new Set());
     reciteWordIndexRef.current = 0;
     reciteVerseIndexRef.current = 0;
+    matchedWordCountRef.current = 0;
     onReciteTriggered?.();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [triggerReciteMode]);
@@ -1006,6 +1024,7 @@ function MemorizationPlayer({
     setRevealedWords(new Set());
     reciteWordIndexRef.current = 0;
     reciteVerseIndexRef.current = 0;
+    matchedWordCountRef.current = 0;
   };
 
   // After auto-advancing (single or cumulative), start playback once the hook has reset.
@@ -2033,6 +2052,7 @@ function MemorizationPlayer({
                               setRevealedWords(new Set());
                               reciteWordIndexRef.current = 0;
                               reciteVerseIndexRef.current = 0;
+                              matchedWordCountRef.current = 0;
                             }
                             return !v;
                           });
@@ -2224,6 +2244,7 @@ function MemorizationPlayer({
                               setRevealedWords(new Set());
                               reciteWordIndexRef.current = 0;
                               reciteVerseIndexRef.current = 0;
+                              matchedWordCountRef.current = 0;
                             }
                             return !v;
                           });
