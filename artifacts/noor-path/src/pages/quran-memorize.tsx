@@ -23,6 +23,7 @@ import {
   CheckCircle,
   Flag,
   EyeOff,
+  Eye,
   Sun,
   Moon,
   Mic,
@@ -637,6 +638,9 @@ interface PlayerProps {
   onBack: () => void;
   onSessionComplete: () => void;
   onPauseAndSave: (completedToAyah: number) => void;
+  triggerReciteMode?: boolean;
+  onReciteTriggered?: () => void;
+  onReciteComplete?: () => void;
 }
 
 function MemorizationPlayer({
@@ -655,6 +659,9 @@ function MemorizationPlayer({
   onBack,
   onSessionComplete,
   onPauseAndSave,
+  triggerReciteMode,
+  onReciteTriggered,
+  onReciteComplete,
 }: PlayerProps) {
   const reciter = RECITERS.find((r) => r.id === "husary")!;
 
@@ -670,6 +677,7 @@ function MemorizationPlayer({
   const [reciteWordIndex, setReciteWordIndex] = useState(0);
   const [reciteVerseIndex, setReciteVerseIndex] = useState(0);
   const [reciteAttempts, setReciteAttempts] = useState(0);
+  const [revealedWords, setRevealedWords] = useState<Set<string>>(new Set());
   const recognitionRef = useRef<any>(null);
   const reciteWordIndexRef = useRef(0);
   const reciteVerseIndexRef = useRef(0);
@@ -964,6 +972,41 @@ function MemorizationPlayer({
 
   // Keep playRef up to date on every render without triggering effects
   playRef.current = play;
+
+  // Trigger recite mode from outside (e.g. "Recite to NoorPath" button)
+  useEffect(() => {
+    if (!triggerReciteMode) return;
+    stopAudio();
+    setIsReciteMode(true);
+    setIsBlindMode(false);
+    setReciteWordIndex(0);
+    setReciteVerseIndex(0);
+    setReciteAttempts(0);
+    setRevealedWords(new Set());
+    reciteWordIndexRef.current = 0;
+    reciteVerseIndexRef.current = 0;
+    onReciteTriggered?.();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [triggerReciteMode]);
+
+  const handleShowWord = () => {
+    const key = `${reciteVerseIndex}-${reciteWordIndex}`;
+    setRevealedWords((prev) => {
+      const next = new Set(prev);
+      next.add(key);
+      return next;
+    });
+    setReciteAttempts((a) => a + 3);
+  };
+
+  const handleReciteRestart = () => {
+    setReciteVerseIndex(0);
+    setReciteWordIndex(0);
+    setReciteAttempts(0);
+    setRevealedWords(new Set());
+    reciteWordIndexRef.current = 0;
+    reciteVerseIndexRef.current = 0;
+  };
 
   // After auto-advancing (single or cumulative), start playback once the hook has reset.
   // Cumulative ayah-to-ayah transitions use delay=0 for seamless flow;
@@ -1455,15 +1498,14 @@ function MemorizationPlayer({
                                     reciteVerseIdx === reciteVerseIndex && i === reciteWordIndex;
                                   // Future: not done and not current
                                   const isFutureWord = !isWordDone && !isCurrentWord;
-                                  // Hint only on the current word after 3 failed attempts
-                                  const showHint = isCurrentWord && reciteAttempts >= 3;
+                                  // Revealed: word was shown via the Show Word button
+                                  const isRevealed = isCurrentWord && revealedWords.has(`${reciteVerseIndex}-${reciteWordIndex}`);
 
-                                  // current word: blurred with green outline (target indicator)
+                                  // current word: blurred with green outline (target indicator), unless revealed
                                   // future word: blurred, no indicator
                                   // done word: fully visible
-                                  const reciteStyle: React.CSSProperties = isCurrentWord
+                                  const reciteStyle: React.CSSProperties = isCurrentWord && !isRevealed
                                     ? {
-                                        position: "relative",
                                         filter: "blur(4px)",
                                         outline: "2px solid #22c55e",
                                         borderRadius: "4px",
@@ -1471,7 +1513,7 @@ function MemorizationPlayer({
                                       }
                                     : isFutureWord
                                       ? { filter: "blur(6px)", userSelect: "none" }
-                                      : {}; // done words: fully visible
+                                      : {}; // done words and revealed current word: fully visible
 
                                   return (
                                     <span
@@ -1479,37 +1521,6 @@ function MemorizationPlayer({
                                       className="inline-block transition-all duration-100 rounded-sm px-[0.15em] mx-[0.15em]"
                                       style={reciteStyle}
                                     >
-                                      {showHint && (
-                                        <span
-                                          style={{
-                                            position: "absolute",
-                                            top: "-1.4em",
-                                            left: "50%",
-                                            transform: "translateX(-50%)",
-                                            fontSize: "0.6rem",
-                                            whiteSpace: "nowrap",
-                                            color: "#16a34a",
-                                            cursor: "pointer",
-                                            userSelect: "none",
-                                            zIndex: 10,
-                                            background: "rgba(255,255,255,0.85)",
-                                            borderRadius: "3px",
-                                            padding: "1px 3px",
-                                          }}
-                                          onClick={(e) => {
-                                            e.stopPropagation();
-                                            setReciteAttempts(0);
-                                            if (i + 1 >= words.length) {
-                                              setReciteVerseIndex((v) => v + 1);
-                                              setReciteWordIndex(0);
-                                            } else {
-                                              setReciteWordIndex((w) => w + 1);
-                                            }
-                                          }}
-                                        >
-                                          👁 Reveal
-                                        </span>
-                                      )}
                                       {hasValidTajweed ? (
                                         <span dangerouslySetInnerHTML={{ __html: tajweedWords[i] }} />
                                       ) : (
@@ -1639,7 +1650,8 @@ function MemorizationPlayer({
                                     const isWordDone = wi < reciteWordIndex;
                                     const isCurrentWord = wi === reciteWordIndex;
                                     const isFutureWord = !isWordDone && !isCurrentWord;
-                                    const wordStyle: React.CSSProperties = isCurrentWord
+                                    const isRevealed = isCurrentWord && revealedWords.has(`${verseSessionIdx}-${reciteWordIndex}`);
+                                    const wordStyle: React.CSSProperties = isCurrentWord && !isRevealed
                                       ? { filter: "blur(4px)", outline: "2px solid #22c55e", borderRadius: "4px", display: "inline-block" }
                                       : isFutureWord
                                         ? { filter: "blur(6px)", userSelect: "none", display: "inline-block" }
@@ -1752,6 +1764,33 @@ function MemorizationPlayer({
           </div>
         )}
       </div>
+
+      {/* Recite completion overlay — shown when all session verses have been recited */}
+      {isReciteMode && sessionVerses.length > 0 && reciteVerseIndex >= sessionVerses.length && (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/30">
+          <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl p-8 mx-6 flex flex-col items-center gap-4 max-w-xs w-full">
+            <div className="text-4xl">🌟</div>
+            <p className="text-lg font-bold text-emerald-700 dark:text-emerald-400 text-center">
+              Recitation Complete!
+            </p>
+            <p className="text-sm text-muted-foreground text-center">
+              You recited all {sessionVerses.length} {sessionVerses.length === 1 ? "verse" : "verses"}.
+            </p>
+            <button
+              onClick={() => onReciteComplete?.()}
+              className="w-full px-6 py-3 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-semibold rounded-xl transition-colors"
+            >
+              Submit Results →
+            </button>
+            <button
+              onClick={handleReciteRestart}
+              className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+            >
+              Try again
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Pause & Save modal */}
       {showPauseModal && (
@@ -1980,6 +2019,9 @@ function MemorizationPlayer({
                               setReciteWordIndex(0);
                               setReciteVerseIndex(0);
                               setReciteAttempts(0);
+                              setRevealedWords(new Set());
+                              reciteWordIndexRef.current = 0;
+                              reciteVerseIndexRef.current = 0;
                             }
                             return !v;
                           });
@@ -2005,6 +2047,26 @@ function MemorizationPlayer({
               <span className="text-xs text-red-500">⚠ Audio unavailable</span>
             )}
           </div>
+
+          {/* Show Word + Restart — only visible in recite mode */}
+          {isReciteMode && reciteVerseIndex < sessionVerses.length && (
+            <div className="flex items-center gap-2 flex-wrap pt-1 border-t border-border/40">
+              <button
+                onClick={handleShowWord}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-emerald-300 text-emerald-700 bg-emerald-50 dark:bg-emerald-950 dark:text-emerald-300 text-xs font-semibold hover:bg-emerald-100 dark:hover:bg-emerald-900 transition-colors"
+              >
+                <Eye size={11} />
+                Show Word
+              </button>
+              <button
+                onClick={handleReciteRestart}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-border text-muted-foreground text-xs font-semibold hover:text-foreground transition-colors"
+              >
+                <RotateCcw size={11} />
+                Restart
+              </button>
+            </div>
+          )}
 
           {/* Pause & Save — always visible shortcut to recitation check */}
           <div className="flex justify-center pt-1 border-t border-border/40">
@@ -2148,6 +2210,9 @@ function MemorizationPlayer({
                               setReciteWordIndex(0);
                               setReciteVerseIndex(0);
                               setReciteAttempts(0);
+                              setRevealedWords(new Set());
+                              reciteWordIndexRef.current = 0;
+                              reciteVerseIndexRef.current = 0;
                             }
                             return !v;
                           });
@@ -2163,6 +2228,26 @@ function MemorizationPlayer({
           {isReciteMode ? <Mic size={11} /> : <MicOff size={11} />}
           Recite mode
         </button>
+
+        {/* Show Word + Restart — only visible in recite mode */}
+        {isReciteMode && reciteVerseIndex < sessionVerses.length && (
+          <>
+            <button
+              onClick={handleShowWord}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-emerald-300 text-emerald-700 bg-emerald-50 dark:bg-emerald-950 dark:text-emerald-300 text-xs font-semibold hover:bg-emerald-100 dark:hover:bg-emerald-900 transition-colors self-start"
+            >
+              <Eye size={11} />
+              Show Word
+            </button>
+            <button
+              onClick={handleReciteRestart}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-border text-muted-foreground text-xs font-semibold hover:text-foreground transition-colors self-start"
+            >
+              <RotateCcw size={11} />
+              Restart
+            </button>
+          </>
+        )}
 
         {/* Settings back link */}
         <button
@@ -2197,6 +2282,8 @@ export default function QuranMemorizePage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [checkRating, setCheckRating] = useState<"needs_work" | "good" | "excellent" | null>(null);
   const [saveSuccess, setSaveSuccess] = useState(false);
+  const [triggerReciteMode, setTriggerReciteMode] = useState(false);
+  const [reciteSource, setReciteSource] = useState(false);
   const [celebration, setCelebration] = useState<{ message: string; subMessage?: string } | null>(null);
 
   const saveMutation = useMutation({
@@ -2297,6 +2384,14 @@ export default function QuranMemorizePage() {
 
   const handlePauseAndSave = useCallback((completedToAyah: number) => {
     setToAyah(completedToAyah);
+    setCheckRating(null);
+    setSaveSuccess(false);
+    setReciteSource(false);
+    setPhase("check");
+  }, []);
+
+  const handleReciteComplete = useCallback(() => {
+    setReciteSource(true);
     setCheckRating(null);
     setSaveSuccess(false);
     setPhase("check");
@@ -2683,27 +2778,47 @@ export default function QuranMemorizePage() {
           {/* Instruction card */}
           <div className="bg-white dark:bg-gray-900 rounded-2xl border border-border dark:border-gray-700 shadow-sm p-5">
             <p className="text-sm font-semibold text-foreground mb-1">
-              Listen to your child recite
+              {reciteSource
+                ? "How did your recitation go? Rate yourself honestly."
+                : "Listen to your child recite"}
             </p>
             <p className="text-muted-foreground text-sm">
-              Ask them to recite{" "}
-              <span className="font-medium text-foreground">
-                {fromAyah === toAyah
-                  ? `Ayah ${fromAyah}`
-                  : `Ayahs ${fromAyah}–${toAyah}`}
-              </span>{" "}
-              of{" "}
-              <span className="font-medium text-foreground arabic-text">
-                {selectedChapter.name_simple}
-              </span>{" "}
-              from memory, then rate their recitation below.
+              {reciteSource ? (
+                <>
+                  Rate your own recitation of{" "}
+                  <span className="font-medium text-foreground">
+                    {fromAyah === toAyah
+                      ? `Ayah ${fromAyah}`
+                      : `Ayahs ${fromAyah}–${toAyah}`}
+                  </span>{" "}
+                  of{" "}
+                  <span className="font-medium text-foreground arabic-text">
+                    {selectedChapter.name_simple}
+                  </span>{" "}
+                  below.
+                </>
+              ) : (
+                <>
+                  Ask them to recite{" "}
+                  <span className="font-medium text-foreground">
+                    {fromAyah === toAyah
+                      ? `Ayah ${fromAyah}`
+                      : `Ayahs ${fromAyah}–${toAyah}`}
+                  </span>{" "}
+                  of{" "}
+                  <span className="font-medium text-foreground arabic-text">
+                    {selectedChapter.name_simple}
+                  </span>{" "}
+                  from memory, then rate their recitation below.
+                </>
+              )}
             </p>
           </div>
 
           {/* Rating selector */}
           <div className="bg-white dark:bg-gray-900 rounded-2xl border border-border dark:border-gray-700 shadow-sm p-5 space-y-3">
             <p className="text-sm font-semibold text-foreground">
-              How did they do?
+              {reciteSource ? "How did you do?" : "How did they do?"}
             </p>
             <div className="grid grid-cols-3 gap-3">
               {ratingOptions.map((opt) => (
@@ -2823,22 +2938,38 @@ export default function QuranMemorizePage() {
         onBack={() => navigate(`/child/${childId}/memorization`)}
         onSessionComplete={handleSessionComplete}
         onPauseAndSave={handlePauseAndSave}
+        triggerReciteMode={triggerReciteMode}
+        onReciteTriggered={() => setTriggerReciteMode(false)}
+        onReciteComplete={handleReciteComplete}
       />
 
       {showReadyModal && (
-        <div className="fixed bottom-0 left-0 right-0 z-50 px-4 pb-8 pt-4 bg-gradient-to-t from-black/40 to-transparent pointer-events-none">
-          <div className="max-w-lg mx-auto pointer-events-auto">
+        <div className="fixed bottom-0 left-0 right-0 z-50 px-4 pb-8 pt-4 bg-gradient-to-t from-black/60 to-transparent pointer-events-none">
+          <div className="max-w-lg mx-auto pointer-events-auto space-y-3">
+            <p className="text-center text-white font-semibold text-sm drop-shadow">
+              Ready to Recite?
+            </p>
             <button
               onClick={() => {
                 setShowReadyModal(false);
                 setCheckRating(null);
                 setSaveSuccess(false);
+                setReciteSource(false);
                 setCelebration(null);
                 setPhase("check");
               }}
-              className="w-full bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-semibold rounded-2xl py-4 text-base shadow-2xl transition-colors"
+              className="w-full bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-semibold rounded-2xl py-3 text-base shadow-2xl transition-colors"
             >
-              Ready to Recite? →
+              Recite to Teacher →
+            </button>
+            <button
+              onClick={() => {
+                setShowReadyModal(false);
+                setTriggerReciteMode(true);
+              }}
+              className="w-full bg-white/90 hover:bg-white active:bg-white/80 text-emerald-800 font-semibold rounded-2xl py-3 text-base shadow-2xl transition-colors"
+            >
+              Recite to NoorPath →
             </button>
           </div>
         </div>
