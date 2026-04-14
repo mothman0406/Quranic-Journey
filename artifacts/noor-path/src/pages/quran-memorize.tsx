@@ -640,7 +640,7 @@ interface PlayerProps {
   onPauseAndSave: (completedToAyah: number) => void;
   triggerReciteMode?: boolean;
   onReciteTriggered?: () => void;
-  onReciteComplete?: () => void;
+  onReciteComplete?: (score: number) => void;
 }
 
 function MemorizationPlayer({
@@ -1777,7 +1777,18 @@ function MemorizationPlayer({
               You recited all {sessionVerses.length} {sessionVerses.length === 1 ? "verse" : "verses"}.
             </p>
             <button
-              onClick={() => onReciteComplete?.()}
+              onClick={() => {
+                const totalWords = sessionVerses.reduce(
+                  (sum, v) => sum + v.text_uthmani.split(/\s+/).filter(Boolean).length,
+                  0
+                );
+                const hintsUsed = revealedWords.size;
+                const failedAttempts = Math.max(0, reciteAttempts - hintsUsed * 3);
+                const penalty = hintsUsed * 15 + failedAttempts * 3;
+                const reciteScore = Math.max(0, 100 - penalty);
+                console.log("score debug:", { totalWords, hintsUsed, reciteAttempts, failedAttempts, penalty, reciteScore });
+                onReciteComplete?.(reciteScore);
+              }}
               className="w-full px-6 py-3 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-semibold rounded-xl transition-colors"
             >
               Submit Results →
@@ -2284,6 +2295,7 @@ export default function QuranMemorizePage() {
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [triggerReciteMode, setTriggerReciteMode] = useState(false);
   const [reciteSource, setReciteSource] = useState(false);
+  const [reciteScore, setReciteScore] = useState(0);
   const [celebration, setCelebration] = useState<{ message: string; subMessage?: string } | null>(null);
 
   const saveMutation = useMutation({
@@ -2390,7 +2402,8 @@ export default function QuranMemorizePage() {
     setPhase("check");
   }, []);
 
-  const handleReciteComplete = useCallback(() => {
+  const handleReciteComplete = useCallback((score: number) => {
+    setReciteScore(score);
     setReciteSource(true);
     setCheckRating(null);
     setSaveSuccess(false);
@@ -2775,6 +2788,27 @@ export default function QuranMemorizePage() {
         </div>
 
         <div className="max-w-lg mx-auto w-full px-4 -mt-6 space-y-5 pb-24">
+          {/* Score card — only shown after Recite to NoorPath */}
+          {reciteSource && (
+            <div className="bg-white dark:bg-gray-900 rounded-2xl border border-border dark:border-gray-700 shadow-sm p-6 flex flex-col items-center gap-1">
+              <p className="text-7xl font-black tabular-nums text-foreground leading-none">
+                {reciteScore}%
+              </p>
+              <p className="text-base font-semibold text-foreground mt-2">
+                {reciteScore >= 90
+                  ? "Excellent 🌟"
+                  : reciteScore >= 70
+                  ? "Good 👍"
+                  : reciteScore >= 50
+                  ? "Needs Work 💪"
+                  : "Keep Practicing 📖"}
+              </p>
+              <p className="text-xs text-muted-foreground text-center mt-1">
+                Based on attempts and hints used — your honest rating below is what counts
+              </p>
+            </div>
+          )}
+
           {/* Instruction card */}
           <div className="bg-white dark:bg-gray-900 rounded-2xl border border-border dark:border-gray-700 shadow-sm p-5">
             <p className="text-sm font-semibold text-foreground mb-1">
