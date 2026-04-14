@@ -598,7 +598,11 @@ const stripTashkeel = (s: string): string =>
     .replace(/ة/g, "ه")       // ta marbuta → ha
     .replace(/ؤ/g, "و")       // waw with hamza → waw
     .replace(/ئ/g, "ي")       // ya with hamza → ya
+    .replace(/ء/g, "")        // remove standalone hamza entirely
     .replace(/[^\u0600-\u06FF\s]/g, "") // remove anything not standard Arabic
+    .replace(/ا+/g, "ا")      // collapse elongated alef (madd)
+    .replace(/و+/g, "و")      // collapse elongated waw (madd)
+    .replace(/ي+/g, "ي")      // collapse elongated ya (madd)
     .replace(/^ال/, "")        // strip definite article from start of word
     .trim();
 
@@ -848,10 +852,21 @@ function MemorizationPlayer({
 
         console.log("SR word:", hw, "| expected:", ew);
 
+        const isSubsequence = (short: string, long: string) => {
+          let i = 0;
+          for (const c of long) {
+            if (c === short[i]) i++;
+            if (i === short.length) return true;
+          }
+          return false;
+        };
+        const fuzzyMatch = isSubsequence(hw, ew) || isSubsequence(ew, hw);
+
         if (
           hw === ew ||
           hw.includes(ew) ||
-          ew.includes(hw)
+          ew.includes(hw) ||
+          fuzzyMatch
         ) {
           advanced = true;
           matchedWordCountRef.current++;
