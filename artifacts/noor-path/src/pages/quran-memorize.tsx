@@ -12,6 +12,7 @@ import { ChildNav } from "@/components/child-nav";
 import { RECITERS, type Reciter } from "@/components/verse-player";
 import {
   ChevronLeft,
+  ChevronRight,
   Play,
   Pause,
   Loader2,
@@ -2590,6 +2591,60 @@ export default function QuranMemorizePage() {
               <span className="arabic-text text-5xl text-amber-300">
                 {selectedChapter.name_arabic}
               </span>
+            </div>
+
+            {/* Surah navigation */}
+            <div className="flex items-center gap-2 mt-4">
+              <button
+                onClick={() => {
+                  const prev = chapters.find((c) => c.id === selectedChapter.id - 1);
+                  if (prev) {
+                    setSelectedChapter(prev);
+                    setFromAyah(1);
+                    setToAyah(prev.verses_count);
+                    navigate(`/child/${childId}/quran-memorize?surah=${prev.id}`);
+                  }
+                }}
+                disabled={selectedChapter.id === 1}
+                className="w-8 h-8 flex items-center justify-center rounded-full bg-white/15 text-white disabled:opacity-30 hover:bg-white/25 transition-colors flex-shrink-0"
+              >
+                <ChevronLeft size={16} />
+              </button>
+              <select
+                value={selectedChapter.id}
+                onChange={(e) => {
+                  const id = parseInt(e.target.value, 10);
+                  const ch = chapters.find((c) => c.id === id);
+                  if (ch) {
+                    setSelectedChapter(ch);
+                    setFromAyah(1);
+                    setToAyah(ch.verses_count);
+                    navigate(`/child/${childId}/quran-memorize?surah=${ch.id}`);
+                  }
+                }}
+                className="flex-1 bg-white/15 text-white text-sm rounded-full px-3 py-1.5 border border-white/30 outline-none cursor-pointer"
+              >
+                {chapters.map((ch) => (
+                  <option key={ch.id} value={ch.id} className="text-black bg-white">
+                    {ch.id}. {ch.name_simple} — {ch.name_arabic}
+                  </option>
+                ))}
+              </select>
+              <button
+                onClick={() => {
+                  const next = chapters.find((c) => c.id === selectedChapter.id + 1);
+                  if (next) {
+                    setSelectedChapter(next);
+                    setFromAyah(1);
+                    setToAyah(next.verses_count);
+                    navigate(`/child/${childId}/quran-memorize?surah=${next.id}`);
+                  }
+                }}
+                disabled={selectedChapter.id === 114}
+                className="w-8 h-8 flex items-center justify-center rounded-full bg-white/15 text-white disabled:opacity-30 hover:bg-white/25 transition-colors flex-shrink-0"
+              >
+                <ChevronRight size={16} />
+              </button>
             </div>
           </div>
         </div>
