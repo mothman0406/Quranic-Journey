@@ -837,7 +837,8 @@ function MemorizationPlayer({
 
       // Walk new heard words against expected words sequentially.
       // Advance local cursors (not state) so we can batch a single state update.
-      let vIdx = reciteVerseIndexRef.current;
+      const startVIdx = reciteVerseIndexRef.current;
+      let vIdx = startVIdx;
       let wIdx = reciteWordIndexRef.current;
       let advanced = false;
 
@@ -891,6 +892,17 @@ function MemorizationPlayer({
         setReciteAttempts(0);
         setReciteVerseIndex(vIdx);
         setReciteWordIndex(wIdx);
+
+        // Auto-flip mushaf page when recite crosses a page boundary.
+        const nextReciteVerse = sessionVersesRef.current[vIdx];
+        const prevReciteVerse = sessionVersesRef.current[startVIdx];
+        if (
+          nextReciteVerse &&
+          nextReciteVerse.page_number !== undefined &&
+          nextReciteVerse.page_number !== prevReciteVerse?.page_number
+        ) {
+          setCurrentAyahNum(nextReciteVerse.verse_number);
+        }
       } else {
         // Only penalise on final results; interim mismatches are expected mid-word.
         if (result.isFinal) {
