@@ -607,6 +607,9 @@ const stripTashkeel = (s: string): string =>
     .trim();
 
 
+// Quranic pause marks, annotation signs, and verse marks — not real words.
+const SKIP_CHARS = /^[\u06D6-\u06ED\u0600-\u0605\u061B\u061E\u061F\u06DD\u06DE\u06DF]+$/;
+
 // Strip trailing verse-end glyph (۝) and Arabic-Indic digits (٠-٩) from Uthmani text.
 const stripVerseEnd = (s: string): string => s.replace(/[\u06DD\u0660-\u0669\s]+$/, "").trimEnd();
 // Same for tajweed HTML — handles both bare text nodes and span-wrapped digits at the end.
@@ -688,6 +691,8 @@ function MemorizationPlayer({
   const reciteVerseIndexRef = useRef(0);
   const isReciteModeRef = useRef(false);
   const matchedWordCountRef = useRef(0);
+  const lastMatchedWordRef = useRef("");
+  const lastMatchTimeRef = useRef(0);
   const [mushafTheme, setMushafThemeState] = useState<keyof typeof MUSHAF_THEMES>(() => {
     try {
       const saved = localStorage.getItem("mushaf-theme");
@@ -825,60 +830,78 @@ function MemorizationPlayer({
     rec.maxAlternatives = 3;
 
     rec.onresult = (e: any) => {
+      // Debounce: ignore rapid-fire interim events immediately after a match.
+      if (Date.now() - lastMatchTimeRef.current < 300) return;
+
       const result = e.results[e.resultIndex];
 
       // Full accumulated transcript for this utterance.
       const bestTranscript = result[0].transcript.trim();
       const allHeardWords = stripTashkeel(bestTranscript).split(/\s+/).filter(Boolean);
 
-      // Skip words already matched in previous interim events for this utterance
-      // so each event only processes newly spoken words.
-      const heardWords = allHeardWords.slice(matchedWordCountRef.current);
+      // Helper: check whether a normalised heard word matches a normalised expected word.
+      const isSubsequence = (short: string, long: string) => {
+        const needed = short.length;
+        let i = 0;
+        for (const c of long) {
+          if (c === short[i]) i++;
+          if (i === needed) return true;
+        }
+        return false;
+      };
+      const stripNW = (w: string) => w.replace(/[نو]/g, "");
+      const wordMatches = (hw: string, ew: string): boolean => {
+        if (hw.length === 1 && hw !== ew) return false;
+        if (hw === lastMatchedWordRef.current) return false;
+        return (
+          hw === ew ||
+          hw.includes(ew) ||
+          ew.includes(hw) ||
+          isSubsequence(hw, ew) ||
+          isSubsequence(ew, hw) ||
+          (stripNW(hw).length > 0 && stripNW(ew).length > 0 && stripNW(hw) === stripNW(ew))
+        );
+      };
 
-      // Walk new heard words against expected words sequentially.
-      // Advance local cursors (not state) so we can batch a single state update.
+      // For each expected word, scan the FULL remaining transcript (from the last
+      // matched position onward) rather than requiring a positional match.
       const startVIdx = reciteVerseIndexRef.current;
       let vIdx = startVIdx;
       let wIdx = reciteWordIndexRef.current;
       let advanced = false;
+      let searchFrom = matchedWordCountRef.current;
 
-      for (const heardWord of heardWords) {
+      while (true) {
         const verse = sessionVersesRef.current[vIdx];
         if (!verse) break;
-        const expectedWords = verse.text_uthmani.split(/\s+/).filter(Boolean);
+        const expectedWords = verse.text_uthmani.split(/\s+/).filter((w) => w.length > 0 && !SKIP_CHARS.test(w));
         const expectedAr = stripTashkeel(expectedWords[wIdx] || "");
-
-        const hw = heardWord.replace(/^ال/, "");
         const ew = expectedAr.replace(/^ال/, "");
 
-        console.log("SR word:", hw, "| expected:", ew);
-
-        const isSubsequence = (short: string, long: string) => {
-          let i = 0;
-          for (const c of long) {
-            if (c === short[i]) i++;
-            if (i === short.length) return true;
+        // Scan from searchFrom onward for any transcript word matching ew.
+        let foundAt = -1;
+        for (let i = searchFrom; i < allHeardWords.length; i++) {
+          const hw = allHeardWords[i].replace(/^ال/, "");
+          console.log("SR scan:", hw, "| expected:", ew);
+          if (wordMatches(hw, ew)) {
+            foundAt = i;
+            break;
           }
-          return false;
-        };
-        const fuzzyMatch = isSubsequence(hw, ew) || isSubsequence(ew, hw);
+        }
 
-        if (
-          hw === ew ||
-          hw.includes(ew) ||
-          ew.includes(hw) ||
-          fuzzyMatch
-        ) {
-          advanced = true;
-          matchedWordCountRef.current++;
-          if (wIdx + 1 >= expectedWords.length) {
-            vIdx++;
-            wIdx = 0;
-          } else {
-            wIdx++;
-          }
+        if (foundAt === -1) break; // expected word not found anywhere in transcript
+
+        advanced = true;
+        lastMatchTimeRef.current = Date.now();
+        lastMatchedWordRef.current = allHeardWords[foundAt].replace(/^ال/, "");
+        matchedWordCountRef.current = foundAt + 1;
+        searchFrom = foundAt + 1;
+
+        if (wIdx + 1 >= expectedWords.length) {
+          vIdx++;
+          wIdx = 0;
         } else {
-          break; // stop on first non-matching word
+          wIdx++;
         }
       }
 
@@ -1031,6 +1054,7 @@ function MemorizationPlayer({
     reciteWordIndexRef.current = 0;
     reciteVerseIndexRef.current = 0;
     matchedWordCountRef.current = 0;
+    lastMatchedWordRef.current = "";
     onReciteTriggered?.();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [triggerReciteMode]);
@@ -1053,6 +1077,7 @@ function MemorizationPlayer({
     reciteWordIndexRef.current = 0;
     reciteVerseIndexRef.current = 0;
     matchedWordCountRef.current = 0;
+    lastMatchedWordRef.current = "";
   };
 
   // After auto-advancing (single or cumulative), start playback once the hook has reset.
@@ -1826,7 +1851,7 @@ function MemorizationPlayer({
             <button
               onClick={() => {
                 const totalWords = sessionVerses.reduce(
-                  (sum, v) => sum + v.text_uthmani.split(/\s+/).filter(Boolean).length,
+                  (sum, v) => sum + v.text_uthmani.split(/\s+/).filter((w) => w.length > 0 && !SKIP_CHARS.test(w)).length,
                   0
                 );
                 const hintsUsed = revealedWords.size;
@@ -2081,6 +2106,7 @@ function MemorizationPlayer({
                               reciteWordIndexRef.current = 0;
                               reciteVerseIndexRef.current = 0;
                               matchedWordCountRef.current = 0;
+                              lastMatchedWordRef.current = "";
                             }
                             return !v;
                           });
@@ -2273,6 +2299,7 @@ function MemorizationPlayer({
                               reciteWordIndexRef.current = 0;
                               reciteVerseIndexRef.current = 0;
                               matchedWordCountRef.current = 0;
+                              lastMatchedWordRef.current = "";
                             }
                             return !v;
                           });
