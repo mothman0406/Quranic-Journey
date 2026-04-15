@@ -1561,31 +1561,22 @@ function MemorizationPlayer({
                                 const isPast = playing && highlightedWord > i;
 
                                 if (isReciteMode) {
-                                  // A word is "done" if its verse is past, or same verse and word index is past
                                   const isWordDone =
                                     reciteVerseIdx < reciteVerseIndex ||
                                     (reciteVerseIdx === reciteVerseIndex && i < reciteWordIndex);
-                                  // Current word: this verse + word is exactly the recite cursor
                                   const isCurrentWord =
                                     reciteVerseIdx === reciteVerseIndex && i === reciteWordIndex;
-                                  // Future: not done and not current
-                                  const isFutureWord = !isWordDone && !isCurrentWord;
-                                  // Revealed: word was shown via the Show Word button
-                                  const isRevealed = isCurrentWord && revealedWords.has(`${reciteVerseIndex}-${reciteWordIndex}`);
 
-                                  // current word: blurred with green outline (target indicator), unless revealed
-                                  // future word: blurred, no indicator
-                                  // done word: fully visible
-                                  const reciteStyle: React.CSSProperties = isCurrentWord && !isRevealed
+                                  const reciteStyle: React.CSSProperties = isCurrentWord
                                     ? {
                                         filter: "blur(4px)",
                                         outline: "2px solid #22c55e",
                                         borderRadius: "4px",
                                         animation: "recite-word-pulse 1.2s ease-in-out infinite",
                                       }
-                                    : isFutureWord
-                                      ? { filter: "blur(6px)", userSelect: "none" }
-                                      : {}; // done words and revealed current word: fully visible
+                                    : isWordDone
+                                      ? {}
+                                      : { filter: "blur(6px)", userSelect: "none" };
 
                                   return (
                                     <span
@@ -1721,13 +1712,11 @@ function MemorizationPlayer({
                                   {verseWordList.map((word, wi) => {
                                     const isWordDone = wi < reciteWordIndex;
                                     const isCurrentWord = wi === reciteWordIndex;
-                                    const isFutureWord = !isWordDone && !isCurrentWord;
-                                    const isRevealed = isCurrentWord && revealedWords.has(`${verseSessionIdx}-${reciteWordIndex}`);
-                                    const wordStyle: React.CSSProperties = isCurrentWord && !isRevealed
+                                    const wordStyle: React.CSSProperties = isCurrentWord
                                       ? { filter: "blur(4px)", outline: "2px solid #22c55e", borderRadius: "4px", display: "inline-block" }
-                                      : isFutureWord
-                                        ? { filter: "blur(6px)", userSelect: "none", display: "inline-block" }
-                                        : { display: "inline-block" };
+                                      : isWordDone
+                                        ? { display: "inline-block" }
+                                        : { filter: "blur(6px)", userSelect: "none", display: "inline-block" };
                                     return (
                                       <span key={wi} className="px-[0.15em] mx-[0.15em]" style={wordStyle}>
                                         {word}
