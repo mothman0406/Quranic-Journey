@@ -678,7 +678,7 @@ function MemorizationPlayer({
   const reciter = RECITERS.find((r) => r.id === "husary")!;
 
   const [currentAyahNum, setCurrentAyahNum] = useState(initialAyah);
-  const [pendingAutoPlay, setPendingAutoPlay] = useState(false);
+  const pendingAutoPlayRef = useRef(false);
   const [autoAdvance, setAutoAdvance] = useState(initialAutoAdvance);
   const [showPauseModal, setShowPauseModal] = useState(false);
   const [pauseToAyah, setPauseToAyah] = useState(initialAyah);
@@ -1006,7 +1006,7 @@ function MemorizationPlayer({
   }, [isReciteMode]);
 
   const handleAllRepeatsDone = useCallback(() => {
-    console.log('handleAllRepeatsDone:', { autoAdvance, autoAdvanceRef: autoAdvanceRef.current, pendingAutoPlay, currentAyahNum: currentAyahNumRef.current });
+    console.log('handleAllRepeatsDone:', { autoAdvance, autoAdvanceRef: autoAdvanceRef.current, pendingAutoPlay: pendingAutoPlayRef.current, currentAyahNum: currentAyahNumRef.current });
     if (internalPhaseRef.current === "single") {
       if (cumulativeReviewRef.current && currentAyahNumRef.current > fromAyahRef.current) {
         // Enter cumulative review for ayahs fromAyah..currentAyahNum (only when >1 ayah covered)
@@ -1020,11 +1020,11 @@ function MemorizationPlayer({
         setInternalPhase("cumulative");
         internalPhaseRef.current = "cumulative";
         pendingPlayDelayRef.current = 150; // small gap entering review
-        setPendingAutoPlay(true); // cumulative always auto-plays
+        pendingAutoPlayRef.current = true; // cumulative always auto-plays
       } else if (currentAyahNumRef.current < toAyahRef.current) {
         // Always advance to next ayah; auto-play iff auto-advance is ON
         pendingPlayDelayRef.current = 150;
-        setPendingAutoPlay(autoAdvanceRef.current);
+        pendingAutoPlayRef.current = autoAdvanceRef.current;
         setCurrentAyahNum((n) => n + 1);
       } else {
         // Last ayah finished — session complete
@@ -1040,7 +1040,7 @@ function MemorizationPlayer({
         pendingPlayDelayRef.current = 0;
         setCumAyahIdx(nextIdx);
         cumAyahIdxRef.current = nextIdx;
-        setPendingAutoPlay(true);
+        pendingAutoPlayRef.current = true;
       } else {
         const nextPass = cumPassRef.current + 1;
         if (nextPass <= reviewRepeatCountRef.current) {
@@ -1050,14 +1050,14 @@ function MemorizationPlayer({
           cumAyahIdxRef.current = 0;
           setCumPass(nextPass);
           cumPassRef.current = nextPass;
-          setPendingAutoPlay(true);
+          pendingAutoPlayRef.current = true;
         } else {
           // cumulative review complete — advance to next single ayah
           if (currentAyahNumRef.current < toAyahRef.current) {
             setInternalPhase("single");
             internalPhaseRef.current = "single";
             pendingPlayDelayRef.current = 150;
-            setPendingAutoPlay(autoAdvanceRef.current);
+            pendingAutoPlayRef.current = autoAdvanceRef.current;
             setCurrentAyahNum((n) => n + 1);
           } else {
             // finished entire session
@@ -1129,14 +1129,14 @@ function MemorizationPlayer({
   // Cumulative ayah-to-ayah transitions use delay=0 for seamless flow;
   // single-ayah advances use 150ms to let the hook fully reset first.
   useEffect(() => {
-    if (!pendingAutoPlay) return;
-    setPendingAutoPlay(false);
+    if (!pendingAutoPlayRef.current) return;
+    pendingAutoPlayRef.current = false;
     const delay = pendingPlayDelayRef.current;
     const timer = setTimeout(() => {
       playRef.current?.();
     }, delay);
     return () => clearTimeout(timer);
-  }, [activeVerseNumber, pendingAutoPlay]);
+  }, [activeVerseNumber]);
 
   // Scroll active ayah into view whenever it changes
   useEffect(() => {
@@ -1169,7 +1169,7 @@ function MemorizationPlayer({
         setCumPass(nextPass);
         cumPassRef.current = nextPass;
         pendingPlayDelayRef.current = 150;
-        setPendingAutoPlay(true);
+        pendingAutoPlayRef.current = true;
       } else {
         // Last pass done — advance to next single ayah or complete session
         setInternalPhase("single");
@@ -1177,7 +1177,7 @@ function MemorizationPlayer({
         if (currentAyahNum < toAyah) {
           pendingPlayDelayRef.current = 150;
           setCurrentAyahNum((n) => n + 1);
-          setPendingAutoPlay(true);
+          pendingAutoPlayRef.current = true;
         } else {
           onSessionCompleteRef.current();
         }
@@ -1199,7 +1199,7 @@ function MemorizationPlayer({
         setInternalPhase("cumulative");
         internalPhaseRef.current = "cumulative";
         pendingPlayDelayRef.current = 150;
-        setPendingAutoPlay(true);
+        pendingAutoPlayRef.current = true;
       } else if (currentAyahNum < toAyah) {
         pendingPlayDelayRef.current = 150;
         setCurrentAyahNum((n) => n + 1);
@@ -1216,7 +1216,7 @@ function MemorizationPlayer({
       if (currentAyahNum < toAyah) {
         pendingPlayDelayRef.current = 150;
         setCurrentAyahNum((n) => n + 1);
-        setPendingAutoPlay(true);
+        pendingAutoPlayRef.current = true;
       } else {
         // Was reviewing the last ayah — session complete
         onSessionCompleteRef.current();
