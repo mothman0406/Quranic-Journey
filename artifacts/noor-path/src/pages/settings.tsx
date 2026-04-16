@@ -156,7 +156,7 @@ export default function SettingsPage() {
 
           <ToggleRow
             label="Auto-Advance"
-            description="Move to the next ayah automatically after all repeats"
+            description="Continuously play through all ayahs without stopping"
             checked={settings.autoAdvance}
             onCheckedChange={(v) => updateSettings({ autoAdvance: v })}
           />
@@ -186,6 +186,41 @@ export default function SettingsPage() {
               </button>
             </div>
           </div>
+
+          <Divider />
+
+          <ToggleRow
+            label="Cumulative Review"
+            description="Replay all ayahs from the start up to the current one"
+            checked={settings.cumulativeReview}
+            onCheckedChange={(v) => updateSettings({ cumulativeReview: v })}
+          />
+
+          {settings.cumulativeReview && (
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-semibold text-foreground">Cumulative Review Repeat Count</p>
+                <p className="text-xs text-muted-foreground mt-0.5">How many times to loop through the cumulative range</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => updateSettings({ defaultReviewRepeatCount: Math.max(1, settings.defaultReviewRepeatCount - 1) })}
+                  className="w-8 h-8 rounded-full border border-border flex items-center justify-center text-sm font-bold text-muted-foreground hover:text-foreground hover:border-primary/40 transition-colors"
+                >
+                  −
+                </button>
+                <span className="w-8 text-center text-sm font-semibold tabular-nums">
+                  {settings.defaultReviewRepeatCount}×
+                </span>
+                <button
+                  onClick={() => updateSettings({ defaultReviewRepeatCount: Math.min(10, settings.defaultReviewRepeatCount + 1) })}
+                  className="w-8 h-8 rounded-full border border-border flex items-center justify-center text-sm font-bold text-muted-foreground hover:text-foreground hover:border-primary/40 transition-colors"
+                >
+                  +
+                </button>
+              </div>
+            </div>
+          )}
         </SectionCard>
 
         {/* ── Recite Mode ── */}

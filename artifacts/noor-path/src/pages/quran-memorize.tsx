@@ -1006,8 +1006,9 @@ function MemorizationPlayer({
   }, [isReciteMode]);
 
   const handleAllRepeatsDone = useCallback(() => {
+    console.log('handleAllRepeatsDone:', { autoAdvance, autoAdvanceRef: autoAdvanceRef.current, pendingAutoPlay, currentAyahNum: currentAyahNumRef.current });
     if (internalPhaseRef.current === "single") {
-      if (autoAdvanceRef.current && cumulativeReviewRef.current && currentAyahNumRef.current > fromAyahRef.current) {
+      if (cumulativeReviewRef.current && currentAyahNumRef.current > fromAyahRef.current) {
         // Enter cumulative review for ayahs fromAyah..currentAyahNum (only when >1 ayah covered)
         const upTo = currentAyahNumRef.current;
         setCumUpTo(upTo);
@@ -1019,12 +1020,13 @@ function MemorizationPlayer({
         setInternalPhase("cumulative");
         internalPhaseRef.current = "cumulative";
         pendingPlayDelayRef.current = 150; // small gap entering review
-        setPendingAutoPlay(true);
-      } else if (autoAdvanceRef.current && currentAyahNumRef.current < toAyahRef.current) {
+        setPendingAutoPlay(true); // cumulative always auto-plays
+      } else if (currentAyahNumRef.current < toAyahRef.current) {
+        // Always advance to next ayah; auto-play iff auto-advance is ON
         pendingPlayDelayRef.current = 150;
-        setPendingAutoPlay(true);
+        setPendingAutoPlay(autoAdvanceRef.current);
         setCurrentAyahNum((n) => n + 1);
-      } else if (currentAyahNumRef.current >= toAyahRef.current) {
+      } else {
         // Last ayah finished — session complete
         onSessionCompleteRef.current();
       }
@@ -1055,8 +1057,8 @@ function MemorizationPlayer({
             setInternalPhase("single");
             internalPhaseRef.current = "single";
             pendingPlayDelayRef.current = 150;
+            setPendingAutoPlay(autoAdvanceRef.current);
             setCurrentAyahNum((n) => n + 1);
-            setPendingAutoPlay(true);
           } else {
             // finished entire session
             setInternalPhase("single");
@@ -2499,8 +2501,8 @@ export default function QuranMemorizePage() {
   const [toAyah, setToAyah] = useState(10);
   const [repeatCount, setRepeatCount] = useState(settings.defaultRepeatCount);
   const [autoAdvance, setAutoAdvance] = useState(settings.autoAdvance);
-  const [cumulativeReview, setCumulativeReview] = useState(false);
-  const [reviewRepeatCount, setReviewRepeatCount] = useState(3);
+  const [cumulativeReview, setCumulativeReview] = useState(settings.cumulativeReview);
+  const [reviewRepeatCount, setReviewRepeatCount] = useState(settings.defaultReviewRepeatCount);
   const [startAyah, setStartAyah] = useState(1);
   const [searchQuery, setSearchQuery] = useState("");
   const [checkRating, setCheckRating] = useState<"needs_work" | "good" | "excellent" | null>(null);
@@ -2931,8 +2933,7 @@ export default function QuranMemorizePage() {
                   Auto-Advance
                 </p>
                 <p className="text-xs text-muted-foreground mt-0.5">
-                  Move to the next ayah automatically after{" "}
-                  {repeatCount === 1 ? "1 play" : `${repeatCount} repeats`}
+                  Keep playing until the full session is complete
                 </p>
               </div>
               <Switch checked={autoAdvance} onCheckedChange={setAutoAdvance} />

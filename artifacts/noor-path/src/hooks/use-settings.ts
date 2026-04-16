@@ -8,6 +8,8 @@ export interface Settings {
   confetti: boolean;
   autoAdvance: boolean;
   defaultRepeatCount: number;
+  cumulativeReview: boolean;
+  defaultReviewRepeatCount: number;
   blurIntensity: BlurIntensity;
   reciter: string;
   mushafTheme: string;
@@ -23,6 +25,8 @@ export const SETTINGS_DEFAULTS: Settings = {
   confetti: true,
   autoAdvance: true,
   defaultRepeatCount: 3,
+  cumulativeReview: false,
+  defaultReviewRepeatCount: 3,
   blurIntensity: "medium",
   reciter: "husary",
   mushafTheme: "teal",
