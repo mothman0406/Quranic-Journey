@@ -31,7 +31,7 @@ import {
   MicOff,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useDarkMode } from "@/hooks/use-dark-mode";
+import { useSettings } from "@/hooks/use-settings";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -682,7 +682,12 @@ function MemorizationPlayer({
   const [autoAdvance, setAutoAdvance] = useState(initialAutoAdvance);
   const [showPauseModal, setShowPauseModal] = useState(false);
   const [pauseToAyah, setPauseToAyah] = useState(initialAyah);
-  const { isDarkMode, toggleDarkMode } = useDarkMode();
+  // Local dark mode: initialised from global setting but does NOT write back to it
+  const [localDarkMode, setLocalDarkMode] = useState(() => {
+    try { return localStorage.getItem("noor-dark-mode") === "true"; }
+    catch { return false; }
+  });
+  const toggleLocalDarkMode = () => setLocalDarkMode((d) => !d);
   const [isBlindMode, setIsBlindMode] = useState(false);
   const [revealedAyahs, setRevealedAyahs] = useState<Set<number>>(new Set());
   const [isReciteMode, setIsReciteMode] = useState(false);
@@ -699,6 +704,14 @@ function MemorizationPlayer({
   const lastMatchTimeRef = useRef(0);
   const [mushafTheme, setMushafThemeState] = useState<keyof typeof MUSHAF_THEMES>(() => {
     try {
+      // Prefer the settings store mushafTheme, fall back to legacy key
+      const settingsRaw = localStorage.getItem("noor-settings");
+      if (settingsRaw) {
+        const s = JSON.parse(settingsRaw) as { mushafTheme?: string };
+        if (s.mushafTheme && s.mushafTheme in MUSHAF_THEMES) {
+          return s.mushafTheme as keyof typeof MUSHAF_THEMES;
+        }
+      }
       const saved = localStorage.getItem("mushaf-theme");
       const darkNow = localStorage.getItem("noor-dark-mode") === "true";
       const isDarkKey = (k: string) => k.endsWith("_dark");
@@ -709,17 +722,17 @@ function MemorizationPlayer({
     } catch { return "teal"; }
   });
 
-  // Auto-switch theme when dark mode toggles
+  // Auto-switch theme when local dark mode toggles (independent of global dark mode)
   useEffect(() => {
     const isThemeDark = mushafTheme.endsWith("_dark");
-    if (isDarkMode && !isThemeDark) {
+    if (localDarkMode && !isThemeDark) {
       setMushafThemeState("madinah_dark");
       try { localStorage.setItem("mushaf-theme", "madinah_dark"); } catch { /* ignore */ }
-    } else if (!isDarkMode && isThemeDark) {
+    } else if (!localDarkMode && isThemeDark) {
       setMushafThemeState("teal");
       try { localStorage.setItem("mushaf-theme", "teal"); } catch { /* ignore */ }
     }
-  }, [isDarkMode]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [localDarkMode]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const theme = MUSHAF_THEMES[mushafTheme] as MushafThemeConfig;
   const setMushafTheme = (t: keyof typeof MUSHAF_THEMES) => {
@@ -2101,14 +2114,14 @@ function MemorizationPlayer({
           {/* Theme picker (mobile) + dark mode toggle */}
           <div className="flex items-center gap-2 pt-1">
             <button
-              onClick={toggleDarkMode}
+              onClick={toggleLocalDarkMode}
               className="flex items-center justify-center w-[18px] h-[18px] rounded-full border border-border/60 text-muted-foreground hover:text-foreground transition-colors flex-shrink-0"
-              title={isDarkMode ? "Switch to light mode" : "Switch to dark mode"}
+              title={localDarkMode ? "Switch to light mode" : "Switch to dark mode"}
             >
-              {isDarkMode ? <Sun size={10} /> : <Moon size={10} />}
+              {localDarkMode ? <Sun size={10} /> : <Moon size={10} />}
             </button>
             {(Object.keys(MUSHAF_THEMES) as Array<keyof typeof MUSHAF_THEMES>)
-              .filter((key) => isDarkMode ? key.endsWith("_dark") : !key.endsWith("_dark"))
+              .filter((key) => localDarkMode ? key.endsWith("_dark") : !key.endsWith("_dark"))
               .map((key) => (
               <button
                 key={key}
@@ -2331,19 +2344,19 @@ function MemorizationPlayer({
           Pause &amp; Save
         </button>
 
-        {/* Dark mode toggle */}
+        {/* Dark mode toggle (local — does not affect the rest of the app) */}
         <button
-          onClick={toggleDarkMode}
+          onClick={toggleLocalDarkMode}
           className="flex items-center justify-center w-8 h-8 rounded-full border border-border text-muted-foreground hover:text-foreground hover:border-primary/40 transition-colors"
-          title={isDarkMode ? "Switch to light mode" : "Switch to dark mode"}
+          title={localDarkMode ? "Switch to light mode" : "Switch to dark mode"}
         >
-          {isDarkMode ? <Sun size={14} /> : <Moon size={14} />}
+          {localDarkMode ? <Sun size={14} /> : <Moon size={14} />}
         </button>
 
         {/* Theme picker */}
         <div className="flex items-center gap-1.5 flex-wrap">
           {(Object.keys(MUSHAF_THEMES) as Array<keyof typeof MUSHAF_THEMES>)
-            .filter((key) => isDarkMode ? key.endsWith("_dark") : !key.endsWith("_dark"))
+            .filter((key) => localDarkMode ? key.endsWith("_dark") : !key.endsWith("_dark"))
             .map((key) => (
             <button
               key={key}
@@ -2477,13 +2490,15 @@ export default function QuranMemorizePage() {
   const [, navigate] = useLocation();
   const qc = useQueryClient();
 
+  const { settings } = useSettings();
+
   const [phase, setPhase] = useState<"pick" | "setup" | "play" | "check">("pick");
   const [showReadyModal, setShowReadyModal] = useState(false);
   const [selectedChapter, setSelectedChapter] = useState<Chapter | null>(null);
   const [fromAyah, setFromAyah] = useState(1);
   const [toAyah, setToAyah] = useState(10);
-  const [repeatCount, setRepeatCount] = useState(3);
-  const [autoAdvance, setAutoAdvance] = useState(true);
+  const [repeatCount, setRepeatCount] = useState(settings.defaultRepeatCount);
+  const [autoAdvance, setAutoAdvance] = useState(settings.autoAdvance);
   const [cumulativeReview, setCumulativeReview] = useState(false);
   const [reviewRepeatCount, setReviewRepeatCount] = useState(3);
   const [startAyah, setStartAyah] = useState(1);
@@ -3004,7 +3019,7 @@ export default function QuranMemorizePage() {
 
   const celebrationOverlay = (
     <CelebrationOverlay
-      show={celebration !== null}
+      show={celebration !== null && settings.confetti}
       onDone={() => setCelebration(null)}
       message={celebration?.message ?? ""}
       subMessage={celebration?.subMessage}
