@@ -3049,7 +3049,7 @@ export default function QuranMemorizePage() {
             </button>
             <h1 className="text-xl font-bold">Recitation Check</h1>
             <p className="text-emerald-200 text-sm mt-1">
-              {selectedChapter.name_simple} · Ayahs {fromAyah}–{toAyah}
+              <span dir="rtl" style={{ unicodeBidi: "embed" }}>{selectedChapter.name_simple}</span> · Ayahs {fromAyah}–{toAyah}
             </p>
           </div>
         </div>
@@ -3093,7 +3093,7 @@ export default function QuranMemorizePage() {
                       : `Ayahs ${fromAyah}–${toAyah}`}
                   </span>{" "}
                   of{" "}
-                  <span className="font-medium text-foreground arabic-text">
+                  <span className="font-medium text-foreground arabic-text" dir="rtl" style={{ unicodeBidi: "embed" }}>
                     {selectedChapter.name_simple}
                   </span>{" "}
                   below.
@@ -3107,7 +3107,7 @@ export default function QuranMemorizePage() {
                       : `Ayahs ${fromAyah}–${toAyah}`}
                   </span>{" "}
                   of{" "}
-                  <span className="font-medium text-foreground arabic-text">
+                  <span className="font-medium text-foreground arabic-text" dir="rtl" style={{ unicodeBidi: "embed" }}>
                     {selectedChapter.name_simple}
                   </span>{" "}
                   from memory, then rate their recitation below.
@@ -3150,7 +3150,7 @@ export default function QuranMemorizePage() {
                 <div>
                   <p className="font-semibold text-emerald-800">Progress saved!</p>
                   <p className="text-sm text-emerald-600">
-                    {selectedChapter.name_simple} ayahs {fromAyah}–{toAyah} marked as memorized.
+                    <span dir="rtl" style={{ unicodeBidi: "embed" }}>{selectedChapter.name_simple}</span> ayahs {fromAyah}–{toAyah} marked as memorized.
                   </p>
                 </div>
               </div>
