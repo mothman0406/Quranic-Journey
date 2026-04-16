@@ -561,23 +561,23 @@ function useVerseAudio({
 
 // Standard Quran.com tajweed class → color mapping, scoped to .mushaf-page.
 const TAJWEED_CSS = `
-.mushaf-page .ham_wasl          { color: #AAAAAA; }
-.mushaf-page .slnt              { color: #AAAAAA; }
-.mushaf-page .lam_shamsiyya     { color: #AAAAAA; }
-.mushaf-page .madda_normal      { color: #537FFF; }
-.mushaf-page .madda_permissible { color: #4050FF; }
-.mushaf-page .madda_necessary   { color: #000EBC; }
-.mushaf-page .madda_obligatory  { color: #000EBC; }
-.mushaf-page .qalaqah           { color: #DD0008; }
-.mushaf-page .ikhafa_shafawi    { color: #D500B7; }
-.mushaf-page .ikhafa            { color: #FF7E1E; }
-.mushaf-page .idgham_ghunna        { color: #169200; }
-.mushaf-page .idgham_wo_ghunna     { color: #169200; }
-.mushaf-page .idgham_mutajanisayn  { color: #169200; }
-.mushaf-page .idgham_mutaqaribain  { color: #169200; }
-.mushaf-page .idgham_shafawi       { color: #169200; }
-.mushaf-page .iqlab             { color: #26BFFD; }
-.mushaf-page .ghunna            { color: #169200; }
+.mushaf-page .ham_wasl,
+.mushaf-page .slnt,
+.mushaf-page .lam_shamsiyya,
+.mushaf-page .madda_normal,
+.mushaf-page .madda_permissible,
+.mushaf-page .madda_necessary,
+.mushaf-page .madda_obligatory,
+.mushaf-page .qalaqah,
+.mushaf-page .ikhafa_shafawi,
+.mushaf-page .ikhafa,
+.mushaf-page .idgham_ghunna,
+.mushaf-page .idgham_wo_ghunna,
+.mushaf-page .idgham_mutajanisayn,
+.mushaf-page .idgham_mutaqaribain,
+.mushaf-page .idgham_shafawi,
+.mushaf-page .iqlab,
+.mushaf-page .ghunna { color: inherit; }
 @keyframes recite-word-pulse {
   0%, 100% { box-shadow: 0 2px 0 #22c55e; opacity: 1; }
   50%       { box-shadow: 0 3px 8px #22c55e99; opacity: 0.85; }
@@ -588,23 +588,29 @@ const TAJWEED_CSS = `
 // Strip Arabic diacritics (tashkeel) and normalize letter variants for fuzzy
 // speech-recognition matching.
 const stripTashkeel = (s: string): string => {
-  const result = s
-    .replace(/\u0670/g, "ا")  // dagger alif → regular alif (must run before diacritic strip)
-    .replace(/[\u0610-\u061A\u064B-\u065F\u06D6-\u06DC\u06DF-\u06E4\u06E7\u06E8\u06EA-\u06ED]/g, "") // strip tashkeel (u0670 excluded — handled above)
-    .replace(/[ـ]/g, "")      // remove tatweel (kashida)
-    .replace(/[\uFB50-\uFDFF]/g, (c) => c.normalize("NFKD").replace(/[\u0300-\u036f]/g, "")) // normalize Arabic presentation forms
-    .replace(/[أإآاٱ]/g, "ا")  // normalize all alef variants to plain alef
-    .replace(/ى/g, "ي")       // alef maqsura → ya
-    .replace(/ة/g, "ه")       // ta marbuta → ha
-    .replace(/ؤ/g, "و")       // waw with hamza → waw
-    .replace(/ئ/g, "ي")       // ya with hamza → ya
-    .replace(/ء/g, "")        // remove standalone hamza entirely
-    .replace(/[^\u0600-\u06FF\s]/g, "") // remove anything not standard Arabic
-    .replace(/ا+/g, "ا")      // collapse elongated alef (madd)
-    .replace(/و+/g, "و")      // collapse elongated waw (madd)
-    .replace(/ي+/g, "ي")      // collapse elongated ya (madd)
-    .replace(/^ال/, "")        // strip definite article from start of word
-    .trim();
+  // Diagnostic: trace each step for words containing إله/اله
+  const traceWord = /[إا]له/.test(s);
+  const t = (label: string, val: string) => { if (traceWord) console.log(`[stripTashkeel] ${label}:`, JSON.stringify(val)); return val; };
+
+  let r = s;
+  r = t("0-input",         r);
+  r = t("1-dagger-alif",   r.replace(/\u0670/g, "ا"));
+  r = t("2-tashkeel",      r.replace(/[\u0610-\u061A\u064B-\u065F\u06D6-\u06DC\u06DF-\u06E4\u06E7\u06E8\u06EA-\u06ED]/g, ""));
+  r = t("3-tatweel",       r.replace(/[ـ]/g, ""));
+  r = t("4-pres-forms",    r.replace(/[\uFB50-\uFDFF]/g, (c) => c.normalize("NFKD").replace(/[\u0300-\u036f]/g, "")));
+  r = t("5-alef-norm",     r.replace(/[أإآاٱ]/g, "ا"));
+  r = t("6-alef-maqsura",  r.replace(/ى/g, "ي"));
+  r = t("7-ta-marbuta",    r.replace(/ة/g, "ه"));
+  r = t("8-waw-hamza",     r.replace(/ؤ/g, "و"));
+  r = t("9-ya-hamza",      r.replace(/ئ/g, "ي"));
+  r = t("10-hamza",        r.replace(/ء/g, ""));
+  r = t("11-non-arabic",   r.replace(/[^\u0600-\u06FF\s]/g, ""));
+  r = t("12-alef-madd",    r.replace(/ا+/g, "ا"));
+  r = t("13-waw-madd",     r.replace(/و+/g, "و"));
+  r = t("14-ya-madd",      r.replace(/ي+/g, "ي"));
+  const result = r.trim();
+  t("15-trim", result);
+
   if (result.length <= 2) console.log("short stripped word:", s, "→", result);
   // Never return empty — an empty expected word causes the matcher to spin forever.
   return result || s;
@@ -721,6 +727,8 @@ function MemorizationPlayer({
       return darkNow ? "madinah_dark" : "teal";
     } catch { return "teal"; }
   });
+
+  const [showSettingsPanel, setShowSettingsPanel] = useState(false);
 
   // Auto-switch theme when local dark mode toggles (independent of global dark mode)
   useEffect(() => {
@@ -916,12 +924,16 @@ function MemorizationPlayer({
           continue;
         }
 
-        const ew = expectedAr.replace(/^ال/, "");
+        const ewRaw = expectedAr;
+        const ewTry = ewRaw.replace(/^ال/, "");
+        const ew = ewTry.length >= 2 ? ewTry : ewRaw;
 
         // Scan from searchFrom onward for any transcript word matching ew.
         let foundAt = -1;
         for (let i = searchFrom; i < allHeardWords.length; i++) {
-          const hw = allHeardWords[i].replace(/^ال/, "");
+          const hwRaw = allHeardWords[i];
+          const hwTry = hwRaw.replace(/^ال/, "");
+          const hw = hwTry.length >= 2 ? hwTry : hwRaw;
           console.log("SR scan:", hw, "| expected:", ew);
           if (wordMatches(hw, ew)) {
             foundAt = i;
@@ -933,7 +945,9 @@ function MemorizationPlayer({
 
         advanced = true;
         lastMatchTimeRef.current = Date.now();
-        lastMatchedWordRef.current = allHeardWords[foundAt].replace(/^ال/, "");
+        const lmwRaw = allHeardWords[foundAt];
+        const lmwTry = lmwRaw.replace(/^ال/, "");
+        lastMatchedWordRef.current = lmwTry.length >= 2 ? lmwTry : lmwRaw;
         matchedWordCountRef.current = foundAt + 1;
         searchFrom = foundAt + 1;
 
@@ -1275,224 +1289,123 @@ function MemorizationPlayer({
     : `Ayah ${currentAyahNum} · ${repeatCount}× repeat`;
 
   return (
-    <div className="h-screen bg-[#f5f0e8] dark:bg-gray-950 flex flex-col md:flex-row overflow-hidden">
-
-      {/* ── LEFT COLUMN (desktop only) ── */}
-      <div className="hidden md:flex w-52 flex-col gap-6 p-4 justify-center shrink-0 bg-[#f5f0e8] dark:bg-gray-950">
-        {/* Surah info + progress */}
-        <div className="flex flex-col gap-2">
-          <div>
-            <h1 className="text-lg font-bold leading-tight text-[#1a5c2a] dark:text-emerald-400">
-              {chapter.name_simple}
-            </h1>
-            <p className="text-sm text-muted-foreground">
-              {chapter.translated_name?.name}
-            </p>
-            <span className="arabic-text text-2xl text-amber-700 mt-1 block text-right">
-              {chapter.name_arabic}
-            </span>
-          </div>
-          <div className="h-1.5 bg-border/60 rounded-full overflow-hidden">
-            {isCumulative ? (
-              <div
-                className="h-full bg-teal-500 rounded-full transition-all duration-300"
-                style={{ width: `${cumUpTo - fromAyah > 0 ? (cumAyahIdx / (cumUpTo - fromAyah)) * 100 : 100}%` }}
-              />
-            ) : (
-              <div
-                className="h-full bg-amber-400 rounded-full transition-all duration-500"
-                style={{ width: `${progressPercent}%` }}
-              />
-            )}
-          </div>
-          <p className="text-xs text-muted-foreground">
-            {isCumulative
-              ? `Reviewing ${cumUpTo - fromAyah + 1} ayahs · pass ${cumPass} of ${reviewRepeatCount}`
-              : `${currentIndexInRange + 1} of ${rangeLength} ayahs`}
-          </p>
-        </div>
-
-        {/* Playback buttons */}
-        <div className="flex items-center justify-center gap-2">
-          <Button
-            variant="outline" size="sm" onClick={goPrev}
-            disabled={isReciteMode || (isCumulative ? false : currentAyahNum <= fromAyah)}
-            className="rounded-full w-10 h-10 p-0"
-            title={isCumulative ? "Exit cumulative review" : "Previous ayah"}
-          >
-            <SkipBack size={16} />
-          </Button>
-          <Button
-            size="lg" onClick={play}
-            disabled={isReciteMode || loading || versesLoading || !currentArabic}
-            className={cn("rounded-full w-14 h-14 p-0 shadow-lg", isCumulative ? "bg-teal-600 hover:bg-teal-700" : "")}
-          >
-            {loading ? <Loader2 size={22} className="animate-spin" /> : playing ? <Pause size={22} /> : <Play size={22} className="ml-1" />}
-          </Button>
-          <Button
-            variant="outline" size="sm" onClick={handleSkipRepeat}
-            disabled={isReciteMode || (!isCumulative && repeatCount <= 1)}
-            className="rounded-full w-10 h-10 p-0"
-            title={isCumulative ? "Skip pass" : "Skip repeat (stay on same ayah)"}
-          >
-            <ChevronsRight size={16} />
-          </Button>
-          <Button
-            variant="outline" size="sm" onClick={skipAyah}
-            disabled={isReciteMode}
-            className="rounded-full w-10 h-10 p-0"
-            title={isCumulative ? "Skip cumulative review" : "Skip ayah (advance to next ayah)"}
-          >
-            <SkipForward size={16} />
-          </Button>
-        </div>
-
-        {/* Auto-advance toggle */}
+    <div
+      style={{
+        height: "100vh",
+        display: "flex",
+        flexDirection: "column",
+        overflow: "hidden",
+        background: localDarkMode ? "#111111" : "#f0f0f0",
+      }}
+    >
+      {/* ── Minimal top bar ── */}
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          padding: "10px 16px",
+          background: localDarkMode ? "#1a1a1a" : "#ffffff",
+          borderBottom: `1px solid ${localDarkMode ? "#2a2a2a" : "#f0f0f0"}`,
+          flexShrink: 0,
+          zIndex: 10,
+        }}
+      >
         <button
-          onClick={() => setAutoAdvance((a) => !a)}
-          className={cn(
-            "flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs transition-colors self-start",
-            autoAdvance
-              ? "border-primary/30 text-primary bg-primary/5"
-              : "border-border text-muted-foreground hover:text-foreground"
-          )}
+          onClick={onBack}
+          style={{
+            display: "flex", alignItems: "center", gap: 4,
+            color: localDarkMode ? "#9ca3af" : "#6b7280",
+            fontSize: 14, background: "none", border: "none",
+            cursor: "pointer", padding: "4px 0", minWidth: 60,
+          }}
         >
-          <RotateCcw size={11} />
-          Auto-advance {autoAdvance ? "on" : "off"}
+          <ChevronLeft size={16} />
+          Back
         </button>
-      </div>
-
-      {/* ── CENTER COLUMN ── */}
-      <div className="flex-1 h-full overflow-hidden flex flex-col items-center justify-start py-3">
-
-      {/* Mobile-only header */}
-      <div className="md:hidden pattern-bg text-white px-4 pt-8 pb-4">
-        <div className="max-w-lg mx-auto">
-          <div className="flex items-center justify-between mb-2">
-            <button
-              onClick={onBack}
-              className="flex items-center gap-1 text-emerald-200 text-sm"
-            >
-              <ChevronLeft size={16} /> Settings
-            </button>
-            <div className="text-right">
-              {isCumulative ? (
-                <>
-                  <p className="text-emerald-200/70 text-[10px] uppercase tracking-wide">
-                    Cumulative Review
-                  </p>
-                  <p className="text-2xl font-bold leading-none">
-                    {fromAyah + cumAyahIdx}
-                  </p>
-                  <p className="text-emerald-200/60 text-xs">
-                    Pass {cumPass}/{reviewRepeatCount} · {fromAyah}–{cumUpTo}
-                  </p>
-                </>
-              ) : (
-                <>
-                  <p className="text-emerald-200/70 text-[10px] uppercase tracking-wide">
-                    Ayah
-                  </p>
-                  <p className="text-2xl font-bold leading-none">{currentAyahNum}</p>
-                  <p className="text-emerald-200/60 text-xs">
-                    {fromAyah}–{toAyah}
-                  </p>
-                </>
-              )}
-            </div>
-          </div>
-
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-lg font-bold leading-tight">
-                {chapter.name_simple}
-              </h1>
-              <p className="text-emerald-200 text-xs">
-                {chapter.translated_name?.name}
-              </p>
-            </div>
-            <span className="arabic-text text-3xl text-amber-300">
-              {chapter.name_arabic}
-            </span>
-          </div>
-
-          {/* Range progress bar — shows single-ayah progress; turns teal in cumulative */}
-          <div className="mt-3 h-1.5 bg-white/20 rounded-full overflow-hidden">
-            {isCumulative ? (
-              // cumulative progress: position within the cumulative ayah range
-              <div
-                className="h-full bg-teal-300 rounded-full transition-all duration-300"
-                style={{
-                  width: `${
-                    cumUpTo - fromAyah > 0
-                      ? (cumAyahIdx / (cumUpTo - fromAyah)) * 100
-                      : 100
-                  }%`,
-                }}
-              />
-            ) : (
-              <div
-                className="h-full bg-amber-300 rounded-full transition-all duration-500"
-                style={{ width: `${progressPercent}%` }}
-              />
-            )}
-          </div>
-          <p className="text-emerald-200/60 text-xs mt-1">
-            {isCumulative
-              ? `Reviewing ${cumUpTo - fromAyah + 1} ayahs · pass ${cumPass} of ${reviewRepeatCount}`
-              : `${currentIndexInRange + 1} of ${rangeLength} ayahs`}
+        <div style={{ textAlign: "center", flex: 1 }}>
+          <p style={{ margin: 0, fontSize: 15, fontWeight: 600, color: localDarkMode ? "#e5e5e5" : "#1a1a1a", lineHeight: 1.3 }}>
+            {chapter.name_simple}
           </p>
+          <p style={{ margin: 0, fontSize: 11, color: "#9ca3af", lineHeight: 1.3, marginTop: 1 }}>
+            {isCumulative
+              ? `Pass ${cumPass}/${reviewRepeatCount} · ${fromAyah}–${cumUpTo}`
+              : `Ayah ${currentAyahNum} · ${fromAyah}–${toAyah}`}
+          </p>
+        </div>
+        <div style={{ minWidth: 60, display: "flex", justifyContent: "flex-end" }}>
+          <button
+            onClick={() => setShowSettingsPanel((v) => !v)}
+            style={{
+              width: 36, height: 36, borderRadius: "50%", border: "1px solid",
+              borderColor: showSettingsPanel ? "#22c55e" : (localDarkMode ? "#333" : "#e5e7eb"),
+              background: showSettingsPanel ? "#f0fdf4" : (localDarkMode ? "#222" : "#fff"),
+              color: showSettingsPanel ? "#16a34a" : (localDarkMode ? "#9ca3af" : "#6b7280"),
+              cursor: "pointer",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              fontSize: 16, padding: 0, transition: "all 0.15s",
+            }}
+            title="Settings"
+          >
+            ⚙
+          </button>
         </div>
       </div>
 
-      {/* Arabic text area — mushaf page view */}
-      <div className="flex-1 w-full min-h-0 overflow-hidden flex flex-col">
+      {/* ── Mushaf area ── */}
+      <div
+        style={{
+          flex: 1, overflow: "hidden",
+          display: "flex", flexDirection: "column", alignItems: "center",
+          padding: "16px 12px 100px",
+        }}
+      >
         <style>{TAJWEED_CSS}</style>
         {versesLoading || !currentArabic ? (
-          <div className="w-full space-y-4 pt-8 px-5">
+          <div className="w-full space-y-4 pt-8 px-5" style={{ maxWidth: 680 }}>
             <Skeleton className="h-10 w-full rounded-xl" />
             <Skeleton className="h-10 w-4/5 rounded-xl mx-auto" />
             <Skeleton className="h-10 w-3/5 rounded-xl mx-auto" />
           </div>
         ) : (
-          <div className="mushaf-page" style={{ width: "min(680px, 96vw)", height: "100%", margin: "0 auto", padding: "12px", display: "flex", flexDirection: "column" }}>
-            {/* Parchment page card */}
+          <div
+            className="mushaf-page"
+            style={{
+              width: "min(680px, 96vw)",
+              height: "100%",
+              display: "flex",
+              flexDirection: "column",
+            }}
+          >
+            {/* Clean page card */}
             <div
-              className="relative"
               style={{
                 flex: 1,
                 overflow: "hidden",
                 display: "flex",
                 flexDirection: "column",
-                border: `2px solid ${theme.bannerBorder}`,
-                outline: `1px solid ${theme.bannerBorder}`,
-                outlineOffset: "-8px",
-                background: theme.parchment,
-                boxShadow: "0 1px 16px rgba(100,60,0,0.14)",
-                borderRadius: "3px",
+                background: localDarkMode ? theme.parchment : "#ffffff",
+                boxShadow: "0 2px 20px rgba(0,0,0,0.08)",
+                borderRadius: 12,
               }}
             >
-              {/* Corner ornaments */}
-              <span aria-hidden="true" style={{ position: "absolute", top: 5, left: 5, color: theme.accent, fontSize: "10px", lineHeight: 1, userSelect: "none", zIndex: 1 }}>◆</span>
-              <span aria-hidden="true" style={{ position: "absolute", top: 5, right: 5, color: theme.accent, fontSize: "10px", lineHeight: 1, userSelect: "none", zIndex: 1 }}>◆</span>
-              <span aria-hidden="true" style={{ position: "absolute", bottom: 5, left: 5, color: theme.accent, fontSize: "10px", lineHeight: 1, userSelect: "none", zIndex: 1 }}>◆</span>
-              <span aria-hidden="true" style={{ position: "absolute", bottom: 5, right: 5, color: theme.accent, fontSize: "10px", lineHeight: 1, userSelect: "none", zIndex: 1 }}>◆</span>
 
               {/* Verse body */}
               <div
-                className="arabic-text px-6 pt-4 pb-5 select-none"
+                className="arabic-text select-none"
                 dir="rtl"
                 lang="ar"
                 style={{
-                  fontFamily: '"Amiri Quran", "me_quran", serif',
-                  fontSize: "1.57rem",
-                  lineHeight: "2.15",
+                  fontFamily: '"Scheherazade New", "Amiri Quran", "me_quran", serif',
+                  fontSize: "1.65rem",
+                  lineHeight: "2.3",
                   textAlign: "justify",
                   textAlignLast: "right",
                   textJustify: "inter-word",
-                  color: theme.textColor ?? "#1a0a00",
+                  color: localDarkMode ? (theme.textColor ?? "#e8d5b0") : "#1a1a1a",
                   flex: 1,
                   overflowY: "auto",
+                  padding: "20px 24px 8px",
                   minHeight: 0,
                 }}
               >
@@ -1546,71 +1459,39 @@ function MemorizationPlayer({
                       );
                     }
 
-                    const ornamentClass = "inline-block arabic-text text-[0.85rem] mx-[0.3em] transition-colors duration-300";
-                    const ornamentColor = isActive
-                      ? (isCumulative ? "rgba(13,148,136,0.55)" : "rgba(217,119,6,0.55)")
-                      : isActiveSurah && inSelectedRange
-                        ? `${theme.accent}47`
-                        : `${theme.accent}21`;
 
                     const surahChapter = allChapters.find(
                       (c) => c.id === surahId
                     );
 
+                    const headerTextColor = localDarkMode ? "#e8d5b0" : "#1a1a1a";
+                    const decorLineColor = localDarkMode ? "#3a3a3a" : "#e5e7eb";
+
                     return (
                       <span key={`${surahId}:${verseNum}`}>
-                        {/* Inline surah banner — only at the start of a surah */}
+                        {/* Inline surah header — clean centered with thin decorative lines */}
                         {showSurahHeader && (
-                          <span className="block" dir="rtl" style={{ textAlign: "center", isolation: "isolate" }}>
-                            <span
-                              className="arabic-text mx-0 mt-3 mb-2 flex items-center justify-center gap-3"
-                              style={{
-                                background: theme.banner,
-                                border: `2px solid ${theme.bannerBorder}`,
-                                boxShadow:
-                                  `inset 0 0 0 3px ${theme.banner}, inset 0 0 0 4px ${theme.bannerBorder}`,
-                                borderRadius: "3px",
-                                padding: "7px 16px",
-                              }}
-                            >
-                              <span
-                                aria-hidden="true"
-                                style={{
-                                  color: theme.accent,
-                                  fontSize: "18px",
-                                  lineHeight: 1,
-                                  flexShrink: 0,
-                                }}
-                              >
-                                ✿
-                              </span>
+                          <span className="block" dir="rtl" style={{ textAlign: "center", isolation: "isolate", margin: "10px 0" }}>
+                            <span style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 12 }}>
+                              <span style={{ flex: 1, height: 1, background: decorLineColor, maxWidth: 60, display: "block" }} />
                               <span
                                 style={{
-                                  color: "#ffffff",
+                                  fontFamily: '"Scheherazade New", "Amiri Quran", "me_quran", serif',
                                   fontSize: "1.1rem",
-                                  textShadow: "0 1px 3px rgba(0,0,0,0.4)",
+                                  fontWeight: 400,
+                                  color: headerTextColor,
                                 }}
                               >
                                 {surahChapter?.name_arabic ?? `سُورَة ${surahId}`}
                               </span>
-                              <span
-                                aria-hidden="true"
-                                style={{
-                                  color: theme.accent,
-                                  fontSize: "18px",
-                                  lineHeight: 1,
-                                  flexShrink: 0,
-                                }}
-                              >
-                                ✿
-                              </span>
+                              <span style={{ flex: 1, height: 1, background: decorLineColor, maxWidth: 60, display: "block" }} />
                             </span>
                             {surahId !== 1 && surahId !== 9 && (
-                              <div style={{ display: "flex", justifyContent: "center", width: "100%", margin: "4px 0" }}>
-                                <span style={{ fontFamily: '"Amiri Quran", "me_quran", serif', fontSize: "1.3rem", color: theme.accent }}>
+                              <span style={{ display: "block", textAlign: "center", margin: "6px 0 2px" }}>
+                                <span style={{ fontFamily: '"Scheherazade New", "Amiri Quran", "me_quran", serif', fontSize: "1.3rem", color: localDarkMode ? "#b8a060" : "#6b5830" }}>
                                   بِسْمِ ٱللَّهِ ٱلرَّحْمَٰنِ ٱلرَّحِيمِ
                                 </span>
-                              </div>
+                              </span>
                             )}
                           </span>
                         )}
@@ -1844,30 +1725,23 @@ function MemorizationPlayer({
                           })()
                         )}
 
-                        {/* Verse-end marker — after verse text so it appears at the END in RTL flow */}
+                        {/* Ayah end marker — small muted inline */}
                         <span
-                          className={ornamentClass}
                           style={{
                             display: "inline-flex",
                             alignItems: "center",
-                            justifyContent: "center",
-                            width: "1.8em",
-                            height: "1.8em",
-                            border: `2px solid ${theme.accent}`,
-                            borderRadius: "2px",
-                            transform: "rotate(45deg)",
-                            fontSize: "0.7em",
-                            direction: "ltr",
-                            margin: "0 0.5em",
-                            flexShrink: 0,
+                            gap: 2,
+                            fontSize: "0.6em",
+                            color: "#9ca3af",
+                            margin: "0 0.4em",
                             verticalAlign: "middle",
-                            color: theme.accent,
-                            opacity: 1,
+                            direction: "ltr",
+                            unicodeBidi: "isolate",
+                            userSelect: "none",
+                            flexShrink: 0,
                           }}
                         >
-                          <bdo dir="ltr" style={{ transform: "rotate(-45deg)", display: "block" }}>
-                            {verseNum}
-                          </bdo>
+                          ◆<bdo dir="ltr">{verseNum}</bdo>
                         </span>
 
                       </span>
@@ -1876,38 +1750,23 @@ function MemorizationPlayer({
                 )}
               </div>
 
-              {/* Page footer */}
+              {/* Page number */}
               <div
-                className="flex items-center justify-center px-6 pb-5 pt-2"
-                style={{ borderTop: "1px solid rgba(160,110,30,0.18)" }}
+                style={{
+                  padding: "6px 16px 14px",
+                  textAlign: "center",
+                  borderTop: `1px solid ${localDarkMode ? "#2a2a2a" : "#f5f5f5"}`,
+                }}
               >
                 <span
                   style={{
-                    display: "inline-flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    width: "44px",
-                    height: "20px",
-                    border: `1px solid ${theme.accent}`,
-                    borderRadius: "2px",
-                    transform: "rotate(45deg)",
-                    direction: "ltr",
+                    fontSize: 11,
+                    color: "#9ca3af",
+                    letterSpacing: "0.05em",
+                    fontVariantNumeric: "tabular-nums",
                   }}
                 >
-                  <bdo
-                    dir="ltr"
-                    className="tabular-nums"
-                    style={{
-                      transform: "rotate(-45deg)",
-                      display: "block",
-                      fontSize: "9px",
-                      color: theme.accent,
-                      fontWeight: 600,
-                      letterSpacing: "0.2em",
-                    }}
-                  >
-                    {activePage ?? ""}
-                  </bdo>
+                  {activePage ?? ""}
                 </span>
               </div>
             </div>
@@ -2017,469 +1876,393 @@ function MemorizationPlayer({
         </div>
       )}
 
-      {/* Player controls */}
-      <div className="md:hidden bg-white dark:bg-gray-900 border-t border-border dark:border-gray-700 px-4 pt-3 pb-6">
-        <div className="max-w-lg mx-auto space-y-3">
-          {/* Phase badge + repeat dots */}
-          <div className="flex items-center justify-center gap-3">
-            {isCumulative ? (
-              <span className="text-[11px] font-semibold px-3 py-1 rounded-full bg-teal-100 text-teal-700 tabular-nums">
-                Cumulative Review · {phaseLabel}
-              </span>
-            ) : (
-              <>
-                <span className="text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full bg-primary/10 text-primary">
-                  Single Ayah
-                </span>
-                <div className="flex items-center gap-1.5">
-                  {Array.from({ length: repeatCount }, (_, i) => (
-                    <div
-                      key={i}
-                      className={cn(
-                        "rounded-full transition-all duration-300",
-                        i < currentRepeat
-                          ? "bg-primary w-2.5 h-2.5"
-                          : "bg-muted w-2 h-2",
-                        i === currentRepeat - 1 && playing
-                          ? "scale-125 shadow-md"
-                          : ""
-                      )}
-                    />
-                  ))}
-                  <span className="text-xs text-muted-foreground ml-1 tabular-nums">
-                    {currentRepeat}/{repeatCount}
-                  </span>
-                </div>
-              </>
-            )}
-          </div>
-
-          {/* Prev / Play-Pause / Next */}
-          <div className="flex items-center justify-center gap-5">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={goPrev}
-              disabled={
-                isReciteMode ||
-                (isCumulative
-                  ? false // tapping prev exits cumulative
-                  : currentAyahNum <= fromAyah)
-              }
-              className="rounded-full w-11 h-11 p-0"
-              title={isCumulative ? "Exit cumulative review" : "Previous ayah"}
-            >
-              <SkipBack size={18} />
-            </Button>
-
-            <Button
-              size="lg"
-              onClick={play}
-              disabled={isReciteMode || loading || versesLoading || !currentArabic}
-              className={cn(
-                "rounded-full w-16 h-16 p-0 shadow-lg",
-                isCumulative ? "bg-teal-600 hover:bg-teal-700" : ""
-              )}
-            >
-              {loading ? (
-                <Loader2 size={24} className="animate-spin" />
-              ) : playing ? (
-                <Pause size={24} />
-              ) : (
-                <Play size={24} className="ml-1" />
-              )}
-            </Button>
-
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleSkipRepeat}
-              disabled={isReciteMode || (!isCumulative && repeatCount <= 1)}
-              className="rounded-full w-11 h-11 p-0"
-              title={isCumulative ? "Skip pass" : "Skip repeat (stay on same ayah)"}
-            >
-              <ChevronsRight size={18} />
-            </Button>
-
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={skipAyah}
-              disabled={isReciteMode}
-              className="rounded-full w-11 h-11 p-0"
-              title={isCumulative ? "Skip cumulative review" : "Skip ayah (advance to next ayah)"}
-            >
-              <SkipForward size={18} />
-            </Button>
-          </div>
-
-          {/* Theme picker (mobile) + dark mode toggle */}
-          <div className="flex items-center gap-2 pt-1">
-            <button
-              onClick={toggleLocalDarkMode}
-              className="flex items-center justify-center w-[18px] h-[18px] rounded-full border border-border/60 text-muted-foreground hover:text-foreground transition-colors flex-shrink-0"
-              title={localDarkMode ? "Switch to light mode" : "Switch to dark mode"}
-            >
-              {localDarkMode ? <Sun size={10} /> : <Moon size={10} />}
-            </button>
-            {(Object.keys(MUSHAF_THEMES) as Array<keyof typeof MUSHAF_THEMES>)
-              .filter((key) => localDarkMode ? key.endsWith("_dark") : !key.endsWith("_dark"))
-              .map((key) => (
+      {/* Recite mode floating pills — shown above bottom bar in recite mode */}
+      {isReciteMode && reciteVerseIndex < sessionVerses.length && (
+        <div
+          style={{
+            position: "fixed", bottom: 92, left: "50%", transform: "translateX(-50%)",
+            display: "flex", gap: 8, alignItems: "center",
+            zIndex: 30, flexWrap: "wrap", justifyContent: "center", padding: "0 16px",
+          }}
+        >
+          <button
+            onClick={handleShowWord}
+            style={{
+              display: "flex", alignItems: "center", gap: 6,
+              padding: "8px 16px", borderRadius: 999,
+              background: "#f0fdf4", border: "1px solid #86efac",
+              color: "#15803d", fontSize: 13, fontWeight: 600,
+              cursor: "pointer", boxShadow: "0 2px 8px rgba(0,0,0,0.10)",
+              whiteSpace: "nowrap",
+            }}
+          >
+            <Eye size={13} />
+            Show Word
+          </button>
+          <button
+            onClick={handleReciteRestart}
+            style={{
+              display: "flex", alignItems: "center", gap: 6,
+              padding: "8px 16px", borderRadius: 999,
+              background: "#ffffff", border: "1px solid #e5e7eb",
+              color: "#6b7280", fontSize: 13, fontWeight: 600,
+              cursor: "pointer", boxShadow: "0 2px 8px rgba(0,0,0,0.10)",
+              whiteSpace: "nowrap",
+            }}
+          >
+            <RotateCcw size={13} />
+            Restart
+          </button>
+          {sessionSpansMultiplePages && (
+            <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
               <button
-                key={key}
-                onClick={() => setMushafTheme(key)}
-                title={MUSHAF_THEMES[key].name}
+                onClick={() => nextPageVerse && setCurrentAyahNum(nextPageVerse.verse_number)}
+                disabled={!nextPageVerse}
+                title="Next page"
                 style={{
-                  width: 18,
-                  height: 18,
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  width: 34, height: 34, borderRadius: "50%",
+                  background: "#ffffff", border: "1px solid #e5e7eb",
+                  color: "#6b7280", cursor: "pointer",
+                  opacity: !nextPageVerse ? 0.3 : 1,
+                  boxShadow: "0 2px 8px rgba(0,0,0,0.10)", padding: 0,
+                }}
+              >
+                <ChevronLeft size={14} />
+              </button>
+              <button
+                onClick={() => prevPageVerse && setCurrentAyahNum(prevPageVerse.verse_number)}
+                disabled={!prevPageVerse}
+                title="Previous page"
+                style={{
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  width: 34, height: 34, borderRadius: "50%",
+                  background: "#ffffff", border: "1px solid #e5e7eb",
+                  color: "#6b7280", cursor: "pointer",
+                  opacity: !prevPageVerse ? 0.3 : 1,
+                  boxShadow: "0 2px 8px rgba(0,0,0,0.10)", padding: 0,
+                }}
+              >
+                <ChevronRight size={14} />
+              </button>
+            </div>
+          )}
+          {sessionSpansMultiplePages && currentWordPage !== undefined && currentWordPage !== activePage && (
+            <button
+              onClick={() => { const v = sessionVerses[reciteVerseIndex]; if (v) setCurrentAyahNum(v.verse_number); }}
+              style={{
+                background: "none", border: "none", fontSize: 12,
+                color: "#9ca3af", cursor: "pointer",
+                textDecoration: "underline", padding: "0 4px",
+              }}
+            >
+              {currentWordPage < (activePage ?? Infinity) ? "Current word →" : "← Current word"}
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* ── Floating bottom toolbar ── */}
+      <div
+        style={{
+          position: "fixed", bottom: 24, left: "50%", transform: "translateX(-50%)",
+          background: localDarkMode ? "#1a1a1a" : "#ffffff",
+          borderRadius: 999,
+          boxShadow: "0 4px 24px rgba(0,0,0,0.12)",
+          padding: "10px 20px",
+          display: "flex", alignItems: "center", gap: 6,
+          zIndex: 40,
+          border: localDarkMode ? "1px solid #2a2a2a" : "none",
+        }}
+      >
+        {/* Prev */}
+        <button
+          onClick={goPrev}
+          disabled={isReciteMode || (isCumulative ? false : currentAyahNum <= fromAyah)}
+          title={isCumulative ? "Exit cumulative review" : "Previous ayah"}
+          style={{
+            width: 36, height: 36, borderRadius: "50%",
+            border: "1px solid",
+            borderColor: localDarkMode ? "#333" : "#e5e7eb",
+            background: "transparent",
+            color: localDarkMode ? "#9ca3af" : "#6b7280",
+            cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
+            padding: 0, flexShrink: 0,
+            opacity: (isReciteMode || (!isCumulative && currentAyahNum <= fromAyah)) ? 0.3 : 1,
+          }}
+        >
+          <SkipBack size={16} />
+        </button>
+
+        {/* Repeat count or cumulative pass indicator */}
+        {!isCumulative ? (
+          <div style={{ display: "flex", alignItems: "center", gap: 3, margin: "0 2px" }}>
+            {Array.from({ length: repeatCount }, (_, i) => (
+              <div
+                key={i}
+                style={{
+                  width: i < currentRepeat ? 9 : 7,
+                  height: i < currentRepeat ? 9 : 7,
                   borderRadius: "50%",
-                  background: MUSHAF_THEMES[key].banner,
-                  border: mushafTheme === key ? `2px solid #d4af37` : "2px solid transparent",
-                  outline: mushafTheme === key ? "1px solid #d4af37" : "none",
-                  outlineOffset: "1px",
+                  background: i < currentRepeat ? "#22c55e" : (localDarkMode ? "#333" : "#d1d5db"),
+                  transition: "all 0.3s",
+                  boxShadow: i === currentRepeat - 1 && playing ? "0 0 0 2px #22c55e40" : "none",
                   flexShrink: 0,
-                  cursor: "pointer",
                 }}
               />
             ))}
           </div>
+        ) : (
+          <span style={{ fontSize: 11, color: "#0d9488", fontWeight: 600, whiteSpace: "nowrap", margin: "0 4px" }}>
+            Pass {cumPass}/{reviewRepeatCount}
+          </span>
+        )}
 
-          {/* Auto-advance toggle + blind mode toggle + recite mode toggle + reciter label */}
-          <div className="flex items-center justify-between pt-1">
-            <div className="flex items-center gap-2 flex-wrap">
+        {/* Play / Pause — large green circle */}
+        <button
+          onClick={play}
+          disabled={isReciteMode || loading || versesLoading || !currentArabic}
+          style={{
+            width: 52, height: 52, borderRadius: "50%",
+            background: isCumulative ? "#0d9488" : "#22c55e",
+            color: "#ffffff", border: "none", cursor: "pointer",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            boxShadow: "0 2px 8px rgba(0,0,0,0.15)",
+            flexShrink: 0, transition: "background 0.2s",
+            opacity: (isReciteMode || loading || versesLoading || !currentArabic) ? 0.5 : 1,
+            padding: 0,
+          }}
+        >
+          {loading ? (
+            <Loader2 size={22} className="animate-spin" />
+          ) : playing ? (
+            <Pause size={20} />
+          ) : (
+            <Play size={20} style={{ marginLeft: 2 }} />
+          )}
+        </button>
+
+        {/* Skip repeat */}
+        <button
+          onClick={handleSkipRepeat}
+          disabled={isReciteMode || (!isCumulative && repeatCount <= 1)}
+          title={isCumulative ? "Skip pass" : "Skip repeat"}
+          style={{
+            width: 36, height: 36, borderRadius: "50%",
+            border: "1px solid",
+            borderColor: localDarkMode ? "#333" : "#e5e7eb",
+            background: "transparent",
+            color: localDarkMode ? "#9ca3af" : "#6b7280",
+            cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
+            padding: 0, flexShrink: 0,
+            opacity: (isReciteMode || (!isCumulative && repeatCount <= 1)) ? 0.3 : 1,
+          }}
+        >
+          <ChevronsRight size={16} />
+        </button>
+
+        {/* Skip ayah */}
+        <button
+          onClick={skipAyah}
+          disabled={isReciteMode}
+          title={isCumulative ? "Skip cumulative review" : "Skip ayah"}
+          style={{
+            width: 36, height: 36, borderRadius: "50%",
+            border: "1px solid",
+            borderColor: localDarkMode ? "#333" : "#e5e7eb",
+            background: "transparent",
+            color: localDarkMode ? "#9ca3af" : "#6b7280",
+            cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
+            padding: 0, flexShrink: 0,
+            opacity: isReciteMode ? 0.3 : 1,
+          }}
+        >
+          <SkipForward size={16} />
+        </button>
+
+        {/* Divider */}
+        <span style={{ width: 1, height: 20, background: localDarkMode ? "#333" : "#e5e7eb", margin: "0 2px", flexShrink: 0 }} />
+
+        {/* Page indicator */}
+        <span style={{ fontSize: 11, color: "#9ca3af", minWidth: 22, textAlign: "center", fontVariantNumeric: "tabular-nums" }}>
+          {activePage ?? ""}
+        </span>
+      </div>
+
+      {/* ── Settings overlay panel ── */}
+      {showSettingsPanel && (
+        <div
+          style={{
+            position: "fixed", inset: 0, zIndex: 50,
+            background: "rgba(0,0,0,0.3)",
+          }}
+          onClick={() => setShowSettingsPanel(false)}
+        >
+          <div
+            style={{
+              position: "fixed", top: 0, right: 0,
+              height: "100vh", width: 320,
+              background: localDarkMode ? "#1a1a1a" : "#ffffff",
+              boxShadow: "-4px 0 24px rgba(0,0,0,0.1)",
+              padding: "24px 20px 32px",
+              overflowY: "auto",
+              transform: "translateX(0)",
+              transition: "transform 0.25s ease",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
+              <h3 style={{ fontSize: 15, fontWeight: 600, color: localDarkMode ? "#e5e5e5" : "#1a1a1a", margin: 0 }}>Settings</h3>
+              <button onClick={() => setShowSettingsPanel(false)} style={{ background: "none", border: "none", cursor: "pointer", color: localDarkMode ? "#9ca3af" : "#6b7280", padding: 4, display: "flex", alignItems: "center", justifyContent: "center" }}>✕</button>
+            </div>
+            {/* Auto-advance */}
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
+              <div>
+                <p style={{ fontSize: 14, color: localDarkMode ? "#d1d5db" : "#374151", margin: 0 }}>Auto-advance</p>
+                <p style={{ fontSize: 11, color: "#9ca3af", margin: "2px 0 0" }}>Play continuously through all ayahs</p>
+              </div>
               <button
                 onClick={() => setAutoAdvance((a) => !a)}
-                className={cn(
-                  "flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs transition-colors",
-                  autoAdvance
-                    ? "border-primary/30 text-primary bg-primary/5"
-                    : "border-border text-muted-foreground hover:text-foreground"
-                )}
+                style={{
+                  padding: "5px 14px", borderRadius: 999,
+                  background: autoAdvance ? "#22c55e" : (localDarkMode ? "#2a2a2a" : "#f3f4f6"),
+                  color: autoAdvance ? "#ffffff" : (localDarkMode ? "#9ca3af" : "#6b7280"),
+                  border: "none", cursor: "pointer", fontSize: 12, fontWeight: 500,
+                  transition: "all 0.15s", flexShrink: 0,
+                }}
               >
-                <RotateCcw size={11} />
-                Auto-advance {autoAdvance ? "on" : "off"}
+                {autoAdvance ? "on" : "off"}
               </button>
+            </div>
+
+            {/* Blind mode */}
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
+              <div>
+                <p style={{ fontSize: 14, color: localDarkMode ? "#d1d5db" : "#374151", margin: 0 }}>Blind mode</p>
+                <p style={{ fontSize: 11, color: "#9ca3af", margin: "2px 0 0" }}>Blur ayahs for memorization challenge</p>
+              </div>
               <button
                 onClick={() => { setIsBlindMode((v) => !v); setIsReciteMode(false); }}
-                className={cn(
-                  "flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs transition-colors",
-                  isBlindMode
-                    ? "border-primary/30 text-primary bg-primary/5"
-                    : "border-border text-muted-foreground hover:text-foreground"
-                )}
+                style={{
+                  padding: "5px 14px", borderRadius: 999,
+                  background: isBlindMode ? "#22c55e" : (localDarkMode ? "#2a2a2a" : "#f3f4f6"),
+                  color: isBlindMode ? "#ffffff" : (localDarkMode ? "#9ca3af" : "#6b7280"),
+                  border: "none", cursor: "pointer", fontSize: 12, fontWeight: 500,
+                  transition: "all 0.15s", flexShrink: 0,
+                }}
               >
-                <EyeOff size={11} />
-                Blind {isBlindMode ? "on" : "off"}
+                {isBlindMode ? "on" : "off"}
               </button>
+            </div>
+
+            {/* Recite mode */}
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
+              <div>
+                <p style={{ fontSize: 14, color: localDarkMode ? "#d1d5db" : "#374151", margin: 0 }}>Recite mode</p>
+                <p style={{ fontSize: 11, color: "#9ca3af", margin: "2px 0 0" }}>Use speech recognition to recite</p>
+              </div>
               <button
                 onClick={() => {
-                          setIsReciteMode((v) => {
-                            if (!v) {
-                              // Resetting state when enabling
-                              stopAudio();
-                              setReciteWordIndex(0);
-                              setReciteVerseIndex(0);
-                              setReciteAttempts(0);
-                              setRevealedWords(new Set());
-                              reciteWordIndexRef.current = 0;
-                              reciteVerseIndexRef.current = 0;
-                              matchedWordCountRef.current = 0;
-                              lastMatchedWordRef.current = "";
-                            }
-                            return !v;
-                          });
-                          setIsBlindMode(false);
-                        }}
-                className={cn(
-                  "flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs transition-colors",
-                  isReciteMode
-                    ? "border-green-500 text-green-700 bg-green-50 dark:bg-green-950 dark:text-green-300"
-                    : "border-border text-muted-foreground hover:text-foreground"
-                )}
+                  setIsReciteMode((v) => {
+                    if (!v) {
+                      stopAudio();
+                      setReciteWordIndex(0);
+                      setReciteVerseIndex(0);
+                      setReciteAttempts(0);
+                      setRevealedWords(new Set());
+                      reciteWordIndexRef.current = 0;
+                      reciteVerseIndexRef.current = 0;
+                      matchedWordCountRef.current = 0;
+                      lastMatchedWordRef.current = "";
+                    }
+                    return !v;
+                  });
+                  setIsBlindMode(false);
+                }}
+                style={{
+                  padding: "5px 14px", borderRadius: 999,
+                  background: isReciteMode ? "#22c55e" : (localDarkMode ? "#2a2a2a" : "#f3f4f6"),
+                  color: isReciteMode ? "#ffffff" : (localDarkMode ? "#9ca3af" : "#6b7280"),
+                  border: "none", cursor: "pointer", fontSize: 12, fontWeight: 500,
+                  transition: "all 0.15s", flexShrink: 0,
+                }}
               >
-                {isReciteMode ? <Mic size={11} /> : <MicOff size={11} />}
-                Recite
+                {isReciteMode ? "on" : "off"}
               </button>
             </div>
 
-            <span className="text-xs text-muted-foreground/70 truncate max-w-[100px]">
-              {reciter.fullName}
-            </span>
-
-            {error && (
-              <span className="text-xs text-red-500">⚠ Audio unavailable</span>
-            )}
-          </div>
-
-          {/* Show Word + Restart — only visible in recite mode */}
-          {isReciteMode && reciteVerseIndex < sessionVerses.length && (
-            <div className="flex flex-col gap-1.5 pt-1 border-t border-border/40">
-              <div className="flex items-center gap-2 flex-wrap">
-                <button
-                  onClick={handleShowWord}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-emerald-300 text-emerald-700 bg-emerald-50 dark:bg-emerald-950 dark:text-emerald-300 text-xs font-semibold hover:bg-emerald-100 dark:hover:bg-emerald-900 transition-colors"
-                >
-                  <Eye size={11} />
-                  Show Word
-                </button>
-                <button
-                  onClick={handleReciteRestart}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-border text-muted-foreground text-xs font-semibold hover:text-foreground transition-colors"
-                >
-                  <RotateCcw size={11} />
-                  Restart
-                </button>
-                {sessionSpansMultiplePages && (
-                  <div className="flex items-center gap-1">
-                    <button
-                      onClick={() => nextPageVerse && setCurrentAyahNum(nextPageVerse.verse_number)}
-                      disabled={!nextPageVerse}
-                      title="Next page"
-                      className="flex items-center px-1.5 py-1.5 rounded-full border border-border text-muted-foreground text-xs disabled:opacity-30 hover:text-foreground transition-colors"
-                    >
-                      <ChevronLeft size={11} />
-                    </button>
-                    <button
-                      onClick={() => prevPageVerse && setCurrentAyahNum(prevPageVerse.verse_number)}
-                      disabled={!prevPageVerse}
-                      title="Previous page"
-                      className="flex items-center px-1.5 py-1.5 rounded-full border border-border text-muted-foreground text-xs disabled:opacity-30 hover:text-foreground transition-colors"
-                    >
-                      <ChevronRight size={11} />
-                    </button>
-                  </div>
-                )}
+            {/* Dark mode */}
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
+              <div>
+                <p style={{ fontSize: 14, color: localDarkMode ? "#d1d5db" : "#374151", margin: 0 }}>Dark mode</p>
+                <p style={{ fontSize: 11, color: "#9ca3af", margin: "2px 0 0" }}>Switch page to dark background</p>
               </div>
-              {sessionSpansMultiplePages && currentWordPage !== undefined && currentWordPage !== activePage && (
-                <button
-                  onClick={() => { const v = sessionVerses[reciteVerseIndex]; if (v) setCurrentAyahNum(v.verse_number); }}
-                  className="text-xs text-muted-foreground/60 cursor-pointer hover:text-muted-foreground hover:underline transition-opacity"
-                >
-                  {currentWordPage < (activePage ?? Infinity) ? "Current word →" : "← Current word"}
-                </button>
-              )}
+              <button
+                onClick={toggleLocalDarkMode}
+                style={{
+                  padding: "5px 14px", borderRadius: 999,
+                  background: localDarkMode ? "#22c55e" : "#f3f4f6",
+                  color: localDarkMode ? "#ffffff" : "#6b7280",
+                  border: "none", cursor: "pointer", fontSize: 12, fontWeight: 500,
+                  transition: "all 0.15s", flexShrink: 0,
+                }}
+              >
+                {localDarkMode ? "on" : "off"}
+              </button>
             </div>
-          )}
 
-          {/* Pause & Save — always visible shortcut to recitation check */}
-          <div className="flex justify-center pt-1 border-t border-border/40">
+            {/* Theme picker */}
+            <div style={{ marginBottom: 20 }}>
+              <p style={{ fontSize: 12, color: "#9ca3af", margin: "0 0 8px" }}>Theme</p>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                {(Object.keys(MUSHAF_THEMES) as Array<keyof typeof MUSHAF_THEMES>)
+                  .filter((key) => localDarkMode ? key.endsWith("_dark") : !key.endsWith("_dark"))
+                  .map((key) => (
+                    <button
+                      key={key}
+                      onClick={() => setMushafTheme(key)}
+                      title={MUSHAF_THEMES[key].name}
+                      style={{
+                        width: 24, height: 24, borderRadius: "50%",
+                        background: MUSHAF_THEMES[key].banner,
+                        border: mushafTheme === key ? "2px solid #d4af37" : "2px solid transparent",
+                        outline: mushafTheme === key ? "1px solid #d4af37" : "none",
+                        outlineOffset: "1px",
+                        cursor: "pointer", padding: 0,
+                      }}
+                    />
+                  ))}
+              </div>
+            </div>
+
+            {/* Pause & Save */}
             <button
               onClick={() => {
                 stopAudio();
                 setPauseToAyah(currentAyahNum);
                 setShowPauseModal(true);
+                setShowSettingsPanel(false);
               }}
-              className="flex items-center gap-1.5 px-4 py-1.5 rounded-full border border-amber-300 text-amber-700 bg-amber-50 text-xs font-semibold hover:bg-amber-100 active:bg-amber-200 transition-colors"
-            >
-              <Flag size={12} />
-              Pause &amp; Save
-            </button>
-          </div>
-        </div>
-      </div>
-      </div>{/* end center column */}
-
-      {/* ── RIGHT COLUMN (desktop only) ── */}
-      <div className="hidden md:flex w-40 flex-col gap-6 p-4 justify-center shrink-0 bg-[#f5f0e8] dark:bg-gray-950">
-        {/* Ayah number + range */}
-        <div className="flex flex-col gap-0.5">
-          {isCumulative ? (
-            <>
-              <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Cumulative</p>
-              <p className="text-3xl font-bold tabular-nums">{fromAyah + cumAyahIdx}</p>
-              <p className="text-xs text-muted-foreground">Pass {cumPass}/{reviewRepeatCount}</p>
-              <p className="text-xs text-muted-foreground">{fromAyah}–{cumUpTo}</p>
-            </>
-          ) : (
-            <>
-              <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Ayah</p>
-              <p className="text-3xl font-bold tabular-nums">{currentAyahNum}</p>
-              <p className="text-xs text-muted-foreground">{fromAyah}–{toAyah}</p>
-            </>
-          )}
-        </div>
-
-        {/* Phase badge + repeat dots */}
-        <div className="flex flex-col gap-1.5">
-          {isCumulative ? (
-            <span className="text-[11px] font-semibold px-3 py-1 rounded-full bg-teal-100 text-teal-700 tabular-nums">
-              Cumulative · {phaseLabel}
-            </span>
-          ) : (
-            <>
-              <span className="text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full bg-primary/10 text-primary self-start">
-                Single Ayah
-              </span>
-              <div className="flex items-center gap-1.5">
-                {Array.from({ length: repeatCount }, (_, i) => (
-                  <div
-                    key={i}
-                    className={cn(
-                      "rounded-full transition-all duration-300",
-                      i < currentRepeat ? "bg-primary w-2.5 h-2.5" : "bg-muted w-2 h-2",
-                      i === currentRepeat - 1 && playing ? "scale-125 shadow-md" : ""
-                    )}
-                  />
-                ))}
-                <span className="text-xs text-muted-foreground ml-1 tabular-nums">
-                  {currentRepeat}/{repeatCount}
-                </span>
-              </div>
-            </>
-          )}
-        </div>
-
-        {/* Reciter */}
-        <div className="flex flex-col gap-1">
-          <span className="text-xs text-muted-foreground/70 truncate">
-            {reciter.fullName}
-          </span>
-          {error && <span className="text-xs text-red-500">⚠ Audio unavailable</span>}
-        </div>
-
-        {/* Pause & Save */}
-        <button
-          onClick={() => { stopAudio(); setPauseToAyah(currentAyahNum); setShowPauseModal(true); }}
-          className="flex items-center justify-center gap-1.5 px-4 py-1.5 rounded-full border border-amber-300 text-amber-700 bg-amber-50 text-xs font-semibold hover:bg-amber-100 active:bg-amber-200 transition-colors"
-        >
-          <Flag size={12} />
-          Pause &amp; Save
-        </button>
-
-        {/* Dark mode toggle (local — does not affect the rest of the app) */}
-        <button
-          onClick={toggleLocalDarkMode}
-          className="flex items-center justify-center w-8 h-8 rounded-full border border-border text-muted-foreground hover:text-foreground hover:border-primary/40 transition-colors"
-          title={localDarkMode ? "Switch to light mode" : "Switch to dark mode"}
-        >
-          {localDarkMode ? <Sun size={14} /> : <Moon size={14} />}
-        </button>
-
-        {/* Theme picker */}
-        <div className="flex items-center gap-1.5 flex-wrap">
-          {(Object.keys(MUSHAF_THEMES) as Array<keyof typeof MUSHAF_THEMES>)
-            .filter((key) => localDarkMode ? key.endsWith("_dark") : !key.endsWith("_dark"))
-            .map((key) => (
-            <button
-              key={key}
-              onClick={() => setMushafTheme(key)}
-              title={MUSHAF_THEMES[key].name}
               style={{
-                width: 18,
-                height: 18,
-                borderRadius: "50%",
-                background: MUSHAF_THEMES[key].banner,
-                border: mushafTheme === key ? `2px solid #d4af37` : "2px solid transparent",
-                outline: mushafTheme === key ? "1px solid #d4af37" : "none",
-                outlineOffset: "1px",
-                flexShrink: 0,
+                display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+                padding: "12px 20px", borderRadius: 12, width: "100%",
+                background: "#fffbeb", border: "1px solid #fcd34d",
+                color: "#92400e", fontSize: 13, fontWeight: 600,
                 cursor: "pointer",
               }}
-            />
-          ))}
+            >
+              <Flag size={14} />
+              Pause &amp; Save
+            </button>
+
+            {error && (
+              <p style={{ color: "#ef4444", fontSize: 12, textAlign: "center", marginTop: 8 }}>
+                ⚠ Audio unavailable
+              </p>
+            )}
+          </div>
         </div>
-
-        {/* Blind mode toggle */}
-        <button
-          onClick={() => { setIsBlindMode((v) => !v); setIsReciteMode(false); }}
-          className={cn(
-            "flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs transition-colors self-start",
-            isBlindMode
-              ? "border-primary/30 text-primary bg-primary/5"
-              : "border-border text-muted-foreground hover:text-foreground"
-          )}
-        >
-          <EyeOff size={11} />
-          Blind mode {isBlindMode ? "on" : "off"}
-        </button>
-
-        {/* Recite mode toggle */}
-        <button
-          onClick={() => {
-                          setIsReciteMode((v) => {
-                            if (!v) {
-                              // Resetting state when enabling
-                              stopAudio();
-                              setReciteWordIndex(0);
-                              setReciteVerseIndex(0);
-                              setReciteAttempts(0);
-                              setRevealedWords(new Set());
-                              reciteWordIndexRef.current = 0;
-                              reciteVerseIndexRef.current = 0;
-                              matchedWordCountRef.current = 0;
-                              lastMatchedWordRef.current = "";
-                            }
-                            return !v;
-                          });
-                          setIsBlindMode(false);
-                        }}
-          className={cn(
-            "flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs transition-colors self-start",
-            isReciteMode
-              ? "border-green-500 text-green-700 bg-green-50 dark:bg-green-950 dark:text-green-300"
-              : "border-border text-muted-foreground hover:text-foreground"
-          )}
-        >
-          {isReciteMode ? <Mic size={11} /> : <MicOff size={11} />}
-          Recite mode
-        </button>
-
-        {/* Show Word + Restart — only visible in recite mode */}
-        {isReciteMode && reciteVerseIndex < sessionVerses.length && (
-          <>
-            <button
-              onClick={handleShowWord}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-emerald-300 text-emerald-700 bg-emerald-50 dark:bg-emerald-950 dark:text-emerald-300 text-xs font-semibold hover:bg-emerald-100 dark:hover:bg-emerald-900 transition-colors self-start"
-            >
-              <Eye size={11} />
-              Show Word
-            </button>
-            <button
-              onClick={handleReciteRestart}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-border text-muted-foreground text-xs font-semibold hover:text-foreground transition-colors self-start"
-            >
-              <RotateCcw size={11} />
-              Restart
-            </button>
-            {sessionSpansMultiplePages && (
-              <div className="flex items-center gap-1 self-start">
-                <button
-                  onClick={() => nextPageVerse && setCurrentAyahNum(nextPageVerse.verse_number)}
-                  disabled={!nextPageVerse}
-                  title="Next page"
-                  className="flex items-center px-1.5 py-1.5 rounded-full border border-border text-muted-foreground text-xs disabled:opacity-30 hover:text-foreground transition-colors"
-                >
-                  <ChevronLeft size={11} />
-                </button>
-                <button
-                  onClick={() => prevPageVerse && setCurrentAyahNum(prevPageVerse.verse_number)}
-                  disabled={!prevPageVerse}
-                  title="Previous page"
-                  className="flex items-center px-1.5 py-1.5 rounded-full border border-border text-muted-foreground text-xs disabled:opacity-30 hover:text-foreground transition-colors"
-                >
-                  <ChevronRight size={11} />
-                </button>
-              </div>
-            )}
-            {sessionSpansMultiplePages && currentWordPage !== undefined && currentWordPage !== activePage && (
-              <button
-                onClick={() => { const v = sessionVerses[reciteVerseIndex]; if (v) setCurrentAyahNum(v.verse_number); }}
-                className="text-xs text-muted-foreground/60 cursor-pointer hover:text-muted-foreground hover:underline transition-opacity self-center"
-              >
-                {currentWordPage < (activePage ?? Infinity) ? "Current word →" : "← Current word"}
-              </button>
-            )}
-          </>
-        )}
-
-        {/* Settings back link */}
-        <button
-          onClick={onBack}
-          className="flex items-center gap-1 text-muted-foreground text-sm"
-        >
-          <ChevronLeft size={16} /> Memorization
-        </button>
-      </div>
+      )}
     </div>
   );
 }
