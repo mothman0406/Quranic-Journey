@@ -1020,7 +1020,7 @@ function MemorizationPlayer({
         setInternalPhase("cumulative");
         internalPhaseRef.current = "cumulative";
         pendingPlayDelayRef.current = 150; // small gap entering review
-        pendingAutoPlayRef.current = true; // cumulative always auto-plays
+        pendingAutoPlayRef.current = autoAdvanceRef.current;
       } else if (currentAyahNumRef.current < toAyahRef.current) {
         // Always advance to next ayah; auto-play iff auto-advance is ON
         pendingPlayDelayRef.current = 150;
