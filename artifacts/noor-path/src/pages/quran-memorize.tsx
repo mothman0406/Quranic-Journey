@@ -587,8 +587,8 @@ const TAJWEED_CSS = `
 
 // Strip Arabic diacritics (tashkeel) and normalize letter variants for fuzzy
 // speech-recognition matching.
-const stripTashkeel = (s: string): string =>
-  s
+const stripTashkeel = (s: string): string => {
+  const result = s
     .replace(/\u0670/g, "ا")  // dagger alif → regular alif (must run before diacritic strip)
     .replace(/[\u0610-\u061A\u064B-\u065F\u06D6-\u06DC\u06DF-\u06E4\u06E7\u06E8\u06EA-\u06ED]/g, "") // strip tashkeel (u0670 excluded — handled above)
     .replace(/[ـ]/g, "")      // remove tatweel (kashida)
@@ -605,6 +605,10 @@ const stripTashkeel = (s: string): string =>
     .replace(/ي+/g, "ي")      // collapse elongated ya (madd)
     .replace(/^ال/, "")        // strip definite article from start of word
     .trim();
+  if (result.length <= 2) console.log("short stripped word:", s, "→", result);
+  // Never return empty — an empty expected word causes the matcher to spin forever.
+  return result || s;
+};
 
 
 // Quranic pause marks, annotation signs, and verse marks — not real words.
@@ -810,6 +814,17 @@ function MemorizationPlayer({
   const sessionVersesRef = useRef<VerseData[]>([]);
   sessionVersesRef.current = sessionVerses;
 
+  const sessionPageNumbers = useMemo(
+    () => {
+      const pages = sessionVerses
+        .map((v) => v.page_number)
+        .filter((p): p is number => p !== undefined);
+      return [...new Set(pages)].sort((a, b) => a - b);
+    },
+    [sessionVerses]
+  );
+  const sessionSpansMultiplePages = sessionPageNumbers.length > 1;
+
   // Speech recognition — runs only while recite mode is active.
   useEffect(() => {
     if (!isReciteMode) {
@@ -853,14 +868,18 @@ function MemorizationPlayer({
       const wordMatches = (hw: string, ew: string): boolean => {
         if (hw.length === 1 && hw !== ew) return false;
         if (hw === lastMatchedWordRef.current) return false;
-        return (
+        if (
           hw === ew ||
           hw.includes(ew) ||
           ew.includes(hw) ||
           isSubsequence(hw, ew) ||
           isSubsequence(ew, hw) ||
           (stripNW(hw).length > 0 && stripNW(ew).length > 0 && stripNW(hw) === stripNW(ew))
-        );
+        ) return true;
+        // Fallback: normalize word-final ت → ه on both sides (handles Uthmani نعمت vs spoken نعمة).
+        const hwT = hw.replace(/ت$/, "ه");
+        const ewT = ew.replace(/ت$/, "ه");
+        return hwT === ewT || hwT.includes(ewT) || ewT.includes(hwT);
       };
 
       // For each expected word, scan the FULL remaining transcript (from the last
@@ -876,6 +895,14 @@ function MemorizationPlayer({
         if (!verse) break;
         const expectedWords = verse.text_uthmani.split(/\s+/).filter((w) => w.length > 0 && !SKIP_CHARS.test(w));
         const expectedAr = stripTashkeel(expectedWords[wIdx] || "");
+
+        // Skip Uthmani words that strip down to ≤2 chars of only ه/ا — these
+        // are pause markers or ligature fragments that speech recognition can never produce.
+        if (expectedAr.length <= 2 && /^[هاا]+$/.test(expectedAr)) {
+          if (wIdx + 1 >= expectedWords.length) { vIdx++; wIdx = 0; } else { wIdx++; }
+          continue;
+        }
+
         const ew = expectedAr.replace(/^ال/, "");
 
         // Scan from searchFrom onward for any transcript word matching ew.
@@ -1061,6 +1088,7 @@ function MemorizationPlayer({
 
   const handleShowWord = () => {
     const key = `${reciteVerseIndex}-${reciteWordIndex}`;
+    console.log("showWord adding key:", key);
     setRevealedWords((prev) => {
       const next = new Set(prev);
       next.add(key);
@@ -1078,6 +1106,8 @@ function MemorizationPlayer({
     reciteVerseIndexRef.current = 0;
     matchedWordCountRef.current = 0;
     lastMatchedWordRef.current = "";
+    const firstVerse = sessionVerses[0];
+    if (firstVerse?.verse_number !== undefined) setCurrentAyahNum(firstVerse.verse_number);
   };
 
   // After auto-advancing (single or cumulative), start playback once the hook has reset.
@@ -1213,6 +1243,16 @@ function MemorizationPlayer({
       pageVerse: undefined as PageVerseData | undefined,
     }));
   }, [pageVerses, verses, chapter.id]);
+
+  // Page navigation derived values for multi-page recite sessions
+  const currentWordPage = sessionVerses[reciteVerseIndex]?.page_number;
+  const activePageIdx = activePage !== undefined ? sessionPageNumbers.indexOf(activePage) : -1;
+  const prevPageVerse = activePageIdx > 0
+    ? sessionVerses.find((v) => v.page_number === sessionPageNumbers[activePageIdx - 1])
+    : undefined;
+  const nextPageVerse = activePageIdx >= 0 && activePageIdx < sessionPageNumbers.length - 1
+    ? sessionVerses.find((v) => v.page_number === sessionPageNumbers[activePageIdx + 1])
+    : undefined;
 
   // Descriptive label for controls bar
   const phaseLabel = isCumulative
@@ -1470,6 +1510,27 @@ function MemorizationPlayer({
                     const hasValidTajweed =
                       isActive && tajweedWords.length === words.length;
 
+                    // Map each words[] position → recite index, skipping SKIP_CHARS tokens.
+                    // Keeps the renderer aligned with the matcher which also filters SKIP_CHARS.
+                    const wordToReciteIdx = new Map<number, number>();
+                    if (isActive) {
+                      let ri = 0;
+                      for (let j = 0; j < words.length; j++) {
+                        if (!SKIP_CHARS.test(words[j])) wordToReciteIdx.set(j, ri++);
+                      }
+                    }
+                    if (isActive && isReciteMode) {
+                      const rendererWords = words.filter(w => !SKIP_CHARS.test(w));
+                      const matcherWords = (surahVerse?.text_uthmani ?? currentArabic)
+                        .split(/\s+/).filter(w => w.length > 0 && !SKIP_CHARS.test(w));
+                      console.log(
+                        "[recite word-sync] verse", verseNum,
+                        "\n  renderer:", rendererWords,
+                        "\n  matcher: ", matcherWords,
+                        "\n  match:", JSON.stringify(rendererWords) === JSON.stringify(matcherWords),
+                      );
+                    }
+
                     const ornamentClass = "inline-block arabic-text text-[0.85rem] mx-[0.3em] transition-colors duration-300";
                     const ornamentColor = isActive
                       ? (isCumulative ? "rgba(13,148,136,0.55)" : "rgba(217,119,6,0.55)")
@@ -1561,20 +1622,33 @@ function MemorizationPlayer({
                                 const isPast = playing && highlightedWord > i;
 
                                 if (isReciteMode) {
+                                  // ri is undefined for SKIP_CHARS tokens — they are never
+                                  // the current word and always render unblurred.
+                                  const ri = wordToReciteIdx.get(i);
                                   const isWordDone =
-                                    reciteVerseIdx < reciteVerseIndex ||
-                                    (reciteVerseIdx === reciteVerseIndex && i < reciteWordIndex);
+                                    ri !== undefined && (
+                                      reciteVerseIdx < reciteVerseIndex ||
+                                      (reciteVerseIdx === reciteVerseIndex && ri < reciteWordIndex)
+                                    );
                                   const isCurrentWord =
-                                    reciteVerseIdx === reciteVerseIndex && i === reciteWordIndex;
+                                    ri !== undefined &&
+                                    reciteVerseIdx === reciteVerseIndex && ri === reciteWordIndex;
+
+                                  // Key matches handleShowWord: ${reciteVerseIndex}-${reciteWordIndex}
+                                  // reciteVerseIdx === reciteVerseIndex and ri === reciteWordIndex when isCurrentWord is true.
+                                  const revealKey = `${reciteVerseIdx}-${ri!}`;
+                                  if (isCurrentWord) console.log("revealed check:", revealKey, revealedWords.has(revealKey));
+                                  const isRevealed =
+                                    isCurrentWord && revealedWords.has(revealKey);
 
                                   const reciteStyle: React.CSSProperties = isCurrentWord
                                     ? {
-                                        filter: "blur(4px)",
+                                        filter: isRevealed ? "none" : "blur(4px)",
                                         outline: "2px solid #22c55e",
                                         borderRadius: "4px",
-                                        animation: "recite-word-pulse 1.2s ease-in-out infinite",
+                                        animation: isRevealed ? "none" : "recite-word-pulse 1.2s ease-in-out infinite",
                                       }
-                                    : isWordDone
+                                    : isWordDone || ri === undefined
                                       ? {}
                                       : { filter: "blur(6px)", userSelect: "none" };
 
@@ -1706,7 +1780,7 @@ function MemorizationPlayer({
                               }
                               // Current verse (verseSessionIdx === reciteVerseIndex) — word-by-word
                               const verseText = stripVerseEnd(surahVerse?.text_uthmani ?? "");
-                              const verseWordList = verseText.split(/\s+/).filter(Boolean);
+                              const verseWordList = verseText.split(/\s+/).filter(w => w.length > 0 && !SKIP_CHARS.test(w));
                               return (
                                 <>
                                   {verseWordList.map((word, wi) => {
@@ -2124,21 +2198,51 @@ function MemorizationPlayer({
 
           {/* Show Word + Restart — only visible in recite mode */}
           {isReciteMode && reciteVerseIndex < sessionVerses.length && (
-            <div className="flex items-center gap-2 flex-wrap pt-1 border-t border-border/40">
-              <button
-                onClick={handleShowWord}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-emerald-300 text-emerald-700 bg-emerald-50 dark:bg-emerald-950 dark:text-emerald-300 text-xs font-semibold hover:bg-emerald-100 dark:hover:bg-emerald-900 transition-colors"
-              >
-                <Eye size={11} />
-                Show Word
-              </button>
-              <button
-                onClick={handleReciteRestart}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-border text-muted-foreground text-xs font-semibold hover:text-foreground transition-colors"
-              >
-                <RotateCcw size={11} />
-                Restart
-              </button>
+            <div className="flex flex-col gap-1.5 pt-1 border-t border-border/40">
+              <div className="flex items-center gap-2 flex-wrap">
+                <button
+                  onClick={handleShowWord}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-emerald-300 text-emerald-700 bg-emerald-50 dark:bg-emerald-950 dark:text-emerald-300 text-xs font-semibold hover:bg-emerald-100 dark:hover:bg-emerald-900 transition-colors"
+                >
+                  <Eye size={11} />
+                  Show Word
+                </button>
+                <button
+                  onClick={handleReciteRestart}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-border text-muted-foreground text-xs font-semibold hover:text-foreground transition-colors"
+                >
+                  <RotateCcw size={11} />
+                  Restart
+                </button>
+                {sessionSpansMultiplePages && (
+                  <div className="flex items-center gap-1">
+                    <button
+                      onClick={() => nextPageVerse && setCurrentAyahNum(nextPageVerse.verse_number)}
+                      disabled={!nextPageVerse}
+                      title="Next page"
+                      className="flex items-center px-1.5 py-1.5 rounded-full border border-border text-muted-foreground text-xs disabled:opacity-30 hover:text-foreground transition-colors"
+                    >
+                      <ChevronLeft size={11} />
+                    </button>
+                    <button
+                      onClick={() => prevPageVerse && setCurrentAyahNum(prevPageVerse.verse_number)}
+                      disabled={!prevPageVerse}
+                      title="Previous page"
+                      className="flex items-center px-1.5 py-1.5 rounded-full border border-border text-muted-foreground text-xs disabled:opacity-30 hover:text-foreground transition-colors"
+                    >
+                      <ChevronRight size={11} />
+                    </button>
+                  </div>
+                )}
+              </div>
+              {sessionSpansMultiplePages && currentWordPage !== undefined && currentWordPage !== activePage && (
+                <button
+                  onClick={() => { const v = sessionVerses[reciteVerseIndex]; if (v) setCurrentAyahNum(v.verse_number); }}
+                  className="text-xs text-muted-foreground/60 cursor-pointer hover:text-muted-foreground hover:underline transition-opacity"
+                >
+                  {currentWordPage < (activePage ?? Infinity) ? "Current word →" : "← Current word"}
+                </button>
+              )}
             </div>
           )}
 
@@ -2322,6 +2426,34 @@ function MemorizationPlayer({
               <RotateCcw size={11} />
               Restart
             </button>
+            {sessionSpansMultiplePages && (
+              <div className="flex items-center gap-1 self-start">
+                <button
+                  onClick={() => nextPageVerse && setCurrentAyahNum(nextPageVerse.verse_number)}
+                  disabled={!nextPageVerse}
+                  title="Next page"
+                  className="flex items-center px-1.5 py-1.5 rounded-full border border-border text-muted-foreground text-xs disabled:opacity-30 hover:text-foreground transition-colors"
+                >
+                  <ChevronLeft size={11} />
+                </button>
+                <button
+                  onClick={() => prevPageVerse && setCurrentAyahNum(prevPageVerse.verse_number)}
+                  disabled={!prevPageVerse}
+                  title="Previous page"
+                  className="flex items-center px-1.5 py-1.5 rounded-full border border-border text-muted-foreground text-xs disabled:opacity-30 hover:text-foreground transition-colors"
+                >
+                  <ChevronRight size={11} />
+                </button>
+              </div>
+            )}
+            {sessionSpansMultiplePages && currentWordPage !== undefined && currentWordPage !== activePage && (
+              <button
+                onClick={() => { const v = sessionVerses[reciteVerseIndex]; if (v) setCurrentAyahNum(v.verse_number); }}
+                className="text-xs text-muted-foreground/60 cursor-pointer hover:text-muted-foreground hover:underline transition-opacity self-center"
+              >
+                {currentWordPage < (activePage ?? Infinity) ? "Current word →" : "← Current word"}
+              </button>
+            )}
           </>
         )}
 
