@@ -1513,7 +1513,7 @@ function MemorizationPlayer({
                       if (!surahsStartingOnPage.has(sid)) continue;
                       const sc = allChapters.find((c) => c.id === sid);
                       nodes.push(
-                        <div key={`hdr-${sid}`} style={{ textAlign: "center", margin: "8px 0 2px", direction: "rtl" }}>
+                        <div key={`hdr-${sid}`} style={{ textAlign: "center", margin: "8px 0 2px", direction: "rtl", ...(sid !== chapter.id ? { opacity: 0.15 } : {}) }}>
                           <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 12 }}>
                             <span style={{ flex: 1, height: 1, background: deco, maxWidth: 60, display: "block" }} />
                             <span style={{ fontFamily: '"Scheherazade New", serif', fontSize: "0.85em", color: hdrColor }}>{sc?.name_arabic ?? `سُورَة ${sid}`}</span>
@@ -1539,7 +1539,7 @@ function MemorizationPlayer({
 
                           if (lw.char_type_name === "end") {
                             return (
-                              <span key={k} style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: "2em", height: "2em", borderRadius: "50%", border: `1.5px solid ${localDarkMode ? "#8a7a50" : "#b8974a"}`, background: localDarkMode ? "#2a2418" : "#fdf8ee", flexShrink: 0, userSelect: "none", direction: "ltr" as const }}>
+                              <span key={k} style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: "2em", height: "2em", borderRadius: "50%", border: `1.5px solid ${localDarkMode ? "#8a7a50" : "#b8974a"}`, background: localDarkMode ? "#2a2418" : "#fdf8ee", flexShrink: 0, userSelect: "none", direction: "ltr" as const, ...(!isActiveSurah ? { opacity: 0.12 } : {}) }}>
                                 <span style={{ fontSize: "0.62em", color: localDarkMode ? "#c9a84c" : "#8a6020", fontFamily: "Georgia, serif", lineHeight: 1 }}>{lw.verseNum}</span>
                               </span>
                             );
@@ -1575,7 +1575,7 @@ function MemorizationPlayer({
                             );
                           }
 
-                          const op = !isActiveSurah ? 0.13 : !inSelectedRange ? 0.17 : isCumulative && !inCumRange ? 0.28 : 0.55;
+                          const op = !isActiveSurah ? 0.10 : !inSelectedRange ? 0.17 : isCumulative && !inCumRange ? 0.28 : 0.55;
                           if (isReciteMode && isActiveSurah && inSelectedRange) {
                             const vi = lw.verseNum - fromAyah;
                             return <span key={k} style={{ opacity: op, display: "inline-block", ...(vi > reciteVerseIndex ? { filter: "blur(6px)", userSelect: "none" } : {}) }}>{lw.text_uthmani}</span>;
@@ -1585,7 +1585,7 @@ function MemorizationPlayer({
                             if (!revealedAyahs.has(lw.verseNum)) return <span key={k} style={{ opacity: op, filter: "blur(6px)", userSelect: "none", cursor: "pointer", display: "inline-block" }} onClick={() => setRevealedAyahs((p) => { const n = new Set(p); n.add(lw.verseNum); return n; })}>{lw.text_uthmani}</span>;
                             return <span key={k} style={{ opacity: op, cursor: "pointer", display: "inline-block" }} onClick={() => setRevealedAyahs((p) => { const n = new Set(p); n.delete(lw.verseNum); return n; })}>{lw.text_uthmani}</span>;
                           }
-                          return <span key={k} style={{ opacity: op, display: "inline-block" }}>{lw.text_uthmani}</span>;
+                          return <span key={k} style={{ opacity: op, display: "inline-block", ...(!isActiveSurah ? { filter: "blur(0.5px)" } : {}) }}>{lw.text_uthmani}</span>;
                         })}
                       </div>
                     );
