@@ -886,6 +886,13 @@ export default function MushafReaderPage() {
                           }}
                         />
                       </div>
+                      {sid !== 9 && (
+                        <div style={{ display: "flex", justifyContent: "center", margin: "4px 0 2px" }}>
+                          <span style={{ fontFamily: '"Scheherazade New", serif', fontSize: "1.1em", color: "#6b5830", direction: "rtl" }}>
+                            بِسْمِ ٱللَّهِ ٱلرَّحْمَٰنِ ٱلرَّحِيمِ
+                          </span>
+                        </div>
+                      )}
                     </div>
                   );
                 }
