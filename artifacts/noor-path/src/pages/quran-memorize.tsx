@@ -707,6 +707,7 @@ function MemorizationPlayer({
   const pendingAutoPlayRef = useRef(false);
   const [autoAdvance, setAutoAdvance] = useState(initialAutoAdvance);
   const [showPauseModal, setShowPauseModal] = useState(false);
+  const [showLeaveModal, setShowLeaveModal] = useState(false);
   const [pauseToAyah, setPauseToAyah] = useState(initialAyah);
   // Local dark mode: initialised from global setting but does NOT write back to it
   const [localDarkMode, setLocalDarkMode] = useState(() => {
@@ -1388,7 +1389,7 @@ function MemorizationPlayer({
         }}
       >
         <button
-          onClick={onBack}
+          onClick={() => setShowLeaveModal(true)}
           style={{
             display: "flex", alignItems: "center", gap: 4,
             color: localDarkMode ? "#9ca3af" : "#6b7280",
@@ -2055,6 +2056,44 @@ function MemorizationPlayer({
               className="w-full text-sm text-muted-foreground hover:text-foreground py-2 transition-colors"
             >
               Cancel — keep going
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Leave session confirmation modal */}
+      {showLeaveModal && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 px-4 pb-6">
+          <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-lg p-6 space-y-4">
+            <div>
+              <h2 className="text-base font-bold text-foreground">Leave this session?</h2>
+              <p className="text-sm text-muted-foreground mt-1">
+                Your progress won't be saved unless you save first.
+              </p>
+            </div>
+            <button
+              onClick={() => {
+                setShowLeaveModal(false);
+                setShowPauseModal(true);
+              }}
+              className="w-full bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-semibold rounded-2xl py-4 text-base transition-colors"
+            >
+              Save &amp; Leave
+            </button>
+            <button
+              onClick={() => {
+                setShowLeaveModal(false);
+                onBack();
+              }}
+              className="w-full border border-border text-foreground font-medium rounded-2xl py-3 text-sm hover:bg-muted/50 transition-colors"
+            >
+              Leave without saving
+            </button>
+            <button
+              onClick={() => setShowLeaveModal(false)}
+              className="w-full text-sm text-muted-foreground hover:text-foreground py-2 transition-colors"
+            >
+              Keep practicing
             </button>
           </div>
         </div>
