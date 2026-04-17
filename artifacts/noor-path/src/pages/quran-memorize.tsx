@@ -233,7 +233,7 @@ async function fetchWordTimingV4(
     const last = segs[segs.length - 1];
     const span = last[2];
     if (span <= 0) return segs;
-    return segs.map((s) => [s[0], s[1] / span, s[2] / span] as Segment);
+    return segs.map((s, i) => [i + 1, s[1] / span, s[2] / span] as Segment);
   } catch {
     return [];
   }
@@ -283,7 +283,8 @@ function fetchQdcChapterTimings(
             segs[i] = [segs[i][0], segs[i][1], segs[i + 1][1]];
           }
         }
-        result.set(vt.verse_key, segs);
+        const reindexed = segs.map((s, i) => [i + 1, s[1], s[2]] as Segment);
+        result.set(vt.verse_key, reindexed);
       }
       return result;
     } catch {
@@ -1316,9 +1317,26 @@ function MemorizationPlayer({
     const all: LineWord[] = [];
     for (const { surahId, verseNum, pageVerse } of displayList) {
       if (!pageVerse?.words?.length) return null;
-      let wi = 0;
+      // Build a forward-match map: for each API word, find its actual index in
+      // the text_uthmani token array. w.position is 1-based and counts pause
+      // marks (ۖ) as separate slots, but those marks are embedded in the
+      // preceding token when splitting text_uthmani on whitespace — so
+      // w.position - 1 is wrong for verses that contain embedded pause marks.
+      const verseTokens = (pageVerse.text_uthmani ?? "").split(/\s+/).filter(Boolean);
+      let lastMatchedJ = -1;
       for (const w of pageVerse.words) {
-        const wordIdxInVerse = w.char_type_name !== "end" ? wi++ : -1;
+        let wordIdxInVerse: number;
+        if (w.char_type_name === "end") {
+          wordIdxInVerse = -1;
+        } else {
+          const target = stripTashkeel(w.text_uthmani);
+          let found = -1;
+          for (let j = lastMatchedJ + 1; j < verseTokens.length; j++) {
+            if (stripTashkeel(verseTokens[j]) === target) { found = j; break; }
+          }
+          if (found !== -1) { lastMatchedJ = found; wordIdxInVerse = found; }
+          else { wordIdxInVerse = w.position - 1; } // fallback
+        }
         all.push({ verse_key: pageVerse.verse_key, surahId, verseNum, position: w.position, wordIdxInVerse, text_uthmani: w.text_uthmani, char_type_name: w.char_type_name, line_number: w.line_number });
       }
     }
