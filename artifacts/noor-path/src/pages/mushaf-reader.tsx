@@ -412,6 +412,7 @@ export default function MushafReaderPage() {
   const recognitionRef = useRef<any>(null);
   const recitePageWordsRef = useRef<ReciteWord[]>([]);
   const reciteWordPosRef = useRef(0);
+  const pageContentRef = useRef<HTMLDivElement>(null);
   const reciteUnlockedWordsRef = useRef<Set<string>>(new Set());
 
   reciteUnlockedWordsRef.current = reciteUnlockedWords;
@@ -507,6 +508,22 @@ export default function MushafReaderPage() {
 
   const verses = pageData?.verses ?? [];
   const lineGroups = useMemo(() => buildLineGroups(verses), [verses]);
+
+  useEffect(() => {
+    requestAnimationFrame(() => {
+      const el = pageContentRef.current;
+      if (!el) return;
+      el.style.fontSize = "";
+      if (el.scrollHeight <= el.offsetHeight + 4) return;
+      const MIN = 0.82;
+      const STEP = 0.01;
+      let size = 1.0;
+      while (el.scrollHeight > el.offsetHeight + 4 && size > MIN) {
+        size -= STEP;
+        el.style.fontSize = size + "em";
+      }
+    });
+  }, [lineGroups]);
 
   const surahsStartingOnPage = useMemo(() => {
     const s = new Set<number>();
@@ -802,6 +819,7 @@ export default function MushafReaderPage() {
 
           {/* Mushaf text area */}
           <div
+            ref={pageContentRef}
             dir="rtl"
             lang="ar"
             style={{
