@@ -511,17 +511,26 @@ export default function MushafReaderPage() {
 
   useEffect(() => {
     requestAnimationFrame(() => {
-      const el = pageContentRef.current;
-      if (!el) return;
-      el.style.fontSize = "";
-      if (el.scrollHeight <= el.offsetHeight + 4) return;
-      const MIN = 0.82;
-      const STEP = 0.01;
-      let size = 1.0;
-      while (el.scrollHeight > el.offsetHeight + 4 && size > MIN) {
-        size -= STEP;
-        el.style.fontSize = size + "em";
-      }
+      requestAnimationFrame(() => {
+        const el = pageContentRef.current;
+        if (!el) return;
+        // Available height = viewport minus all chrome (top bar ~90px, nav ~56px, card header ~44px, page number ~44px, nav buttons ~72px, padding ~24px)
+        const available = document.documentElement.clientHeight - 330;
+        if (available <= 0) return;
+        // Binary search for the largest font size where content fits
+        let lo = 0.55, hi = 1.1, best = 0.55;
+        for (let i = 0; i < 30; i++) {
+          const mid = (lo + hi) / 2;
+          el.style.fontSize = mid + "em";
+          if (el.scrollHeight <= available) {
+            best = mid;
+            lo = mid;
+          } else {
+            hi = mid;
+          }
+        }
+        el.style.fontSize = best + "em";
+      });
     });
   }, [lineGroups]);
 
@@ -686,7 +695,7 @@ export default function MushafReaderPage() {
   );
 
   return (
-    <div className="min-h-screen bg-[#fdf8f0] pb-20">
+    <div className="min-h-screen bg-[#fdf8f0] pb-4">
       {/* ── Sticky top bar ── */}
       <div className="sticky top-0 z-20 bg-white border-b border-amber-100 shadow-sm">
         {/* Title row */}
@@ -828,7 +837,6 @@ export default function MushafReaderPage() {
               lineHeight: 2.2,
               padding: "20px 20px 12px",
               color: "#1a1a1a",
-              minHeight: "60vh",
             }}
           >
             {isLoading && (
