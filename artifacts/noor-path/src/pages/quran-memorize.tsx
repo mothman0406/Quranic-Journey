@@ -1477,13 +1477,22 @@ function MemorizationPlayer({
                   const deco = localDarkMode ? "#3a3a3a" : "#e5e7eb";
                   const hdrColor = localDarkMode ? "#e8d5b0" : "#1a1a1a";
 
+                  // Only show name/basmala for surahs that actually start on this page (have verse 1)
+                  const surahsStartingOnPage = new Set<number>();
+                  for (const { words: lws } of lineGroups) {
+                    for (const lw of lws) {
+                      if (lw.verseNum === 1) surahsStartingOnPage.add(lw.surahId);
+                    }
+                  }
+
                   for (const { lineNum, words: lws } of lineGroups) {
-                    // Insert surah header(s) before first line of each surah
+                    // Insert surah header(s) before first line of each surah that starts here
                     const newSurahs: number[] = [];
                     for (const lw of lws) {
                       if (!seenSurahIds.has(lw.surahId)) { seenSurahIds.add(lw.surahId); newSurahs.push(lw.surahId); }
                     }
                     for (const sid of newSurahs) {
+                      if (!surahsStartingOnPage.has(sid)) continue;
                       const sc = allChapters.find((c) => c.id === sid);
                       nodes.push(
                         <div key={`hdr-${sid}`} style={{ textAlign: "center", margin: "8px 0 2px", direction: "rtl" }}>
