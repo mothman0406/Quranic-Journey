@@ -2479,6 +2479,12 @@ export default function QuranMemorizePage() {
   const [reciteScore, setReciteScore] = useState(0);
   const [celebration, setCelebration] = useState<{ message: string; subMessage?: string } | null>(null);
 
+  // String state for the setup-phase From/To inputs — allows free typing before blur commit
+  const [fromInput, setFromInput] = useState(String(fromAyah));
+  const [toInput, setToInput] = useState(String(toAyah));
+  useEffect(() => setFromInput(String(fromAyah)), [fromAyah]);
+  useEffect(() => setToInput(String(toAyah)), [toAyah]);
+
   const saveMutation = useMutation({
     mutationFn: (qualityRating: number) => {
       const memorizedAyahs = Array.from({ length: toAyah - fromAyah + 1 }, (_, i) => fromAyah + i);
@@ -2823,14 +2829,14 @@ export default function QuranMemorizePage() {
                   type="number"
                   min={1}
                   max={toAyah}
-                  value={fromAyah}
-                  onChange={(e) => {
-                    const v = Math.max(
-                      1,
-                      Math.min(toAyah, parseInt(e.target.value) || 1)
-                    );
+                  value={fromInput}
+                  onChange={(e) => setFromInput(e.target.value)}
+                  onBlur={() => {
+                    const v = Math.max(1, Math.min(maxAyah, parseInt(fromInput) || 1));
                     setFromAyah(v);
+                    if (v > toAyah) setToAyah(v);
                   }}
+                  onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); }}
                   className="w-full border border-border rounded-xl px-3 py-2 text-sm text-center font-medium outline-none focus:border-primary"
                 />
               </div>
@@ -2843,14 +2849,14 @@ export default function QuranMemorizePage() {
                   type="number"
                   min={fromAyah}
                   max={maxAyah}
-                  value={toAyah}
-                  onChange={(e) => {
-                    const v = Math.max(
-                      fromAyah,
-                      Math.min(maxAyah, parseInt(e.target.value) || fromAyah)
-                    );
+                  value={toInput}
+                  onChange={(e) => setToInput(e.target.value)}
+                  onBlur={() => {
+                    const parsed = parseInt(toInput);
+                    const v = Math.max(fromAyah, Math.min(maxAyah, isNaN(parsed) ? fromAyah : parsed));
                     setToAyah(v);
                   }}
+                  onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); }}
                   className="w-full border border-border rounded-xl px-3 py-2 text-sm text-center font-medium outline-none focus:border-primary"
                 />
               </div>
