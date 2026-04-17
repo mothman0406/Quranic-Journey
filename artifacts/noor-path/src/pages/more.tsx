@@ -18,6 +18,14 @@ export default function MorePage() {
   const showDuas = !child?.hideDuas;
 
   const sections = [
+    {
+      label: "Full Quran",
+      subtitle: "Read the entire Mushaf, page by page",
+      icon: BookOpen,
+      color: "bg-emerald-100",
+      iconColor: "text-emerald-600",
+      href: `/child/${childId}/mushaf-reader`,
+    },
     showStories && {
       label: "Stories",
       subtitle: "Islamic stories for your learning journey",
