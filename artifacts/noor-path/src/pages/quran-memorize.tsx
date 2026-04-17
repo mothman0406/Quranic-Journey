@@ -162,17 +162,36 @@ async function fetchVersesBySurah(
   return r.json();
 }
 
+interface ApiWord {
+  position: number;
+  text_uthmani: string;
+  char_type_name: string;
+  line_number: number;
+}
+
+type LineWord = {
+  verse_key: string;
+  surahId: number;
+  verseNum: number;
+  position: number;
+  wordIdxInVerse: number; // 0-indexed among actual words; -1 for end markers
+  text_uthmani: string;
+  char_type_name: string;
+  line_number: number;
+};
+
 interface PageVerseData {
   verse_key: string;
   text_uthmani: string;
   text_uthmani_tajweed?: string;
+  words?: ApiWord[];
 }
 
 async function fetchVersesByPage(
   pageNumber: number
 ): Promise<{ verses: PageVerseData[] }> {
   const r = await fetch(
-    `${QURAN_API}/verses/by_page/${pageNumber}?fields=text_uthmani,text_uthmani_tajweed&per_page=50`
+    `${QURAN_API}/verses/by_page/${pageNumber}?words=true&fields=text_uthmani,text_uthmani_tajweed&word_fields=text_uthmani,line_number,char_type_name&per_page=50`
   );
   if (!r.ok) throw new Error(`Failed to fetch page ${pageNumber}`);
   const data = await r.json();
@@ -1273,6 +1292,45 @@ function MemorizationPlayer({
     }));
   }, [pageVerses, verses, chapter.id]);
 
+  // Precomputed active-verse tajweed + recite index map for line-based rendering
+  const activeVerseEntry = displayList.find(
+    ({ surahId, verseNum }) => surahId === chapter.id && verseNum === activeVerseNumber
+  );
+  const activeTajweedHtml = stripVerseEndHtml(
+    activeVerseEntry?.surahVerse?.text_uthmani_tajweed ??
+    activeVerseEntry?.pageVerse?.text_uthmani_tajweed ?? ""
+  );
+  const activeTajweedWords = splitTajweedIntoWords(activeTajweedHtml);
+  const activeHasValidTajweed = activeTajweedWords.length === words.length;
+  const activeWordToReciteIdx = (() => {
+    const m = new Map<number, number>();
+    let ri = 0;
+    for (let j = 0; j < words.length; j++) {
+      if (!SKIP_CHARS.test(words[j])) m.set(j, ri++);
+    }
+    return m;
+  })();
+
+  // Group page words by mushaf line number (null when word data not yet loaded)
+  const lineGroups = useMemo((): Array<{ lineNum: number; words: LineWord[] }> | null => {
+    const all: LineWord[] = [];
+    for (const { surahId, verseNum, pageVerse } of displayList) {
+      if (!pageVerse?.words?.length) return null;
+      let wi = 0;
+      for (const w of pageVerse.words) {
+        const wordIdxInVerse = w.char_type_name !== "end" ? wi++ : -1;
+        all.push({ verse_key: pageVerse.verse_key, surahId, verseNum, position: w.position, wordIdxInVerse, text_uthmani: w.text_uthmani, char_type_name: w.char_type_name, line_number: w.line_number });
+      }
+    }
+    if (all.length === 0) return null;
+    const map = new Map<number, LineWord[]>();
+    for (const w of all) {
+      if (!map.has(w.line_number)) map.set(w.line_number, []);
+      map.get(w.line_number)!.push(w);
+    }
+    return [...map.entries()].sort(([a], [b]) => a - b).map(([lineNum, wds]) => ({ lineNum, words: wds }));
+  }, [displayList]);
+
   // Page navigation derived values for multi-page recite sessions
   const currentWordPage = sessionVerses[reciteVerseIndex]?.page_number;
   const activePageIdx = activePage !== undefined ? sessionPageNumbers.indexOf(activePage) : -1;
@@ -1397,20 +1455,119 @@ function MemorizationPlayer({
                 lang="ar"
                 style={{
                   fontFamily: '"Scheherazade New", "Amiri Quran", "me_quran", serif',
-                  fontSize: "1.65rem",
-                  lineHeight: "2.3",
+                  fontSize: "clamp(14px, 2.2vh, 28px)",
+                  lineHeight: 2.0,
                   textAlign: "justify",
                   textAlignLast: "right",
                   textJustify: "inter-word",
+                  wordSpacing: "0.06em",
+                  letterSpacing: "0.01em",
                   color: localDarkMode ? (theme.textColor ?? "#e8d5b0") : "#1a1a1a",
                   flex: 1,
-                  overflowY: "auto",
+                  overflow: "hidden",
                   padding: "20px 24px 8px",
                   minHeight: 0,
                 }}
               >
 
-                {displayList.map(
+                {/* ── Line-based mushaf rendering (when API word data available) ── */}
+                {lineGroups && (() => {
+                  const nodes: React.ReactNode[] = [];
+                  const seenSurahIds = new Set<number>();
+                  const deco = localDarkMode ? "#3a3a3a" : "#e5e7eb";
+                  const hdrColor = localDarkMode ? "#e8d5b0" : "#1a1a1a";
+
+                  for (const { lineNum, words: lws } of lineGroups) {
+                    // Insert surah header(s) before first line of each surah
+                    const newSurahs: number[] = [];
+                    for (const lw of lws) {
+                      if (!seenSurahIds.has(lw.surahId)) { seenSurahIds.add(lw.surahId); newSurahs.push(lw.surahId); }
+                    }
+                    for (const sid of newSurahs) {
+                      const sc = allChapters.find((c) => c.id === sid);
+                      nodes.push(
+                        <div key={`hdr-${sid}`} style={{ textAlign: "center", margin: "8px 0 2px", direction: "rtl" }}>
+                          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 12 }}>
+                            <span style={{ flex: 1, height: 1, background: deco, maxWidth: 60, display: "block" }} />
+                            <span style={{ fontFamily: '"Scheherazade New", serif', fontSize: "0.85em", color: hdrColor }}>{sc?.name_arabic ?? `سُورَة ${sid}`}</span>
+                            <span style={{ flex: 1, height: 1, background: deco, maxWidth: 60, display: "block" }} />
+                          </div>
+                          {sid !== 1 && sid !== 9 && (
+                            <div style={{ textAlign: "center", margin: "4px 0 2px" }}>
+                              <span style={{ fontFamily: '"Scheherazade New", serif', fontSize: "1.1em", color: localDarkMode ? "#b8a060" : "#6b5830" }}>بِسْمِ ٱللَّهِ ٱلرَّحْمَٰنِ ٱلرَّحِيمِ</span>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    }
+
+                    nodes.push(
+                      <div key={`ln-${lineNum}`} style={{ display: "flex", direction: "rtl", justifyContent: "center", alignItems: "center", flexWrap: "nowrap", lineHeight: 2.1, padding: "0 4px", width: "100%", gap: "0.35em" }}>
+                        {lws.map((lw) => {
+                          const isActiveSurah = lw.surahId === chapter.id;
+                          const isActive = isActiveSurah && lw.verseNum === activeVerseNumber;
+                          const inSelectedRange = isActiveSurah && lw.verseNum >= fromAyah && lw.verseNum <= toAyah;
+                          const inCumRange = isCumulative && isActiveSurah && lw.verseNum <= cumUpTo;
+                          const k = `${lw.verse_key}:${lw.position}`;
+
+                          if (lw.char_type_name === "end") {
+                            return (
+                              <span key={k} style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: "2em", height: "2em", borderRadius: "50%", border: `1.5px solid ${localDarkMode ? "#8a7a50" : "#b8974a"}`, background: localDarkMode ? "#2a2418" : "#fdf8ee", flexShrink: 0, userSelect: "none", direction: "ltr" as const }}>
+                                <span style={{ fontSize: "0.62em", color: localDarkMode ? "#c9a84c" : "#8a6020", fontFamily: "Georgia, serif", lineHeight: 1 }}>{lw.verseNum}</span>
+                              </span>
+                            );
+                          }
+
+                          const wi = lw.wordIdxInVerse;
+                          const wc = (activeHasValidTajweed && isActive)
+                            ? <span dangerouslySetInnerHTML={{ __html: activeTajweedWords[wi] ?? lw.text_uthmani }} />
+                            : <>{lw.text_uthmani}</>;
+
+                          if (isActive) {
+                            const isHighlighted = highlightedWord === wi;
+                            const isPast = playing && highlightedWord > wi;
+                            if (isReciteMode) {
+                              const ri = activeWordToReciteIdx.get(wi);
+                              const rvIdx = activeVerseNumber - fromAyah;
+                              const done = ri !== undefined && (rvIdx < reciteVerseIndex || (rvIdx === reciteVerseIndex && ri < reciteWordIndex));
+                              const isCurr = ri !== undefined && rvIdx === reciteVerseIndex && ri === reciteWordIndex;
+                              const rKey = `${rvIdx}-${ri!}`;
+                              const revealed = isCurr && revealedWords.has(rKey);
+                              const rs: React.CSSProperties = isCurr
+                                ? { filter: revealed ? "none" : "blur(4px)", outline: "2px solid #22c55e", borderRadius: "4px", animation: revealed ? "none" : "recite-word-pulse 1.2s ease-in-out infinite" }
+                                : done || ri === undefined ? {} : { filter: "blur(6px)", userSelect: "none" };
+                              return <span key={k} className="inline-block transition-all duration-100 rounded-sm px-[0.1em]" style={rs}>{wc}</span>;
+                            }
+                            if (isBlindMode && !revealedAyahs.has(lw.verseNum)) {
+                              return <span key={k} className="inline-block transition-all duration-100 rounded-sm px-[0.1em]" style={{ filter: "blur(6px)", userSelect: "none", cursor: "pointer" }} onClick={() => setRevealedAyahs((p) => { const n = new Set(p); n.add(lw.verseNum); return n; })}>{wc}</span>;
+                            }
+                            return (
+                              <span key={k} className={cn("inline-block transition-all duration-100 rounded-sm px-[0.1em]", isHighlighted ? (isCumulative ? "bg-teal-300 text-teal-900 scale-110 shadow-sm" : "bg-amber-300 text-amber-900 scale-110 shadow-sm") : isPast ? "opacity-35" : "")} style={!isHighlighted ? { backgroundColor: "rgba(254,240,138,0.25)" } : {}}>
+                                {wc}
+                              </span>
+                            );
+                          }
+
+                          const op = !isActiveSurah ? 0.13 : !inSelectedRange ? 0.17 : isCumulative && !inCumRange ? 0.28 : 0.55;
+                          if (isReciteMode && isActiveSurah && inSelectedRange) {
+                            const vi = lw.verseNum - fromAyah;
+                            return <span key={k} style={{ opacity: op, display: "inline-block", ...(vi > reciteVerseIndex ? { filter: "blur(6px)", userSelect: "none" } : {}) }}>{lw.text_uthmani}</span>;
+                          }
+                          if (isBlindMode) {
+                            if (!isActiveSurah || !inSelectedRange) return <span key={k} style={{ opacity: op, filter: "blur(6px)", userSelect: "none", display: "inline-block" }}>{lw.text_uthmani}</span>;
+                            if (!revealedAyahs.has(lw.verseNum)) return <span key={k} style={{ opacity: op, filter: "blur(6px)", userSelect: "none", cursor: "pointer", display: "inline-block" }} onClick={() => setRevealedAyahs((p) => { const n = new Set(p); n.add(lw.verseNum); return n; })}>{lw.text_uthmani}</span>;
+                            return <span key={k} style={{ opacity: op, cursor: "pointer", display: "inline-block" }} onClick={() => setRevealedAyahs((p) => { const n = new Set(p); n.delete(lw.verseNum); return n; })}>{lw.text_uthmani}</span>;
+                          }
+                          return <span key={k} style={{ opacity: op, display: "inline-block" }}>{lw.text_uthmani}</span>;
+                        })}
+                      </div>
+                    );
+                  }
+                  return nodes;
+                })()}
+
+                {/* ── Fallback flow rendering (no word data yet) ── */}
+                {!lineGroups && displayList.map(
                   ({ surahId, verseNum, surahVerse, pageVerse }, listIdx) => {
                     const isActiveSurah = surahId === chapter.id;
                     const isActive =
