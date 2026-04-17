@@ -194,7 +194,14 @@ function AyahSheet({
   const [, setLocation] = useLocation();
   const [playing, setPlaying] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [highlightedWordIdx, setHighlightedWordIdx] = useState(-1);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const rafRef = useRef<number>(0);
+
+  const sheetWords = useMemo(
+    () => ayah.text_uthmani.split(/\s+/).filter(Boolean),
+    [ayah.text_uthmani]
+  );
 
   const { data: translation, isLoading: translationLoading } = useQuery({
     queryKey: ["translation", ayah.verseKey],
@@ -202,33 +209,57 @@ function AyahSheet({
     staleTime: Infinity,
   });
 
+  const tickHighlight = useCallback(() => {
+    const audio = audioRef.current;
+    if (!audio || audio.paused) return;
+    const dur = audio.duration || 0;
+    const frac = dur > 0 ? audio.currentTime / dur : 0;
+    const idx = Math.min(Math.floor(frac * sheetWords.length), sheetWords.length - 1);
+    setHighlightedWordIdx(idx);
+    rafRef.current = requestAnimationFrame(tickHighlight);
+  }, [sheetWords.length]);
+
   // Stop audio when verse changes or sheet unmounts
   useEffect(() => {
     return () => {
+      cancelAnimationFrame(rafRef.current);
       if (audioRef.current) {
         audioRef.current.pause();
         audioRef.current.src = "";
         audioRef.current = null;
       }
       setPlaying(false);
+      setHighlightedWordIdx(-1);
     };
   }, [ayah.verseKey]);
 
   const handlePlay = () => {
     if (playing && audioRef.current) {
       audioRef.current.pause();
+      cancelAnimationFrame(rafRef.current);
       setPlaying(false);
       return;
     }
     if (audioRef.current) {
       audioRef.current.pause();
+      cancelAnimationFrame(rafRef.current);
       audioRef.current.src = "";
     }
     const audio = new Audio(buildAudioUrl(ayah.surahId, ayah.verseNum));
-    audio.onended = () => setPlaying(false);
-    audio.onerror = () => setPlaying(false);
+    audio.onended = () => {
+      setPlaying(false);
+      setHighlightedWordIdx(-1);
+      cancelAnimationFrame(rafRef.current);
+    };
+    audio.onerror = () => {
+      setPlaying(false);
+      cancelAnimationFrame(rafRef.current);
+    };
     audioRef.current = audio;
-    audio.play().then(() => setPlaying(true)).catch(() => setPlaying(false));
+    audio.play().then(() => {
+      setPlaying(true);
+      rafRef.current = requestAnimationFrame(tickHighlight);
+    }).catch(() => setPlaying(false));
   };
 
   const handleCopy = async () => {
@@ -245,7 +276,7 @@ function AyahSheet({
     <>
       <div className="fixed inset-0 bg-black/40 z-40" onClick={onClose} />
       <div className="fixed bottom-0 left-0 right-0 bg-white rounded-t-2xl z-50 shadow-2xl max-h-[72vh] overflow-y-auto">
-        <div className="max-w-lg mx-auto p-5 pb-8">
+        <div className="max-w-lg mx-auto p-5 pb-24">
           {/* Drag handle */}
           <div className="w-10 h-1 bg-gray-200 rounded-full mx-auto mb-4" />
 
@@ -278,7 +309,18 @@ function AyahSheet({
               color: "#1a1a1a",
             }}
           >
-            {ayah.text_uthmani}
+            {sheetWords.map((w, i) => (
+              <span
+                key={i}
+                style={{
+                  backgroundColor: i === highlightedWordIdx ? "#fcd34d" : undefined,
+                  borderRadius: i === highlightedWordIdx ? "3px" : undefined,
+                  padding: "0 0.05em",
+                }}
+              >
+                {w}{i < sheetWords.length - 1 ? " " : ""}
+              </span>
+            ))}
           </div>
 
           {/* Translation */}

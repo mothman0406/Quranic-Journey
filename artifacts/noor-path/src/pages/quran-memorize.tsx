@@ -701,6 +701,9 @@ function MemorizationPlayer({
   onReciteTriggered,
   onReciteComplete,
 }: PlayerProps) {
+  const [, setLocation] = useLocation();
+  const leaveDestinationRef = useRef<string | null>(null);
+
   const reciter = RECITERS.find((r) => r.id === "husary")!;
 
   const [currentAyahNum, setCurrentAyahNum] = useState(initialAyah);
@@ -2073,8 +2076,15 @@ function MemorizationPlayer({
             </div>
             <button
               onClick={() => {
-                setShowLeaveModal(false);
-                setShowPauseModal(true);
+                const dest = leaveDestinationRef.current;
+                if (dest) {
+                  leaveDestinationRef.current = null;
+                  setShowLeaveModal(false);
+                  setLocation(dest);
+                } else {
+                  setShowLeaveModal(false);
+                  setShowPauseModal(true);
+                }
               }}
               className="w-full bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-semibold rounded-2xl py-4 text-base transition-colors"
             >
@@ -2082,8 +2092,14 @@ function MemorizationPlayer({
             </button>
             <button
               onClick={() => {
+                const dest = leaveDestinationRef.current;
+                leaveDestinationRef.current = null;
                 setShowLeaveModal(false);
-                onBack();
+                if (dest) {
+                  setLocation(dest);
+                } else {
+                  onBack();
+                }
               }}
               className="w-full border border-border text-foreground font-medium rounded-2xl py-3 text-sm hover:bg-muted/50 transition-colors"
             >
@@ -2476,6 +2492,25 @@ function MemorizationPlayer({
             >
               <Flag size={14} />
               Pause &amp; Save
+            </button>
+
+            {/* View in Full Mushaf */}
+            <button
+              onClick={() => {
+                leaveDestinationRef.current = `/child/${childId}/mushaf-reader?page=${activePage ?? 1}`;
+                setShowSettingsPanel(false);
+                setShowLeaveModal(true);
+              }}
+              style={{
+                display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+                padding: "12px 20px", borderRadius: 12, width: "100%", marginTop: 8,
+                background: localDarkMode ? "#1a2a3a" : "#f0f9ff",
+                border: `1px solid ${localDarkMode ? "#334455" : "#bae6fd"}`,
+                color: localDarkMode ? "#7dd3fc" : "#0369a1", fontSize: 13, fontWeight: 600,
+                cursor: "pointer",
+              }}
+            >
+              📖 View in Full Mushaf
             </button>
 
             {error && (
