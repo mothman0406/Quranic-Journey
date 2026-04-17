@@ -26,10 +26,14 @@ import {
   Circle,
   X,
   Check,
+  Mic,
+  MicOff,
 } from "lucide-react";
 
 const TOTAL_PAGES = 604;
 const QURAN_API = "https://api.quran.com/api/v4";
+
+const SKIP_CHARS = /^[\u06D6-\u06ED\u0600-\u0605\u061B\u061E\u061F\u06DD\u06DE\u06DF]+$/;
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -72,6 +76,14 @@ interface AyahInfo {
   verseNum: number;
   text_uthmani: string;
 }
+
+type ReciteWord = {
+  verse_key: string;
+  surahId: number;
+  verseNum: number;
+  position: number;
+  text_uthmani: string;
+};
 
 // ─── Fetchers ──────────────────────────────────────────────────────────────────
 
@@ -124,6 +136,12 @@ function pad(n: number, len: number) {
 
 function buildAudioUrl(surah: number, verse: number): string {
   return `https://everyayah.com/data/Husary_64kbps/${pad(surah, 3)}${pad(verse, 3)}.mp3`;
+}
+
+function isBeforeVerseKey(a: string, b: string): boolean {
+  const [aSurah, aVerse] = a.split(":").map(Number);
+  const [bSurah, bVerse] = b.split(":").map(Number);
+  return aSurah < bSurah || (aSurah === bSurah && aVerse < bVerse);
 }
 
 function buildLineGroups(
@@ -386,12 +404,35 @@ export default function MushafReaderPage() {
   const [isSelectMode, setIsSelectMode] = useState(false);
   const [selectedVerseKeys, setSelectedVerseKeys] = useState<Set<string>>(new Set());
   const [tappedAyah, setTappedAyah] = useState<AyahInfo | null>(null);
+  const [isRecitePickMode, setIsRecitePickMode] = useState(false);
+  const [isReciting, setIsReciting] = useState(false);
+  const [reciteStartVerseKey, setReciteStartVerseKey] = useState<string | null>(null);
+  const [reciteUnlockedWords, setReciteUnlockedWords] = useState<Set<string>>(new Set());
+
+  const recognitionRef = useRef<any>(null);
+  const recitePageWordsRef = useRef<ReciteWord[]>([]);
+  const reciteWordPosRef = useRef(0);
+  const reciteUnlockedWordsRef = useRef<Set<string>>(new Set());
+
+  reciteUnlockedWordsRef.current = reciteUnlockedWords;
 
   // Reset reveals when page changes
   useEffect(() => {
     setRevealedVerseKeys(new Set());
     setTappedAyah(null);
+    recognitionRef.current?.stop();
+    recognitionRef.current = null;
+    setIsReciting(false);
+    setIsRecitePickMode(false);
+    setReciteStartVerseKey(null);
+    setReciteUnlockedWords(new Set());
+    reciteWordPosRef.current = 0;
   }, [currentPage]);
+
+  // Cleanup recognition on unmount
+  useEffect(() => {
+    return () => { recognitionRef.current?.stop(); };
+  }, []);
 
   // Page data
   const { data: pageData, isLoading, isError } = useQuery({
@@ -484,6 +525,87 @@ export default function MushafReaderPage() {
     return ch?.name_simple ?? `Surah ${firstWord.surahId}`;
   }, [lineGroups, chapters]);
 
+  const stopReciting = useCallback(() => {
+    recognitionRef.current?.stop();
+    recognitionRef.current = null;
+    setIsReciting(false);
+    setIsRecitePickMode(false);
+    setReciteStartVerseKey(null);
+    setReciteUnlockedWords(new Set());
+    reciteUnlockedWordsRef.current = new Set();
+    reciteWordPosRef.current = 0;
+  }, []);
+
+  const startReciting = useCallback(
+    (startVerseKey: string) => {
+      if (!lineGroups) return;
+      const words: ReciteWord[] = [];
+      for (const { words: lws } of lineGroups) {
+        for (const lw of lws) {
+          if (lw.char_type_name !== "end" && !SKIP_CHARS.test(lw.text_uthmani)) {
+            words.push({
+              verse_key: lw.verse_key,
+              surahId: lw.surahId,
+              verseNum: lw.verseNum,
+              position: lw.position,
+              text_uthmani: lw.text_uthmani,
+            });
+          }
+        }
+      }
+      recitePageWordsRef.current = words;
+      const startIdx = words.findIndex((w) => w.verse_key === startVerseKey);
+      reciteWordPosRef.current = Math.max(0, startIdx);
+      setReciteStartVerseKey(startVerseKey);
+      const emptySet = new Set<string>();
+      setReciteUnlockedWords(emptySet);
+      reciteUnlockedWordsRef.current = emptySet;
+      setIsReciting(true);
+
+      const SR =
+        (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+      if (!SR) {
+        alert("Speech recognition not supported in this browser. Try Chrome.");
+        setIsReciting(false);
+        return;
+      }
+      const recognition = new SR();
+      recognition.lang = "ar-SA";
+      recognition.continuous = true;
+      recognition.interimResults = true;
+      recognitionRef.current = recognition;
+
+      recognition.onresult = (event: any) => {
+        const result = event.results[event.results.length - 1];
+        if (!result) return;
+        const transcript = result[0].transcript.trim();
+        const heardWords = stripTashkeel(transcript).split(/\s+/).filter(Boolean);
+        const pageWords = recitePageWordsRef.current;
+        let pos = reciteWordPosRef.current;
+        const newUnlocked = new Set(reciteUnlockedWordsRef.current);
+        let advanced = false;
+        for (const heard of heardWords) {
+          if (pos >= pageWords.length) break;
+          const expected = stripTashkeel(pageWords[pos].text_uthmani);
+          if (expected.length <= 1) { pos++; continue; }
+          if (heard === expected || expected.startsWith(heard) || heard.startsWith(expected)) {
+            newUnlocked.add(`${pageWords[pos].verse_key}:${pageWords[pos].position}`);
+            pos++;
+            advanced = true;
+          }
+        }
+        if (advanced) {
+          reciteWordPosRef.current = pos;
+          reciteUnlockedWordsRef.current = newUnlocked;
+          setReciteUnlockedWords(new Set(newUnlocked));
+        }
+      };
+      recognition.onerror = () => {};
+      recognition.start();
+    },
+    [lineGroups]
+  );
+
   const goToPage = (page: number) => {
     const clamped = Math.max(1, Math.min(TOTAL_PAGES, page));
     setCurrentPage(clamped);
@@ -507,6 +629,14 @@ export default function MushafReaderPage() {
 
   const handleWordClick = useCallback(
     (lw: LineWord) => {
+      if (isReciting) return;
+
+      if (isRecitePickMode) {
+        setIsRecitePickMode(false);
+        startReciting(lw.verse_key);
+        return;
+      }
+
       if (isSelectMode) {
         setSelectedVerseKeys((prev) => {
           const next = new Set(prev);
@@ -535,7 +665,7 @@ export default function MushafReaderPage() {
         text_uthmani: pv?.text_uthmani ?? "",
       });
     },
-    [isSelectMode, isBlindMode, verses]
+    [isReciting, isRecitePickMode, isSelectMode, isBlindMode, verses, startReciting]
   );
 
   return (
@@ -595,6 +725,26 @@ export default function MushafReaderPage() {
           >
             {isSelectMode ? <CheckCircle size={15} /> : <Circle size={15} />}
           </button>
+
+          {/* Recite mode */}
+          <button
+            onClick={() => {
+              if (isReciting) {
+                stopReciting();
+              } else {
+                setIsRecitePickMode((p) => !p);
+              }
+            }}
+            title={isReciting ? "Stop reciting" : isRecitePickMode ? "Cancel recite" : "Recite mode"}
+            className={cn(
+              "p-2 rounded-lg border text-xs transition-colors shrink-0",
+              isReciting || isRecitePickMode
+                ? "border-rose-300 bg-rose-50 text-rose-700"
+                : "border-gray-200 text-gray-400 hover:text-gray-600"
+            )}
+          >
+            {isReciting ? <MicOff size={15} /> : <Mic size={15} />}
+          </button>
         </div>
 
         {/* Nav controls row */}
@@ -646,7 +796,7 @@ export default function MushafReaderPage() {
           {/* Top page label */}
           <div className="text-center py-2.5 border-b border-amber-100/60">
             <span className="text-xs text-amber-400 tracking-widest">
-              ﷽ — صفحة {currentPage}
+              صفحة {currentPage}
             </span>
           </div>
 
@@ -736,26 +886,6 @@ export default function MushafReaderPage() {
                           }}
                         />
                       </div>
-                      {sid !== 1 && sid !== 9 && (
-                        <div
-                          style={{
-                            display: "flex",
-                            justifyContent: "center",
-                            margin: "4px 0 2px",
-                          }}
-                        >
-                          <span
-                            style={{
-                              fontFamily: '"Scheherazade New", serif',
-                              fontSize: "1.05em",
-                              color: "#7a5820",
-                              direction: "rtl",
-                            }}
-                          >
-                            بِسْمِ ٱللَّهِ ٱلرَّحْمَٰنِ ٱلرَّحِيمِ
-                          </span>
-                        </div>
-                      )}
                     </div>
                   );
                 }
@@ -780,6 +910,12 @@ export default function MushafReaderPage() {
 
                       if (lw.char_type_name === "end") {
                         const isSelected = isSelectMode && selectedVerseKeys.has(lw.verse_key);
+                        let endOpacity = 1;
+                        if (isReciting && reciteStartVerseKey) {
+                          if (isBeforeVerseKey(lw.verse_key, reciteStartVerseKey)) {
+                            endOpacity = 0.3;
+                          }
+                        }
                         return (
                           <span
                             key={k}
@@ -799,6 +935,7 @@ export default function MushafReaderPage() {
                               userSelect: "none",
                               direction: "ltr",
                               cursor: "pointer",
+                              opacity: endOpacity,
                             }}
                           >
                             <span
@@ -818,6 +955,20 @@ export default function MushafReaderPage() {
                       const isSelected = isSelectMode && selectedVerseKeys.has(lw.verse_key);
                       const isBlurred =
                         isBlindMode && !revealedVerseKeys.has(lw.verse_key);
+                      let wordFilter = isBlurred ? "blur(6px)" : "none";
+                      let wordOpacity = 1;
+                      if (isReciting && reciteStartVerseKey) {
+                        if (isBeforeVerseKey(lw.verse_key, reciteStartVerseKey)) {
+                          wordFilter = "none";
+                          wordOpacity = 0.3;
+                        } else if (!reciteUnlockedWords.has(k)) {
+                          wordFilter = "blur(6px)";
+                          wordOpacity = 1;
+                        } else {
+                          wordFilter = "none";
+                          wordOpacity = 1;
+                        }
+                      }
 
                       return (
                         <span
@@ -828,7 +979,8 @@ export default function MushafReaderPage() {
                             isSelected && "bg-emerald-100 text-emerald-900 ring-1 ring-emerald-300"
                           )}
                           style={{
-                            filter: isBlurred ? "blur(6px)" : "none",
+                            filter: wordFilter,
+                            opacity: wordOpacity,
                             userSelect: "none",
                             padding: "0 0.04em",
                           }}
@@ -893,7 +1045,7 @@ export default function MushafReaderPage() {
           <Button
             variant="outline"
             onClick={() => goToPage(currentPage + 1)}
-            disabled={currentPage >= TOTAL_PAGES}
+            disabled={currentPage >= TOTAL_PAGES || isReciting}
             className="flex items-center gap-1 border-amber-300 text-amber-800 hover:bg-amber-50 bg-white"
           >
             <ChevronLeft size={16} />
@@ -916,7 +1068,7 @@ export default function MushafReaderPage() {
           <Button
             variant="outline"
             onClick={() => goToPage(currentPage - 1)}
-            disabled={currentPage <= 1}
+            disabled={currentPage <= 1 || isReciting}
             className="flex items-center gap-1 border-amber-300 text-amber-800 hover:bg-amber-50 bg-white"
           >
             <span className="hidden sm:inline text-xs">Prev</span>
@@ -937,6 +1089,35 @@ export default function MushafReaderPage() {
             {markMutation.isPending
               ? "Saving…"
               : `Mark ${selectedVerseKeys.size} ayah${selectedVerseKeys.size > 1 ? "s" : ""} as memorized`}
+          </button>
+        </div>
+      )}
+
+      {/* ── Recite pick mode banner ── */}
+      {isRecitePickMode && !isReciting && (
+        <div className="fixed bottom-20 left-0 right-0 z-30 flex justify-center px-4 pointer-events-none">
+          <div className="bg-white rounded-xl shadow-xl border border-rose-200 px-5 py-3 pointer-events-auto flex items-center gap-4">
+            <p className="text-sm font-medium text-gray-800">
+              Tap an ayah to start reciting from there
+            </p>
+            <button
+              onClick={() => setIsRecitePickMode(false)}
+              className="text-sm text-rose-600 font-semibold shrink-0"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── Stop reciting button ── */}
+      {isReciting && (
+        <div className="fixed bottom-20 left-0 right-0 z-30 flex justify-center px-4 pointer-events-none">
+          <button
+            onClick={stopReciting}
+            className="flex items-center gap-2 bg-rose-600 text-white text-sm font-semibold px-6 py-3 rounded-full shadow-xl pointer-events-auto active:bg-rose-700"
+          >
+            <MicOff size={15} /> Stop Reciting
           </button>
         </div>
       )}
