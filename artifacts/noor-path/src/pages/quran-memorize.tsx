@@ -1493,8 +1493,8 @@ function MemorizationPlayer({
                             <span style={{ flex: 1, height: 1, background: deco, maxWidth: 60, display: "block" }} />
                           </div>
                           {sid !== 1 && sid !== 9 && (
-                            <div style={{ textAlign: "center", margin: "4px 0 2px" }}>
-                              <span style={{ fontFamily: '"Scheherazade New", serif', fontSize: "1.1em", color: localDarkMode ? "#b8a060" : "#6b5830" }}>بِسْمِ ٱللَّهِ ٱلرَّحْمَٰنِ ٱلرَّحِيمِ</span>
+                            <div style={{ display: "flex", justifyContent: "center", margin: "4px 0 2px" }}>
+                              <span style={{ fontFamily: '"Scheherazade New", serif', fontSize: "1.1em", color: localDarkMode ? "#b8a060" : "#6b5830", direction: "rtl" }}>بِسْمِ ٱللَّهِ ٱلرَّحْمَٰنِ ٱلرَّحِيمِ</span>
                             </div>
                           )}
                         </div>
