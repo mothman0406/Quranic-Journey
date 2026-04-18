@@ -1155,6 +1155,45 @@ function MemorizationPlayer({
     setReciteAttempts((a) => a + 3);
   };
 
+  const handleSkipWord = () => {
+    const verse = sessionVerses[reciteVerseIndex];
+    if (!verse) return;
+    const expectedWords = verse.text_uthmani
+      .split(/\s+/)
+      .filter((w) => w.length > 0 && !SKIP_CHARS.test(w));
+
+    const key = `${reciteVerseIndex}-${reciteWordIndex}`;
+    setRevealedWords((prev) => { const n = new Set(prev); n.add(key); return n; });
+    const newAttempts = reciteAttempts + 5;
+    setReciteAttempts(newAttempts);
+
+    let vIdx = reciteVerseIndex;
+    let wIdx = reciteWordIndex;
+    if (wIdx + 1 >= expectedWords.length) { vIdx++; wIdx = 0; }
+    else { wIdx++; }
+
+    reciteVerseIndexRef.current = vIdx;
+    reciteWordIndexRef.current = wIdx;
+    matchedWordCountRef.current = 0;
+    lastMatchedWordRef.current = "";
+    setReciteVerseIndex(vIdx);
+    setReciteWordIndex(wIdx);
+
+    const nextVerse = sessionVerses[vIdx];
+    if (
+      nextVerse &&
+      nextVerse.page_number !== undefined &&
+      nextVerse.page_number !== verse.page_number
+    ) {
+      setCurrentAyahNum(nextVerse.verse_number);
+    }
+
+    if (vIdx >= sessionVerses.length) {
+      const score = Math.max(0, 100 - newAttempts * 5);
+      onReciteComplete?.(score);
+    }
+  };
+
   const handleReciteRestart = () => {
     setReciteVerseIndex(0);
     setReciteWordIndex(0);
@@ -2148,6 +2187,20 @@ function MemorizationPlayer({
           >
             <Eye size={13} />
             Show Word
+          </button>
+          <button
+            onClick={handleSkipWord}
+            style={{
+              display: "flex", alignItems: "center", gap: 6,
+              padding: "8px 16px", borderRadius: 999,
+              background: "#fffbeb", border: "1px solid #fcd34d",
+              color: "#b45309", fontSize: 13, fontWeight: 600,
+              cursor: "pointer", boxShadow: "0 2px 8px rgba(0,0,0,0.10)",
+              whiteSpace: "nowrap",
+            }}
+          >
+            <ChevronsRight size={13} />
+            Skip Word
           </button>
           <button
             onClick={handleReciteRestart}
