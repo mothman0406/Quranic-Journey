@@ -859,6 +859,10 @@ function MemorizationPlayer({
   const sessionVersesRef = useRef<VerseData[]>([]);
   sessionVersesRef.current = sessionVerses;
 
+  const reciteActiveVerseNumber = isReciteMode
+    ? (sessionVerses[reciteVerseIndex]?.verse_number ?? activeVerseNumber)
+    : activeVerseNumber;
+
   const sessionPageNumbers = useMemo(
     () => {
       const pages = sessionVerses
@@ -1127,6 +1131,7 @@ function MemorizationPlayer({
     stopAudio();
     setIsReciteMode(true);
     setIsBlindMode(false);
+    setCurrentAyahNum(fromAyah);
     setReciteWordIndex(0);
     setReciteVerseIndex(0);
     setReciteAttempts(0);
@@ -1299,7 +1304,7 @@ function MemorizationPlayer({
 
   // Precomputed active-verse tajweed + recite index map for line-based rendering
   const activeVerseEntry = displayList.find(
-    ({ surahId, verseNum }) => surahId === chapter.id && verseNum === activeVerseNumber
+    ({ surahId, verseNum }) => surahId === chapter.id && verseNum === (isReciteMode ? reciteActiveVerseNumber : activeVerseNumber)
   );
   const activeTajweedHtml = stripVerseEndHtml(
     activeVerseEntry?.surahVerse?.text_uthmani_tajweed ??
@@ -1536,7 +1541,7 @@ function MemorizationPlayer({
                       <div key={`ln-${lineNum}`} style={{ display: "flex", direction: "rtl", justifyContent: "center", alignItems: "center", flexWrap: "nowrap", lineHeight: 2.1, padding: "0 4px", width: "100%", gap: "0.35em" }}>
                         {lws.map((lw) => {
                           const isActiveSurah = lw.surahId === chapter.id;
-                          const isActive = isActiveSurah && lw.verseNum === activeVerseNumber;
+                          const isActive = isActiveSurah && lw.verseNum === (isReciteMode ? reciteActiveVerseNumber : activeVerseNumber);
                           const inSelectedRange = isActiveSurah && lw.verseNum >= fromAyah && lw.verseNum <= toAyah;
                           const inCumRange = isCumulative && isActiveSurah && lw.verseNum <= cumUpTo;
                           const k = `${lw.verse_key}:${lw.position}`;
@@ -1559,7 +1564,7 @@ function MemorizationPlayer({
                             const isPast = playing && highlightedWord > wi;
                             if (isReciteMode) {
                               const ri = activeWordToReciteIdx.get(wi);
-                              const rvIdx = activeVerseNumber - fromAyah;
+                              const rvIdx = reciteActiveVerseNumber - fromAyah;
                               const done = ri !== undefined && (rvIdx < reciteVerseIndex || (rvIdx === reciteVerseIndex && ri < reciteWordIndex));
                               const isCurr = ri !== undefined && rvIdx === reciteVerseIndex && ri === reciteWordIndex;
                               const rKey = `${rvIdx}-${ri!}`;
@@ -1582,7 +1587,7 @@ function MemorizationPlayer({
                           const op = !isActiveSurah ? 0.10 : !inSelectedRange ? 0.17 : isCumulative && !inCumRange ? 0.28 : 0.55;
                           if (isReciteMode && isActiveSurah && inSelectedRange) {
                             const vi = lw.verseNum - fromAyah;
-                            return <span key={k} style={{ opacity: op, display: "inline-block", ...(vi > reciteVerseIndex ? { filter: "blur(6px)", userSelect: "none" } : {}) }}>{lw.text_uthmani}</span>;
+                            return <span key={k} style={{ opacity: op, display: "inline-block", ...(vi >= reciteVerseIndex ? { filter: "blur(6px)", userSelect: "none" } : {}) }}>{lw.text_uthmani}</span>;
                           }
                           if (isBlindMode) {
                             if (!isActiveSurah || !inSelectedRange) return <span key={k} style={{ opacity: op, filter: "blur(6px)", userSelect: "none", display: "inline-block" }}>{lw.text_uthmani}</span>;
