@@ -1311,12 +1311,18 @@ function MemorizationPlayer({
     activeVerseEntry?.pageVerse?.text_uthmani_tajweed ?? ""
   );
   const activeTajweedWords = splitTajweedIntoWords(activeTajweedHtml);
-  const activeHasValidTajweed = activeTajweedWords.length === words.length;
+  // In recite mode the active verse may differ from the audio verse — use its
+  // word list so the index map covers all words in the recite verse.
+  const reciteActiveWords = isReciteMode
+    ? (activeVerseEntry?.surahVerse?.text_uthmani ?? activeVerseEntry?.pageVerse?.text_uthmani ?? "")
+        .split(/\s+/).filter(Boolean)
+    : words;
+  const activeHasValidTajweed = activeTajweedWords.length === reciteActiveWords.length;
   const activeWordToReciteIdx = (() => {
     const m = new Map<number, number>();
     let ri = 0;
-    for (let j = 0; j < words.length; j++) {
-      if (!SKIP_CHARS.test(words[j])) m.set(j, ri++);
+    for (let j = 0; j < reciteActiveWords.length; j++) {
+      if (!SKIP_CHARS.test(reciteActiveWords[j])) m.set(j, ri++);
     }
     return m;
   })();
@@ -1587,7 +1593,7 @@ function MemorizationPlayer({
                           const op = !isActiveSurah ? 0.10 : !inSelectedRange ? 0.17 : isCumulative && !inCumRange ? 0.28 : 0.55;
                           if (isReciteMode && isActiveSurah && inSelectedRange) {
                             const vi = lw.verseNum - fromAyah;
-                            return <span key={k} style={{ opacity: op, display: "inline-block", ...(vi >= reciteVerseIndex ? { filter: "blur(6px)", userSelect: "none" } : {}) }}>{lw.text_uthmani}</span>;
+                            return <span key={k} style={{ opacity: op, display: "inline-block", ...(vi > reciteVerseIndex ? { filter: "blur(6px)", userSelect: "none" } : {}) }}>{lw.text_uthmani}</span>;
                           }
                           if (isBlindMode) {
                             if (!isActiveSurah || !inSelectedRange) return <span key={k} style={{ opacity: op, filter: "blur(6px)", userSelect: "none", display: "inline-block" }}>{lw.text_uthmani}</span>;
