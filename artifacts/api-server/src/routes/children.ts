@@ -3,6 +3,7 @@ import { db } from "@workspace/db";
 import { childrenTable, memorizationProgressTable, reviewScheduleTable, learningSessionsTable, childDuasTable } from "@workspace/db/schema";
 import { eq, desc, and, lte } from "drizzle-orm";
 import { SURAHS } from "../data/surahs.js";
+import { resolvePageTarget, getPageForVerse } from "../data/quran-meta.js";
 import { STORIES } from "../data/stories.js";
 import { DUAS } from "../data/duas.js";
 
@@ -172,7 +173,7 @@ router.get("/children", async (req, res) => {
 });
 
 router.post("/children", async (req, res) => {
-  const { name, age, gender, avatarEmoji, preMemorizedSurahIds, memorationStrength, practiceMinutesPerDay } = req.body;
+  const { name, age, gender, avatarEmoji, preMemorizedSurahIds, memorationStrength, practiceMinutesPerDay, memorizePagePerDay, reviewPagesPerDay } = req.body;
   const ageGroup = getAgeGroup(age);
   const practiceMinutes = practiceMinutesPerDay || 20;
 
@@ -182,6 +183,8 @@ router.post("/children", async (req, res) => {
     avatarEmoji: avatarEmoji || (gender === "female" ? "🌸" : "⭐"),
     lastActiveDate: new Date().toISOString().split("T")[0],
     practiceMinutesPerDay: practiceMinutes,
+    memorizePagePerDay: memorizePagePerDay ?? 1.0,
+    reviewPagesPerDay: reviewPagesPerDay ?? 2.0,
     onboardingCompleted: 1
   }).returning();
 
@@ -241,6 +244,8 @@ router.put("/children/:childId", async (req, res) => {
   if (req.body.avatarEmoji) updates.avatarEmoji = req.body.avatarEmoji;
   if (req.body.goals !== undefined) updates.goals = JSON.stringify(req.body.goals);
   if (req.body.practiceMinutesPerDay) updates.practiceMinutesPerDay = req.body.practiceMinutesPerDay;
+  if (req.body.memorizePagePerDay != null) updates.memorizePagePerDay = req.body.memorizePagePerDay;
+  if (req.body.reviewPagesPerDay != null) updates.reviewPagesPerDay = req.body.reviewPagesPerDay;
   if (req.body.hideStories !== undefined) updates.hideStories = req.body.hideStories ? 1 : 0;
   if (req.body.hideDuas !== undefined) updates.hideDuas = req.body.hideDuas ? 1 : 0;
   const [child] = await db.update(childrenTable).set(updates).where(eq(childrenTable.id, childId)).returning();
@@ -315,13 +320,32 @@ router.get("/children/:childId/dashboard", async (req, res) => {
   const storedGoals = child.goals ? JSON.parse(child.goals) : null;
   const activeGoals = storedGoals || autoGoals;
 
+  // Determine new memorization start position
+  let nextStartSurah: number;
+  let nextStartAyah: number;
+  if (inProgressSurah) {
+    const inProgData = SURAHS.find(s => s.id === inProgressSurah.surahId);
+    nextStartSurah = inProgData?.number ?? (nextSurahData?.number ?? 1);
+    nextStartAyah = inProgressSurah.versesMemorized + 1;
+  } else {
+    nextStartSurah = nextSurahData?.number ?? 1;
+    nextStartAyah = 1;
+  }
+  const memTarget = nextSurahData
+    ? resolvePageTarget(nextStartSurah, nextStartAyah, child.memorizePagePerDay)
+    : null;
+
   const todaysPlan = {
     date: today,
-    newMemorization: nextSurahData ? {
+    newMemorization: nextSurahData && memTarget ? {
       surahName: nextSurahData.nameTransliteration,
+      surahNumber: nextSurahData.number,
       surahNameArabic: nextSurahData.nameArabic,
-      ayahStart: (memProgress.find(m => m.surahId === nextSurahData.id)?.versesMemorized || 0) + 1,
-      ayahEnd: Math.min((memProgress.find(m => m.surahId === nextSurahData.id)?.versesMemorized || 0) + 3, nextSurahData.verseCount),
+      ayahStart: nextStartAyah,
+      ayahEnd: memTarget.endAyah,
+      pageStart: getPageForVerse(nextStartSurah, nextStartAyah),
+      pageEnd: getPageForVerse(memTarget.endSurah, memTarget.endAyah),
+      snapReason: memTarget.snapReason,
       estimatedMinutes: 10
     } : null,
     reviewSessions: dueReviews.slice(0, 3).map(r => {

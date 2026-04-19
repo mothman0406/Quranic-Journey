@@ -3,6 +3,7 @@ import { db } from "@workspace/db";
 import { childrenTable, memorizationProgressTable, reviewScheduleTable } from "@workspace/db/schema";
 import { eq, and } from "drizzle-orm";
 import { SURAHS } from "../data/surahs.js";
+import { getPageForVerse } from "../data/quran-meta.js";
 
 async function ownsChild(parentId: string, childId: number): Promise<boolean> {
   const [child] = await db.select({ parentId: childrenTable.parentId })
@@ -287,12 +288,17 @@ router.post("/children/:childId/memorization", async (req, res) => {
 router.get("/children/:childId/reviews", async (req, res) => {
   const childId = parseInt(req.params.childId);
   if (!await ownsChild(req.user.id, childId)) { res.status(403).json({ error: "Forbidden" }); return; }
+
+  const [child] = await db.select({ reviewPagesPerDay: childrenTable.reviewPagesPerDay })
+    .from(childrenTable).where(eq(childrenTable.id, childId));
+  const reviewBudget = child?.reviewPagesPerDay ?? 2.0;
+
   const today = new Date().toISOString().split("T")[0];
 
   const allReviews = await db.select().from(reviewScheduleTable)
     .where(eq(reviewScheduleTable.childId, childId));
 
-  const dueToday = allReviews.filter(r => r.dueDate <= today).map(r => {
+  const formatReview = (r: typeof reviewScheduleTable.$inferSelect, isOverdue: boolean) => {
     const surah = SURAHS.find(s => s.id === r.surahId);
     return {
       id: r.id,
@@ -305,28 +311,58 @@ router.get("/children/:childId/reviews", async (req, res) => {
       easeFactor: r.easeFactor,
       repetitionCount: r.repetitionCount,
       lastReviewed: r.lastReviewed?.toISOString() || null,
-      isOverdue: r.dueDate < today
+      isOverdue
     };
-  });
+  };
 
-  const upcoming = allReviews.filter(r => r.dueDate > today).slice(0, 10).map(r => {
+  // Sort due items by actual Quran surah number ascending
+  const rawDueToday = allReviews
+    .filter(r => r.dueDate <= today)
+    .sort((a, b) => {
+      const nA = SURAHS.find(s => s.id === a.surahId)?.number ?? 0;
+      const nB = SURAHS.find(s => s.id === b.surahId)?.number ?? 0;
+      return nA - nB;
+    });
+
+  // Walk through accumulating page budget
+  let pagesAccumulated = 0;
+  const withinBudget: typeof rawDueToday = [];
+  const overBudget: typeof rawDueToday = [];
+
+  for (const r of rawDueToday) {
     const surah = SURAHS.find(s => s.id === r.surahId);
-    return {
-      id: r.id,
-      childId: r.childId,
-      surahId: r.surahId,
-      surahName: surah?.nameTransliteration || null,
-      surahNumber: surah?.number || 0,
-      dueDate: r.dueDate,
-      interval: r.interval,
-      easeFactor: r.easeFactor,
-      repetitionCount: r.repetitionCount,
-      lastReviewed: r.lastReviewed?.toISOString() || null,
-      isOverdue: false
-    };
-  });
+    const surahPages = surah
+      ? getPageForVerse(surah.number, surah.verseCount) - getPageForVerse(surah.number, 1) + 1
+      : 1;
+    if (withinBudget.length === 0 || pagesAccumulated + surahPages <= reviewBudget) {
+      pagesAccumulated += surahPages;
+      withinBudget.push(r);
+    } else {
+      overBudget.push(r);
+    }
+  }
 
-  res.json({ dueToday, upcoming });
+  // Build todayRange from first ayah of first within-budget surah to last ayah of last
+  let todayRange: { fromSurah: number; fromAyah: number; toSurah: number; toAyah: number } | null = null;
+  if (withinBudget.length > 0) {
+    const firstSurah = SURAHS.find(s => s.id === withinBudget[0].surahId);
+    const lastSurah = SURAHS.find(s => s.id === withinBudget[withinBudget.length - 1].surahId);
+    if (firstSurah && lastSurah) {
+      todayRange = {
+        fromSurah: firstSurah.number,
+        fromAyah: 1,
+        toSurah: lastSurah.number,
+        toAyah: lastSurah.verseCount
+      };
+    }
+  }
+
+  const dueToday = withinBudget.map(r => formatReview(r, r.dueDate < today));
+
+  const upcomingFuture = allReviews.filter(r => r.dueDate > today).slice(0, 10).map(r => formatReview(r, false));
+  const upcoming = [...overBudget.map(r => formatReview(r, r.dueDate < today)), ...upcomingFuture];
+
+  res.json({ dueToday, upcoming, todayRange });
 });
 
 router.post("/children/:childId/reviews", async (req, res) => {

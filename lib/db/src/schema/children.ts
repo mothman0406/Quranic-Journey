@@ -1,4 +1,4 @@
-import { pgTable, serial, text, integer, timestamp, pgEnum } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, integer, real, timestamp, pgEnum } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { authUserTable } from "./auth";
@@ -25,6 +25,8 @@ export const childrenTable = pgTable("children", {
   onboardingCompleted: integer("onboarding_completed").notNull().default(0),
   hideStories: integer("hide_stories").notNull().default(0),
   hideDuas: integer("hide_duas").notNull().default(0),
+  memorizePagePerDay: real("memorize_page_per_day").notNull().default(1.0),
+  reviewPagesPerDay: real("review_pages_per_day").notNull().default(2.0),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
