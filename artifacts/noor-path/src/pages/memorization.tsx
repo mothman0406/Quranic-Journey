@@ -51,12 +51,14 @@ function SurahStudyView({
   surahId,
   childId,
   onBack,
+  initialVerseIndex = 0,
 }: {
   surahId: number;
   childId: string;
   onBack: () => void;
+  initialVerseIndex?: number;
 }) {
-  const [verseIndex, setVerseIndex] = useState(0);
+  const [verseIndex, setVerseIndex] = useState(initialVerseIndex);
   const [showTajweed, setShowTajweed] = useState(false);
   const [rating, setRating] = useState(0);
   const [completed, setCompleted] = useState(false);
@@ -382,6 +384,7 @@ export default function MemorizationPage() {
   const [filter, setFilter] = useState<"all" | "memorized" | "in_progress" | "not_started">("all");
   const [expandedSurahId, setExpandedSurahId] = useState<number | null>(null);
   const [studyingSurahId, setStudyingSurahId] = useState<number | null>(null);
+  const [studyingInitialAyah, setStudyingInitialAyah] = useState(0);
   const qc = useQueryClient();
 
   const { data: surahsData } = useQuery({
@@ -424,6 +427,7 @@ export default function MemorizationPage() {
         surahId={studyingSurahId}
         childId={childId}
         onBack={() => setStudyingSurahId(null)}
+        initialVerseIndex={studyingInitialAyah}
       />
     );
   }
@@ -431,6 +435,13 @@ export default function MemorizationPage() {
   const progress = progressData?.progress ?? [];
   const surahs = surahsData?.surahs ?? [];
   const nextSurah = dashboard?.nextSurah;
+
+  type NewMemExt = { surahName: string; surahNumber?: number; ayahStart: number; ayahEnd: number; pageStart?: number };
+  const newMem = dashboard?.todaysPlan?.newMemorization as NewMemExt | undefined;
+  const todaysSurahId = newMem?.surahNumber
+    ? surahs.find(s => s.number === newMem.surahNumber)?.id
+    : nextSurah?.id;
+  const showUpNext = !!nextSurah && newMem?.surahNumber !== undefined && nextSurah.number !== newMem.surahNumber;
 
   const filteredProgress =
     filter === "all" ? progress : progress.filter((p) => p.status === filter);
@@ -481,28 +492,72 @@ export default function MemorizationPage() {
       </div>
 
       <div className="max-w-lg mx-auto px-4 pt-4 space-y-4">
-        {/* What's next banner */}
-        {nextSurah && (
-          <Card className="border-primary/20 bg-primary/5">
+        {/* Today's Work banner */}
+        {newMem && (
+          <Card className="border-primary/30 bg-primary/5">
+            <CardContent className="p-3">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="w-9 h-9 rounded-xl bg-primary/15 flex items-center justify-center text-xs font-bold text-primary shrink-0">
+                    {newMem.surahNumber}
+                  </div>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-1.5">
+                      <p className="text-xs font-semibold text-primary">Today's Work</p>
+                      {newMem.pageStart !== undefined && (
+                        <span className="text-xs text-muted-foreground">· Page {newMem.pageStart}</span>
+                      )}
+                    </div>
+                    <p className="text-sm font-medium text-foreground truncate">
+                      {newMem.surahName} · Ayah {newMem.ayahStart}–{newMem.ayahEnd}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex gap-2 shrink-0">
+                  <button
+                    onClick={() => {
+                      if (todaysSurahId !== undefined) {
+                        setStudyingInitialAyah((newMem.ayahStart ?? 1) - 1);
+                        setStudyingSurahId(todaysSurahId);
+                      }
+                    }}
+                    className="flex items-center gap-1 text-xs text-primary font-medium border border-primary px-2.5 py-1.5 rounded-full whitespace-nowrap"
+                  >
+                    <ListOrdered size={12} /> Ayah by Ayah
+                  </button>
+                  <Link href={`/child/${childId}/quran-memorize?surah=${newMem.surahNumber}&mode=mushaf&fromAyah=${newMem.ayahStart}&toAyah=${newMem.ayahEnd}`}>
+                    <button className="flex items-center gap-1 text-xs text-white font-medium bg-primary px-2.5 py-1.5 rounded-full whitespace-nowrap">
+                      <BookOpen size={12} /> Full Mushaf
+                    </button>
+                  </Link>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Up Next banner — only shown when next surah differs from today's work */}
+        {showUpNext && nextSurah && (
+          <Card className="border-border bg-muted/20">
             <CardContent className="p-3 flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-xl bg-primary/15 flex items-center justify-center text-xs font-bold text-primary">
+                <div className="w-8 h-8 rounded-xl bg-muted flex items-center justify-center text-xs font-bold text-muted-foreground">
                   {nextSurah.number}
                 </div>
                 <div>
-                  <p className="text-xs font-semibold text-primary">Up Next</p>
+                  <p className="text-xs font-medium text-muted-foreground">Up Next</p>
                   <p className="text-sm font-medium text-foreground">{nextSurah.nameTransliteration}</p>
                 </div>
               </div>
               <div className="flex gap-2">
                 <button
-                  onClick={() => setStudyingSurahId(nextSurah.id)}
-                  className="flex items-center gap-1 text-xs text-primary font-medium border border-primary px-2.5 py-1.5 rounded-full whitespace-nowrap"
+                  onClick={() => { setStudyingInitialAyah(0); setStudyingSurahId(nextSurah.id); }}
+                  className="flex items-center gap-1 text-xs text-muted-foreground font-medium border border-border px-2.5 py-1.5 rounded-full whitespace-nowrap"
                 >
                   <ListOrdered size={12} /> Ayah by Ayah
                 </button>
                 <Link href={`/child/${childId}/quran-memorize?surah=${nextSurah.number}&mode=mushaf`}>
-                  <button className="flex items-center gap-1 text-xs text-white font-medium bg-primary px-2.5 py-1.5 rounded-full whitespace-nowrap">
+                  <button className="flex items-center gap-1 text-xs text-foreground font-medium bg-muted px-2.5 py-1.5 rounded-full whitespace-nowrap">
                     <BookOpen size={12} /> Full Mushaf
                   </button>
                 </Link>
@@ -611,7 +666,7 @@ export default function MemorizationPage() {
                             size="sm"
                             variant="outline"
                             className="h-7 text-xs px-2 flex-1 border-primary text-primary"
-                            onClick={() => setStudyingSurahId(item.surahId)}
+                            onClick={() => { setStudyingInitialAyah(0); setStudyingSurahId(item.surahId); }}
                           >
                             <ListOrdered size={11} className="mr-1" /> Ayah by Ayah
                           </Button>

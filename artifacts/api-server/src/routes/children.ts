@@ -297,10 +297,16 @@ router.get("/children/:childId/dashboard", async (req, res) => {
     .orderBy(desc(learningSessionsTable.createdAt))
     .limit(7);
 
-  const memorizedSurahIds = memProgress.filter(m => m.status === "memorized").map(m => m.surahId);
+  // All surahs that have been memorized in any form — not just fully memorized
+  const workedSurahIds = memProgress
+    .filter(m => m.status === "memorized" || m.status === "needs_review" || m.status === "in_progress")
+    .map(m => m.surahId);
 
-  // Sort by recommendedOrder so Al-Fatihah (order=0) is always first
-  const nextSurahData = SURAHS_IN_ORDER.find(s => !memorizedSurahIds.includes(s.id));
+  // For finding nextSurahData (next to memorize = never touched at all)
+  const nextSurahData = SURAHS_IN_ORDER.find(s => !workedSurahIds.includes(s.id));
+
+  // Keep memorizedSurahIds as strictly memorized for achievement counts
+  const memorizedSurahIds = memProgress.filter(m => m.status === "memorized").map(m => m.surahId);
 
   const totalVersesMemorized = memProgress.reduce((sum, m) => sum + m.versesMemorized, 0);
   const juzCompleted = Math.floor(totalVersesMemorized / 200);

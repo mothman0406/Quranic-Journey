@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import { db } from "@workspace/db";
 import { childrenTable, memorizationProgressTable, reviewScheduleTable } from "@workspace/db/schema";
-import { eq, and } from "drizzle-orm";
+import { eq, and, isNull } from "drizzle-orm";
 import { SURAHS } from "../data/surahs.js";
 import { getPageForVerse } from "../data/quran-meta.js";
 
@@ -293,19 +293,104 @@ router.get("/children/:childId/reviews", async (req, res) => {
     .from(childrenTable).where(eq(childrenTable.id, childId));
   const reviewBudget = child?.reviewPagesPerDay ?? 2.0;
 
-  const today = new Date().toISOString().split("T")[0];
+  // Step 1 — Local date (not UTC)
+  const d = new Date();
+  const today = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
-  const allReviewsRaw = await db.select().from(reviewScheduleTable)
+  // Step 2 — Delete stale bulk-inserted entries that were never reviewed
+  await db.delete(reviewScheduleTable)
+    .where(and(
+      eq(reviewScheduleTable.childId, childId),
+      eq(reviewScheduleTable.repetitionCount, 0),
+      isNull(reviewScheduleTable.lastReviewed)
+    ));
+
+  // Step 3 — Fetch and classify all reviewable surahs
+  const memProgress = await db.select().from(memorizationProgressTable)
+    .where(eq(memorizationProgressTable.childId, childId));
+
+  const reviewable = memProgress.filter(m =>
+    m.status === 'memorized' || m.status === 'needs_review' || m.status === 'in_progress'
+  );
+
+  const maxSurahNumber = Math.max(
+    0,
+    ...reviewable.map(m => SURAHS.find(s => s.id === m.surahId)?.number ?? 0)
+  );
+
+  const isWeak = (m: typeof memProgress[0]) =>
+    (m.strength ?? 1) <= 2 || m.status === 'needs_review';
+
+  // Step 4 — Auto-create missing review schedule entries
+  let scheduleRows = await db.select().from(reviewScheduleTable)
     .where(eq(reviewScheduleTable.childId, childId));
 
-  const memProgress = await db.select({ surahId: memorizationProgressTable.surahId, status: memorizationProgressTable.status })
-    .from(memorizationProgressTable)
-    .where(eq(memorizationProgressTable.childId, childId));
-  const memorizedSurahIds = new Set(memProgress.filter(m => m.status === "memorized").map(m => m.surahId));
+  const scheduledSurahIds = new Set(scheduleRows.map(r => r.surahId));
+  const missing = reviewable.filter(m => !scheduledSurahIds.has(m.surahId));
+  if (missing.length > 0) {
+    await db.insert(reviewScheduleTable).values(
+      missing.map(m => ({
+        childId,
+        surahId: m.surahId,
+        dueDate: today,
+        interval: 1,
+        easeFactor: 2.5,
+        repetitionCount: 0
+      }))
+    );
+    scheduleRows = await db.select().from(reviewScheduleTable)
+      .where(eq(reviewScheduleTable.childId, childId));
+  }
 
-  const allReviews = allReviewsRaw.filter(r => memorizedSurahIds.has(r.surahId));
+  // Step 5 — Build prioritized review list: weak first, then strong (both desc by surah number)
+  const reviewableWithSchedule = reviewable
+    .map(m => ({ mem: m, schedule: scheduleRows.find(r => r.surahId === m.surahId) }))
+    .filter((x): x is { mem: typeof memProgress[0]; schedule: typeof scheduleRows[0] } => !!x.schedule);
 
-  const formatReview = (r: typeof reviewScheduleTable.$inferSelect, isOverdue: boolean) => {
+  const bySurahDesc = (
+    a: { mem: typeof memProgress[0] },
+    b: { mem: typeof memProgress[0] }
+  ) => {
+    const nA = SURAHS.find(s => s.id === a.mem.surahId)?.number ?? 0;
+    const nB = SURAHS.find(s => s.id === b.mem.surahId)?.number ?? 0;
+    return nB - nA;
+  };
+
+  const weakSurahs = reviewableWithSchedule
+    .filter(x => isWeak(x.mem))
+    .sort(bySurahDesc);
+
+  const strongSurahs = reviewableWithSchedule
+    .filter(x => !isWeak(x.mem) && (SURAHS.find(s => s.id === x.mem.surahId)?.number ?? 0) <= maxSurahNumber)
+    .sort(bySurahDesc);
+
+  const prioritized = [...weakSurahs, ...strongSurahs];
+
+  const withinBudget: typeof scheduleRows = [];
+  const overBudget: typeof scheduleRows = [];
+  const coveredPages = new Set<number>();
+
+  for (const { schedule: r } of prioritized) {
+    const surah = SURAHS.find(s => s.id === r.surahId);
+    if (!surah) { withinBudget.push(r); continue; }
+
+    const startPage = getPageForVerse(surah.number, 1);
+    const endPage = getPageForVerse(surah.number, surah.verseCount);
+    const surahPageSet = new Set<number>();
+    for (let p = startPage; p <= endPage; p++) surahPageSet.add(p);
+
+    const newPages = [...surahPageSet].filter(p => !coveredPages.has(p));
+
+    if (coveredPages.size < reviewBudget || newPages.length === 0) {
+      newPages.forEach(p => coveredPages.add(p));
+      withinBudget.push(r);
+    } else {
+      overBudget.push(r);
+    }
+  }
+
+  // Step 6 — Format response
+  const formatReview = (r: typeof reviewScheduleTable.$inferSelect, isOverdue: boolean, weak: boolean) => {
     const surah = SURAHS.find(s => s.id === r.surahId);
     return {
       id: r.id,
@@ -318,36 +403,10 @@ router.get("/children/:childId/reviews", async (req, res) => {
       easeFactor: r.easeFactor,
       repetitionCount: r.repetitionCount,
       lastReviewed: r.lastReviewed?.toISOString() || null,
-      isOverdue
+      isOverdue,
+      isWeak: weak
     };
   };
-
-  // Sort by descending surah number (review from most recent back to earliest)
-  const rawDueToday = allReviews
-    .filter(r => r.dueDate <= today)
-    .sort((a, b) => {
-      const nA = SURAHS.find(s => s.id === a.surahId)?.number ?? 0;
-      const nB = SURAHS.find(s => s.id === b.surahId)?.number ?? 0;
-      return nB - nA; // descending: 114, 113, 112...
-    });
-
-  // Walk through accumulating page budget
-  let pagesAccumulated = 0;
-  const withinBudget: typeof rawDueToday = [];
-  const overBudget: typeof rawDueToday = [];
-
-  for (const r of rawDueToday) {
-    const surah = SURAHS.find(s => s.id === r.surahId);
-    const surahPages = surah
-      ? getPageForVerse(surah.number, surah.verseCount) - getPageForVerse(surah.number, 1) + 1
-      : 1;
-    if (withinBudget.length === 0 || pagesAccumulated + surahPages <= reviewBudget) {
-      pagesAccumulated += surahPages;
-      withinBudget.push(r);
-    } else {
-      overBudget.push(r);
-    }
-  }
 
   // Build todayRange from first ayah of first within-budget surah to last ayah of last
   let todayRange: { fromSurah: number; fromAyah: number; toSurah: number; toAyah: number } | null = null;
@@ -364,18 +423,15 @@ router.get("/children/:childId/reviews", async (req, res) => {
     }
   }
 
-  const dueToday = withinBudget.map(r => formatReview(r, r.dueDate < today));
+  const dueToday = withinBudget.map(r => {
+    const mem = memProgress.find(m => m.surahId === r.surahId);
+    return formatReview(r, r.dueDate < today, mem ? isWeak(mem) : false);
+  });
 
-  const upcomingFuture = allReviews
-    .filter(r => r.dueDate > today)
-    .sort((a, b) => {
-      const nA = SURAHS.find(s => s.id === a.surahId)?.number ?? 0;
-      const nB = SURAHS.find(s => s.id === b.surahId)?.number ?? 0;
-      return nB - nA;
-    })
-    .slice(0, 10)
-    .map(r => formatReview(r, false));
-  const upcoming = [...overBudget.map(r => formatReview(r, r.dueDate < today)), ...upcomingFuture];
+  const upcoming = overBudget.map(r => {
+    const mem = memProgress.find(m => m.surahId === r.surahId);
+    return formatReview(r, false, mem ? isWeak(mem) : false);
+  });
 
   res.json({ dueToday, upcoming, todayRange });
 });

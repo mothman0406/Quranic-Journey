@@ -1,5 +1,6 @@
 import app from "./app";
 import { logger } from "./lib/logger";
+import { ensureVersePageCache } from "./data/quran-meta.js";
 
 const rawPort = process.env["PORT"];
 
@@ -15,11 +16,20 @@ if (Number.isNaN(port) || port <= 0) {
   throw new Error(`Invalid PORT value: "${rawPort}"`);
 }
 
-app.listen(port, (err) => {
-  if (err) {
-    logger.error({ err }, "Error listening on port");
-    process.exit(1);
-  }
-
-  logger.info({ port }, "Server listening");
-});
+ensureVersePageCache()
+  .then(() => {
+    app.listen(port, (err) => {
+      if (err) {
+        logger.error({ err }, "Error listening on port");
+        process.exit(1);
+      }
+      logger.info({ port }, "Server listening");
+    });
+  })
+  .catch((err) => {
+    logger.error({ err }, "Failed to load verse page cache — starting anyway");
+    app.listen(port, (err2) => {
+      if (err2) { logger.error({ err: err2 }, "Error listening on port"); process.exit(1); }
+      logger.info({ port }, "Server listening (cache unavailable)");
+    });
+  });

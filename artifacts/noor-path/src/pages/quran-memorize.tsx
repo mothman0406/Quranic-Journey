@@ -2685,8 +2685,11 @@ export default function QuranMemorizePage() {
     const ch = chapters.find((c) => c.id === surahNum);
     if (ch) {
       setSelectedChapter(ch);
-      setFromAyah(1);
-      setToAyah(Math.min(10, ch.verses_count));
+      const params = new URLSearchParams(search);
+      const urlFrom = parseInt(params.get("fromAyah") ?? "1", 10);
+      const urlTo = parseInt(params.get("toAyah") ?? "0", 10);
+      setFromAyah(isNaN(urlFrom) || urlFrom < 1 ? 1 : urlFrom);
+      setToAyah(isNaN(urlTo) || urlTo < 1 ? Math.min(10, ch.verses_count) : Math.min(urlTo, ch.verses_count));
       setPhase("setup");
     }
   }, [chapters, surahParam, phase]);

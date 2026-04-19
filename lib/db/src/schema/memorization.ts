@@ -37,6 +37,17 @@ export const reviewScheduleTable = pgTable("review_schedule", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+export const quranVersesTable = pgTable("quran_verses", {
+  id: serial("id").primaryKey(),
+  surahNumber: integer("surah_number").notNull(),
+  ayahNumber: integer("ayah_number").notNull(),
+  pageNumber: integer("page_number").notNull(),
+  textUthmani: text("text_uthmani").notNull().default(""),
+  juzNumber: integer("juz_number").notNull().default(0),
+});
+
+export type QuranVerse = typeof quranVersesTable.$inferSelect;
+
 export const insertMemorizationSchema = createInsertSchema(memorizationProgressTable).omit({ id: true, createdAt: true, updatedAt: true });
 export type InsertMemorization = z.infer<typeof insertMemorizationSchema>;
 export type MemorizationProgress = typeof memorizationProgressTable.$inferSelect;

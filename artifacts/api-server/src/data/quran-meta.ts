@@ -3,6 +3,8 @@
  * Complete static lookup tables for the Medina Mushaf (Hafs 'an 'Asim, 15-line layout).
  * No external API calls — all data is embedded here.
  */
+import { db } from "@workspace/db";
+import { quranVersesTable } from "@workspace/db/schema";
 
 export interface VerseRef {
   surah: number;
@@ -163,7 +165,7 @@ export const PAGE_TO_FIRST_VERSE: VerseRef[] = [
   {surah:58,ayah:9},{surah:58,ayah:17},{surah:59,ayah:1},{surah:59,ayah:8},{surah:59,ayah:16},
   {surah:60,ayah:1},{surah:60,ayah:7},{surah:61,ayah:1},{surah:62,ayah:1},{surah:62,ayah:7},
   {surah:63,ayah:1},{surah:63,ayah:7},{surah:64,ayah:1},{surah:64,ayah:9},{surah:65,ayah:1},
-  {surah:65,ayah:8},{surah:66,ayah:1},{surah:66,ayah:8},{surah:67,ayah:1},{surah:67,ayah:14},
+  {surah:65,ayah:6},{surah:66,ayah:1},{surah:66,ayah:8},{surah:67,ayah:1},{surah:67,ayah:14},
   {surah:67,ayah:24},{surah:68,ayah:1},{surah:68,ayah:18},{surah:68,ayah:38},{surah:69,ayah:1},
   {surah:69,ayah:19},{surah:69,ayah:40},{surah:70,ayah:1},{surah:70,ayah:22},{surah:71,ayah:1},
   {surah:71,ayah:20},{surah:72,ayah:1},{surah:72,ayah:20},{surah:73,ayah:1},{surah:73,ayah:15},
@@ -249,6 +251,38 @@ export const HIZB_QUARTER_STARTS: VerseRef[] = [
   {surah:78,ayah:1},{surah:80,ayah:1},{surah:82,ayah:1},{surah:85,ayah:1},
 ];
 
+// ─── DB-backed verse→page cache ───────────────────────────────────────────────
+
+export const versePageCache = new Map<string, number>();
+export const pageLastVerseCache = new Map<number, VerseRef>();
+let cacheLoaded = false;
+
+export async function ensureVersePageCache(): Promise<void> {
+  if (cacheLoaded) return;
+  cacheLoaded = true;
+  try {
+    const rows = await db.select({
+      surahNumber: quranVersesTable.surahNumber,
+      ayahNumber: quranVersesTable.ayahNumber,
+      pageNumber: quranVersesTable.pageNumber,
+    }).from(quranVersesTable);
+    for (const row of rows) {
+      versePageCache.set(`${row.surahNumber}:${row.ayahNumber}`, row.pageNumber);
+    }
+    console.log(`[quran-meta] Loaded ${versePageCache.size} verse→page mappings from DB`);
+    for (const [key, page] of versePageCache) {
+      const [s, a] = key.split(":").map(Number);
+      const existing = pageLastVerseCache.get(page);
+      if (!existing || s > existing.surah || (s === existing.surah && a > existing.ayah)) {
+        pageLastVerseCache.set(page, { surah: s, ayah: a });
+      }
+    }
+    console.log(`[quran-meta] Built page→lastVerse map for ${pageLastVerseCache.size} pages`);
+  } catch (err) {
+    console.error("[quran-meta] Failed to load verse page cache from DB:", err);
+  }
+}
+
 // ─── Helper functions ─────────────────────────────────────────────────────────
 
 export function compareVerseRefs(a: VerseRef, b: VerseRef): number {
@@ -272,25 +306,24 @@ export function nextVerse(surah: number, ayah: number): VerseRef | null {
 export function getPageForVerse(surah: number, ayah: number): number {
   if (surah < 1 || surah > 114) return 1;
 
-  // Fast path: if ayah === 1, SURAH_START_PAGES is exact
   const surahStartPage = SURAH_START_PAGES[surah - 1];
-  if (ayah <= 1) return surahStartPage ?? 1;
 
-  // Binary search PAGE_TO_FIRST_VERSE for precise page
-  let lo = 0;
-  let hi = PAGE_TO_FIRST_VERSE.length - 1;
-  let result = surahStartPage ?? 1; // default to surah start page
+  if (versePageCache.size > 0) {
+    for (let a = ayah; a >= 1; a--) {
+      const p = versePageCache.get(`${surah}:${a}`);
+      if (p !== undefined) return p;
+    }
+  }
+
+  // Static fallback (before cache loads)
+  if (ayah <= 1) return surahStartPage ?? 1;
+  let lo = 0, hi = PAGE_TO_FIRST_VERSE.length - 1, result = surahStartPage ?? 1;
   while (lo <= hi) {
     const mid = (lo + hi) >> 1;
     const v = PAGE_TO_FIRST_VERSE[mid];
-    if (v.surah < surah || (v.surah === surah && v.ayah <= ayah)) {
-      result = mid + 1;
-      lo = mid + 1;
-    } else {
-      hi = mid - 1;
-    }
+    if (v.surah < surah || (v.surah === surah && v.ayah <= ayah)) { result = mid + 1; lo = mid + 1; }
+    else hi = mid - 1;
   }
-  // Clamp to valid range and never go below the surah's own start page
   return Math.max(result, surahStartPage ?? 1);
 }
 
@@ -305,20 +338,22 @@ export function resolvePageTarget(
 ): PageTargetResult {
   const startPage = getPageForVerse(startSurah, startAyah);
   const targetPage = startPage + pagesTarget;
-  const hardStopPage = startPage + pagesTarget * 1.15;
+  const hardStopPage = startPage + pagesTarget * 1.05;
 
   type Candidate = VerseRef & { reason: PageTargetResult['snapReason']; page: number };
   const candidates: Candidate[] = [];
   const start: VerseRef = { surah: startSurah, ayah: startAyah };
 
-  // Surah ends within budget
+  // Surah ends within budget — only snap to surah end if it fits within targetPage (no overshoot for surah ends)
   for (let s = startSurah; s <= 114; s++) {
     const lastAyah = SURAH_VERSE_COUNTS[s - 1];
     const endRef: VerseRef = { surah: s, ayah: lastAyah };
     if (compareVerseRefs(endRef, start) <= 0) continue;
     const endPage = getPageForVerse(s, lastAyah);
     if (endPage > hardStopPage) break;
-    candidates.push({ ...endRef, reason: 'surah_end', page: endPage });
+    if (endPage < targetPage) {
+      candidates.push({ ...endRef, reason: 'surah_end', page: endPage });
+    }
   }
 
   // Juz boundaries
@@ -337,19 +372,24 @@ export function resolvePageTarget(
     candidates.push({ ...hq, reason: 'hizb_quarter', page: p });
   }
 
-  // Page ends
-  const lastFullPage = Math.floor(hardStopPage);
+  // Page ends — use DB-backed reverse map if available, fall back to static array
+  const lastFullPage = Math.floor(targetPage) - 1;
   for (let p = startPage; p <= Math.min(lastFullPage, 604); p++) {
-    const nextIdx = p;
-    if (nextIdx < PAGE_TO_FIRST_VERSE.length) {
-      const nf = PAGE_TO_FIRST_VERSE[nextIdx];
-      let es = nf.surah;
-      let ea = nf.ayah - 1;
-      if (ea < 1) { es -= 1; ea = SURAH_VERSE_COUNTS[es - 1] ?? 1; }
-      const ref: VerseRef = { surah: es, ayah: ea };
-      if (compareVerseRefs(ref, start) > 0) {
-        candidates.push({ ...ref, reason: 'page_end', page: p });
+    let ref: VerseRef | null = null;
+    if (pageLastVerseCache.size > 0) {
+      ref = pageLastVerseCache.get(p) ?? null;
+    } else {
+      const nextIdx = p;
+      if (nextIdx < PAGE_TO_FIRST_VERSE.length) {
+        const nf = PAGE_TO_FIRST_VERSE[nextIdx];
+        let es = nf.surah;
+        let ea = nf.ayah - 1;
+        if (ea < 1) { es -= 1; ea = SURAH_VERSE_COUNTS[es - 1] ?? 1; }
+        ref = { surah: es, ayah: ea };
       }
+    }
+    if (ref && compareVerseRefs(ref, start) > 0) {
+      candidates.push({ ...ref, reason: 'page_end', page: p });
     }
   }
 
@@ -372,17 +412,33 @@ export function resolvePageTarget(
   }
 
   // Fallback: split verses of start page in half
-  const pfv = PAGE_TO_FIRST_VERSE[startPage - 1];
+  const pfv = versePageCache.size > 0
+    ? (() => {
+        let first: VerseRef | null = null;
+        for (const [key, page] of versePageCache) {
+          if (page === startPage) {
+            const [s, a] = key.split(":").map(Number);
+            if (!first || s < first.surah || (s === first.surah && a < first.ayah)) {
+              first = { surah: s, ayah: a };
+            }
+          }
+        }
+        return first ?? PAGE_TO_FIRST_VERSE[startPage - 1];
+      })()
+    : PAGE_TO_FIRST_VERSE[startPage - 1];
+
   const pageVerses: VerseRef[] = [];
   let cur: VerseRef = { surah: pfv.surah, ayah: pfv.ayah };
-  const endOfPage = startPage < 604
-    ? (() => {
-        const nf = PAGE_TO_FIRST_VERSE[startPage];
-        let es = nf.surah; let ea = nf.ayah - 1;
-        if (ea < 1) { es -= 1; ea = SURAH_VERSE_COUNTS[es - 1] ?? 1; }
-        return { surah: es, ayah: ea };
-      })()
-    : { surah: 114, ayah: 6 };
+  const endOfPage: VerseRef = pageLastVerseCache.size > 0
+    ? (pageLastVerseCache.get(startPage) ?? { surah: 114, ayah: 6 })
+    : startPage < 604
+      ? (() => {
+          const nf = PAGE_TO_FIRST_VERSE[startPage];
+          let es = nf.surah; let ea = nf.ayah - 1;
+          if (ea < 1) { es -= 1; ea = SURAH_VERSE_COUNTS[es - 1] ?? 1; }
+          return { surah: es, ayah: ea };
+        })()
+      : { surah: 114, ayah: 6 };
   for (let i = 0; i < 50; i++) {
     pageVerses.push({ ...cur });
     if (compareVerseRefs(cur, endOfPage) >= 0) break;
