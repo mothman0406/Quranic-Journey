@@ -318,39 +318,55 @@ router.get("/children/:childId/dashboard", async (req, res) => {
   const randomDua = child.hideDuas ? null : DUAS[0];
 
   const memorizedCount = memorizedSurahIds.length;
-  const inProgressSurah = nextSurahData
-    ? memProgress.find(m => m.status === "in_progress" && m.surahId === nextSurahData.id)
-    : undefined;
-  const currentSurahName = inProgressSurah ? SURAHS.find(s => s.id === inProgressSurah.surahId)?.nameTransliteration : null;
+
+  // Surahs fully done (memorized or needs_review) — excluded from today's target
+  const doneSurahIds = new Set(
+    memProgress.filter(m => m.status === "memorized" || m.status === "needs_review").map(m => m.surahId)
+  );
 
   // Auto goals for dashboard teaser
   const autoGoals = generateAutoGoals(child, memorizedCount, child.practiceMinutesPerDay);
   const storedGoals = child.goals ? JSON.parse(child.goals) : null;
   const activeGoals = storedGoals || autoGoals;
 
-  // Determine new memorization target surah and start position.
-  // If a surah is in-progress and has remaining verses, continue from there.
-  // Otherwise fall to the next unmemorized surah.
-  let memorizationSurahData: typeof SURAHS[0] | undefined;
-  let nextStartSurah: number;
-  let nextStartAyah: number;
+  // Selection rule: Al-Fatihah first if not done; otherwise farthest in Mushaf
+  // (highest surah number) among all not-done surahs.
+  const fatihah = SURAHS.find(s => s.number === 1)!;
+  const fatiahDone = doneSurahIds.has(fatihah.id);
 
-  if (inProgressSurah) {
-    const inProgData = SURAHS.find(s => s.id === inProgressSurah.surahId);
-    if (inProgData && inProgressSurah.versesMemorized < inProgData.verseCount) {
-      memorizationSurahData = inProgData;
-      nextStartSurah = inProgData.number;
-      nextStartAyah = inProgressSurah.versesMemorized + 1;
-    } else {
-      memorizationSurahData = nextSurahData;
-      nextStartSurah = nextSurahData?.number ?? 1;
-      nextStartAyah = 1;
-    }
+  let memorizationSurahData: typeof SURAHS[0] | undefined;
+  let nextStartSurah = 1;
+  let nextStartAyah = 1;
+  let inProgressSurah: typeof memProgress[0] | undefined;
+
+  if (!fatiahDone) {
+    inProgressSurah = memProgress.find(m => m.surahId === fatihah.id && m.status === "in_progress");
+    memorizationSurahData = fatihah;
+    nextStartSurah = 1;
+    nextStartAyah = (inProgressSurah && inProgressSurah.versesMemorized < fatihah.verseCount)
+      ? inProgressSurah.versesMemorized + 1
+      : 1;
   } else {
-    memorizationSurahData = nextSurahData;
-    nextStartSurah = nextSurahData?.number ?? 1;
-    nextStartAyah = 1;
+    // Pool: in_progress surahs + nextSurahData (the immediate next not-started surah).
+    // Pick the farthest in the Mushaf (highest surah number).
+    const inProgressIds = new Set(
+      memProgress.filter(m => m.status === "in_progress").map(m => m.surahId)
+    );
+    const target = SURAHS
+      .filter(s => s.number !== 1 && (inProgressIds.has(s.id) || s.id === nextSurahData?.id))
+      .sort((a, b) => b.number - a.number)[0];
+
+    if (target) {
+      inProgressSurah = memProgress.find(m => m.surahId === target.id && m.status === "in_progress");
+      memorizationSurahData = target;
+      nextStartSurah = target.number;
+      nextStartAyah = (inProgressSurah && inProgressSurah.versesMemorized < target.verseCount)
+        ? inProgressSurah.versesMemorized + 1
+        : 1;
+    }
   }
+
+  const currentSurahName = memorizationSurahData?.nameTransliteration ?? null;
 
   const memTarget = memorizationSurahData
     ? resolvePageTarget(nextStartSurah, nextStartAyah, child.memorizePagePerDay)
