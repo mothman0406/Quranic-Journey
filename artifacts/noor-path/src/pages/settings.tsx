@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useParams, Link } from "wouter";
 import { ChevronLeft, Sun, Moon } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
@@ -6,6 +7,7 @@ import { ChildNav } from "@/components/child-nav";
 import { useSettings } from "@/hooks/use-settings";
 import type { BlurIntensity, FontSize } from "@/hooks/use-settings";
 import { cn } from "@/lib/utils";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 
 const MUSHAF_THEME_OPTIONS = [
   { key: "teal",         name: "Madinah",       swatch: "#1a4a5c", parchment: "#fdf6e3" },
@@ -223,6 +225,9 @@ export default function SettingsPage() {
           )}
         </SectionCard>
 
+        {/* ── Daily Goals ── */}
+        <DailyGoalsSection childId={childId} />
+
         {/* ── Recite Mode ── */}
         <SectionCard title="Recite Mode">
           <div>
@@ -321,6 +326,125 @@ export default function SettingsPage() {
 
       <ChildNav childId={childId} />
     </div>
+  );
+}
+
+const MEMORIZE_OPTIONS = [
+  { value: 0.25, label: "¼ page" },
+  { value: 0.5,  label: "½ page" },
+  { value: 1.0,  label: "1 page" },
+  { value: 2.0,  label: "2 pages" },
+];
+
+const REVIEW_OPTIONS = [
+  { value: 1.0,  label: "~1 page" },
+  { value: 2.0,  label: "~2 pages" },
+  { value: 4.0,  label: "~4 pages" },
+  { value: 10.0, label: "10 pages" },
+  { value: 20.0, label: "20 pages" },
+];
+
+function DailyGoalsSection({ childId }: { childId: string }) {
+  const qc = useQueryClient();
+  const [saved, setSaved] = useState<"memorize" | "review" | null>(null);
+  const [memorizeValue, setMemorizeValue] = useState<number | null>(null);
+  const [reviewValue, setReviewValue] = useState<number | null>(null);
+
+  const { data: child } = useQuery({
+    queryKey: ["child", childId],
+    queryFn: async () => {
+      const res = await fetch(`/api/children/${childId}`);
+      return res.json() as Promise<{ memorizePagePerDay: number; reviewPagesPerDay: number }>;
+    },
+  });
+
+  const mutation = useMutation({
+    mutationFn: async (updates: { memorizePagePerDay?: number; reviewPagesPerDay?: number }) => {
+      const res = await fetch(`/api/children/${childId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(updates),
+      });
+      return res.json();
+    },
+    onSuccess: (_, vars) => {
+      qc.invalidateQueries({ queryKey: ["dashboard", childId] });
+      qc.invalidateQueries({ queryKey: ["reviews", childId] });
+      const key: "memorize" | "review" = "memorizePagePerDay" in vars ? "memorize" : "review";
+      setSaved(key);
+      setTimeout(() => setSaved(null), 2000);
+    },
+  });
+
+  const activeMemorize = memorizeValue ?? child?.memorizePagePerDay;
+  const activeReview = reviewValue ?? child?.reviewPagesPerDay;
+
+  return (
+    <SectionCard title="Daily Goals">
+      <div>
+        <div className="flex items-center justify-between mb-2">
+          <div>
+            <p className="text-sm font-semibold text-foreground">New Memorization Per Day</p>
+            <p className="text-xs text-muted-foreground mt-0.5">How much new Quran to memorize each day</p>
+          </div>
+          {saved === "memorize" && (
+            <span className="text-xs text-emerald-600 font-medium">Saved ✓</span>
+          )}
+        </div>
+        <div className="flex gap-2 flex-wrap">
+          {MEMORIZE_OPTIONS.map((o) => (
+            <button
+              key={o.value}
+              onClick={() => {
+                setMemorizeValue(o.value);
+                mutation.mutate({ memorizePagePerDay: o.value });
+              }}
+              className={cn(
+                "rounded-xl border px-3 py-2 text-sm font-medium transition-all",
+                activeMemorize === o.value
+                  ? "border-primary bg-primary/5 text-primary"
+                  : "border-border text-muted-foreground hover:border-primary/40"
+              )}
+            >
+              {o.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <Divider />
+
+      <div>
+        <div className="flex items-center justify-between mb-2">
+          <div>
+            <p className="text-sm font-semibold text-foreground">Daily Review Amount</p>
+            <p className="text-xs text-muted-foreground mt-0.5">How much to review each day</p>
+          </div>
+          {saved === "review" && (
+            <span className="text-xs text-emerald-600 font-medium">Saved ✓</span>
+          )}
+        </div>
+        <div className="flex gap-2 flex-wrap">
+          {REVIEW_OPTIONS.map((o) => (
+            <button
+              key={o.value}
+              onClick={() => {
+                setReviewValue(o.value);
+                mutation.mutate({ reviewPagesPerDay: o.value });
+              }}
+              className={cn(
+                "rounded-xl border px-3 py-2 text-sm font-medium transition-all",
+                activeReview === o.value
+                  ? "border-primary bg-primary/5 text-primary"
+                  : "border-border text-muted-foreground hover:border-primary/40"
+              )}
+            >
+              {o.label}
+            </button>
+          ))}
+        </div>
+      </div>
+    </SectionCard>
   );
 }
 
