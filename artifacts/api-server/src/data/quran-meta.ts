@@ -269,9 +269,16 @@ export function nextVerse(surah: number, ayah: number): VerseRef | null {
 
 /** Get the page number (1-indexed) that contains surah:ayah */
 export function getPageForVerse(surah: number, ayah: number): number {
+  if (surah < 1 || surah > 114) return 1;
+
+  // Fast path: if ayah === 1, SURAH_START_PAGES is exact
+  const surahStartPage = SURAH_START_PAGES[surah - 1];
+  if (ayah <= 1) return surahStartPage ?? 1;
+
+  // Binary search PAGE_TO_FIRST_VERSE for precise page
   let lo = 0;
   let hi = PAGE_TO_FIRST_VERSE.length - 1;
-  let result = 1;
+  let result = surahStartPage ?? 1; // default to surah start page
   while (lo <= hi) {
     const mid = (lo + hi) >> 1;
     const v = PAGE_TO_FIRST_VERSE[mid];
@@ -282,7 +289,8 @@ export function getPageForVerse(surah: number, ayah: number): number {
       hi = mid - 1;
     }
   }
-  return result;
+  // Clamp to valid range and never go below the surah's own start page
+  return Math.max(result, surahStartPage ?? 1);
 }
 
 /**

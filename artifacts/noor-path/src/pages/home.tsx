@@ -40,6 +40,8 @@ type OnboardingForm = {
   preMemorizedSurahIds: number[];
   memorationStrength: number;
   practiceMinutesPerDay: number;
+  memorizePagePerDay: number;
+  reviewPagesPerDay: number;
 };
 
 const DEFAULT_FORM: OnboardingForm = {
@@ -50,6 +52,8 @@ const DEFAULT_FORM: OnboardingForm = {
   preMemorizedSurahIds: [],
   memorationStrength: 3,
   practiceMinutesPerDay: 20,
+  memorizePagePerDay: 1.0,
+  reviewPagesPerDay: 2.0,
 };
 
 const STEP_LABELS = ["Basic Info", "Memorization", "Strength", "Goals"];
@@ -91,6 +95,8 @@ export default function Home() {
         preMemorizedSurahIds: form.preMemorizedSurahIds,
         memorationStrength: form.memorationStrength,
         practiceMinutesPerDay: form.practiceMinutesPerDay,
+        memorizePagePerDay: form.memorizePagePerDay,
+        reviewPagesPerDay: form.reviewPagesPerDay,
       })
     }).then(r => r.json()),
     onSuccess: () => {
@@ -122,6 +128,8 @@ export default function Home() {
         preMemorizedSurahIds: [],
         memorationStrength: 3,
         practiceMinutesPerDay: 20,
+        memorizePagePerDay: 1.0,
+        reviewPagesPerDay: 2.0,
       })
     }).then(r => r.json()),
     onSuccess: (data) => {
@@ -138,6 +146,7 @@ export default function Home() {
     }
   });
 
+  const [customMemorizePage, setCustomMemorizePage] = useState("");
   const [streakCelebration, setStreakCelebration] = useState<{ message: string; subMessage?: string } | null>(null);
   const streakShownRef = useRef(false);
 
@@ -156,7 +165,7 @@ export default function Home() {
     }
   }, [children]);
 
-  const totalSteps = form.preMemorizedSurahIds.length > 0 ? 4 : 3;
+  const totalSteps = form.preMemorizedSurahIds.length > 0 ? 5 : 4;
 
   const canProceedStep1 = form.name.trim().length > 0 && form.age.length > 0 && parseInt(form.age) >= 3;
 
@@ -187,16 +196,18 @@ export default function Home() {
       return;
     }
     if (step === 3) { setStep(4); return; }
-    if (step === 4) { createMutation.mutate(); return; }
+    if (step === 4) { setStep(5); return; }
+    if (step === 5) { createMutation.mutate(); return; }
   }
 
   function handleBack() {
     if (step === 4 && form.preMemorizedSurahIds.length === 0) { setStep(2); return; }
+    if (step === 5) { setStep(4); return; }
     setStep(s => s - 1);
   }
 
-  const displayStep = step === 4 ? (form.preMemorizedSurahIds.length > 0 ? 4 : 3) : step;
-  const displayTotal = form.preMemorizedSurahIds.length > 0 ? 4 : 3;
+  const displayStep = step <= 3 ? step : form.preMemorizedSurahIds.length > 0 ? step : step - 1;
+  const displayTotal = form.preMemorizedSurahIds.length > 0 ? 5 : 4;
 
   return (
     <div className="min-h-screen bg-background">
@@ -460,11 +471,11 @@ export default function Home() {
       </Dialog>
 
       {/* Multi-step onboarding dialog */}
-      <Dialog open={showAdd} onOpenChange={open => { setShowAdd(open); if (!open) { setStep(1); setForm(DEFAULT_FORM); setRangeFrom(null); setRangeTo(null); } }}>
+      <Dialog open={showAdd} onOpenChange={open => { setShowAdd(open); if (!open) { setStep(1); setForm(DEFAULT_FORM); setRangeFrom(null); setRangeTo(null); setCustomMemorizePage(""); } }}>
         <DialogContent className="max-w-sm mx-4 max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="text-base">
-              {step === 1 ? "Create a Profile" : step === 2 ? "Prior Memorization" : step === 3 ? "How Strong Is the Memorization?" : "Daily Practice Goal"}
+              {step === 1 ? "Create a Profile" : step === 2 ? "Prior Memorization" : step === 3 ? "How Strong Is the Memorization?" : step === 4 ? "Daily Practice Goal" : "Daily Learning Goals"}
             </DialogTitle>
           </DialogHeader>
 
@@ -675,6 +686,87 @@ export default function Home() {
                   </button>
                 ))}
               </div>
+            </div>
+          )}
+
+          {/* Step 5: Daily learning goals */}
+          {step === 5 && (
+            <div className="space-y-5">
+              {/* Memorization picker */}
+              <div className="space-y-2">
+                <p className="text-sm font-medium">New memorization per day</p>
+                <div className="flex flex-wrap gap-2">
+                  {[
+                    { value: 0.25, label: "¼ page", desc: "A few verses" },
+                    { value: 0.5,  label: "½ page", desc: "~7 verses" },
+                    { value: 1.0,  label: "1 page",  desc: "Standard" },
+                    { value: 2.0,  label: "2 pages", desc: "Intensive" },
+                  ].map(opt => (
+                    <button
+                      key={opt.value}
+                      onClick={() => { setForm(f => ({ ...f, memorizePagePerDay: opt.value })); setCustomMemorizePage(""); }}
+                      className={cn(
+                        "px-3 py-2 rounded-full border text-left transition-all text-sm",
+                        form.memorizePagePerDay === opt.value && customMemorizePage === ""
+                          ? "border-primary bg-primary/10 text-primary font-semibold"
+                          : "border-border hover:bg-muted/50"
+                      )}
+                    >
+                      <span className="font-semibold">{opt.label}</span>
+                      <span className="text-muted-foreground text-xs ml-1">· {opt.desc}</span>
+                    </button>
+                  ))}
+                </div>
+                <div className="flex items-center gap-2">
+                  <Input
+                    type="number"
+                    min={0.1}
+                    max={10}
+                    step={0.25}
+                    placeholder="Custom (e.g. 1.5)"
+                    value={customMemorizePage}
+                    onChange={e => {
+                      setCustomMemorizePage(e.target.value);
+                      const v = parseFloat(e.target.value);
+                      if (!isNaN(v) && v > 0) setForm(f => ({ ...f, memorizePagePerDay: v }));
+                    }}
+                    className="h-8 text-sm"
+                  />
+                  <span className="text-xs text-muted-foreground whitespace-nowrap">pages/day</span>
+                </div>
+              </div>
+
+              {/* Review picker */}
+              <div className="space-y-2">
+                <p className="text-sm font-medium">Daily review amount</p>
+                <div className="flex flex-wrap gap-2">
+                  {[
+                    { value: 1.0,  label: "~1 page",   desc: "Light" },
+                    { value: 2.0,  label: "~2 pages",  desc: "Regular" },
+                    { value: 4.0,  label: "~4 pages",  desc: "Strong" },
+                    { value: 10.0, label: "10 pages",  desc: "Intensive" },
+                    { value: 20.0, label: "20 pages",  desc: "Hafidh pace" },
+                  ].map(opt => (
+                    <button
+                      key={opt.value}
+                      onClick={() => setForm(f => ({ ...f, reviewPagesPerDay: opt.value }))}
+                      className={cn(
+                        "px-3 py-2 rounded-full border text-left transition-all text-sm",
+                        form.reviewPagesPerDay === opt.value
+                          ? "border-primary bg-primary/10 text-primary font-semibold"
+                          : "border-border hover:bg-muted/50"
+                      )}
+                    >
+                      <span className="font-semibold">{opt.label}</span>
+                      <span className="text-muted-foreground text-xs ml-1">· {opt.desc}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <p className="text-xs text-muted-foreground bg-muted/50 rounded-lg px-3 py-2">
+                Don't worry — you can always change this in Settings later.
+              </p>
 
               {/* Summary */}
               <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 space-y-1">
@@ -685,6 +777,8 @@ export default function Home() {
                   {form.preMemorizedSurahIds.length === 0 ? "Starting fresh" : `${form.preMemorizedSurahIds.length} surah${form.preMemorizedSurahIds.length > 1 ? "s" : ""}`}
                 </span></p>
                 <p className="text-sm"><span className="text-muted-foreground">Daily practice:</span> <span className="font-medium">{form.practiceMinutesPerDay} min/day</span></p>
+                <p className="text-sm"><span className="text-muted-foreground">New memorization:</span> <span className="font-medium">{form.memorizePagePerDay} page{form.memorizePagePerDay !== 1 ? "s" : ""}/day</span></p>
+                <p className="text-sm"><span className="text-muted-foreground">Daily review:</span> <span className="font-medium">{form.reviewPagesPerDay} page{form.reviewPagesPerDay !== 1 ? "s" : ""}/day</span></p>
               </div>
             </div>
           )}
@@ -705,7 +799,7 @@ export default function Home() {
               }
             >
               {createMutation.isPending ? "Creating..." :
-               step < 4 ? (
+               step < 5 ? (
                  <span className="flex items-center gap-1">Next <ChevronRight size={14} /></span>
                ) : (
                  "Start Their Journey ✨"
