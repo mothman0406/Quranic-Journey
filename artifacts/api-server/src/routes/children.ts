@@ -312,7 +312,9 @@ router.get("/children/:childId/dashboard", async (req, res) => {
   const randomDua = child.hideDuas ? null : DUAS[0];
 
   const memorizedCount = memorizedSurahIds.length;
-  const inProgressSurah = memProgress.find(m => m.status === "in_progress");
+  const inProgressSurah = nextSurahData
+    ? memProgress.find(m => m.status === "in_progress" && m.surahId === nextSurahData.id)
+    : undefined;
   const currentSurahName = inProgressSurah ? SURAHS.find(s => s.id === inProgressSurah.surahId)?.nameTransliteration : null;
 
   // Auto goals for dashboard teaser

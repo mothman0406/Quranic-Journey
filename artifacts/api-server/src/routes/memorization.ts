@@ -295,8 +295,15 @@ router.get("/children/:childId/reviews", async (req, res) => {
 
   const today = new Date().toISOString().split("T")[0];
 
-  const allReviews = await db.select().from(reviewScheduleTable)
+  const allReviewsRaw = await db.select().from(reviewScheduleTable)
     .where(eq(reviewScheduleTable.childId, childId));
+
+  const memProgress = await db.select({ surahId: memorizationProgressTable.surahId, status: memorizationProgressTable.status })
+    .from(memorizationProgressTable)
+    .where(eq(memorizationProgressTable.childId, childId));
+  const memorizedSurahIds = new Set(memProgress.filter(m => m.status === "memorized").map(m => m.surahId));
+
+  const allReviews = allReviewsRaw.filter(r => memorizedSurahIds.has(r.surahId));
 
   const formatReview = (r: typeof reviewScheduleTable.$inferSelect, isOverdue: boolean) => {
     const surah = SURAHS.find(s => s.id === r.surahId);
@@ -315,13 +322,13 @@ router.get("/children/:childId/reviews", async (req, res) => {
     };
   };
 
-  // Sort due items by actual Quran surah number ascending
+  // Sort by descending surah number (review from most recent back to earliest)
   const rawDueToday = allReviews
     .filter(r => r.dueDate <= today)
     .sort((a, b) => {
       const nA = SURAHS.find(s => s.id === a.surahId)?.number ?? 0;
       const nB = SURAHS.find(s => s.id === b.surahId)?.number ?? 0;
-      return nA - nB;
+      return nB - nA; // descending: 114, 113, 112...
     });
 
   // Walk through accumulating page budget
@@ -359,7 +366,15 @@ router.get("/children/:childId/reviews", async (req, res) => {
 
   const dueToday = withinBudget.map(r => formatReview(r, r.dueDate < today));
 
-  const upcomingFuture = allReviews.filter(r => r.dueDate > today).slice(0, 10).map(r => formatReview(r, false));
+  const upcomingFuture = allReviews
+    .filter(r => r.dueDate > today)
+    .sort((a, b) => {
+      const nA = SURAHS.find(s => s.id === a.surahId)?.number ?? 0;
+      const nB = SURAHS.find(s => s.id === b.surahId)?.number ?? 0;
+      return nB - nA;
+    })
+    .slice(0, 10)
+    .map(r => formatReview(r, false));
   const upcoming = [...overBudget.map(r => formatReview(r, r.dueDate < today)), ...upcomingFuture];
 
   res.json({ dueToday, upcoming, todayRange });
