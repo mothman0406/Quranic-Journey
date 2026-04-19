@@ -320,34 +320,57 @@ router.get("/children/:childId/dashboard", async (req, res) => {
   const storedGoals = child.goals ? JSON.parse(child.goals) : null;
   const activeGoals = storedGoals || autoGoals;
 
-  // Determine new memorization start position
+  // Determine new memorization target surah and start position.
+  // If a surah is in-progress and has remaining verses, continue from there.
+  // Otherwise fall to the next unmemorized surah.
+  let memorizationSurahData: typeof SURAHS[0] | undefined;
   let nextStartSurah: number;
   let nextStartAyah: number;
+
   if (inProgressSurah) {
     const inProgData = SURAHS.find(s => s.id === inProgressSurah.surahId);
-    nextStartSurah = inProgData?.number ?? (nextSurahData?.number ?? 1);
-    nextStartAyah = inProgressSurah.versesMemorized + 1;
+    if (inProgData && inProgressSurah.versesMemorized < inProgData.verseCount) {
+      memorizationSurahData = inProgData;
+      nextStartSurah = inProgData.number;
+      nextStartAyah = inProgressSurah.versesMemorized + 1;
+    } else {
+      memorizationSurahData = nextSurahData;
+      nextStartSurah = nextSurahData?.number ?? 1;
+      nextStartAyah = 1;
+    }
   } else {
+    memorizationSurahData = nextSurahData;
     nextStartSurah = nextSurahData?.number ?? 1;
     nextStartAyah = 1;
   }
-  const memTarget = nextSurahData
+
+  const memTarget = memorizationSurahData
     ? resolvePageTarget(nextStartSurah, nextStartAyah, child.memorizePagePerDay)
     : null;
 
   const todaysPlan = {
     date: today,
-    newMemorization: nextSurahData && memTarget ? {
-      surahName: nextSurahData.nameTransliteration,
-      surahNumber: nextSurahData.number,
-      surahNameArabic: nextSurahData.nameArabic,
-      ayahStart: nextStartAyah,
-      ayahEnd: memTarget.endAyah,
-      pageStart: getPageForVerse(nextStartSurah, nextStartAyah),
-      pageEnd: getPageForVerse(memTarget.endSurah, memTarget.endAyah),
-      snapReason: memTarget.snapReason,
-      estimatedMinutes: 10
-    } : null,
+    newMemorization: memorizationSurahData && memTarget ? (() => {
+      // endSurah may differ from startSurah (page target crossed a surah boundary).
+      // Find the display name for the end position.
+      const endSurahData = SURAHS.find(s => s.number === memTarget.endSurah) ?? memorizationSurahData;
+      const isSameSurah = memTarget.endSurah === nextStartSurah;
+      return {
+        surahName: isSameSurah
+          ? memorizationSurahData.nameTransliteration
+          : `${memorizationSurahData.nameTransliteration} – ${endSurahData?.nameTransliteration ?? ''}`,
+        surahNumber: memorizationSurahData.number,
+        surahNameArabic: memorizationSurahData.nameArabic,
+        ayahStart: nextStartAyah,
+        // Cap endAyah to actual last verse of endSurah
+        ayahEnd: Math.min(memTarget.endAyah, endSurahData?.verseCount ?? memTarget.endAyah),
+        endSurahNumber: memTarget.endSurah,
+        pageStart: getPageForVerse(nextStartSurah, nextStartAyah),
+        pageEnd: getPageForVerse(memTarget.endSurah, memTarget.endAyah),
+        snapReason: memTarget.snapReason,
+        estimatedMinutes: 10
+      };
+    })() : null,
     reviewSessions: dueReviews.slice(0, 3).map(r => {
       const surah = SURAHS.find(s => s.id === r.surahId);
       return { surahName: surah?.nameTransliteration || "Unknown", surahNumber: surah?.number || 0, ayahCount: surah?.verseCount || 0 };
