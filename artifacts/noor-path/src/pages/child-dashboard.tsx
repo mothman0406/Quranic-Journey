@@ -129,7 +129,7 @@ export default function ChildDashboard() {
                       <p className="text-sm font-medium text-foreground">Review Session</p>
                       <div className="flex items-center gap-1.5 flex-wrap">
                         {reviewsData !== undefined && todayProgress?.reviewCompletedCount != null && todayProgress.reviewCompletedCount > 0 ? (
-                          <p className="text-xs text-muted-foreground">{todayProgress.reviewCompletedCount}/{(reviewsData.dueToday?.length ?? 0) + todayProgress.reviewCompletedCount} surahs done</p>
+                          <p className="text-xs text-muted-foreground">{todayProgress.reviewCompletedCount}/{reviewsData.dueToday?.length === 0 ? todayProgress.reviewCompletedCount : (reviewsData.dueToday?.length ?? 0) + todayProgress.reviewCompletedCount} surahs done</p>
                         ) : (
                           <p className="text-xs text-muted-foreground">{reviewsDueToday} surah{reviewsDueToday > 1 ? "s" : ""} to review today</p>
                         )}

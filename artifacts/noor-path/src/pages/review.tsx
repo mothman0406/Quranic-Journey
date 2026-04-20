@@ -556,7 +556,7 @@ export default function ReviewPage() {
                 {(() => {
                   const persistedDone = todayProgress?.reviewCompletedCount ?? 0;
                   const sessionDoneCount = completedCount > 0 ? completedCount : persistedDone;
-                  const sessionTotal = completedCount > 0
+                  const sessionTotal = (sessionDone || completedCount > 0)
                     ? sessionTotalRef.current
                     : (persistedDone + dueToday.length);
                   return sessionDoneCount > 0 || persistedDone > 0
@@ -606,7 +606,7 @@ export default function ReviewPage() {
                   </CardContent>
                 </Card>
               )}
-              {pendingItems.map((item) => {
+              {!sessionDone && pendingItems.map((item) => {
                 const idx = dueToday.indexOf(item);
                 return (
                   <Card
