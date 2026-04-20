@@ -466,8 +466,46 @@ router.get("/children/:childId/reviews", async (req, res) => {
     return formatReview(r, false, mem ? isWeak(mem) : false);
   });
 
-  const reviewedToday = reviewableWithSchedule
-    .filter(x => x.schedule.lastReviewed != null && localDateStr(x.schedule.lastReviewed) === today)
+  // reviewedToday = only surahs reviewed today that belong to THIS budget session.
+  // Simulate the same budget logic on (reviewed-today candidates + withinBudget) combined
+  // so that surahs from earlier sessions or prior days don't bleed in.
+  const withinBudgetIds = new Set(withinBudget.map(r => r.surahId));
+
+  const reviewedTodayCandidates = reviewableWithSchedule.filter(x =>
+    x.schedule.lastReviewed != null &&
+    localDateStr(x.schedule.lastReviewed) === today
+  );
+
+  const sessionCoveredPages = new Set<number>();
+  const sessionSurahIds = new Set<number>();
+
+  // Process reviewed-today first (they were reviewed earlier in the session),
+  // then still-pending withinBudget entries — dedup by surahId
+  const allSessionCandidates = [
+    ...reviewedTodayCandidates,
+    ...reviewableWithSchedule.filter(x => withinBudgetIds.has(x.schedule.surahId)),
+  ];
+
+  for (const { schedule: r } of allSessionCandidates) {
+    if (sessionSurahIds.has(r.surahId)) continue;
+    const surah = SURAHS.find(s => s.id === r.surahId);
+    if (!surah) { sessionSurahIds.add(r.surahId); continue; }
+    const startPage = getPageForVerse(surah.number, 1);
+    const endPage = getPageForVerse(surah.number, surah.verseCount);
+    const surahPages = new Set<number>();
+    for (let p = startPage; p <= endPage; p++) surahPages.add(p);
+    const newPagesForSession = [...surahPages].filter(p => !sessionCoveredPages.has(p));
+    const currentUnder = reviewBudget - sessionCoveredPages.size;
+    const wouldBeOver = (sessionCoveredPages.size + newPagesForSession.length) - reviewBudget;
+    const fits = sessionCoveredPages.size < reviewBudget || newPagesForSession.length === 0 || wouldBeOver <= currentUnder;
+    if (fits) {
+      newPagesForSession.forEach(p => sessionCoveredPages.add(p));
+      sessionSurahIds.add(r.surahId);
+    }
+  }
+
+  const reviewedToday = reviewedTodayCandidates
+    .filter(x => sessionSurahIds.has(x.schedule.surahId))
     .map(x => {
       const mem = memProgress.find(m => m.surahId === x.schedule.surahId);
       return formatReview(x.schedule, false, mem ? isWeak(mem) : false);
