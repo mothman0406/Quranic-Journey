@@ -1,6 +1,6 @@
 import { useParams, Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
-import { getChildDashboard } from "@workspace/api-client-react";
+import { getChildDashboard, listReviews } from "@workspace/api-client-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -17,6 +17,12 @@ export default function ChildDashboard() {
     queryFn: () => getChildDashboard(parseInt(childId))
   });
 
+  const { data: reviewsData } = useQuery({
+    queryKey: ["reviews", childId],
+    queryFn: () => listReviews(parseInt(childId)),
+    staleTime: 60_000
+  });
+
   if (isLoading) {
     return (
       <div className="min-h-screen bg-background">
@@ -29,7 +35,8 @@ export default function ChildDashboard() {
   }
 
   if (!data) return null;
-  const { child, todaysPlan, memorizationStats, reviewsDueToday, achievements, nextSurah } = data;
+  const { child, todaysPlan, memorizationStats, achievements, nextSurah } = data;
+  const reviewsDueToday = reviewsData?.dueToday?.length ?? data.reviewsDueToday;
   type TodayProgress = {
     memStatus: "not_started" | "in_progress" | "completed";
     reviewStatus: "not_started" | "in_progress" | "completed";
