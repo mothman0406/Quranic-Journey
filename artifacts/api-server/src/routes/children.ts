@@ -389,7 +389,7 @@ router.get("/children/:childId/dashboard", async (req, res) => {
       memTargetAyahStart: nextStartAyah,
       memTargetAyahEnd: memTarget?.endAyah ?? null,
       memStatus: 'not_started',
-      reviewTargetCount: dueReviews.length,
+      reviewTargetCount: null,
       reviewCompletedCount: 0,
       reviewStatus: 'not_started',
     }).returning();
