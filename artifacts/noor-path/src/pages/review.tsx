@@ -282,6 +282,7 @@ export default function ReviewPage() {
   const [completedSurahIds, setCompletedSurahIds] = useState<Set<number>>(new Set());
   const [completedItemsData, setCompletedItemsData] = useState<Array<{surahId: number; surahName: string | null | undefined; surahNumber: number}>>([]);
   const sessionTotalRef = useRef<number>(0);
+  const sessionSurahsRef = useRef<typeof dueToday | null>(null);
   const dueTodayRef = useRef<{surahId: number; surahName: string | null | undefined; surahNumber: number}[]>([]);
   const qc = useQueryClient();
 
@@ -300,13 +301,15 @@ export default function ReviewPage() {
   const dueToday = data?.dueToday ?? [];
   dueTodayRef.current = dueToday;
 
-  // Capture session total once when data first arrives
-  if (data && sessionTotalRef.current === 0 && dueToday.length > 0) {
+  // Freeze session list on first load — never changes during the session regardless of refetches
+  if (data && sessionSurahsRef.current === null && dueToday.length > 0) {
+    sessionSurahsRef.current = dueToday;
     sessionTotalRef.current = dueToday.length;
   }
+  const sessionSurahs = sessionSurahsRef.current ?? dueToday;
 
   // Fetch current flashcard surah if in flashcard mode
-  const flashcardItem = flashcardIndex !== null ? dueToday[flashcardIndex] : null;
+  const flashcardItem = flashcardIndex !== null ? sessionSurahs[flashcardIndex] : null;
   const { data: flashcardSurahData } = useQuery({
     queryKey: ["surah", flashcardItem?.surahId],
     queryFn: () => getSurah(flashcardItem!.surahId),
@@ -393,7 +396,7 @@ export default function ReviewPage() {
               <div>
                 <h1 className="text-xl font-bold">Flashcard Review</h1>
                 <p className="text-emerald-200 text-sm mt-1">
-                  {flashcardIndex + 1} of {dueToday.length} · {dueToday.length - flashcardIndex - 1} remaining
+                  {flashcardIndex + 1} of {sessionTotalRef.current} · {sessionTotalRef.current - flashcardIndex - 1} remaining
                 </p>
               </div>
               <div className="w-14 h-14 rounded-full bg-white/15 border border-white/20 flex items-center justify-center">
@@ -521,7 +524,7 @@ export default function ReviewPage() {
   }
 
   // ── Genuinely no reviews today (not just all completed this session) ──
-  if (!sessionDone && dueToday.length === 0 && completedItemsData.length === 0 && ((data as any)?.reviewedToday ?? []).length === 0) {
+  if (!sessionDone && data !== undefined && sessionSurahs.length === 0 && completedItemsData.length === 0) {
     return (
       <div className="min-h-screen bg-background pb-24 flex flex-col items-center justify-center px-4">
         <div className="text-center max-w-sm">
@@ -553,16 +556,10 @@ export default function ReviewPage() {
             <div>
               <h1 className="text-xl font-bold">Review Session</h1>
               <p className="text-emerald-200 text-sm mt-1">
-                {(() => {
-                  const persistedDone = todayProgress?.reviewCompletedCount ?? 0;
-                  const sessionDoneCount = completedCount > 0 ? completedCount : persistedDone;
-                  const sessionTotal = (sessionDone || completedCount > 0)
-                    ? sessionTotalRef.current
-                    : (persistedDone + dueToday.length);
-                  return sessionDoneCount > 0 || persistedDone > 0
-                    ? `${sessionDoneCount}/${sessionTotal} surahs done`
-                    : `${dueToday.length} surah${dueToday.length !== 1 ? "s" : ""} due today`;
-                })()}
+                {completedCount > 0 || sessionDone
+                  ? `${completedCount}/${sessionTotalRef.current} surahs done`
+                  : `${sessionSurahs.length} surah${sessionSurahs.length !== 1 ? "s" : ""} due today`
+                }
               </p>
             </div>
             <div className="w-14 h-14 rounded-full bg-white/15 border border-white/20 flex items-center justify-center">
@@ -575,25 +572,8 @@ export default function ReviewPage() {
       <div className="max-w-lg mx-auto px-4 -mt-6 space-y-3">
         {/* Due today cards */}
         {(() => {
-          // Surahs reviewed today from the server (persists across refreshes)
-          const serverReviewedToday: typeof dueToday = (data as any)?.reviewedToday ?? [];
-          // Combined done set: server-persisted + in-session completions not yet refetched
-          const doneSuprahIdSet = new Set([
-            ...serverReviewedToday.map((r: any) => r.surahId as number),
-            ...completedSurahIds,
-          ]);
-          // Pending = still in dueToday and not done
-          const pendingItems = dueToday.filter(item => !doneSuprahIdSet.has(item.surahId));
-          // Done rows = server-reviewed (deduped by surahId)
-          const seenDone = new Set<number>();
-          const doneItems = [
-            ...serverReviewedToday,
-            ...completedItemsData.filter(item => !serverReviewedToday.some((r: any) => r.surahId === item.surahId)),
-          ].filter((item: any) => {
-            if (seenDone.has(item.surahId)) return false;
-            seenDone.add(item.surahId);
-            return true;
-          });
+          // Use frozen session snapshot — immune to refetch changes
+          const pendingItems = sessionSurahs.filter(item => !completedSurahIds.has(item.surahId));
 
           return (
             <>
@@ -607,7 +587,7 @@ export default function ReviewPage() {
                 </Card>
               )}
               {!sessionDone && pendingItems.map((item) => {
-                const idx = dueToday.indexOf(item);
+                const idx = sessionSurahs.indexOf(item);
                 return (
                   <Card
                     key={item.id}
@@ -660,7 +640,7 @@ export default function ReviewPage() {
                   </Card>
                 );
               })}
-              {doneItems.map((item: any) => (
+              {completedItemsData.map((item) => (
                 <div
                   key={`done-${item.surahId}`}
                   className="flex items-center gap-3 px-4 py-2.5 rounded-xl bg-emerald-50 border border-emerald-200"
