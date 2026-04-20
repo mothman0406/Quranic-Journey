@@ -475,9 +475,18 @@ export default function MemorizationPage() {
   const filteredProgress = (() => {
     if (filter === "all") return progress;
     if (filter === "today") {
-      const targetNum = todayProgress?.memTargetSurah ?? newMem?.surahNumber;
-      if (targetNum == null) return [];
-      return progress.filter(p => surahs.find(s => s.id === p.surahId)?.number === targetNum);
+      const primaryNum = todayProgress?.memTargetSurah ?? newMem?.surahNumber;
+      if (primaryNum == null) return [];
+      const endNum = newMem?.endSurahNumber;
+      if (endNum != null && endNum !== primaryNum) {
+        const lo = Math.min(primaryNum, endNum);
+        const hi = Math.max(primaryNum, endNum);
+        return progress.filter(p => {
+          const num = surahs.find(s => s.id === p.surahId)?.number;
+          return num != null && num >= lo && num <= hi;
+        });
+      }
+      return progress.filter(p => surahs.find(s => s.id === p.surahId)?.number === primaryNum);
     }
     return progress.filter(p => p.status === filter);
   })();
@@ -531,40 +540,30 @@ export default function MemorizationPage() {
         {/* 3-card row: Today's Work | Current Work | Next Up */}
         {newMem && (
           <div className="grid grid-cols-3 gap-2">
-            {/* Card 1: Today's Work — full assignment range */}
-            <Card className={cn(
-              "border",
-              todayMemStatus === "completed"
-                ? "border-emerald-500/40 bg-emerald-50/60"
-                : "border-primary/30 bg-primary/5"
-            )}>
-              <CardContent className="p-2.5 flex flex-col gap-1 min-h-[110px]">
-                <p className={cn(
-                  "text-[10px] font-semibold leading-none",
-                  todayMemStatus === "completed" ? "text-emerald-700" : "text-primary"
-                )}>
-                  {todayMemStatus === "completed" ? "✓ Done" : todayMemStatus === "in_progress" ? "In Progress" : "Today's Work"}
-                </p>
-                <p className="text-xs font-semibold text-foreground leading-tight line-clamp-2 mt-0.5">
-                  {newMem.surahName}
-                </p>
-                {newMem.pageStart !== undefined && (
-                  <p className="text-[10px] text-muted-foreground">Page {newMem.pageStart}</p>
-                )}
-                <div className="mt-auto pt-1.5">
-                  <Link href={`/child/${childId}/quran-memorize?surah=${newMem.surahNumber}&mode=mushaf&fromAyah=${newMem.ayahStart}&toAyah=${newMem.ayahEnd}`}>
-                    <button className={cn(
-                      "flex items-center justify-center gap-0.5 text-[10px] font-medium px-2 py-1 rounded-full w-full whitespace-nowrap",
-                      todayMemStatus === "completed"
-                        ? "bg-emerald-500/15 text-emerald-700"
-                        : "bg-primary text-white"
-                    )}>
-                      <BookOpen size={9} /> Mushaf
-                    </button>
-                  </Link>
-                </div>
-              </CardContent>
-            </Card>
+            {/* Card 1: Today's Work — full assignment range, informational, taps into mushaf at first verse */}
+            <Link href={`/child/${childId}/quran-memorize?surah=${newMem.surahNumber}&mode=mushaf&fromAyah=${newMem.ayahStart}&toAyah=${newMem.ayahEnd}`}>
+              <Card className={cn(
+                "border cursor-pointer transition-opacity hover:opacity-80",
+                todayMemStatus === "completed"
+                  ? "border-emerald-500/40 bg-emerald-50/60"
+                  : "border-primary/30 bg-primary/5"
+              )}>
+                <CardContent className="p-2.5 flex flex-col gap-1 min-h-[110px]">
+                  <p className={cn(
+                    "text-[10px] font-semibold leading-none",
+                    todayMemStatus === "completed" ? "text-emerald-700" : "text-primary"
+                  )}>
+                    {todayMemStatus === "completed" ? "✓ Done" : todayMemStatus === "in_progress" ? "In Progress" : "Today's Work"}
+                  </p>
+                  <p className="text-xs font-semibold text-foreground leading-tight line-clamp-2 mt-0.5">
+                    {newMem.surahName}
+                  </p>
+                  {newMem.pageStart !== undefined && (
+                    <p className="text-[10px] text-muted-foreground">Page {newMem.pageStart}</p>
+                  )}
+                </CardContent>
+              </Card>
+            </Link>
 
             {/* Card 2: Current Work — first surah to study (highest number = learned first) */}
             <Card className="border-amber-200/70 bg-amber-50/40">
@@ -576,7 +575,7 @@ export default function MemorizationPage() {
                 <p className="text-[10px] text-muted-foreground">
                   Ay {newMem.currentWorkAyahStart ?? newMem.ayahStart}–{newMem.currentWorkAyahEnd ?? newMem.ayahEnd}
                 </p>
-                <div className="mt-auto pt-1.5">
+                <div className="mt-auto pt-1.5 flex flex-col gap-1">
                   <button
                     onClick={() => {
                       if (currentWorkSurahId !== undefined) {
@@ -588,6 +587,11 @@ export default function MemorizationPage() {
                   >
                     <ListOrdered size={9} /> Ayah by Ayah
                   </button>
+                  <Link href={`/child/${childId}/quran-memorize?surah=${newMem.currentWorkSurahNumber ?? newMem.surahNumber}&mode=mushaf&fromAyah=${newMem.currentWorkAyahStart ?? newMem.ayahStart}&toAyah=${newMem.currentWorkAyahEnd ?? newMem.ayahEnd}`}>
+                    <button className="flex items-center justify-center gap-0.5 text-[10px] text-amber-700 font-medium border border-amber-300 bg-amber-50/60 px-2 py-1 rounded-full w-full whitespace-nowrap">
+                      <BookOpen size={9} /> Mushaf
+                    </button>
+                  </Link>
                 </div>
               </CardContent>
             </Card>
@@ -601,13 +605,18 @@ export default function MemorizationPage() {
                     <p className="text-xs font-semibold text-foreground leading-tight mt-0.5">{upNextMem.surahName}</p>
                     <p className="text-[10px] text-muted-foreground">{upNextMem.ayahEnd} verses</p>
                     {upNextSurahId !== undefined && (
-                      <div className="mt-auto pt-1.5">
+                      <div className="mt-auto pt-1.5 flex flex-col gap-1">
                         <button
-                          onClick={() => { setStudyingInitialAyah(0); setStudyingSurahId(upNextSurahId); }}
+                          onClick={() => { setStudyingInitialAyah(upNextMem!.ayahStart - 1); setStudyingSurahId(upNextSurahId); }}
                           className="flex items-center justify-center gap-0.5 text-[10px] text-muted-foreground font-medium border border-border px-2 py-1 rounded-full w-full whitespace-nowrap"
                         >
-                          <BookOpen size={9} /> Preview
+                          <ListOrdered size={9} /> Ayah by Ayah
                         </button>
+                        <Link href={`/child/${childId}/quran-memorize?surah=${upNextMem!.surahNumber}&mode=mushaf&fromAyah=${upNextMem!.ayahStart}&toAyah=${upNextMem!.ayahEnd}`}>
+                          <button className="flex items-center justify-center gap-0.5 text-[10px] text-muted-foreground font-medium border border-border bg-muted/30 px-2 py-1 rounded-full w-full whitespace-nowrap">
+                            <BookOpen size={9} /> Mushaf
+                          </button>
+                        </Link>
                       </div>
                     )}
                   </>
