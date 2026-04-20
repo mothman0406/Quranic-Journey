@@ -553,14 +553,18 @@ export default function MemorizationPage() {
                     "text-[10px] font-semibold leading-none",
                     todayMemStatus === "completed" ? "text-emerald-700" : "text-primary"
                   )}>
-                    {todayMemStatus === "completed" ? "✓ Done" : todayMemStatus === "in_progress" ? "In Progress" : "Today's Work"}
+                    Today's Work
                   </p>
                   <p className="text-xs font-semibold text-foreground leading-tight line-clamp-2 mt-0.5">
                     {newMem.surahName}
                   </p>
-                  {newMem.pageStart !== undefined && (
+                  {todayMemStatus === "completed" ? (
+                    <p className="text-[10px] text-emerald-700">✓ Done</p>
+                  ) : todayMemStatus === "in_progress" ? (
+                    <p className="text-[10px] text-primary">In Progress</p>
+                  ) : newMem.pageStart !== undefined ? (
                     <p className="text-[10px] text-muted-foreground">Page {newMem.pageStart}</p>
-                  )}
+                  ) : null}
                 </CardContent>
               </Card>
             </Link>
