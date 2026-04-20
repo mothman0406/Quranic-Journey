@@ -381,7 +381,7 @@ function AyahCircles({
 
 export default function MemorizationPage() {
   const { childId } = useParams<{ childId: string }>();
-  const [filter, setFilter] = useState<"all" | "memorized" | "in_progress" | "not_started">("all");
+  const [filter, setFilter] = useState<"all" | "memorized" | "in_progress" | "not_started" | "today">("all");
   const [expandedSurahId, setExpandedSurahId] = useState<number | null>(null);
   const [studyingSurahId, setStudyingSurahId] = useState<number | null>(null);
   const [studyingInitialAyah, setStudyingInitialAyah] = useState(0);
@@ -437,14 +437,41 @@ export default function MemorizationPage() {
   const nextSurah = dashboard?.nextSurah;
 
   type NewMemExt = { surahName: string; surahNumber?: number; ayahStart: number; ayahEnd: number; pageStart?: number };
+  type TodayProgress = {
+    memStatus: "not_started" | "in_progress" | "completed";
+    memTargetSurah: number | null;
+    memTargetAyahStart: number | null;
+    memTargetAyahEnd: number | null;
+    memCompletedAyahEnd: number | null;
+    reviewStatus: "not_started" | "in_progress" | "completed";
+    reviewTargetCount: number | null;
+    reviewCompletedCount: number;
+  };
   const newMem = dashboard?.todaysPlan?.newMemorization as NewMemExt | undefined;
+  const todayProgress = (dashboard as { todayProgress?: TodayProgress } | undefined)?.todayProgress;
+  const todayMemStatus = todayProgress?.memStatus ?? "not_started";
   const todaysSurahId = newMem?.surahNumber
     ? surahs.find(s => s.number === newMem.surahNumber)?.id
     : nextSurah?.id;
-  const showUpNext = !!nextSurah && newMem?.surahNumber !== undefined && nextSurah.number !== newMem.surahNumber;
+  const showUpNext = !!nextSurah && (
+    todayMemStatus === "completed" ||
+    (newMem?.surahNumber !== undefined && nextSurah.number !== newMem.surahNumber)
+  );
 
-  const filteredProgress =
-    filter === "all" ? progress : progress.filter((p) => p.status === filter);
+  const memStart = todayProgress?.memTargetAyahStart ?? newMem?.ayahStart ?? 1;
+  const memEnd = todayProgress?.memTargetAyahEnd ?? newMem?.ayahEnd ?? 1;
+  const memDone = todayProgress?.memCompletedAyahEnd ?? memStart - 1;
+  const memPct = memEnd > memStart ? ((memDone - memStart + 1) / (memEnd - memStart + 1)) * 100 : 0;
+
+  const filteredProgress = (() => {
+    if (filter === "all") return progress;
+    if (filter === "today") {
+      const targetNum = todayProgress?.memTargetSurah ?? newMem?.surahNumber;
+      if (targetNum == null) return [];
+      return progress.filter(p => surahs.find(s => s.id === p.surahId)?.number === targetNum);
+    }
+    return progress.filter(p => p.status === filter);
+  })();
 
   const memorizedCount = progress.filter((p) => p.status === "memorized").length;
   const totalVerses = progress.reduce((s, p) => s + p.versesMemorized, 0);
@@ -494,26 +521,58 @@ export default function MemorizationPage() {
       <div className="max-w-lg mx-auto px-4 pt-4 space-y-4">
         {/* Today's Work banner */}
         {newMem && (
-          <Card className="border-primary/30 bg-primary/5">
+          <Card className={cn(
+            "border",
+            todayMemStatus === "completed"
+              ? "border-emerald-500/40 bg-emerald-50/60"
+              : "border-primary/30 bg-primary/5"
+          )}>
             <CardContent className="p-3">
               <div className="flex items-center justify-between gap-2">
                 <div className="flex items-center gap-3 min-w-0">
-                  <div className="w-9 h-9 rounded-xl bg-primary/15 flex items-center justify-center text-xs font-bold text-primary shrink-0">
+                  <div className={cn(
+                    "w-9 h-9 rounded-xl flex items-center justify-center text-xs font-bold shrink-0",
+                    todayMemStatus === "completed"
+                      ? "bg-emerald-500/15 text-emerald-700"
+                      : "bg-primary/15 text-primary"
+                  )}>
                     {newMem.surahNumber}
                   </div>
-                  <div className="min-w-0">
+                  <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-1.5">
-                      <p className="text-xs font-semibold text-primary">Today's Work</p>
-                      {newMem.pageStart !== undefined && (
-                        <span className="text-xs text-muted-foreground">· Page {newMem.pageStart}</span>
+                      {todayMemStatus === "completed" ? (
+                        <p className="text-xs font-semibold text-emerald-700">Today's Work · ✓ Completed</p>
+                      ) : todayMemStatus === "in_progress" ? (
+                        <p className="text-xs font-semibold text-primary">Today's Work · In Progress</p>
+                      ) : (
+                        <>
+                          <p className="text-xs font-semibold text-primary">Today's Work</p>
+                          {newMem.pageStart !== undefined && (
+                            <span className="text-xs text-muted-foreground">· Page {newMem.pageStart}</span>
+                          )}
+                        </>
                       )}
                     </div>
-                    <p className="text-sm font-medium text-foreground truncate">
-                      {newMem.surahName} · Ayah {newMem.ayahStart}–{newMem.ayahEnd}
-                    </p>
+                    {todayMemStatus === "in_progress" ? (
+                      <>
+                        <p className="text-sm font-medium text-foreground truncate">
+                          {newMem.surahName} · Ayah {newMem.ayahStart}–{todayProgress?.memCompletedAyahEnd ?? newMem.ayahStart} done of {newMem.ayahStart}–{newMem.ayahEnd}
+                        </p>
+                        <div className="mt-1.5 h-1.5 w-full bg-muted rounded-full overflow-hidden">
+                          <div
+                            className="h-full bg-emerald-500 rounded-full transition-all"
+                            style={{ width: `${Math.max(0, Math.min(100, memPct))}%` }}
+                          />
+                        </div>
+                      </>
+                    ) : (
+                      <p className="text-sm font-medium text-foreground truncate">
+                        {newMem.surahName} · Ayah {newMem.ayahStart}–{newMem.ayahEnd}
+                      </p>
+                    )}
                   </div>
                 </div>
-                <div className="flex gap-2 shrink-0">
+                <div className={cn("flex gap-2 shrink-0", todayMemStatus === "completed" && "opacity-50")}>
                   <button
                     onClick={() => {
                       if (todaysSurahId !== undefined) {
@@ -568,7 +627,7 @@ export default function MemorizationPage() {
 
         {/* Filter tabs */}
         <div className="bg-white rounded-2xl border border-border p-1 flex gap-1 shadow-sm overflow-x-auto">
-          {(["all", "not_started", "in_progress", "memorized"] as const).map((f) => (
+          {(["all", "today", "not_started", "in_progress", "memorized"] as const).map((f) => (
             <button
               key={f}
               onClick={() => setFilter(f)}
@@ -579,12 +638,10 @@ export default function MemorizationPage() {
                   : "text-muted-foreground hover:text-foreground"
               )}
             >
-              {f === "all"
-                ? "All"
-                : f === "not_started"
-                ? "Not Started"
-                : f === "in_progress"
-                ? "In Progress"
+              {f === "all" ? "All"
+                : f === "today" ? "Today"
+                : f === "not_started" ? "Not Started"
+                : f === "in_progress" ? "In Progress"
                 : "Memorized"}
             </button>
           ))}

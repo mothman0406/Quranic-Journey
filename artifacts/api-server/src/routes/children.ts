@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { db } from "@workspace/db";
-import { childrenTable, memorizationProgressTable, reviewScheduleTable, learningSessionsTable, childDuasTable } from "@workspace/db/schema";
+import { childrenTable, memorizationProgressTable, reviewScheduleTable, learningSessionsTable, childDuasTable, dailyProgressTable } from "@workspace/db/schema";
 import { eq, desc, and, lte } from "drizzle-orm";
 import { SURAHS } from "../data/surahs.js";
 import { resolvePageTarget, getPageForVerse } from "../data/quran-meta.js";
@@ -104,6 +104,11 @@ function getAchievements(child: typeof childrenTable.$inferSelect, memProgress: 
       target: 100
     }
   ];
+}
+
+async function ownsChild(parentId: string, childId: number): Promise<boolean> {
+  const [child] = await db.select({ parentId: childrenTable.parentId }).from(childrenTable).where(eq(childrenTable.id, childId));
+  return !!child && child.parentId === parentId;
 }
 
 function generateAutoGoals(child: typeof childrenTable.$inferSelect, memorizedCount: number, practiceMinutes: number) {
@@ -286,7 +291,8 @@ router.get("/children/:childId/dashboard", async (req, res) => {
   if (child.parentId !== req.user.id) { res.status(403).json({ error: "Forbidden" }); return; }
 
   const memProgress = await db.select().from(memorizationProgressTable).where(eq(memorizationProgressTable.childId, childId));
-  const today = new Date().toISOString().split("T")[0];
+  const _d = new Date();
+  const today = `${_d.getFullYear()}-${String(_d.getMonth()+1).padStart(2,'0')}-${String(_d.getDate()).padStart(2,'0')}`;
 
   const dueReviews = await db.select().from(reviewScheduleTable).where(
     and(eq(reviewScheduleTable.childId, childId), lte(reviewScheduleTable.dueDate, today))
@@ -372,6 +378,23 @@ router.get("/children/:childId/dashboard", async (req, res) => {
     ? resolvePageTarget(nextStartSurah, nextStartAyah, child.memorizePagePerDay)
     : null;
 
+  let [todayProgress] = await db.select().from(dailyProgressTable)
+    .where(and(eq(dailyProgressTable.childId, childId), eq(dailyProgressTable.date, today)));
+
+  if (!todayProgress) {
+    [todayProgress] = await db.insert(dailyProgressTable).values({
+      childId,
+      date: today,
+      memTargetSurah: nextStartSurah,
+      memTargetAyahStart: nextStartAyah,
+      memTargetAyahEnd: memTarget?.endAyah ?? null,
+      memStatus: 'not_started',
+      reviewTargetCount: dueReviews.length,
+      reviewCompletedCount: 0,
+      reviewStatus: 'not_started',
+    }).returning();
+  }
+
   const todaysPlan = {
     date: today,
     newMemorization: memorizationSurahData && memTarget ? (() => {
@@ -435,7 +458,17 @@ router.get("/children/:childId/dashboard", async (req, res) => {
       recommendedOrder: nextSurahData.recommendedOrder
     } : null,
     achievements: getAchievements(child, memProgress),
-    goals: activeGoals
+    goals: activeGoals,
+    todayProgress: {
+      memStatus: todayProgress.memStatus,
+      memTargetSurah: todayProgress.memTargetSurah,
+      memTargetAyahStart: todayProgress.memTargetAyahStart,
+      memTargetAyahEnd: todayProgress.memTargetAyahEnd,
+      memCompletedAyahEnd: todayProgress.memCompletedAyahEnd,
+      reviewStatus: todayProgress.reviewStatus,
+      reviewTargetCount: todayProgress.reviewTargetCount,
+      reviewCompletedCount: todayProgress.reviewCompletedCount,
+    }
   });
 });
 
@@ -553,6 +586,35 @@ router.delete("/children/:childId", async (req, res) => {
   await db.delete(childrenTable).where(eq(childrenTable.id, childId));
 
   res.status(204).send();
+});
+
+router.post("/children/:childId/daily-progress", async (req, res) => {
+  const childId = parseInt(req.params.childId);
+  if (!await ownsChild(req.user.id, childId)) { res.status(403).json({ error: "Forbidden" }); return; }
+  const _d = new Date();
+  const today = `${_d.getFullYear()}-${String(_d.getMonth()+1).padStart(2,'0')}-${String(_d.getDate()).padStart(2,'0')}`;
+  const { memStatus, memCompletedAyahEnd, reviewStatus, reviewCompletedCount } = req.body;
+  const updates: Record<string, unknown> = { updatedAt: new Date() };
+  if (memStatus) updates.memStatus = memStatus;
+  if (memCompletedAyahEnd != null) updates.memCompletedAyahEnd = memCompletedAyahEnd;
+  if (reviewStatus) updates.reviewStatus = reviewStatus;
+  if (reviewCompletedCount != null) updates.reviewCompletedCount = reviewCompletedCount;
+  let [row] = await db.select().from(dailyProgressTable)
+    .where(and(eq(dailyProgressTable.childId, childId), eq(dailyProgressTable.date, today)));
+  if (row) {
+    [row] = await db.update(dailyProgressTable).set(updates).where(eq(dailyProgressTable.id, row.id)).returning();
+  }
+  res.json(row);
+});
+
+router.get("/children/:childId/weekly-progress", async (req, res) => {
+  const childId = parseInt(req.params.childId);
+  if (!await ownsChild(req.user.id, childId)) { res.status(403).json({ error: "Forbidden" }); return; }
+  const rows = await db.select().from(dailyProgressTable)
+    .where(eq(dailyProgressTable.childId, childId))
+    .orderBy(desc(dailyProgressTable.date))
+    .limit(7);
+  res.json({ days: rows });
 });
 
 export default router;

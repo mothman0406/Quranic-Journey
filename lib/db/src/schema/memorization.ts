@@ -48,6 +48,24 @@ export const quranVersesTable = pgTable("quran_verses", {
 
 export type QuranVerse = typeof quranVersesTable.$inferSelect;
 
+export const dailyProgressTable = pgTable("daily_progress", {
+  id: serial("id").primaryKey(),
+  childId: integer("child_id").notNull(),
+  date: text("date").notNull(),
+  memTargetSurah: integer("mem_target_surah"),
+  memTargetAyahStart: integer("mem_target_ayah_start"),
+  memTargetAyahEnd: integer("mem_target_ayah_end"),
+  memCompletedAyahEnd: integer("mem_completed_ayah_end"),
+  memStatus: text("mem_status").notNull().default("not_started"),
+  reviewTargetCount: integer("review_target_count"),
+  reviewCompletedCount: integer("review_completed_count").notNull().default(0),
+  reviewStatus: text("review_status").notNull().default("not_started"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export type DailyProgress = typeof dailyProgressTable.$inferSelect;
+
 export const insertMemorizationSchema = createInsertSchema(memorizationProgressTable).omit({ id: true, createdAt: true, updatedAt: true });
 export type InsertMemorization = z.infer<typeof insertMemorizationSchema>;
 export type MemorizationProgress = typeof memorizationProgressTable.$inferSelect;

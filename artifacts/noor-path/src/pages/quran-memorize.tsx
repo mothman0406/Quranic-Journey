@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { CelebrationOverlay } from "@/components/celebration-overlay";
 import { useParams, Link, useSearch, useLocation } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { updateMemorization } from "@workspace/api-client-react";
+import { updateMemorization, getChildDashboard } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
@@ -2599,6 +2599,11 @@ export default function QuranMemorizePage() {
 
   const { settings } = useSettings();
 
+  const { data: dashboard } = useQuery({
+    queryKey: ["dashboard", childId],
+    queryFn: () => getChildDashboard(parseInt(childId)),
+  });
+
   const [phase, setPhase] = useState<"pick" | "setup" | "play" | "check">("pick");
   const [showReadyModal, setShowReadyModal] = useState(false);
   const [selectedChapter, setSelectedChapter] = useState<Chapter | null>(null);
@@ -2622,6 +2627,18 @@ export default function QuranMemorizePage() {
   const [toInput, setToInput] = useState(String(toAyah));
   useEffect(() => setFromInput(String(fromAyah)), [fromAyah]);
   useEffect(() => setToInput(String(toAyah)), [toAyah]);
+
+  const dailyProgressMutation = useMutation({
+    mutationFn: (body: { memStatus: string; memCompletedAyahEnd: number }) =>
+      fetch(`/api/children/${childId}/daily-progress`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["dashboard", childId] });
+    },
+  });
 
   const saveMutation = useMutation({
     mutationFn: (qualityRating: number) => {
@@ -2653,6 +2670,12 @@ export default function QuranMemorizePage() {
       const isComplete = toAyah >= selectedChapter!.verses_count;
       if (isComplete) {
         setCelebration({ message: "Surah Complete!", subMessage: "You've memorized the full surah!" });
+      }
+      // Update daily progress if user worked on today's target surah
+      const todayMem = dashboard?.todaysPlan?.newMemorization as { surahNumber?: number; ayahEnd?: number } | undefined;
+      if (todayMem?.surahNumber != null && selectedChapter?.id === todayMem.surahNumber) {
+        const memStatus = todayMem.ayahEnd != null && toAyah >= todayMem.ayahEnd ? "completed" : "in_progress";
+        dailyProgressMutation.mutate({ memStatus, memCompletedAyahEnd: toAyah });
       }
     },
     onError: (err) => {
