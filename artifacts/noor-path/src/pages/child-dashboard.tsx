@@ -12,6 +12,23 @@ import { Flame, Star, BookOpen, RefreshCw, ChevronLeft, Trophy, Heart, BookMarke
 export default function ChildDashboard() {
   const { childId } = useParams<{ childId: string }>();
 
+  const getTodayLocal = () => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  };
+  const reviewSession = (() => {
+    try {
+      const stored = localStorage.getItem(`child-${childId}-review-session`);
+      if (!stored) return null;
+      const parsed = JSON.parse(stored);
+      if (parsed.date !== getTodayLocal()) return null;
+      return parsed;
+    } catch { return null; }
+  })();
+  const reviewSessionDone = reviewSession?.sessionDone === true;
+  const reviewSessionTotal = reviewSession?.sessionTotal as number | undefined;
+  const reviewSessionCompleted = (reviewSession?.completedItemsData as any[] | undefined)?.length ?? 0;
+
   const { data, isLoading } = useQuery({
     queryKey: ["dashboard", childId],
     queryFn: () => getChildDashboard(parseInt(childId))
@@ -128,7 +145,9 @@ export default function ChildDashboard() {
                     <div className="flex-1">
                       <p className="text-sm font-medium text-foreground">Review Session</p>
                       <div className="flex items-center gap-1.5 flex-wrap">
-                        {reviewsData !== undefined && todayProgress?.reviewCompletedCount != null && todayProgress.reviewCompletedCount > 0 ? (
+                        {reviewSessionDone ? (
+                          <p className="text-xs text-muted-foreground">{reviewSessionTotal ?? reviewSessionCompleted}/{reviewSessionTotal ?? reviewSessionCompleted} surahs done</p>
+                        ) : reviewsData !== undefined && todayProgress?.reviewCompletedCount != null && todayProgress.reviewCompletedCount > 0 ? (
                           <p className="text-xs text-muted-foreground">{todayProgress.reviewCompletedCount}/{reviewsData.dueToday?.length === 0 ? todayProgress.reviewCompletedCount : (reviewsData.dueToday?.length ?? 0) + todayProgress.reviewCompletedCount} surahs done</p>
                         ) : (
                           <p className="text-xs text-muted-foreground">{reviewsDueToday} surah{reviewsDueToday > 1 ? "s" : ""} to review today</p>
@@ -138,7 +157,7 @@ export default function ChildDashboard() {
                         )}
                       </div>
                     </div>
-                    {todayProgress?.reviewStatus === "completed" ? (
+                    {reviewSessionDone || todayProgress?.reviewStatus === "completed" ? (
                       <span className="text-xs text-emerald-600 font-semibold">✓ Done</span>
                     ) : (
                       <span className="text-xs text-amber-600 font-medium">Review →</span>
