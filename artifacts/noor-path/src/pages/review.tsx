@@ -300,17 +300,17 @@ export default function ReviewPage() {
   const [completedSurahIds, setCompletedSurahIds] = useState<Set<number>>(
     new Set(storedSession?.completedItemsData?.map((i: any) => i.surahId) ?? [])
   );
-  const [completedItemsData, setCompletedItemsData] = useState<Array<{surahId: number; surahName: string | null | undefined; surahNumber: number}>>(
+  const [completedItemsData, setCompletedItemsData] = useState<Array<{surahId: number; surahName?: string | null; surahNumber: number}>>(
     storedSession?.completedItemsData ?? []
   );
   const sessionTotalRef = useRef<number>(storedSession?.sessionTotal ?? 0);
   const sessionSurahsRef = useRef<typeof dueToday | null>(storedSession?.sessionSurahs ?? null);
-  const dueTodayRef = useRef<{surahId: number; surahName: string | null | undefined; surahNumber: number}[]>([]);
+  const dueTodayRef = useRef<{surahId: number; surahName?: string | null; surahNumber: number}[]>([]);
   const qc = useQueryClient();
 
   const saveSession = (updates: {
     sessionDone?: boolean;
-    completedItemsData?: Array<{surahId: number; surahName: string | null | undefined; surahNumber: number}>;
+    completedItemsData?: Array<{surahId: number; surahName?: string | null; surahNumber: number}>;
     sessionSurahs?: typeof dueToday;
     sessionTotal?: number;
   }) => {
