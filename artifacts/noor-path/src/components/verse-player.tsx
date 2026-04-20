@@ -208,9 +208,10 @@ interface VersePlayerProps {
   reciter?: Reciter;
   /** Called when the user switches reciters — required when reciter prop is provided */
   onReciterChange?: (r: Reciter) => void;
+  onWordTap?: (word: string, position: number, translation?: string) => void;
 }
 
-export function VersePlayer({ arabic, surahNumber, verseNumber, size = "md", reciter: reciterProp, onReciterChange }: VersePlayerProps) {
+export function VersePlayer({ arabic, surahNumber, verseNumber, size = "md", reciter: reciterProp, onReciterChange, onWordTap }: VersePlayerProps) {
   const [internalReciter, setInternalReciter] = useState<Reciter>(getDefaultReciter);
 
   const reciter = reciterProp ?? internalReciter;
@@ -390,7 +391,8 @@ export function VersePlayer({ arabic, surahNumber, verseNumber, size = "md", rec
       setTappedWord(-1);
       wordAudioRef.current = null;
     });
-  }, [surahNumber, verseNumber, displayToQdc]);
+    onWordTap?.(words[wordIndex], qdcPos, undefined);
+  }, [surahNumber, verseNumber, displayToQdc, onWordTap, words]);
 
   const textSize = size === "sm" ? "text-xl" : size === "lg" ? "text-4xl" : "text-3xl";
 

@@ -29,6 +29,11 @@ import {
   Moon,
   Mic,
   MicOff,
+  Volume2,
+  X,
+  Copy,
+  Check,
+  BookOpen,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useSettings } from "@/hooks/use-settings";
@@ -167,6 +172,7 @@ interface ApiWord {
   text_uthmani: string;
   char_type_name: string;
   line_number: number;
+  translation?: string | { text: string; language_name: string };
 }
 
 type LineWord = {
@@ -178,6 +184,7 @@ type LineWord = {
   text_uthmani: string;
   char_type_name: string;
   line_number: number;
+  translation?: string;
 };
 
 interface PageVerseData {
@@ -191,7 +198,7 @@ async function fetchVersesByPage(
   pageNumber: number
 ): Promise<{ verses: PageVerseData[] }> {
   const r = await fetch(
-    `${QURAN_API}/verses/by_page/${pageNumber}?words=true&fields=text_uthmani,text_uthmani_tajweed&word_fields=text_uthmani,line_number,char_type_name&per_page=50`
+    `${QURAN_API}/verses/by_page/${pageNumber}?words=true&fields=text_uthmani,text_uthmani_tajweed&word_fields=text_uthmani,line_number,char_type_name,translation&per_page=50`
   );
   if (!r.ok) throw new Error(`Failed to fetch page ${pageNumber}`);
   const data = await r.json();
@@ -309,6 +316,22 @@ async function fetchWordTiming(
     return fetchWordTimingV4(reciter.quranComId, surah, verse);
   }
   return [];
+}
+
+async function fetchTranslation(verseKey: string): Promise<string> {
+  const r = await fetch(`${QURAN_API}/verses/by_key/${verseKey}?translations=131`);
+  if (!r.ok) return "";
+  const data = await r.json();
+  const raw: string = data.verse?.translations?.[0]?.text ?? "";
+  return raw
+    .replace(/<sup[^>]*>.*?<\/sup>/gi, "")
+    .replace(/<[^>]+>/g, "")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&#\d+;/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 // ─── Bookmark helpers ─────────────────────────────────────────────────────────
@@ -658,6 +681,178 @@ function splitTajweedIntoWords(html: string): string[] {
   return html.split(/(?<=>)\s+(?=<)/).filter((s) => s.length > 0);
 }
 
+// ─── AyahSheet ────────────────────────────────────────────────────────────────
+
+interface AyahInfo {
+  verseKey: string;
+  surahId: number;
+  verseNum: number;
+  text_uthmani: string;
+}
+
+function AyahSheet({
+  ayah,
+  childId,
+  onClose,
+}: {
+  ayah: AyahInfo;
+  childId: string;
+  onClose: () => void;
+}) {
+  const [, setLocation] = useLocation();
+  const [sheetPlaying, setSheetPlaying] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [highlightedWordIdx, setHighlightedWordIdx] = useState(-1);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const rafRef = useRef<number>(0);
+
+  const sheetWords = useMemo(
+    () => ayah.text_uthmani.split(/\s+/).filter(Boolean),
+    [ayah.text_uthmani]
+  );
+
+  const { data: translation, isLoading: translationLoading } = useQuery({
+    queryKey: ["translation", ayah.verseKey],
+    queryFn: () => fetchTranslation(ayah.verseKey),
+    staleTime: Infinity,
+  });
+
+  const tickHighlight = useCallback(() => {
+    const audio = audioRef.current;
+    if (!audio || audio.paused) return;
+    const dur = audio.duration || 0;
+    const frac = dur > 0 ? audio.currentTime / dur : 0;
+    const idx = Math.min(Math.floor(frac * sheetWords.length), sheetWords.length - 1);
+    setHighlightedWordIdx(idx);
+    rafRef.current = requestAnimationFrame(tickHighlight);
+  }, [sheetWords.length]);
+
+  useEffect(() => {
+    return () => {
+      cancelAnimationFrame(rafRef.current);
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current.src = "";
+        audioRef.current = null;
+      }
+      setSheetPlaying(false);
+      setHighlightedWordIdx(-1);
+    };
+  }, [ayah.verseKey]);
+
+  const handleSheetPlay = () => {
+    if (sheetPlaying && audioRef.current) {
+      audioRef.current.pause();
+      cancelAnimationFrame(rafRef.current);
+      setSheetPlaying(false);
+      return;
+    }
+    if (audioRef.current) {
+      audioRef.current.pause();
+      cancelAnimationFrame(rafRef.current);
+      audioRef.current.src = "";
+    }
+    const husary = RECITERS.find(r => r.id === "husary")!;
+    const audio = new Audio(buildAudioUrl(husary, ayah.surahId, ayah.verseNum));
+    audio.onended = () => {
+      setSheetPlaying(false);
+      setHighlightedWordIdx(-1);
+      cancelAnimationFrame(rafRef.current);
+    };
+    audio.onerror = () => {
+      setSheetPlaying(false);
+      cancelAnimationFrame(rafRef.current);
+    };
+    audioRef.current = audio;
+    audio.play().then(() => {
+      setSheetPlaying(true);
+      rafRef.current = requestAnimationFrame(tickHighlight);
+    }).catch(() => setSheetPlaying(false));
+  };
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(ayah.text_uthmani);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch { /* ignore */ }
+  };
+
+  return (
+    <>
+      <div className="fixed inset-0 bg-black/40 z-40" onClick={onClose} />
+      <div className="fixed bottom-0 left-0 right-0 bg-white rounded-t-2xl z-50 shadow-2xl max-h-[72vh] overflow-y-auto">
+        <div className="max-w-lg mx-auto p-5 pb-24">
+          <div className="w-10 h-1 bg-gray-200 rounded-full mx-auto mb-4" />
+          <div className="flex items-start justify-between mb-4">
+            <div>
+              <p className="text-sm font-semibold text-gray-900">{ayah.verseKey}</p>
+              <p className="text-xs text-gray-400 mt-0.5">Surah {ayah.surahId}, Verse {ayah.verseNum}</p>
+            </div>
+            <button onClick={onClose} className="p-1.5 rounded-full hover:bg-gray-100 text-gray-400">
+              <X size={16} />
+            </button>
+          </div>
+          <div
+            dir="rtl" lang="ar"
+            className="bg-amber-50 rounded-xl p-4 mb-4 border border-amber-100"
+            style={{ fontFamily: '"KFGQPC Hafs", "Amiri Quran", serif', fontSize: "clamp(18px, 4vw, 26px)", lineHeight: 2.2, textAlign: "right", color: "#1a1a1a" }}
+          >
+            {sheetWords.map((w, i) => (
+              <span
+                key={i}
+                style={{ backgroundColor: i === highlightedWordIdx ? "#fcd34d" : undefined, borderRadius: i === highlightedWordIdx ? "3px" : undefined, padding: "0 0.05em" }}
+              >
+                {w}{i < sheetWords.length - 1 ? " " : ""}
+              </span>
+            ))}
+          </div>
+          <div className="mb-4 min-h-[56px]">
+            {translationLoading ? (
+              <Skeleton className="h-14 rounded-xl" />
+            ) : translation ? (
+              <p className="text-sm text-gray-700 leading-relaxed">{translation}</p>
+            ) : (
+              <p className="text-xs text-gray-400 italic">Translation unavailable</p>
+            )}
+          </div>
+          <div className="grid grid-cols-2 gap-2 mb-2">
+            <button
+              onClick={handleSheetPlay}
+              className="flex items-center justify-center gap-2 py-2.5 rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-700 text-sm font-medium active:bg-emerald-100"
+            >
+              {sheetPlaying ? <Pause size={14} /> : <Play size={14} />}
+              {sheetPlaying ? "Pause" : "Play Ayah"}
+            </button>
+            <button
+              onClick={handleCopy}
+              className="flex items-center justify-center gap-2 py-2.5 rounded-xl border border-amber-200 bg-amber-50 text-amber-700 text-sm font-medium active:bg-amber-100"
+            >
+              {copied ? <Check size={14} /> : <Copy size={14} />}
+              {copied ? "Copied!" : "Copy Verse"}
+            </button>
+          </div>
+          <button
+            onClick={() => setLocation(`/child/${childId}/quran-memorize?surah=${ayah.surahId}&mode=mushaf`)}
+            className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-emerald-600 text-white text-sm font-semibold active:bg-emerald-700"
+          >
+            <BookOpen size={14} /> Memorize from here
+          </button>
+          <button
+            onClick={() => {
+              setLocation(`/child/${childId}/quran-memorize?surah=${ayah.surahId}&fromAyah=${ayah.verseNum}&toAyah=${ayah.verseNum}&mode=mushaf`);
+              onClose();
+            }}
+            className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border border-amber-200 bg-amber-50 text-amber-800 text-sm font-semibold active:bg-amber-100 mt-2"
+          >
+            📖 Open in Memorization Mushaf
+          </button>
+        </div>
+      </div>
+    </>
+  );
+}
+
 // ─── MemorizationPlayer ───────────────────────────────────────────────────────
 // Extracted as its own component so its hooks only run when mounted (play phase).
 
@@ -722,6 +917,8 @@ function MemorizationPlayer({
   const [isBlindMode, setIsBlindMode] = useState(false);
   const [revealedAyahs, setRevealedAyahs] = useState<Set<number>>(new Set());
   const [isReciteMode, setIsReciteMode] = useState(false);
+  const [tappedWord, setTappedWord] = useState<{ key: string; text: string; position: number; surahId: number; verseNum: number; translation: string } | null>(null);
+  const [tappedAyah, setTappedAyah] = useState<AyahInfo | null>(null);
   const [reciteWordIndex, setReciteWordIndex] = useState(0);
   const [reciteVerseIndex, setReciteVerseIndex] = useState(0);
   const [reciteAttempts, setReciteAttempts] = useState(0);
@@ -1226,6 +1423,8 @@ function MemorizationPlayer({
     currentVerseRef.current?.scrollIntoView({ block: "center", behavior: "smooth" });
   }, [activeVerseNumber]);
 
+  useEffect(() => { setTappedWord(null); }, [activeVerseNumber]);
+
   const rangeLength = toAyah - fromAyah + 1;
   const currentIndexInRange = currentAyahNum - fromAyah;
   const progressPercent =
@@ -1392,7 +1591,7 @@ function MemorizationPlayer({
           if (found !== -1) { lastMatchedJ = found; wordIdxInVerse = found; }
           else { wordIdxInVerse = w.position - 1; } // fallback
         }
-        all.push({ verse_key: pageVerse.verse_key, surahId, verseNum, position: w.position, wordIdxInVerse, text_uthmani: w.text_uthmani, char_type_name: w.char_type_name, line_number: w.line_number });
+        all.push({ verse_key: pageVerse.verse_key, surahId, verseNum, position: w.position, wordIdxInVerse, text_uthmani: w.text_uthmani, char_type_name: w.char_type_name, line_number: w.line_number, translation: typeof w.translation === 'object' && w.translation !== null ? (w.translation as any).text ?? "" : (w.translation as string | undefined) });
       }
     }
     if (all.length === 0) return null;
@@ -1594,7 +1793,15 @@ function MemorizationPlayer({
 
                           if (lw.char_type_name === "end") {
                             return (
-                              <span key={k} style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: "2em", height: "2em", borderRadius: "50%", border: `1.5px solid ${localDarkMode ? "#8a7a50" : "#b8974a"}`, background: localDarkMode ? "#2a2418" : "#fdf8ee", flexShrink: 0, userSelect: "none", direction: "ltr" as const, ...(!isActiveSurah ? { opacity: 0.12 } : {}) }}>
+                              <span
+                                key={k}
+                                onClick={() => {
+                                  if (isReciteMode || isBlindMode || !isActiveSurah) return;
+                                  const pv = pageVerses.find(v => v.verse_key === lw.verse_key);
+                                  setTappedAyah({ verseKey: lw.verse_key, surahId: lw.surahId, verseNum: lw.verseNum, text_uthmani: pv?.text_uthmani ?? "" });
+                                }}
+                                style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: "2em", height: "2em", borderRadius: "50%", border: `1.5px solid ${localDarkMode ? "#8a7a50" : "#b8974a"}`, background: localDarkMode ? "#2a2418" : "#fdf8ee", flexShrink: 0, userSelect: "none", direction: "ltr" as const, cursor: (isReciteMode || isBlindMode || !isActiveSurah) ? "default" : "pointer", ...(!isActiveSurah ? { opacity: 0.12 } : {}) }}
+                              >
                                 <span style={{ fontSize: "0.62em", color: localDarkMode ? "#c9a84c" : "#8a6020", fontFamily: "Georgia, serif", lineHeight: 1 }}>{lw.verseNum}</span>
                               </span>
                             );
@@ -1624,7 +1831,22 @@ function MemorizationPlayer({
                               return <span key={k} className="inline-block transition-all duration-100 rounded-sm px-[0.1em]" style={{ filter: "blur(6px)", userSelect: "none", cursor: "pointer" }} onClick={() => setRevealedAyahs((p) => { const n = new Set(p); n.add(lw.verseNum); return n; })}>{wc}</span>;
                             }
                             return (
-                              <span key={k} className={cn("inline-block transition-all duration-100 rounded-sm px-[0.1em]", isHighlighted ? (isCumulative ? "bg-teal-300 text-teal-900 scale-110 shadow-sm" : "bg-amber-300 text-amber-900 scale-110 shadow-sm") : isPast ? "opacity-35" : "")} style={!isHighlighted ? { backgroundColor: "rgba(254,240,138,0.25)" } : {}}>
+                              <span
+                                key={k}
+                                onClick={() => {
+                                  const wordKey = `${lw.verse_key}:${lw.position}`;
+                                  setTappedWord(prev => prev?.key === wordKey ? null : {
+                                    key: wordKey,
+                                    text: lw.text_uthmani,
+                                    position: lw.position,
+                                    surahId: lw.surahId,
+                                    verseNum: lw.verseNum,
+                                    translation: lw.translation ?? "",
+                                  });
+                                }}
+                                className={cn("inline-block transition-all duration-100 rounded-sm px-[0.1em] cursor-pointer", isHighlighted ? (isCumulative ? "bg-teal-300 text-teal-900 scale-110 shadow-sm" : "bg-amber-300 text-amber-900 scale-110 shadow-sm") : isPast ? "opacity-35" : "")}
+                                style={!isHighlighted ? { backgroundColor: "rgba(254,240,138,0.25)" } : {}}
+                              >
                                 {wc}
                               </span>
                             );
@@ -2392,6 +2614,55 @@ function MemorizationPlayer({
           {activePage ?? ""}
         </span>
       </div>
+
+      {/* ── Word translation tooltip ── */}
+      {tappedWord && (
+        <div
+          className="fixed bottom-28 left-0 right-0 z-50 flex justify-center px-4 pointer-events-none"
+          onClick={() => setTappedWord(null)}
+        >
+          <div className="bg-white rounded-2xl shadow-xl border border-amber-200 px-4 py-3 pointer-events-auto max-w-xs w-full">
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center justify-between gap-2 mb-1">
+                  <p dir="rtl" className="text-xl text-amber-900" style={{ fontFamily: '"KFGQPC Hafs", "Amiri Quran", serif' }}>
+                    {tappedWord.text}
+                  </p>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      const audio = new Audio(`https://audio.qurancdn.com/wbw/${String(tappedWord.surahId).padStart(3,'0')}_${String(tappedWord.verseNum).padStart(3,'0')}_${String(tappedWord.position).padStart(3,'0')}.mp3`);
+                      audio.play().catch(() => {});
+                    }}
+                    className="flex-shrink-0 w-8 h-8 rounded-full bg-amber-100 hover:bg-amber-200 flex items-center justify-center text-amber-700"
+                  >
+                    <Volume2 size={14} />
+                  </button>
+                </div>
+                {tappedWord.translation ? (
+                  <p className="text-sm text-gray-700 leading-snug">{tappedWord.translation}</p>
+                ) : (
+                  <p className="text-xs text-gray-400 italic">No translation available</p>
+                )}
+                <p className="text-[10px] text-amber-400 mt-1">{tappedWord.surahId}:{tappedWord.verseNum} · word {tappedWord.position}</p>
+              </div>
+              <button onClick={() => setTappedWord(null)} className="text-gray-300 hover:text-gray-500 shrink-0 mt-0.5">
+                <X size={14} />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Ayah bottom sheet ── */}
+      {tappedAyah && (
+        <AyahSheet
+          key={tappedAyah.verseKey}
+          ayah={tappedAyah}
+          childId={childId}
+          onClose={() => setTappedAyah(null)}
+        />
+      )}
 
       {/* ── Settings overlay panel ── */}
       {showSettingsPanel && (

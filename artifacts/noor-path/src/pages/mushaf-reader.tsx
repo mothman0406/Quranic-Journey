@@ -28,6 +28,7 @@ import {
   Check,
   Mic,
   MicOff,
+  Volume2,
 } from "lucide-react";
 
 const TOTAL_PAGES = 604;
@@ -383,6 +384,15 @@ function AyahSheet({
             className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-emerald-600 text-white text-sm font-semibold active:bg-emerald-700"
           >
             <BookOpen size={14} /> Memorize from here
+          </button>
+          <button
+            onClick={() => {
+              setLocation(`/child/${childId}/quran-memorize?surah=${ayah.surahId}&fromAyah=${ayah.verseNum}&toAyah=${ayah.verseNum}&mode=mushaf`);
+              onClose();
+            }}
+            className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border border-amber-200 bg-amber-50 text-amber-800 text-sm font-semibold active:bg-amber-100 mt-2"
+          >
+            📖 Open in Memorization Mushaf
           </button>
         </div>
       </div>
@@ -1200,13 +1210,21 @@ export default function MushafReaderPage() {
             <div className="bg-white rounded-2xl shadow-xl border border-amber-200 px-4 py-3 pointer-events-auto max-w-xs w-full">
               <div className="flex items-start justify-between gap-3">
                 <div className="flex-1 min-w-0">
-                  <p
-                    dir="rtl"
-                    className="text-xl text-amber-900 mb-1"
-                    style={{ fontFamily: '"KFGQPC Hafs", "Amiri Quran", serif' }}
-                  >
-                    {tappedWord.text}
-                  </p>
+                  <div className="flex items-center justify-between gap-2 mb-1">
+                    <p dir="rtl" className="text-xl text-amber-900" style={{ fontFamily: '"KFGQPC Hafs", "Amiri Quran", serif' }}>
+                      {tappedWord.text}
+                    </p>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        const audio = new Audio(`https://audio.qurancdn.com/wbw/${String(tappedWord.surahId).padStart(3,'0')}_${String(tappedWord.verseNum).padStart(3,'0')}_${String(tappedWord.position).padStart(3,'0')}.mp3`);
+                        audio.play().catch(() => {});
+                      }}
+                      className="flex-shrink-0 w-8 h-8 rounded-full bg-amber-100 hover:bg-amber-200 flex items-center justify-center text-amber-700"
+                    >
+                      <Volume2 size={14} />
+                    </button>
+                  </div>
                   {tappedWord.translation ? (
                     <p className="text-sm text-gray-700 leading-snug">{tappedWord.translation}</p>
                   ) : (

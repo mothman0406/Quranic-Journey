@@ -5,14 +5,15 @@ import { getSurah } from "@workspace/api-client-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { VersePlayer, RECITERS, type Reciter } from "@/components/verse-player";
-import { ChevronLeft, Info } from "lucide-react";
+import { VersePlayer, RECITERS, buildWordAudioUrl, type Reciter } from "@/components/verse-player";
+import { ChevronLeft, Info, Volume2, X } from "lucide-react";
 
 export default function SurahDetailPage() {
   const { surahId } = useParams<{ surahId: string }>();
   const [, setLocation] = useLocation();
   const [showTajweed, setShowTajweed] = useState(false);
   const [sessionReciter, setSessionReciter] = useState<Reciter>(() => RECITERS.find(r => r.id === "husary")!);
+  const [tappedWord, setTappedWord] = useState<{ word: string; translation: string; surahId: number; verseNum: number; position: number } | null>(null);
 
   const { data: surah, isLoading } = useQuery({
     queryKey: ["surah", parseInt(surahId)],
@@ -118,6 +119,9 @@ export default function SurahDetailPage() {
                   size="md"
                   reciter={sessionReciter}
                   onReciterChange={setSessionReciter}
+                  onWordTap={(word, position) => {
+                    setTappedWord({ word, translation: verse.translation ?? "", surahId: surah.number, verseNum: verse.number, position });
+                  }}
                 />
 
                 {/* Transliteration */}
@@ -130,6 +134,37 @@ export default function SurahDetailPage() {
           ))}
         </div>
       </div>
+
+      {tappedWord && (
+        <div className="fixed bottom-6 left-0 right-0 z-50 flex justify-center px-4 pointer-events-none">
+          <div className="bg-white rounded-2xl shadow-xl border border-amber-200 px-4 py-3 pointer-events-auto max-w-xs w-full">
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center justify-between gap-2 mb-1">
+                  <p dir="rtl" className="text-xl text-amber-900" style={{ fontFamily: '"KFGQPC Hafs", "Amiri Quran", serif' }}>
+                    {tappedWord.word}
+                  </p>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      const audio = new Audio(buildWordAudioUrl(tappedWord.surahId, tappedWord.verseNum, tappedWord.position));
+                      audio.play().catch(() => {});
+                    }}
+                    className="flex-shrink-0 w-8 h-8 rounded-full bg-amber-100 hover:bg-amber-200 flex items-center justify-center text-amber-700"
+                  >
+                    <Volume2 size={14} />
+                  </button>
+                </div>
+                <p className="text-[10px] text-amber-400 mb-1">Verse {tappedWord.verseNum} · word {tappedWord.position}</p>
+                <p className="text-sm text-gray-700 leading-snug line-clamp-3">{tappedWord.translation}</p>
+              </div>
+              <button onClick={() => setTappedWord(null)} className="text-gray-300 hover:text-gray-500 shrink-0 mt-0.5">
+                <X size={14} />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
