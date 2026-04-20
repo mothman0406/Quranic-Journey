@@ -3,7 +3,7 @@ import { db } from "@workspace/db";
 import { childrenTable, memorizationProgressTable, reviewScheduleTable, learningSessionsTable, childDuasTable, dailyProgressTable } from "@workspace/db/schema";
 import { eq, desc, and, lte } from "drizzle-orm";
 import { SURAHS } from "../data/surahs.js";
-import { resolvePageTarget, getPageForVerse, SURAH_START_PAGES } from "../data/quran-meta.js";
+import { resolvePageTarget, getPageForVerse } from "../data/quran-meta.js";
 import { STORIES } from "../data/stories.js";
 import { DUAS } from "../data/duas.js";
 
@@ -375,20 +375,22 @@ router.get("/children/:childId/dashboard", async (req, res) => {
   // Extend start backward on the same Mushaf page so the daily assignment
   // fills as close to memorizePagePerDay as possible (e.g. 0.75 pages on a
   // 15-verse page → prefer 11 verses over 6).
+  // Use getPageForVerse(s, lastAyah) — not SURAH_START_PAGES — because
+  // SURAH_START_PAGES has stale placeholder values (604) for surahs 91-100.
   if (memorizationSurahData) {
-    const surahPage = SURAH_START_PAGES[nextStartSurah - 1];
+    const surahPage = getPageForVerse(nextStartSurah, memorizationSurahData.verseCount);
     const totalVersesOnPage = SURAHS.reduce(
-      (acc, s) => (SURAH_START_PAGES[s.number - 1] === surahPage ? acc + s.verseCount : acc), 0
+      (acc, s) => (getPageForVerse(s.number, s.verseCount) === surahPage ? acc + s.verseCount : acc), 0
     );
     if (totalVersesOnPage > 0) {
       const targetVerseCount = child.memorizePagePerDay * totalVersesOnPage;
-      let accumulated = (memorizationSurahData.verseCount) - (nextStartAyah - 1);
+      let accumulated = memorizationSurahData.verseCount - (nextStartAyah - 1);
       let bestStartSurah = nextStartSurah;
 
       for (let s = nextStartSurah - 1; s >= 2; s--) {
-        if (SURAH_START_PAGES[s - 1] !== surahPage) break;
         const sd = SURAHS.find(ss => ss.number === s);
         if (!sd || doneSurahIds.has(sd.id)) break;
+        if (getPageForVerse(s, sd.verseCount) !== surahPage) break;
         const newTotal = accumulated + sd.verseCount;
         if (Math.abs(targetVerseCount - newTotal) < Math.abs(targetVerseCount - accumulated)) {
           accumulated = newTotal;
