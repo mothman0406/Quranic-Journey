@@ -694,10 +694,12 @@ function AyahSheet({
   ayah,
   childId,
   onClose,
+  onViewInFullQuran,
 }: {
   ayah: AyahInfo;
   childId: string;
   onClose: () => void;
+  onViewInFullQuran?: () => void;
 }) {
   const [, setLocation] = useLocation();
   const [sheetPlaying, setSheetPlaying] = useState(false);
@@ -832,21 +834,23 @@ function AyahSheet({
               {copied ? "Copied!" : "Copy Verse"}
             </button>
           </div>
-          <button
-            onClick={() => setLocation(`/child/${childId}/quran-memorize?surah=${ayah.surahId}&mode=mushaf`)}
-            className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-emerald-600 text-white text-sm font-semibold active:bg-emerald-700"
-          >
-            <BookOpen size={14} /> Memorize from here
-          </button>
-          <button
-            onClick={() => {
-              setLocation(`/child/${childId}/quran-memorize?surah=${ayah.surahId}&fromAyah=${ayah.verseNum}&toAyah=${ayah.verseNum}&mode=mushaf`);
-              onClose();
-            }}
-            className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border border-amber-200 bg-amber-50 text-amber-800 text-sm font-semibold active:bg-amber-100 mt-2"
-          >
-            📖 Open in Memorization Mushaf
-          </button>
+          {onViewInFullQuran ? (
+            <button
+              onClick={() => { onClose(); onViewInFullQuran(); }}
+              className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-sky-600 text-white text-sm font-semibold active:bg-sky-700"
+            >
+              <BookOpen size={14} /> View in Full Quran
+            </button>
+          ) : (
+            <button
+              onClick={() =>
+                setLocation(`/child/${childId}/quran-memorize?surah=${ayah.surahId}&mode=mushaf`)
+              }
+              className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-emerald-600 text-white text-sm font-semibold active:bg-emerald-700"
+            >
+              <BookOpen size={14} /> Memorize from here
+            </button>
+          )}
         </div>
       </div>
     </>
@@ -2661,6 +2665,11 @@ function MemorizationPlayer({
           ayah={tappedAyah}
           childId={childId}
           onClose={() => setTappedAyah(null)}
+          onViewInFullQuran={() => {
+            leaveDestinationRef.current = `/child/${childId}/mushaf-reader?page=${activePage ?? 1}`;
+            setTappedAyah(null);
+            setShowLeaveModal(true);
+          }}
         />
       )}
 
