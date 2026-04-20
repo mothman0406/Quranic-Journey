@@ -333,16 +333,17 @@ export default function ReviewPage() {
       qc.invalidateQueries({ queryKey: ["reviews", childId] });
       const newCount = completedCount + 1;
       setCompletedCount(newCount);
+      const sessionTotal = sessionTotalRef.current;
       fetch(`/api/children/${childId}/daily-progress`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ reviewCompletedCount: newCount }),
       }).then(() => qc.invalidateQueries({ queryKey: ["dashboard", childId] })).catch(() => {});
-      // Advance or finish
+      // Advance or finish — use sessionTotal (stable) not dueToday.length (shrinks on refetch)
       if (flashcardIndex !== null) {
         setFlashcardRating(null);
         setFlashcardShowVerses(false);
-        if (flashcardIndex >= dueToday.length - 1) {
+        if (newCount >= sessionTotal) {
           setSessionDone(true);
           setShowReviewCelebration(true);
           setFlashcardIndex(null);
@@ -351,7 +352,7 @@ export default function ReviewPage() {
         }
       } else if (mushafItem) {
         setMushafItem(null);
-        if (dueToday.length <= 1) {
+        if (newCount >= sessionTotal) {
           setSessionDone(true);
           setShowReviewCelebration(true);
         }
@@ -519,42 +520,27 @@ export default function ReviewPage() {
     );
   }
 
-  // ── Done / none ──
-  if (sessionDone || dueToday.length === 0) {
+  // ── Genuinely no reviews today (not just all completed this session) ──
+  if (!sessionDone && dueToday.length === 0 && completedItemsData.length === 0 && ((data as any)?.reviewedToday ?? []).length === 0) {
     return (
-      <>
-        <div className="min-h-screen bg-background pb-24 flex flex-col items-center justify-center px-4">
-          <div className="text-center max-w-sm">
-            <div className="text-6xl mb-4">{sessionDone ? "🏆" : "✅"}</div>
-            <h2 className="text-2xl font-bold text-foreground mb-2">
-              {sessionDone ? "Review Complete!" : "All Caught Up!"}
-            </h2>
-            <p className="text-muted-foreground mb-2">
-              {sessionDone
-                ? `Great job! You reviewed ${dueToday.length} surah${dueToday.length > 1 ? "s" : ""} today.`
-                : "No surahs due for review today. Keep memorizing!"}
-            </p>
-            <p className="text-xs text-muted-foreground mb-6">
-              Consistent review is the key to strong memorization.
-            </p>
-            <Link href={`/child/${childId}`}>
-              <Button className="w-full rounded-full">Back to Dashboard</Button>
-            </Link>
-          </div>
-          <ChildNav childId={childId} />
+      <div className="min-h-screen bg-background pb-24 flex flex-col items-center justify-center px-4">
+        <div className="text-center max-w-sm">
+          <div className="text-6xl mb-4">✅</div>
+          <h2 className="text-2xl font-bold text-foreground mb-2">All Caught Up!</h2>
+          <p className="text-muted-foreground mb-2">No surahs due for review today. Keep memorizing!</p>
+          <p className="text-xs text-muted-foreground mb-6">Consistent review is the key to strong memorization.</p>
+          <Link href={`/child/${childId}`}>
+            <Button className="w-full rounded-full">Back to Dashboard</Button>
+          </Link>
         </div>
-        <CelebrationOverlay
-          show={showReviewCelebration}
-          onDone={() => setShowReviewCelebration(false)}
-          message="Review Complete!"
-          subMessage="Excellent revision!"
-        />
-      </>
+        <ChildNav childId={childId} />
+      </div>
     );
   }
 
-  // ── Default: surah card grid ──
+  // ── Default: surah card grid (also shown when sessionDone — completed rows stay visible) ──
   return (
+    <>
     <div className="min-h-screen bg-background pb-24">
       <div className="pattern-bg text-white px-4 pt-8 pb-12">
         <div className="max-w-lg mx-auto">
@@ -611,6 +597,15 @@ export default function ReviewPage() {
 
           return (
             <>
+              {sessionDone && (
+                <Card className="border-emerald-300 bg-emerald-50">
+                  <CardContent className="p-4 text-center">
+                    <p className="text-2xl mb-1">🏆</p>
+                    <p className="font-bold text-emerald-800">All done for today!</p>
+                    <p className="text-xs text-emerald-700 mt-1">Great job! Come back tomorrow for your next review.</p>
+                  </CardContent>
+                </Card>
+              )}
               {pendingItems.map((item) => {
                 const idx = dueToday.indexOf(item);
                 return (
@@ -680,7 +675,7 @@ export default function ReviewPage() {
         })()}
 
         {/* Upcoming */}
-        {(data?.upcoming ?? []).length > 0 && (
+        {!sessionDone && (data?.upcoming ?? []).length > 0 && (
           <Card className="border-border">
             <CardContent className="p-4">
               <p className="text-sm font-semibold text-foreground mb-3">Upcoming Reviews</p>
@@ -695,9 +690,23 @@ export default function ReviewPage() {
             </CardContent>
           </Card>
         )}
+        {sessionDone && (
+          <div className="pb-2">
+            <Link href={`/child/${childId}`}>
+              <Button className="w-full rounded-full">Back to Dashboard</Button>
+            </Link>
+          </div>
+        )}
       </div>
 
       <ChildNav childId={childId} />
     </div>
+    <CelebrationOverlay
+      show={showReviewCelebration}
+      onDone={() => setShowReviewCelebration(false)}
+      message="Review Complete!"
+      subMessage="Excellent revision!"
+    />
+    </>
   );
 }
