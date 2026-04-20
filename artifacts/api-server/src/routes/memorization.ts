@@ -319,7 +319,7 @@ router.get("/children/:childId/reviews", async (req, res) => {
   );
 
   const isWeak = (m: typeof memProgress[0]) =>
-    (m.strength ?? 1) <= 2 || m.status === 'needs_review';
+    m.status === 'needs_review' || (m.strength ?? 1) <= 2;
 
   // Step 4 — Auto-create missing review schedule entries
   let scheduleRows = await db.select().from(reviewScheduleTable)
@@ -364,30 +364,55 @@ router.get("/children/:childId/reviews", async (req, res) => {
     .filter(x => !isWeak(x.mem) && (SURAHS.find(s => s.id === x.mem.surahId)?.number ?? 0) <= maxSurahNumber)
     .sort(bySurahDesc);
 
-  const prioritized = [...weakSurahs, ...strongSurahs];
-
   const withinBudget: typeof scheduleRows = [];
   const overBudget: typeof scheduleRows = [];
   const coveredPages = new Set<number>();
 
-  for (const { schedule: r } of prioritized) {
+  console.log('[review budget] reviewBudget:', reviewBudget,
+    'weak:', weakSurahs.map(x => { const s = SURAHS.find(s2 => s2.id === x.schedule.surahId); const mem = memProgress.find(m => m.surahId === x.schedule.surahId); return `${s?.number}(${mem?.status},str=${mem?.strength})`; }),
+    'strong:', strongSurahs.map(x => { const s = SURAHS.find(s2 => s2.id === x.schedule.surahId); const mem = memProgress.find(m => m.surahId === x.schedule.surahId); return `${s?.number}(${mem?.status},str=${mem?.strength})`; }));
+
+  // Phase 1 — weak surahs: apply budget with closerToInclude tie-break
+  let anyWeakSkipped = false;
+  for (const { schedule: r } of weakSurahs) {
     const surah = SURAHS.find(s => s.id === r.surahId);
     if (!surah) { withinBudget.push(r); continue; }
-
     const startPage = getPageForVerse(surah.number, 1);
     const endPage = getPageForVerse(surah.number, surah.verseCount);
     const surahPageSet = new Set<number>();
     for (let p = startPage; p <= endPage; p++) surahPageSet.add(p);
-
     const newPages = [...surahPageSet].filter(p => !coveredPages.has(p));
-
-    // Include if: already under budget, OR this surah is free (shares covered pages),
-    // OR including it would bring us closer to the budget than excluding it.
     const currentUnder = reviewBudget - coveredPages.size;
     const wouldBeOver = (coveredPages.size + newPages.length) - reviewBudget;
     const closerToInclude = newPages.length > 0 && wouldBeOver <= currentUnder;
+    const include = coveredPages.size < reviewBudget || newPages.length === 0 || closerToInclude;
+    console.log(`[review budget] weak surah ${surah.number}: pages=${startPage}-${endPage} newPages=${newPages.length} coveredSize=${coveredPages.size} → ${include ? 'INCLUDE' : 'SKIP'}`);
+    if (include) {
+      newPages.forEach(p => coveredPages.add(p));
+      withinBudget.push(r);
+    } else {
+      anyWeakSkipped = true;
+      overBudget.push(r);
+    }
+  }
 
-    if (coveredPages.size < reviewBudget || newPages.length === 0 || closerToInclude) {
+  // Phase 2 — strong surahs: only run if every weak surah fit (never skip weak in favor of strong)
+  for (const { schedule: r } of strongSurahs) {
+    const surah = SURAHS.find(s => s.id === r.surahId);
+    if (!surah) { withinBudget.push(r); continue; }
+    if (anyWeakSkipped) {
+      console.log(`[review budget] strong surah ${surah.number}: SKIP (weak surah was excluded)`);
+      overBudget.push(r);
+      continue;
+    }
+    const startPage = getPageForVerse(surah.number, 1);
+    const endPage = getPageForVerse(surah.number, surah.verseCount);
+    const surahPageSet = new Set<number>();
+    for (let p = startPage; p <= endPage; p++) surahPageSet.add(p);
+    const newPages = [...surahPageSet].filter(p => !coveredPages.has(p));
+    const fits = coveredPages.size + newPages.length <= reviewBudget;
+    console.log(`[review budget] strong surah ${surah.number}: pages=${startPage}-${endPage} newPages=${newPages.length} coveredSize=${coveredPages.size} → ${fits ? 'INCLUDE' : 'SKIP'}`);
+    if (fits) {
       newPages.forEach(p => coveredPages.add(p));
       withinBudget.push(r);
     } else {
