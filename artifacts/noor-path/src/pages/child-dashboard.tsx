@@ -158,7 +158,7 @@ export default function ChildDashboard() {
                       </div>
                     </div>
                     {reviewSessionDone || todayProgress?.reviewStatus === "completed" ? (
-                      <span className="text-xs text-emerald-600 font-semibold">✓ Done</span>
+                      <span className="text-xs text-emerald-600 font-semibold">✓ Completed</span>
                     ) : (
                       <span className="text-xs text-amber-600 font-medium">Review →</span>
                     )}
