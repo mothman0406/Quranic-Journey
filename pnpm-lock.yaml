@@ -190,6 +190,9 @@ importers:
       drizzle-orm:
         specifier: 'catalog:'
         version: 0.45.1(@opentelemetry/api@1.9.1)(@types/pg@8.18.0)(kysely@0.28.15)(pg@8.20.0)
+      drizzle-zod:
+        specifier: ^0.8.3
+        version: 0.8.3(drizzle-orm@0.45.1(@opentelemetry/api@1.9.1)(@types/pg@8.18.0)(kysely@0.28.15)(pg@8.20.0))(zod@4.3.6)
       express:
         specifier: ^5
         version: 5.2.1
@@ -4967,6 +4970,11 @@ snapshots:
     dependencies:
       drizzle-orm: 0.45.1(@opentelemetry/api@1.9.1)(@types/pg@8.18.0)(kysely@0.28.15)(pg@8.20.0)
       zod: 3.25.76
+
+  drizzle-zod@0.8.3(drizzle-orm@0.45.1(@opentelemetry/api@1.9.1)(@types/pg@8.18.0)(kysely@0.28.15)(pg@8.20.0))(zod@4.3.6):
+    dependencies:
+      drizzle-orm: 0.45.1(@opentelemetry/api@1.9.1)(@types/pg@8.18.0)(kysely@0.28.15)(pg@8.20.0)
+      zod: 4.3.6
 
   dunder-proto@1.0.1:
     dependencies:

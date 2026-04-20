@@ -85,7 +85,12 @@ export default function ChildDashboard() {
                       </div>
                     </div>
                     {todayProgress?.memStatus === "completed" ? (
-                      <span className="text-xs text-emerald-600 font-semibold">✓ Done</span>
+                      <span className="text-xs text-emerald-600 font-semibold">✓ Completed</span>
+                    ) : todayProgress?.memStatus === "in_progress" ? (
+                      <span className="flex items-center gap-1 text-xs text-amber-600 font-medium">
+                        <span className="w-2 h-2 rounded-full bg-amber-400 flex-shrink-0" />
+                        In Progress
+                      </span>
                     ) : (
                       <span className="text-xs text-primary font-medium">Start →</span>
                     )}

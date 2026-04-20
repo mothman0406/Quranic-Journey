@@ -449,14 +449,17 @@ export default function MemorizationPage() {
   };
   const newMem = dashboard?.todaysPlan?.newMemorization as NewMemExt | undefined;
   const todayProgress = (dashboard as { todayProgress?: TodayProgress } | undefined)?.todayProgress;
+  type UpNextMem = { surahName: string; surahNumber: number; ayahStart: number; ayahEnd: number; pageStart?: number } | null;
+  const upNextMem = (dashboard as { upNextMemorization?: UpNextMem } | undefined)?.upNextMemorization ?? null;
   const todayMemStatus = todayProgress?.memStatus ?? "not_started";
   const todaysSurahId = newMem?.surahNumber
     ? surahs.find(s => s.number === newMem.surahNumber)?.id
     : nextSurah?.id;
-  const showUpNext = !!nextSurah && (
-    todayMemStatus === "completed" ||
-    (newMem?.surahNumber !== undefined && nextSurah.number !== newMem.surahNumber)
-  );
+  const upNextSurahId = upNextMem ? surahs.find(s => s.number === upNextMem.surahNumber)?.id : undefined;
+  const showUpNext = !!nextSurah &&
+    todayMemStatus !== "completed" &&
+    newMem?.surahNumber !== undefined &&
+    nextSurah.number !== newMem.surahNumber;
 
   const memStart = todayProgress?.memTargetAyahStart ?? newMem?.ayahStart ?? 1;
   const memEnd = todayProgress?.memTargetAyahEnd ?? newMem?.ayahEnd ?? 1;
@@ -595,8 +598,39 @@ export default function MemorizationPage() {
           </Card>
         )}
 
-        {/* Up Next banner — only shown when next surah differs from today's work */}
-        {showUpNext && nextSurah && (
+        {/* Up Next banner */}
+        {todayMemStatus === "completed" && upNextMem ? (
+          <Card className="border-border bg-muted/20">
+            <CardContent className="p-3 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-xl bg-muted flex items-center justify-center text-xs font-bold text-muted-foreground">
+                  {upNextMem.surahNumber}
+                </div>
+                <div>
+                  <p className="text-xs font-medium text-muted-foreground">Up Next</p>
+                  <p className="text-sm font-medium text-foreground">{upNextMem.surahName} · Ayah {upNextMem.ayahStart}–{upNextMem.ayahEnd}</p>
+                </div>
+              </div>
+              <div className="flex gap-2">
+                {upNextSurahId !== undefined && (
+                  <>
+                    <button
+                      onClick={() => { setStudyingInitialAyah((upNextMem.ayahStart ?? 1) - 1); setStudyingSurahId(upNextSurahId); }}
+                      className="flex items-center gap-1 text-xs text-muted-foreground font-medium border border-border px-2.5 py-1.5 rounded-full whitespace-nowrap"
+                    >
+                      <ListOrdered size={12} /> Ayah by Ayah
+                    </button>
+                    <Link href={`/child/${childId}/quran-memorize?surah=${upNextMem.surahNumber}&mode=mushaf&fromAyah=${upNextMem.ayahStart}&toAyah=${upNextMem.ayahEnd}`}>
+                      <button className="flex items-center gap-1 text-xs text-foreground font-medium bg-muted px-2.5 py-1.5 rounded-full whitespace-nowrap">
+                        <BookOpen size={12} /> Full Mushaf
+                      </button>
+                    </Link>
+                  </>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        ) : showUpNext && nextSurah ? (
           <Card className="border-border bg-muted/20">
             <CardContent className="p-3 flex items-center justify-between">
               <div className="flex items-center gap-3">
@@ -623,7 +657,7 @@ export default function MemorizationPage() {
               </div>
             </CardContent>
           </Card>
-        )}
+        ) : null}
 
         {/* Filter tabs */}
         <div className="bg-white rounded-2xl border border-border p-1 flex gap-1 shadow-sm overflow-x-auto">

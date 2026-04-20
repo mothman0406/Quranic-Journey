@@ -395,26 +395,40 @@ router.get("/children/:childId/dashboard", async (req, res) => {
     }).returning();
   }
 
+  // Serve frozen daily_progress target when in_progress or completed
+  let displaySurahNumber = nextStartSurah;
+  let displayAyahStart = nextStartAyah;
+  let displayAyahEnd = memTarget?.endAyah ?? nextStartAyah;
+  let displaySurahData = memorizationSurahData;
+
+  if (todayProgress.memStatus !== 'not_started' && todayProgress.memTargetSurah) {
+    displaySurahNumber = todayProgress.memTargetSurah;
+    displayAyahStart = todayProgress.memTargetAyahStart ?? 1;
+    displayAyahEnd = todayProgress.memTargetAyahEnd ?? displayAyahEnd;
+    displaySurahData = SURAHS.find(s => s.number === todayProgress.memTargetSurah) ?? memorizationSurahData;
+  }
+
+  const displaySurahDataFinal = displaySurahData;
+
   const todaysPlan = {
     date: today,
-    newMemorization: memorizationSurahData && memTarget ? (() => {
-      // endSurah may differ from startSurah (page target crossed a surah boundary).
-      // Find the display name for the end position.
-      const endSurahData = SURAHS.find(s => s.number === memTarget.endSurah) ?? memorizationSurahData;
-      const isSameSurah = memTarget.endSurah === nextStartSurah;
+    newMemorization: displaySurahDataFinal ? (() => {
+      const frozen = todayProgress.memStatus !== 'not_started' && !!todayProgress.memTargetSurah;
+      const endSurah = frozen ? displaySurahNumber : (memTarget?.endSurah ?? displaySurahNumber);
+      const endSurahData = SURAHS.find(s => s.number === endSurah) ?? displaySurahDataFinal;
+      const isSameSurah = endSurah === displaySurahNumber;
       return {
         surahName: isSameSurah
-          ? memorizationSurahData.nameTransliteration
-          : `${memorizationSurahData.nameTransliteration} – ${endSurahData?.nameTransliteration ?? ''}`,
-        surahNumber: memorizationSurahData.number,
-        surahNameArabic: memorizationSurahData.nameArabic,
-        ayahStart: nextStartAyah,
-        // Cap endAyah to actual last verse of endSurah
-        ayahEnd: Math.min(memTarget.endAyah, endSurahData?.verseCount ?? memTarget.endAyah),
-        endSurahNumber: memTarget.endSurah,
-        pageStart: getPageForVerse(nextStartSurah, nextStartAyah),
-        pageEnd: getPageForVerse(memTarget.endSurah, memTarget.endAyah),
-        snapReason: memTarget.snapReason,
+          ? displaySurahDataFinal.nameTransliteration
+          : `${displaySurahDataFinal.nameTransliteration} – ${endSurahData?.nameTransliteration ?? ''}`,
+        surahNumber: displaySurahDataFinal.number,
+        surahNameArabic: displaySurahDataFinal.nameArabic,
+        ayahStart: displayAyahStart,
+        ayahEnd: Math.min(displayAyahEnd, endSurahData?.verseCount ?? displayAyahEnd),
+        endSurahNumber: endSurah,
+        pageStart: getPageForVerse(displaySurahNumber, displayAyahStart),
+        pageEnd: getPageForVerse(endSurah, displayAyahEnd),
+        snapReason: frozen ? undefined : memTarget?.snapReason,
         estimatedMinutes: 10
       };
     })() : null,
@@ -468,7 +482,14 @@ router.get("/children/:childId/dashboard", async (req, res) => {
       reviewStatus: todayProgress.reviewStatus,
       reviewTargetCount: todayProgress.reviewTargetCount,
       reviewCompletedCount: todayProgress.reviewCompletedCount,
-    }
+    },
+    upNextMemorization: todayProgress.memStatus === 'completed' && memorizationSurahData && memTarget ? {
+      surahName: memorizationSurahData.nameTransliteration,
+      surahNumber: memorizationSurahData.number,
+      ayahStart: nextStartSurah === displaySurahNumber ? displayAyahEnd + 1 : nextStartAyah,
+      ayahEnd: memTarget.endAyah,
+      pageStart: getPageForVerse(nextStartSurah, nextStartAyah),
+    } : null,
   });
 });
 
