@@ -20,7 +20,7 @@ export default function ChildDashboard() {
   const { data: reviewsData } = useQuery({
     queryKey: ["reviews", childId],
     queryFn: () => listReviews(parseInt(childId)),
-    staleTime: 60_000
+    staleTime: 0
   });
 
   if (isLoading) {
