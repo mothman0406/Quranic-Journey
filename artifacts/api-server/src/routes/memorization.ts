@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import { db } from "@workspace/db";
 import { childrenTable, memorizationProgressTable, reviewScheduleTable } from "@workspace/db/schema";
-import { eq, and, isNull } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import { SURAHS } from "../data/surahs.js";
 import { getPageForVerse } from "../data/quran-meta.js";
 
@@ -83,6 +83,10 @@ const router: IRouter = Router();
 
 function formatDate(date: Date): string {
   return date.toISOString().split("T")[0];
+}
+
+function localDateStr(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
 function addDays(date: Date, days: number): Date {
@@ -297,13 +301,8 @@ router.get("/children/:childId/reviews", async (req, res) => {
   const d = new Date();
   const today = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
-  // Step 2 — Delete stale bulk-inserted entries that were never reviewed
-  await db.delete(reviewScheduleTable)
-    .where(and(
-      eq(reviewScheduleTable.childId, childId),
-      eq(reviewScheduleTable.repetitionCount, 0),
-      isNull(reviewScheduleTable.lastReviewed)
-    ));
+  // Step 2 — (removed: was deleting unreviewed entries, but Step 4 would immediately recreate
+  // them on every refetch, causing new surahs to appear mid-session)
 
   // Step 3 — Fetch and classify all reviewable surahs
   const memProgress = await db.select().from(memorizationProgressTable)
@@ -468,7 +467,7 @@ router.get("/children/:childId/reviews", async (req, res) => {
   });
 
   const reviewedToday = reviewableWithSchedule
-    .filter(x => x.schedule.lastReviewed != null && formatDate(x.schedule.lastReviewed) === today)
+    .filter(x => x.schedule.lastReviewed != null && localDateStr(x.schedule.lastReviewed) === today)
     .map(x => {
       const mem = memProgress.find(m => m.surahId === x.schedule.surahId);
       return formatReview(x.schedule, false, mem ? isWeak(mem) : false);
@@ -492,7 +491,7 @@ router.post("/children/:childId/reviews", async (req, res) => {
     qualityRating
   );
 
-  const nextDate = formatDate(new Date(now.getTime() + interval * 24 * 60 * 60 * 1000));
+  const nextDate = localDateStr(new Date(now.getTime() + interval * 24 * 60 * 60 * 1000));
 
   let updated;
   if (review) {
