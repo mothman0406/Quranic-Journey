@@ -267,6 +267,24 @@ function MushafReviewSheet({
 
 export default function ReviewPage() {
   const { childId } = useParams<{ childId: string }>();
+
+  const getTodayLocal = () => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  };
+  const SESSION_KEY = `child-${childId}-review-session`;
+
+  const loadSession = () => {
+    try {
+      const stored = localStorage.getItem(SESSION_KEY);
+      if (!stored) return null;
+      const parsed = JSON.parse(stored);
+      if (parsed.date !== getTodayLocal()) return null;
+      return parsed;
+    } catch { return null; }
+  };
+  const storedSession = loadSession();
+
   const [mushafItem, setMushafItem] = useState<{
     surahId: number;
     surahNumber: number;
@@ -276,15 +294,35 @@ export default function ReviewPage() {
   const [flashcardIndex, setFlashcardIndex] = useState<number | null>(null);
   const [flashcardRating, setFlashcardRating] = useState<number | null>(null);
   const [flashcardShowVerses, setFlashcardShowVerses] = useState(false);
-  const [sessionDone, setSessionDone] = useState(false);
+  const [sessionDone, setSessionDone] = useState<boolean>(storedSession?.sessionDone ?? false);
   const [showReviewCelebration, setShowReviewCelebration] = useState(false);
-  const [completedCount, setCompletedCount] = useState(0);
-  const [completedSurahIds, setCompletedSurahIds] = useState<Set<number>>(new Set());
-  const [completedItemsData, setCompletedItemsData] = useState<Array<{surahId: number; surahName: string | null | undefined; surahNumber: number}>>([]);
-  const sessionTotalRef = useRef<number>(0);
-  const sessionSurahsRef = useRef<typeof dueToday | null>(null);
+  const [completedCount, setCompletedCount] = useState<number>(storedSession?.completedItemsData?.length ?? 0);
+  const [completedSurahIds, setCompletedSurahIds] = useState<Set<number>>(
+    new Set(storedSession?.completedItemsData?.map((i: any) => i.surahId) ?? [])
+  );
+  const [completedItemsData, setCompletedItemsData] = useState<Array<{surahId: number; surahName: string | null | undefined; surahNumber: number}>>(
+    storedSession?.completedItemsData ?? []
+  );
+  const sessionTotalRef = useRef<number>(storedSession?.sessionTotal ?? 0);
+  const sessionSurahsRef = useRef<typeof dueToday | null>(storedSession?.sessionSurahs ?? null);
   const dueTodayRef = useRef<{surahId: number; surahName: string | null | undefined; surahNumber: number}[]>([]);
   const qc = useQueryClient();
+
+  const saveSession = (updates: {
+    sessionDone?: boolean;
+    completedItemsData?: Array<{surahId: number; surahName: string | null | undefined; surahNumber: number}>;
+    sessionSurahs?: typeof dueToday;
+    sessionTotal?: number;
+  }) => {
+    try {
+      const current = (() => { try { return JSON.parse(localStorage.getItem(SESSION_KEY) || '{}'); } catch { return {}; } })();
+      localStorage.setItem(SESSION_KEY, JSON.stringify({
+        ...current,
+        date: getTodayLocal(),
+        ...updates,
+      }));
+    } catch {}
+  };
 
   const { data, isLoading } = useQuery({
     queryKey: ["reviews", childId],
@@ -305,6 +343,7 @@ export default function ReviewPage() {
   if (data && sessionSurahsRef.current === null && dueToday.length > 0) {
     sessionSurahsRef.current = dueToday;
     sessionTotalRef.current = dueToday.length;
+    saveSession({ sessionSurahs: dueToday, sessionTotal: dueToday.length });
   }
   const sessionSurahs = sessionSurahsRef.current ?? dueToday;
 
@@ -326,11 +365,11 @@ export default function ReviewPage() {
     onSuccess: (_, variables) => {
       const completedItem = dueTodayRef.current.find(i => i.surahId === variables.surahId);
       if (completedItem) {
-        setCompletedItemsData(prev =>
-          prev.some(i => i.surahId === completedItem.surahId)
-            ? prev
-            : [...prev, { surahId: completedItem.surahId, surahName: completedItem.surahName, surahNumber: completedItem.surahNumber }]
-        );
+        const newItemsData = completedItemsData.some(i => i.surahId === completedItem.surahId)
+          ? completedItemsData
+          : [...completedItemsData, { surahId: completedItem.surahId, surahName: completedItem.surahName, surahNumber: completedItem.surahNumber }];
+        setCompletedItemsData(newItemsData);
+        saveSession({ completedItemsData: newItemsData });
       }
       setCompletedSurahIds((prev) => new Set([...prev, variables.surahId]));
       qc.invalidateQueries({ queryKey: ["reviews", childId] });
@@ -348,6 +387,7 @@ export default function ReviewPage() {
         setFlashcardShowVerses(false);
         if (newCount >= sessionTotal) {
           setSessionDone(true);
+          saveSession({ sessionDone: true });
           setShowReviewCelebration(true);
           setFlashcardIndex(null);
         } else {
@@ -357,6 +397,7 @@ export default function ReviewPage() {
         setMushafItem(null);
         if (newCount >= sessionTotal) {
           setSessionDone(true);
+          saveSession({ sessionDone: true });
           setShowReviewCelebration(true);
         }
       }
@@ -671,9 +712,26 @@ export default function ReviewPage() {
           </Card>
         )}
         {sessionDone && (
-          <div className="pb-2">
+          <div className="pb-2 space-y-2">
+            <Button
+              className="w-full rounded-full"
+              variant="outline"
+              onClick={() => {
+                localStorage.removeItem(SESSION_KEY);
+                setSessionDone(false);
+                setCompletedCount(0);
+                setCompletedSurahIds(new Set());
+                setCompletedItemsData([]);
+                sessionTotalRef.current = 0;
+                sessionSurahsRef.current = null;
+                qc.invalidateQueries({ queryKey: ["reviews", childId] });
+                qc.invalidateQueries({ queryKey: ["dashboard", childId] });
+              }}
+            >
+              Next Day's Review →
+            </Button>
             <Link href={`/child/${childId}`}>
-              <Button className="w-full rounded-full">Back to Dashboard</Button>
+              <Button className="w-full rounded-full" variant="ghost">Back to Dashboard</Button>
             </Link>
           </div>
         )}
