@@ -90,10 +90,16 @@ export default function ChildDashboard() {
                     <div className="flex-1">
                       <p className="text-sm font-medium text-foreground">New Memorization</p>
                       <div className="flex items-center gap-1.5 flex-wrap">
-                        {todayProgress?.memStatus === "in_progress" && todayProgress.memCompletedAyahEnd != null && todayProgress.memTargetAyahStart != null && todayProgress.memTargetAyahEnd != null ? (
-                          <p className="text-xs text-muted-foreground">
-                            {todaysPlan.newMemorization.surahName} · {todayProgress.memCompletedAyahEnd - todayProgress.memTargetAyahStart + 1}/{todayProgress.memTargetAyahEnd - todayProgress.memTargetAyahStart + 1} ayahs
-                          </p>
+                        {todayProgress?.memStatus === "completed" ? (
+                          <p className="text-xs text-muted-foreground">{todaysPlan.newMemorization.surahName} · ✓ Completed</p>
+                        ) : todayProgress?.memStatus === "in_progress" ? (
+                          todayProgress.memCompletedAyahEnd != null && todayProgress.memTargetAyahStart != null && todayProgress.memTargetAyahEnd != null ? (
+                            <p className="text-xs text-muted-foreground">
+                              {todaysPlan.newMemorization.surahName} · {Math.max(0, todayProgress.memCompletedAyahEnd - todayProgress.memTargetAyahStart + 1)}/{todayProgress.memTargetAyahEnd - todayProgress.memTargetAyahStart + 1} ayahs
+                            </p>
+                          ) : (
+                            <p className="text-xs text-muted-foreground">{todaysPlan.newMemorization.surahName} · In Progress</p>
+                          )
                         ) : (
                           <p className="text-xs text-muted-foreground">{todaysPlan.newMemorization.surahName} · Ayah {todaysPlan.newMemorization.ayahStart}–{todaysPlan.newMemorization.ayahEnd}</p>
                         )}
@@ -122,8 +128,8 @@ export default function ChildDashboard() {
                     <div className="flex-1">
                       <p className="text-sm font-medium text-foreground">Review Session</p>
                       <div className="flex items-center gap-1.5 flex-wrap">
-                        {todayProgress?.reviewCompletedCount != null && todayProgress.reviewCompletedCount > 0 && todayProgress.reviewStatus !== "completed" ? (
-                          <p className="text-xs text-muted-foreground">{todayProgress.reviewCompletedCount}/{reviewsDueToday} surahs done</p>
+                        {todayProgress?.reviewCompletedCount != null && todayProgress.reviewCompletedCount > 0 ? (
+                          <p className="text-xs text-muted-foreground">{todayProgress.reviewCompletedCount}/{todayProgress?.reviewTargetCount ?? reviewsDueToday} surahs done</p>
                         ) : (
                           <p className="text-xs text-muted-foreground">{reviewsDueToday} surah{reviewsDueToday > 1 ? "s" : ""} to review today</p>
                         )}

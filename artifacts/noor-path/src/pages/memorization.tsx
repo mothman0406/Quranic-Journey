@@ -557,17 +557,23 @@ export default function MemorizationPage() {
                       )}
                     </div>
                     {todayMemStatus === "in_progress" ? (
-                      <>
+                      todayProgress?.memCompletedAyahEnd != null ? (
+                        <>
+                          <p className="text-sm font-medium text-foreground truncate">
+                            {newMem.surahName} · {Math.max(0, todayProgress.memCompletedAyahEnd - memStart + 1)}/{memEnd - memStart + 1} ayahs
+                          </p>
+                          <div className="mt-1.5 h-1.5 w-full bg-muted rounded-full overflow-hidden">
+                            <div
+                              className="h-full bg-emerald-500 rounded-full transition-all"
+                              style={{ width: `${Math.max(0, Math.min(100, memPct))}%` }}
+                            />
+                          </div>
+                        </>
+                      ) : (
                         <p className="text-sm font-medium text-foreground truncate">
-                          {newMem.surahName} · {Math.max(0, (todayProgress?.memCompletedAyahEnd ?? memStart - 1) - memStart + 1)}/{memEnd - memStart + 1} ayahs
+                          {newMem.surahName} · In Progress
                         </p>
-                        <div className="mt-1.5 h-1.5 w-full bg-muted rounded-full overflow-hidden">
-                          <div
-                            className="h-full bg-emerald-500 rounded-full transition-all"
-                            style={{ width: `${Math.max(0, Math.min(100, memPct))}%` }}
-                          />
-                        </div>
-                      </>
+                      )
                     ) : (
                       <p className="text-sm font-medium text-foreground truncate">
                         {newMem.surahName} · Ayah {newMem.ayahStart}–{newMem.ayahEnd}

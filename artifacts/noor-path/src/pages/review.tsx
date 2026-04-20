@@ -2,7 +2,7 @@ import { useState, useRef } from "react";
 import { CelebrationOverlay } from "@/components/celebration-overlay";
 import { useParams, Link } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { listReviews, completeReview, getSurah } from "@workspace/api-client-react";
+import { listReviews, completeReview, getSurah, getChildDashboard } from "@workspace/api-client-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -287,6 +287,13 @@ export default function ReviewPage() {
     queryFn: () => listReviews(parseInt(childId)),
   });
 
+  const { data: dashData } = useQuery({
+    queryKey: ["dashboard", childId],
+    queryFn: () => getChildDashboard(parseInt(childId)),
+    staleTime: 30_000,
+  });
+  const todayProgress = (dashData as any)?.todayProgress;
+
   const dueToday = data?.dueToday ?? [];
 
   // Capture session total once when data first arrives
@@ -547,8 +554,8 @@ export default function ReviewPage() {
             <div>
               <h1 className="text-xl font-bold">Review Session</h1>
               <p className="text-emerald-200 text-sm mt-1">
-                {completedCount > 0 && sessionTotalRef.current > 0
-                  ? `${completedCount}/${sessionTotalRef.current} surahs done`
+                {(completedCount > 0 || (todayProgress?.reviewCompletedCount ?? 0) > 0)
+                  ? `${todayProgress?.reviewCompletedCount ?? completedCount}/${todayProgress?.reviewTargetCount ?? dueToday.length} surahs done`
                   : `${dueToday.length} surah${dueToday.length !== 1 ? "s" : ""} due today`}
               </p>
             </div>
