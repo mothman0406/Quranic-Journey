@@ -357,11 +357,11 @@ router.get("/children/:childId/reviews", async (req, res) => {
   };
 
   const weakSurahs = reviewableWithSchedule
-    .filter(x => isWeak(x.mem))
+    .filter(x => isWeak(x.mem) && x.schedule.dueDate <= today)
     .sort(bySurahDesc);
 
   const strongSurahs = reviewableWithSchedule
-    .filter(x => !isWeak(x.mem) && (SURAHS.find(s => s.id === x.mem.surahId)?.number ?? 0) <= maxSurahNumber)
+    .filter(x => !isWeak(x.mem) && x.schedule.dueDate <= today && (SURAHS.find(s => s.id === x.mem.surahId)?.number ?? 0) <= maxSurahNumber)
     .sort(bySurahDesc);
 
   const withinBudget: typeof scheduleRows = [];
@@ -459,7 +459,10 @@ router.get("/children/:childId/reviews", async (req, res) => {
     return formatReview(r, r.dueDate < today, mem ? isWeak(mem) : false);
   });
 
-  const upcoming = overBudget.map(r => {
+  const futureScheduled = reviewableWithSchedule
+    .filter(x => x.schedule.dueDate > today)
+    .map(x => x.schedule);
+  const upcoming = [...overBudget, ...futureScheduled].map(r => {
     const mem = memProgress.find(m => m.surahId === r.surahId);
     return formatReview(r, false, mem ? isWeak(mem) : false);
   });

@@ -128,8 +128,8 @@ export default function ChildDashboard() {
                     <div className="flex-1">
                       <p className="text-sm font-medium text-foreground">Review Session</p>
                       <div className="flex items-center gap-1.5 flex-wrap">
-                        {todayProgress?.reviewCompletedCount != null && todayProgress.reviewCompletedCount > 0 ? (
-                          <p className="text-xs text-muted-foreground">{todayProgress.reviewCompletedCount}/{reviewsDueToday + (todayProgress?.reviewCompletedCount ?? 0)} surahs done</p>
+                        {reviewsData !== undefined && todayProgress?.reviewCompletedCount != null && todayProgress.reviewCompletedCount > 0 ? (
+                          <p className="text-xs text-muted-foreground">{todayProgress.reviewCompletedCount}/{(reviewsData.dueToday?.length ?? 0) + todayProgress.reviewCompletedCount} surahs done</p>
                         ) : (
                           <p className="text-xs text-muted-foreground">{reviewsDueToday} surah{reviewsDueToday > 1 ? "s" : ""} to review today</p>
                         )}

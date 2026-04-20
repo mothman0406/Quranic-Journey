@@ -559,7 +559,7 @@ export default function ReviewPage() {
                 {(() => {
                   const persistedDone = todayProgress?.reviewCompletedCount ?? 0;
                   const sessionDoneCount = completedCount > 0 ? completedCount : persistedDone;
-                  const sessionTotal = sessionTotalRef.current > 0
+                  const sessionTotal = completedCount > 0
                     ? sessionTotalRef.current
                     : (persistedDone + dueToday.length);
                   return sessionDoneCount > 0 || persistedDone > 0
