@@ -467,7 +467,14 @@ router.get("/children/:childId/reviews", async (req, res) => {
     return formatReview(r, false, mem ? isWeak(mem) : false);
   });
 
-  res.json({ dueToday, upcoming, todayRange });
+  const reviewedToday = reviewableWithSchedule
+    .filter(x => x.schedule.lastReviewed != null && formatDate(x.schedule.lastReviewed) === today)
+    .map(x => {
+      const mem = memProgress.find(m => m.surahId === x.schedule.surahId);
+      return formatReview(x.schedule, false, mem ? isWeak(mem) : false);
+    });
+
+  res.json({ dueToday, upcoming, todayRange, reviewedToday });
 });
 
 router.post("/children/:childId/reviews", async (req, res) => {

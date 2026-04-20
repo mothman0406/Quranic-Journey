@@ -578,76 +578,94 @@ export default function ReviewPage() {
       <div className="max-w-lg mx-auto px-4 -mt-6 space-y-3">
         {/* Due today cards */}
         {(() => {
-          const pendingItems = dueToday.filter(item => !completedSurahIds.has(item.surahId));
-          const doneItems = dueToday.filter(item => completedSurahIds.has(item.surahId));
-          const orderedItems = [...pendingItems, ...doneItems];
-          return orderedItems.map((item) => {
-            const isDone = completedSurahIds.has(item.surahId);
-            const idx = dueToday.indexOf(item);
-            if (isDone) {
-              return (
+          // Surahs reviewed today from the server (persists across refreshes)
+          const serverReviewedToday: typeof dueToday = (data as any)?.reviewedToday ?? [];
+          // Combined done set: server-persisted + in-session completions not yet refetched
+          const doneSuprahIdSet = new Set([
+            ...serverReviewedToday.map((r: any) => r.surahId as number),
+            ...completedSurahIds,
+          ]);
+          // Pending = still in dueToday and not done
+          const pendingItems = dueToday.filter(item => !doneSuprahIdSet.has(item.surahId));
+          // Done rows = server-reviewed (deduped by surahId)
+          const seenDone = new Set<number>();
+          const doneItems = [
+            ...serverReviewedToday,
+            ...dueToday.filter(item => completedSurahIds.has(item.surahId)),
+          ].filter((item: any) => {
+            if (seenDone.has(item.surahId)) return false;
+            seenDone.add(item.surahId);
+            return true;
+          });
+
+          return (
+            <>
+              {pendingItems.map((item) => {
+                const idx = dueToday.indexOf(item);
+                return (
+                  <Card
+                    key={item.id}
+                    className={cn("border-border", item.isOverdue && "border-orange-200")}
+                  >
+                    <CardContent className="p-4">
+                      <div className="flex items-center justify-between mb-3">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <p className="font-bold text-foreground">{item.surahName}</p>
+                            {item.isOverdue && (
+                              <Badge className="bg-orange-100 text-orange-700 border-0 text-[10px]">
+                                Overdue
+                              </Badge>
+                            )}
+                          </div>
+                          <p className="text-xs text-muted-foreground mt-0.5">
+                            Surah {item.surahNumber} · Due {item.dueDate}
+                          </p>
+                        </div>
+                        <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center text-sm font-bold text-primary">
+                          {item.surahNumber}
+                        </div>
+                      </div>
+                      <div className="flex gap-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="flex-1 h-8 text-xs"
+                          onClick={() =>
+                            setMushafItem({
+                              surahId: item.surahId,
+                              surahNumber: item.surahNumber,
+                              surahName: item.surahName ?? "",
+                              reviewItemId: item.id,
+                            })
+                          }
+                        >
+                          Mushaf View
+                        </Button>
+                        <Button
+                          size="sm"
+                          className="flex-1 h-8 text-xs"
+                          onClick={() => setFlashcardIndex(idx)}
+                        >
+                          Flashcard
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })}
+              {doneItems.map((item: any) => (
                 <div
-                  key={item.id}
+                  key={`done-${item.surahId}`}
                   className="flex items-center gap-3 px-4 py-2.5 rounded-xl bg-emerald-50 border border-emerald-200"
                 >
                   <CheckCircle size={16} className="text-emerald-500 flex-shrink-0" />
                   <p className="text-sm font-medium text-emerald-800 flex-1">{item.surahName}</p>
                   <span className="text-xs text-emerald-600 font-medium">Reviewed ✓</span>
                 </div>
-              );
-            }
-            return (
-              <Card
-                key={item.id}
-                className={cn("border-border", item.isOverdue && "border-orange-200")}
-              >
-                <CardContent className="p-4">
-                  <div className="flex items-center justify-between mb-3">
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <p className="font-bold text-foreground">{item.surahName}</p>
-                        {item.isOverdue && (
-                          <Badge className="bg-orange-100 text-orange-700 border-0 text-[10px]">
-                            Overdue
-                          </Badge>
-                        )}
-                      </div>
-                      <p className="text-xs text-muted-foreground mt-0.5">
-                        Surah {item.surahNumber} · Due {item.dueDate}
-                      </p>
-                    </div>
-                    <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center text-sm font-bold text-primary">
-                      {item.surahNumber}
-                    </div>
-                  </div>
-                  <div className="flex gap-2">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="flex-1 h-8 text-xs"
-                      onClick={() =>
-                        setMushafItem({
-                          surahId: item.surahId,
-                          surahNumber: item.surahNumber,
-                          surahName: item.surahName ?? "",
-                          reviewItemId: item.id,
-                        })
-                      }
-                    >
-                      Mushaf View
-                    </Button>
-                    <Button
-                      size="sm"
-                      className="flex-1 h-8 text-xs"
-                      onClick={() => setFlashcardIndex(idx)}
-                    >
-                      Flashcard
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            );
-          });
+              ))}
+            </>
+          );
         })()}
 
         {/* Upcoming */}
