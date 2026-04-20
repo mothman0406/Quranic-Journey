@@ -459,11 +459,19 @@ router.get("/children/:childId/dashboard", async (req, res) => {
         : (memTarget?.endSurah ?? displaySurahNumber);
       const endSurahData = SURAHS.find(s => s.number === endSurah) ?? displaySurahDataFinal;
       const isSameSurah = endSurah === displaySurahNumber;
+      // Learning order is descending: higher surah number (e.g. 114) is studied before lower (e.g. 113)
+      const isDescending = endSurah > displaySurahNumber;
+      const firstWorkData = isDescending ? endSurahData : displaySurahDataFinal;
+      const lastWorkData = isDescending ? displaySurahDataFinal : endSurahData;
       return {
         surahName: isSameSurah
           ? displaySurahDataFinal.nameTransliteration
-          : `${displaySurahDataFinal.nameTransliteration} – ${endSurahData?.nameTransliteration ?? ''}`,
+          : `${firstWorkData?.nameTransliteration ?? ''} – ${lastWorkData?.nameTransliteration ?? ''}`,
         surahNumber: displaySurahDataFinal.number,
+        currentWorkSurahNumber: isDescending ? endSurah : displaySurahNumber,
+        currentWorkSurahName: firstWorkData?.nameTransliteration ?? displaySurahDataFinal.nameTransliteration,
+        currentWorkAyahStart: isDescending ? 1 : displayAyahStart,
+        currentWorkAyahEnd: isDescending ? (endSurahData?.verseCount ?? displayAyahEnd) : displayAyahEnd,
         surahNameArabic: displaySurahDataFinal.nameArabic,
         ayahStart: displayAyahStart,
         ayahEnd: Math.min(displayAyahEnd, endSurahData?.verseCount ?? displayAyahEnd),
@@ -525,13 +533,23 @@ router.get("/children/:childId/dashboard", async (req, res) => {
       reviewTargetCount: todayProgress.reviewTargetCount,
       reviewCompletedCount: todayProgress.reviewCompletedCount,
     },
-    upNextMemorization: todayProgress.memStatus === 'completed' && memorizationSurahData && memTarget ? {
-      surahName: memorizationSurahData.nameTransliteration,
-      surahNumber: memorizationSurahData.number,
-      ayahStart: nextStartSurah === displaySurahNumber ? displayAyahEnd + 1 : nextStartAyah,
-      ayahEnd: memTarget.endAyah,
-      pageStart: getPageForVerse(nextStartSurah, nextStartAyah),
-    } : null,
+    upNextMemorization: (() => {
+      const mem = todaysPlan.newMemorization;
+      if (!mem) return null;
+      // Simulate completing today's surahs to find tomorrow's next surah
+      const todayNums = new Set<number>([mem.surahNumber, mem.endSurahNumber]);
+      const todayIds = new Set(SURAHS.filter(s => todayNums.has(s.number)).map(s => s.id));
+      const afterToday = new Set([...doneSurahIds, ...todayIds]);
+      const nextUp = SURAHS_IN_ORDER.find(s => !afterToday.has(s.id));
+      if (!nextUp) return null;
+      return {
+        surahName: nextUp.nameTransliteration,
+        surahNumber: nextUp.number,
+        ayahStart: 1,
+        ayahEnd: nextUp.verseCount,
+        pageStart: getPageForVerse(nextUp.number, 1),
+      };
+    })(),
   });
 });
 
