@@ -2,7 +2,7 @@ import { useState, useRef } from "react";
 import { CelebrationOverlay } from "@/components/celebration-overlay";
 import { useParams, Link } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { listReviews, completeReview, getSurah, getChildDashboard } from "@workspace/api-client-react";
+import { listReviews, completeReview, getSurah } from "@workspace/api-client-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -279,6 +279,7 @@ export default function ReviewPage() {
   const [sessionDone, setSessionDone] = useState(false);
   const [showReviewCelebration, setShowReviewCelebration] = useState(false);
   const [completedCount, setCompletedCount] = useState(0);
+  const [completedSurahIds, setCompletedSurahIds] = useState<Set<number>>(new Set());
   const sessionTotalRef = useRef<number>(0);
   const qc = useQueryClient();
 
@@ -286,13 +287,6 @@ export default function ReviewPage() {
     queryKey: ["reviews", childId],
     queryFn: () => listReviews(parseInt(childId)),
   });
-
-  const { data: dashData } = useQuery({
-    queryKey: ["dashboard", childId],
-    queryFn: () => getChildDashboard(parseInt(childId)),
-    staleTime: 30_000,
-  });
-  const todayProgress = (dashData as any)?.todayProgress;
 
   const dueToday = data?.dueToday ?? [];
 
@@ -316,7 +310,8 @@ export default function ReviewPage() {
         qualityRating: quality,
         durationMinutes: 5,
       }),
-    onSuccess: () => {
+    onSuccess: (_, variables) => {
+      setCompletedSurahIds((prev) => new Set([...prev, variables.surahId]));
       qc.invalidateQueries({ queryKey: ["reviews", childId] });
       const newCount = completedCount + 1;
       setCompletedCount(newCount);
@@ -554,8 +549,8 @@ export default function ReviewPage() {
             <div>
               <h1 className="text-xl font-bold">Review Session</h1>
               <p className="text-emerald-200 text-sm mt-1">
-                {(completedCount > 0 || (todayProgress?.reviewCompletedCount ?? 0) > 0)
-                  ? `${todayProgress?.reviewCompletedCount ?? completedCount}/${todayProgress?.reviewTargetCount ?? dueToday.length} surahs done`
+                {completedCount > 0
+                  ? `${completedCount}/${sessionTotalRef.current > 0 ? sessionTotalRef.current : dueToday.length} surahs done`
                   : `${dueToday.length} surah${dueToday.length !== 1 ? "s" : ""} due today`}
               </p>
             </div>
@@ -568,60 +563,74 @@ export default function ReviewPage() {
 
       <div className="max-w-lg mx-auto px-4 -mt-6 space-y-3">
         {/* Due today cards */}
-        {dueToday.map((item, idx) => (
-          <Card
-            key={item.id}
-            className={cn(
-              "border-border",
-              item.isOverdue && "border-orange-200"
-            )}
-          >
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between mb-3">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <p className="font-bold text-foreground">{item.surahName}</p>
-                    {item.isOverdue && (
-                      <Badge className="bg-orange-100 text-orange-700 border-0 text-[10px]">
-                        Overdue
-                      </Badge>
-                    )}
+        {dueToday.map((item, idx) => {
+          const isDone = completedSurahIds.has(item.surahId);
+          return (
+            <Card
+              key={item.id}
+              className={cn(
+                "border-border",
+                !isDone && item.isOverdue && "border-orange-200",
+                isDone && "opacity-60 bg-emerald-50/40 border-emerald-200"
+              )}
+            >
+              <CardContent className="p-4">
+                <div className="flex items-center justify-between mb-3">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <p className="font-bold text-foreground">{item.surahName}</p>
+                      {isDone ? (
+                        <span className="text-xs font-semibold text-emerald-600 flex items-center gap-1">
+                          <CheckCircle size={12} /> Done
+                        </span>
+                      ) : item.isOverdue && (
+                        <Badge className="bg-orange-100 text-orange-700 border-0 text-[10px]">
+                          Overdue
+                        </Badge>
+                      )}
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Surah {item.surahNumber} · Due {item.dueDate}
+                    </p>
                   </div>
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    Surah {item.surahNumber} · Due {item.dueDate}
-                  </p>
+                  <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center text-sm font-bold text-primary">
+                    {item.surahNumber}
+                  </div>
                 </div>
-                <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center text-sm font-bold text-primary">
-                  {item.surahNumber}
-                </div>
-              </div>
-              <div className="flex gap-2">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="flex-1 h-8 text-xs"
-                  onClick={() =>
-                    setMushafItem({
-                      surahId: item.surahId,
-                      surahNumber: item.surahNumber,
-                      surahName: item.surahName ?? "",
-                    reviewItemId: item.id,
-                    })
-                  }
-                >
-                  Mushaf View
-                </Button>
-                <Button
-                  size="sm"
-                  className="flex-1 h-8 text-xs"
-                  onClick={() => setFlashcardIndex(idx)}
-                >
-                  Flashcard
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
+                {isDone ? (
+                  <div className="flex items-center justify-center h-8 text-xs text-emerald-600 font-medium bg-emerald-50 rounded-md border border-emerald-200">
+                    ✓ Reviewed
+                  </div>
+                ) : (
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="flex-1 h-8 text-xs"
+                      onClick={() =>
+                        setMushafItem({
+                          surahId: item.surahId,
+                          surahNumber: item.surahNumber,
+                          surahName: item.surahName ?? "",
+                          reviewItemId: item.id,
+                        })
+                      }
+                    >
+                      Mushaf View
+                    </Button>
+                    <Button
+                      size="sm"
+                      className="flex-1 h-8 text-xs"
+                      onClick={() => setFlashcardIndex(idx)}
+                    >
+                      Flashcard
+                    </Button>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          );
+        })}
 
         {/* Upcoming */}
         {(data?.upcoming ?? []).length > 0 && (
