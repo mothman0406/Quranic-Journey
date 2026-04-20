@@ -623,6 +623,7 @@ const stripTashkeel = (s: string): string => {
   r = t("7-ta-marbuta",    r.replace(/ة/g, "ه"));
   r = t("8-waw-hamza",     r.replace(/ؤ/g, "و"));
   r = t("9-ya-hamza",      r.replace(/ئ/g, "ي"));
+  r = t("9b-small-letters", r.replace(/\u06E5/g, "و").replace(/\u06E6/g, "ي"));
   r = t("10-hamza",        r.replace(/ء/g, ""));
   r = t("11-non-arabic",   r.replace(/[^\u0600-\u06FF\s]/g, ""));
   r = t("12-alef-madd",    r.replace(/ا+/g, "ا"));
