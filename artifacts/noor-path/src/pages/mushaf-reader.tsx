@@ -894,7 +894,7 @@ export default function MushafReaderPage() {
                         />
                         <span
                           style={{
-                            fontFamily: '"Scheherazade New", serif',
+                            fontFamily: '"KFGQPC Hafs", "Amiri Quran", serif',
                             fontSize: "0.9em",
                             color: "#5a3e1b",
                             fontWeight: 500,
@@ -914,7 +914,7 @@ export default function MushafReaderPage() {
                       </div>
                       {sid !== 9 && (
                         <div style={{ display: "flex", justifyContent: "center", margin: "4px 0 2px" }}>
-                          <span style={{ fontFamily: '"Scheherazade New", serif', fontSize: "1.1em", color: "#6b5830", direction: "rtl" }}>
+                          <span style={{ fontFamily: '"KFGQPC Hafs", "Amiri Quran", serif', fontSize: "1.1em", color: "#6b5830", direction: "rtl" }}>
                             بِسْمِ ٱللَّهِ ٱلرَّحْمَٰنِ ٱلرَّحِيمِ
                           </span>
                         </div>
