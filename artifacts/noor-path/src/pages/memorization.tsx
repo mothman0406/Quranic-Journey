@@ -559,7 +559,7 @@ export default function MemorizationPage() {
                     {todayMemStatus === "in_progress" ? (
                       <>
                         <p className="text-sm font-medium text-foreground truncate">
-                          {newMem.surahName} · Ayah {newMem.ayahStart}–{todayProgress?.memCompletedAyahEnd ?? newMem.ayahStart} done of {newMem.ayahStart}–{newMem.ayahEnd}
+                          {newMem.surahName} · {Math.max(0, (todayProgress?.memCompletedAyahEnd ?? memStart - 1) - memStart + 1)}/{memEnd - memStart + 1} ayahs
                         </p>
                         <div className="mt-1.5 h-1.5 w-full bg-muted rounded-full overflow-hidden">
                           <div

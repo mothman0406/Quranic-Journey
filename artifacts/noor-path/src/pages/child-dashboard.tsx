@@ -39,7 +39,12 @@ export default function ChildDashboard() {
   const reviewsDueToday = reviewsData?.dueToday?.length ?? data.reviewsDueToday;
   type TodayProgress = {
     memStatus: "not_started" | "in_progress" | "completed";
+    memTargetAyahStart: number | null;
+    memTargetAyahEnd: number | null;
+    memCompletedAyahEnd: number | null;
     reviewStatus: "not_started" | "in_progress" | "completed";
+    reviewTargetCount: number | null;
+    reviewCompletedCount: number;
   };
   const todayProgress = (data as { todayProgress?: TodayProgress } | undefined)?.todayProgress;
   const earned = achievements.filter(a => a.earned).length;
@@ -85,7 +90,13 @@ export default function ChildDashboard() {
                     <div className="flex-1">
                       <p className="text-sm font-medium text-foreground">New Memorization</p>
                       <div className="flex items-center gap-1.5 flex-wrap">
-                        <p className="text-xs text-muted-foreground">{todaysPlan.newMemorization.surahName} · Ayah {todaysPlan.newMemorization.ayahStart}–{todaysPlan.newMemorization.ayahEnd}</p>
+                        {todayProgress?.memStatus === "in_progress" && todayProgress.memCompletedAyahEnd != null && todayProgress.memTargetAyahStart != null && todayProgress.memTargetAyahEnd != null ? (
+                          <p className="text-xs text-muted-foreground">
+                            {todaysPlan.newMemorization.surahName} · {todayProgress.memCompletedAyahEnd - todayProgress.memTargetAyahStart + 1}/{todayProgress.memTargetAyahEnd - todayProgress.memTargetAyahStart + 1} ayahs
+                          </p>
+                        ) : (
+                          <p className="text-xs text-muted-foreground">{todaysPlan.newMemorization.surahName} · Ayah {todaysPlan.newMemorization.ayahStart}–{todaysPlan.newMemorization.ayahEnd}</p>
+                        )}
                         {todayProgress?.memStatus === "in_progress" && (
                           <span className="text-[10px] font-medium text-amber-600 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded-full">In Progress</span>
                         )}
@@ -111,7 +122,11 @@ export default function ChildDashboard() {
                     <div className="flex-1">
                       <p className="text-sm font-medium text-foreground">Review Session</p>
                       <div className="flex items-center gap-1.5 flex-wrap">
-                        <p className="text-xs text-muted-foreground">{reviewsDueToday} surah{reviewsDueToday > 1 ? "s" : ""} to review today</p>
+                        {todayProgress?.reviewCompletedCount != null && todayProgress.reviewCompletedCount > 0 && todayProgress.reviewStatus !== "completed" ? (
+                          <p className="text-xs text-muted-foreground">{todayProgress.reviewCompletedCount}/{reviewsDueToday} surahs done</p>
+                        ) : (
+                          <p className="text-xs text-muted-foreground">{reviewsDueToday} surah{reviewsDueToday > 1 ? "s" : ""} to review today</p>
+                        )}
                         {todayProgress?.reviewStatus === "in_progress" && (
                           <span className="text-[10px] font-medium text-amber-600 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded-full">In Progress</span>
                         )}

@@ -278,6 +278,8 @@ export default function ReviewPage() {
   const [flashcardShowVerses, setFlashcardShowVerses] = useState(false);
   const [sessionDone, setSessionDone] = useState(false);
   const [showReviewCelebration, setShowReviewCelebration] = useState(false);
+  const [completedCount, setCompletedCount] = useState(0);
+  const sessionTotalRef = useRef<number>(0);
   const qc = useQueryClient();
 
   const { data, isLoading } = useQuery({
@@ -286,6 +288,11 @@ export default function ReviewPage() {
   });
 
   const dueToday = data?.dueToday ?? [];
+
+  // Capture session total once when data first arrives
+  if (data && sessionTotalRef.current === 0 && dueToday.length > 0) {
+    sessionTotalRef.current = dueToday.length;
+  }
 
   // Fetch current flashcard surah if in flashcard mode
   const flashcardItem = flashcardIndex !== null ? dueToday[flashcardIndex] : null;
@@ -304,6 +311,13 @@ export default function ReviewPage() {
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["reviews", childId] });
+      const newCount = completedCount + 1;
+      setCompletedCount(newCount);
+      fetch(`/api/children/${childId}/daily-progress`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reviewCompletedCount: newCount }),
+      }).then(() => qc.invalidateQueries({ queryKey: ["dashboard", childId] })).catch(() => {});
       // Advance or finish
       if (flashcardIndex !== null) {
         setFlashcardRating(null);
@@ -533,7 +547,9 @@ export default function ReviewPage() {
             <div>
               <h1 className="text-xl font-bold">Review Session</h1>
               <p className="text-emerald-200 text-sm mt-1">
-                {dueToday.length} surah{dueToday.length !== 1 ? "s" : ""} due today
+                {completedCount > 0 && sessionTotalRef.current > 0
+                  ? `${completedCount}/${sessionTotalRef.current} surahs done`
+                  : `${dueToday.length} surah${dueToday.length !== 1 ? "s" : ""} due today`}
               </p>
             </div>
             <div className="w-14 h-14 rounded-full bg-white/15 border border-white/20 flex items-center justify-center">
