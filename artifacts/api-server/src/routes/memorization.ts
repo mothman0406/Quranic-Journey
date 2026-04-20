@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { db } from "@workspace/db";
-import { childrenTable, memorizationProgressTable, reviewScheduleTable } from "@workspace/db/schema";
+import { childrenTable, memorizationProgressTable, reviewScheduleTable, dailyProgressTable } from "@workspace/db/schema";
 import { eq, and } from "drizzle-orm";
 import { SURAHS } from "../data/surahs.js";
 import { getPageForVerse } from "../data/quran-meta.js";
@@ -269,6 +269,42 @@ router.post("/children/:childId/memorization", async (req, res) => {
   }
 
   console.log("[memorization POST] wrote to DB:", { id: record.id, surahId: record.surahId, status: record.status, versesMemorized: record.versesMemorized });
+
+  // Auto-advance daily progress status so the assignment freezes once the session starts
+  try {
+    const _dd = new Date();
+    const todayStr = `${_dd.getFullYear()}-${String(_dd.getMonth()+1).padStart(2,'0')}-${String(_dd.getDate()).padStart(2,'0')}`;
+    const [todayProg] = await db.select().from(dailyProgressTable)
+      .where(and(eq(dailyProgressTable.childId, childId), eq(dailyProgressTable.date, todayStr)));
+
+    if (todayProg) {
+      if (todayProg.memStatus === 'not_started') {
+        await db.update(dailyProgressTable).set({ memStatus: 'in_progress', updatedAt: now })
+          .where(eq(dailyProgressTable.id, todayProg.id));
+      } else if (todayProg.memStatus === 'in_progress') {
+        const targetNum = todayProg.memTargetSurah;
+        const endNum = todayProg.memTargetEndSurah ?? targetNum;
+        if (targetNum && endNum) {
+          const rangeMin = Math.min(targetNum, endNum);
+          const rangeMax = Math.max(targetNum, endNum);
+          const allProg = await db.select().from(memorizationProgressTable)
+            .where(eq(memorizationProgressTable.childId, childId));
+          const allDone = Array.from({ length: rangeMax - rangeMin + 1 }, (_, i) => rangeMin + i).every(n => {
+            const s = SURAHS.find(ss => ss.number === n);
+            if (!s) return true;
+            const mp = allProg.find(m => m.surahId === s.id);
+            return mp?.status === 'memorized';
+          });
+          if (allDone) {
+            await db.update(dailyProgressTable).set({ memStatus: 'completed', updatedAt: now })
+              .where(eq(dailyProgressTable.id, todayProg.id));
+          }
+        }
+      }
+    }
+  } catch (e) {
+    console.error('[memorization POST] failed to update daily progress status:', e);
+  }
 
   const returnedAyahs: number[] = (() => { try { return JSON.parse(record.memorizedAyahs || "[]"); } catch { return []; } })();
   res.json({

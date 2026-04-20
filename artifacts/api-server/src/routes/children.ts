@@ -463,15 +463,42 @@ router.get("/children/:childId/dashboard", async (req, res) => {
       const isDescending = endSurah > displaySurahNumber;
       const firstWorkData = isDescending ? endSurahData : displaySurahDataFinal;
       const lastWorkData = isDescending ? displaySurahDataFinal : endSurahData;
+
+      // Current work = first incomplete surah in today's range (descending learning order).
+      // Defaults to the last in learning order (displaySurahNumber) if all are done.
+      let cwNum: number;
+      let cwAyahStart: number;
+      let cwAyahEnd: number;
+      if (!isSameSurah && isDescending) {
+        cwNum = displaySurahNumber;
+        cwAyahStart = displayAyahStart;
+        cwAyahEnd = displaySurahDataFinal.verseCount;
+        for (let n = endSurah; n >= displaySurahNumber; n--) {
+          const s = SURAHS.find(ss => ss.number === n);
+          const mp = s ? memProgress.find(m => m.surahId === s.id) : undefined;
+          if (!mp || mp.status !== 'memorized') {
+            cwNum = n;
+            cwAyahStart = n === displaySurahNumber ? displayAyahStart : 1;
+            cwAyahEnd = n === endSurah ? (endSurahData?.verseCount ?? displayAyahEnd) : (s?.verseCount ?? displayAyahEnd);
+            break;
+          }
+        }
+      } else {
+        cwNum = isDescending ? endSurah : displaySurahNumber;
+        cwAyahStart = isDescending ? 1 : displayAyahStart;
+        cwAyahEnd = isDescending ? (endSurahData?.verseCount ?? displayAyahEnd) : displayAyahEnd;
+      }
+      const cwData = SURAHS.find(s => s.number === cwNum);
+
       return {
         surahName: isSameSurah
           ? displaySurahDataFinal.nameTransliteration
           : `${firstWorkData?.nameTransliteration ?? ''} – ${lastWorkData?.nameTransliteration ?? ''}`,
         surahNumber: displaySurahDataFinal.number,
-        currentWorkSurahNumber: isDescending ? endSurah : displaySurahNumber,
-        currentWorkSurahName: firstWorkData?.nameTransliteration ?? displaySurahDataFinal.nameTransliteration,
-        currentWorkAyahStart: isDescending ? 1 : displayAyahStart,
-        currentWorkAyahEnd: isDescending ? (endSurahData?.verseCount ?? displayAyahEnd) : displayAyahEnd,
+        currentWorkSurahNumber: cwNum,
+        currentWorkSurahName: cwData?.nameTransliteration ?? displaySurahDataFinal.nameTransliteration,
+        currentWorkAyahStart: cwAyahStart,
+        currentWorkAyahEnd: cwAyahEnd,
         surahNameArabic: displaySurahDataFinal.nameArabic,
         ayahStart: displayAyahStart,
         ayahEnd: Math.min(displayAyahEnd, endSurahData?.verseCount ?? displayAyahEnd),
