@@ -117,6 +117,21 @@ async function fetchTranslation(verseKey: string): Promise<string> {
     .trim();
 }
 
+async function fetchWordTranslation(surah: number, verse: number): Promise<Array<{ position: number; translation: string }>> {
+  try {
+    const r = await fetch(
+      `https://api.quran.com/api/v4/verses/by_key/${surah}:${verse}?word_fields=translation`
+    );
+    if (!r.ok) return [];
+    const data = await r.json();
+    return (data.verse?.words ?? [])
+      .filter((w: any) => w.char_type_name !== "end")
+      .map((w: any) => ({ position: w.position, translation: w.translation?.text ?? "" }));
+  } catch {
+    return [];
+  }
+}
+
 // ─── Utilities ─────────────────────────────────────────────────────────────────
 
 function stripTashkeel(s: string): string {
@@ -404,6 +419,8 @@ export default function MushafReaderPage() {
   const [isSelectMode, setIsSelectMode] = useState(false);
   const [selectedVerseKeys, setSelectedVerseKeys] = useState<Set<string>>(new Set());
   const [tappedAyah, setTappedAyah] = useState<AyahInfo | null>(null);
+  const [tappedWord, setTappedWord] = useState<{ key: string; text: string; position: number; surahId: number; verseNum: number } | null>(null);
+  const [wordTranslations, setWordTranslations] = useState<Map<string, string>>(new Map());
   const [isRecitePickMode, setIsRecitePickMode] = useState(false);
   const [isReciting, setIsReciting] = useState(false);
   const [reciteStartVerseKey, setReciteStartVerseKey] = useState<string | null>(null);
@@ -421,6 +438,7 @@ export default function MushafReaderPage() {
   useEffect(() => {
     setRevealedVerseKeys(new Set());
     setTappedAyah(null);
+    setTappedWord(null);
     recognitionRef.current?.stop();
     recognitionRef.current = null;
     setIsReciting(false);
@@ -683,15 +701,39 @@ export default function MushafReaderPage() {
         return;
       }
 
-      const pv = verses.find((v) => v.verse_key === lw.verse_key);
-      setTappedAyah({
-        verseKey: lw.verse_key,
-        surahId: lw.surahId,
-        verseNum: lw.verseNum,
-        text_uthmani: pv?.text_uthmani ?? "",
-      });
+      // In normal mode: word tap → show word tooltip, end marker tap → open AyahSheet
+      if (lw.char_type_name === "end") {
+        const pv = verses.find((v) => v.verse_key === lw.verse_key);
+        setTappedAyah({
+          verseKey: lw.verse_key,
+          surahId: lw.surahId,
+          verseNum: lw.verseNum,
+          text_uthmani: pv?.text_uthmani ?? "",
+        });
+        setTappedWord(null);
+      } else {
+        const wordKey = `${lw.verse_key}:${lw.position}`;
+        if (tappedWord?.key === wordKey) {
+          setTappedWord(null);
+          return;
+        }
+        setTappedWord({ key: wordKey, text: lw.text_uthmani, position: lw.position, surahId: lw.surahId, verseNum: lw.verseNum });
+        const cacheKey = `${lw.surahId}:${lw.verseNum}`;
+        if (!wordTranslations.has(cacheKey + ":fetched")) {
+          fetchWordTranslation(lw.surahId, lw.verseNum).then(results => {
+            setWordTranslations(prev => {
+              const next = new Map(prev);
+              next.set(cacheKey + ":fetched", "1");
+              for (const r of results) {
+                next.set(`${lw.surahId}:${lw.verseNum}:${r.position}`, r.translation);
+              }
+              return next;
+            });
+          });
+        }
+      }
     },
-    [isReciting, isRecitePickMode, isSelectMode, isBlindMode, verses, startReciting]
+    [isReciting, isRecitePickMode, isSelectMode, isBlindMode, verses, startReciting, tappedWord, wordTranslations]
   );
 
   return (
@@ -1164,6 +1206,49 @@ export default function MushafReaderPage() {
           onClose={() => setTappedAyah(null)}
         />
       )}
+
+      {/* ── Word translation tooltip ── */}
+      {tappedWord && (() => {
+        const cacheKey = `${tappedWord.surahId}:${tappedWord.verseNum}:${tappedWord.position}`;
+        const translation = wordTranslations.get(cacheKey);
+        return (
+          <div
+            className="fixed bottom-20 left-0 right-0 z-40 flex justify-center px-4 pointer-events-none"
+            onClick={() => setTappedWord(null)}
+          >
+            <div className="bg-white rounded-2xl shadow-xl border border-amber-200 px-4 py-3 pointer-events-auto max-w-xs w-full">
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex-1 min-w-0">
+                  <p
+                    dir="rtl"
+                    className="text-xl text-amber-900 mb-1"
+                    style={{ fontFamily: '"KFGQPC Hafs", "Amiri Quran", serif' }}
+                  >
+                    {tappedWord.text}
+                  </p>
+                  {translation === undefined ? (
+                    <p className="text-xs text-muted-foreground animate-pulse">Loading…</p>
+                  ) : translation ? (
+                    <p className="text-sm text-gray-700 leading-snug">{translation}</p>
+                  ) : (
+                    <p className="text-xs text-gray-400 italic">No translation available</p>
+                  )}
+                  <p className="text-[10px] text-amber-400 mt-1">
+                    {tappedWord.surahId}:{tappedWord.verseNum} · word {tappedWord.position}
+                  </p>
+                </div>
+                <button
+                  onClick={() => setTappedWord(null)}
+                  className="text-gray-300 hover:text-gray-500 shrink-0 mt-0.5"
+                >
+                  <X size={14} />
+                </button>
+              </div>
+              <p className="text-[10px] text-amber-300 mt-2 text-center">Tap verse number ○ to open full ayah</p>
+            </div>
+          </div>
+        );
+      })()}
 
       <ChildNav childId={childId} />
     </div>
