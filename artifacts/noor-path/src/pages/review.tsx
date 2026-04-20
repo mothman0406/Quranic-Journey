@@ -563,45 +563,49 @@ export default function ReviewPage() {
 
       <div className="max-w-lg mx-auto px-4 -mt-6 space-y-3">
         {/* Due today cards */}
-        {dueToday.map((item, idx) => {
-          const isDone = completedSurahIds.has(item.surahId);
-          return (
-            <Card
-              key={item.id}
-              className={cn(
-                "border-border",
-                !isDone && item.isOverdue && "border-orange-200",
-                isDone && "opacity-60 bg-emerald-50/40 border-emerald-200"
-              )}
-            >
-              <CardContent className="p-4">
-                <div className="flex items-center justify-between mb-3">
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <p className="font-bold text-foreground">{item.surahName}</p>
-                      {isDone ? (
-                        <span className="text-xs font-semibold text-emerald-600 flex items-center gap-1">
-                          <CheckCircle size={12} /> Done
-                        </span>
-                      ) : item.isOverdue && (
-                        <Badge className="bg-orange-100 text-orange-700 border-0 text-[10px]">
-                          Overdue
-                        </Badge>
-                      )}
-                    </div>
-                    <p className="text-xs text-muted-foreground mt-0.5">
-                      Surah {item.surahNumber} · Due {item.dueDate}
-                    </p>
-                  </div>
-                  <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center text-sm font-bold text-primary">
-                    {item.surahNumber}
-                  </div>
+        {(() => {
+          const pendingItems = dueToday.filter(item => !completedSurahIds.has(item.surahId));
+          const doneItems = dueToday.filter(item => completedSurahIds.has(item.surahId));
+          const orderedItems = [...pendingItems, ...doneItems];
+          return orderedItems.map((item) => {
+            const isDone = completedSurahIds.has(item.surahId);
+            const idx = dueToday.indexOf(item);
+            if (isDone) {
+              return (
+                <div
+                  key={item.id}
+                  className="flex items-center gap-3 px-4 py-2.5 rounded-xl bg-emerald-50 border border-emerald-200"
+                >
+                  <CheckCircle size={16} className="text-emerald-500 flex-shrink-0" />
+                  <p className="text-sm font-medium text-emerald-800 flex-1">{item.surahName}</p>
+                  <span className="text-xs text-emerald-600 font-medium">Reviewed ✓</span>
                 </div>
-                {isDone ? (
-                  <div className="flex items-center justify-center h-8 text-xs text-emerald-600 font-medium bg-emerald-50 rounded-md border border-emerald-200">
-                    ✓ Reviewed
+              );
+            }
+            return (
+              <Card
+                key={item.id}
+                className={cn("border-border", item.isOverdue && "border-orange-200")}
+              >
+                <CardContent className="p-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <p className="font-bold text-foreground">{item.surahName}</p>
+                        {item.isOverdue && (
+                          <Badge className="bg-orange-100 text-orange-700 border-0 text-[10px]">
+                            Overdue
+                          </Badge>
+                        )}
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        Surah {item.surahNumber} · Due {item.dueDate}
+                      </p>
+                    </div>
+                    <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center text-sm font-bold text-primary">
+                      {item.surahNumber}
+                    </div>
                   </div>
-                ) : (
                   <div className="flex gap-2">
                     <Button
                       size="sm"
@@ -626,11 +630,11 @@ export default function ReviewPage() {
                       Flashcard
                     </Button>
                   </div>
-                )}
-              </CardContent>
-            </Card>
-          );
-        })}
+                </CardContent>
+              </Card>
+            );
+          });
+        })()}
 
         {/* Upcoming */}
         {(data?.upcoming ?? []).length > 0 && (
