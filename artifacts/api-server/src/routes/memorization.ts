@@ -287,12 +287,13 @@ router.post("/children/:childId/memorization", async (req, res) => {
         if (targetNum && endNum) {
           const rangeMin = Math.min(targetNum, endNum);
           const rangeMax = Math.max(targetNum, endNum);
-          const allProg = await db.select().from(memorizationProgressTable)
+          // Re-fetch AFTER the current save so we see the just-updated status
+          const freshProg = await db.select().from(memorizationProgressTable)
             .where(eq(memorizationProgressTable.childId, childId));
           const allDone = Array.from({ length: rangeMax - rangeMin + 1 }, (_, i) => rangeMin + i).every(n => {
             const s = SURAHS.find(ss => ss.number === n);
             if (!s) return true;
-            const mp = allProg.find(m => m.surahId === s.id);
+            const mp = freshProg.find(m => m.surahId === s.id);
             return mp?.status === 'memorized';
           });
           if (allDone) {

@@ -702,13 +702,14 @@ router.post("/children/:childId/daily-progress", async (req, res) => {
   const _d = new Date();
   const today = `${_d.getFullYear()}-${String(_d.getMonth()+1).padStart(2,'0')}-${String(_d.getDate()).padStart(2,'0')}`;
   const { memStatus, memCompletedAyahEnd, reviewStatus, reviewCompletedCount } = req.body;
+  let [row] = await db.select().from(dailyProgressTable)
+    .where(and(eq(dailyProgressTable.childId, childId), eq(dailyProgressTable.date, today)));
   const updates: Record<string, unknown> = { updatedAt: new Date() };
-  if (memStatus) updates.memStatus = memStatus;
+  // Never downgrade a completed status — the /memorization route sets it authoritatively
+  if (memStatus && !(row?.memStatus === 'completed' && memStatus !== 'completed')) updates.memStatus = memStatus;
   if (memCompletedAyahEnd != null) updates.memCompletedAyahEnd = memCompletedAyahEnd;
   if (reviewStatus) updates.reviewStatus = reviewStatus;
   if (reviewCompletedCount != null) updates.reviewCompletedCount = reviewCompletedCount;
-  let [row] = await db.select().from(dailyProgressTable)
-    .where(and(eq(dailyProgressTable.childId, childId), eq(dailyProgressTable.date, today)));
   if (row) {
     [row] = await db.update(dailyProgressTable).set(updates).where(eq(dailyProgressTable.id, row.id)).returning();
   }

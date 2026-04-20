@@ -110,13 +110,7 @@ export default function ChildDashboard() {
                         {todayProgress?.memStatus === "completed" ? (
                           <p className="text-xs text-muted-foreground">{todaysPlan.newMemorization.surahName} · ✓ Completed</p>
                         ) : todayProgress?.memStatus === "in_progress" ? (
-                          todayProgress.memCompletedAyahEnd != null && todayProgress.memTargetAyahStart != null && todayProgress.memTargetAyahEnd != null ? (
-                            <p className="text-xs text-muted-foreground">
-                              {todaysPlan.newMemorization.surahName} · {Math.max(0, todayProgress.memCompletedAyahEnd - todayProgress.memTargetAyahStart + 1)}/{todayProgress.memTargetAyahEnd - todayProgress.memTargetAyahStart + 1} ayahs
-                            </p>
-                          ) : (
-                            <p className="text-xs text-muted-foreground">{todaysPlan.newMemorization.surahName} · In Progress</p>
-                          )
+                          <p className="text-xs text-muted-foreground">{todaysPlan.newMemorization.surahName} · In Progress</p>
                         ) : (
                           <p className="text-xs text-muted-foreground">{todaysPlan.newMemorization.surahName} · Ayah {todaysPlan.newMemorization.ayahStart}–{todaysPlan.newMemorization.ayahEnd}</p>
                         )}
