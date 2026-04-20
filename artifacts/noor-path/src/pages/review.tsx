@@ -280,7 +280,9 @@ export default function ReviewPage() {
   const [showReviewCelebration, setShowReviewCelebration] = useState(false);
   const [completedCount, setCompletedCount] = useState(0);
   const [completedSurahIds, setCompletedSurahIds] = useState<Set<number>>(new Set());
+  const [completedItemsData, setCompletedItemsData] = useState<Array<{surahId: number; surahName: string | null | undefined; surahNumber: number}>>([]);
   const sessionTotalRef = useRef<number>(0);
+  const dueTodayRef = useRef<{surahId: number; surahName: string | null | undefined; surahNumber: number}[]>([]);
   const qc = useQueryClient();
 
   const { data, isLoading } = useQuery({
@@ -296,6 +298,7 @@ export default function ReviewPage() {
   const todayProgress = (dashData as any)?.todayProgress;
 
   const dueToday = data?.dueToday ?? [];
+  dueTodayRef.current = dueToday;
 
   // Capture session total once when data first arrives
   if (data && sessionTotalRef.current === 0 && dueToday.length > 0) {
@@ -318,6 +321,14 @@ export default function ReviewPage() {
         durationMinutes: 5,
       }),
     onSuccess: (_, variables) => {
+      const completedItem = dueTodayRef.current.find(i => i.surahId === variables.surahId);
+      if (completedItem) {
+        setCompletedItemsData(prev =>
+          prev.some(i => i.surahId === completedItem.surahId)
+            ? prev
+            : [...prev, { surahId: completedItem.surahId, surahName: completedItem.surahName, surahNumber: completedItem.surahNumber }]
+        );
+      }
       setCompletedSurahIds((prev) => new Set([...prev, variables.surahId]));
       qc.invalidateQueries({ queryKey: ["reviews", childId] });
       const newCount = completedCount + 1;
@@ -591,7 +602,7 @@ export default function ReviewPage() {
           const seenDone = new Set<number>();
           const doneItems = [
             ...serverReviewedToday,
-            ...dueToday.filter(item => completedSurahIds.has(item.surahId)),
+            ...completedItemsData.filter(item => !serverReviewedToday.some((r: any) => r.surahId === item.surahId)),
           ].filter((item: any) => {
             if (seenDone.has(item.surahId)) return false;
             seenDone.add(item.surahId);
