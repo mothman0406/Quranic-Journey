@@ -381,7 +381,13 @@ router.get("/children/:childId/reviews", async (req, res) => {
 
     const newPages = [...surahPageSet].filter(p => !coveredPages.has(p));
 
-    if (coveredPages.size < reviewBudget || newPages.length === 0) {
+    // Include if: already under budget, OR this surah is free (shares covered pages),
+    // OR including it would bring us closer to the budget than excluding it.
+    const currentUnder = reviewBudget - coveredPages.size;
+    const wouldBeOver = (coveredPages.size + newPages.length) - reviewBudget;
+    const closerToInclude = newPages.length > 0 && wouldBeOver <= currentUnder;
+
+    if (coveredPages.size < reviewBudget || newPages.length === 0 || closerToInclude) {
       newPages.forEach(p => coveredPages.add(p));
       withinBudget.push(r);
     } else {
