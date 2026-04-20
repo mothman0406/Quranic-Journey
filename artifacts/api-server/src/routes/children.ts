@@ -3,7 +3,7 @@ import { db } from "@workspace/db";
 import { childrenTable, memorizationProgressTable, reviewScheduleTable, learningSessionsTable, childDuasTable, dailyProgressTable } from "@workspace/db/schema";
 import { eq, desc, and, lte } from "drizzle-orm";
 import { SURAHS } from "../data/surahs.js";
-import { resolvePageTarget, getPageForVerse } from "../data/quran-meta.js";
+import { resolvePageTarget, getPageForVerse, SURAH_START_PAGES } from "../data/quran-meta.js";
 import { STORIES } from "../data/stories.js";
 import { DUAS } from "../data/duas.js";
 
@@ -372,6 +372,43 @@ router.get("/children/:childId/dashboard", async (req, res) => {
     }
   }
 
+  // Extend start backward on the same Mushaf page so the daily assignment
+  // fills as close to memorizePagePerDay as possible (e.g. 0.75 pages on a
+  // 15-verse page → prefer 11 verses over 6).
+  if (memorizationSurahData) {
+    const surahPage = SURAH_START_PAGES[nextStartSurah - 1];
+    const totalVersesOnPage = SURAHS.reduce(
+      (acc, s) => (SURAH_START_PAGES[s.number - 1] === surahPage ? acc + s.verseCount : acc), 0
+    );
+    if (totalVersesOnPage > 0) {
+      const targetVerseCount = child.memorizePagePerDay * totalVersesOnPage;
+      let accumulated = (memorizationSurahData.verseCount) - (nextStartAyah - 1);
+      let bestStartSurah = nextStartSurah;
+
+      for (let s = nextStartSurah - 1; s >= 2; s--) {
+        if (SURAH_START_PAGES[s - 1] !== surahPage) break;
+        const sd = SURAHS.find(ss => ss.number === s);
+        if (!sd || doneSurahIds.has(sd.id)) break;
+        const newTotal = accumulated + sd.verseCount;
+        if (Math.abs(targetVerseCount - newTotal) < Math.abs(targetVerseCount - accumulated)) {
+          accumulated = newTotal;
+          bestStartSurah = s;
+        } else {
+          break;
+        }
+      }
+
+      if (bestStartSurah !== nextStartSurah) {
+        const bestSurahData = SURAHS.find(ss => ss.number === bestStartSurah)!;
+        const earlyInProg = memProgress.find(m => m.surahId === bestSurahData.id && m.status === 'in_progress');
+        nextStartSurah = bestStartSurah;
+        nextStartAyah = earlyInProg ? earlyInProg.versesMemorized + 1 : 1;
+        memorizationSurahData = bestSurahData;
+        inProgressSurah = earlyInProg;
+      }
+    }
+  }
+
   const currentSurahName = memorizationSurahData?.nameTransliteration ?? null;
 
   const memTarget = memorizationSurahData
@@ -388,6 +425,7 @@ router.get("/children/:childId/dashboard", async (req, res) => {
       memTargetSurah: nextStartSurah,
       memTargetAyahStart: nextStartAyah,
       memTargetAyahEnd: memTarget?.endAyah ?? null,
+      memTargetEndSurah: memTarget?.endSurah ?? nextStartSurah,
       memStatus: 'not_started',
       reviewTargetCount: null,
       reviewCompletedCount: 0,
@@ -414,7 +452,9 @@ router.get("/children/:childId/dashboard", async (req, res) => {
     date: today,
     newMemorization: displaySurahDataFinal ? (() => {
       const frozen = todayProgress.memStatus !== 'not_started' && !!todayProgress.memTargetSurah;
-      const endSurah = frozen ? displaySurahNumber : (memTarget?.endSurah ?? displaySurahNumber);
+      const endSurah = frozen
+        ? (todayProgress.memTargetEndSurah ?? displaySurahNumber)
+        : (memTarget?.endSurah ?? displaySurahNumber);
       const endSurahData = SURAHS.find(s => s.number === endSurah) ?? displaySurahDataFinal;
       const isSameSurah = endSurah === displaySurahNumber;
       return {

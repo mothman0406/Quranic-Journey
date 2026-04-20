@@ -328,6 +328,32 @@ export function getPageForVerse(surah: number, ayah: number): number {
 }
 
 /**
+ * Returns the fractional page position of a verse.
+ * atEnd=false → start of the verse slot; atEnd=true → end of the verse slot.
+ * Allows sub-page precision when multiple surah ends share the same integer page.
+ */
+function getFractionalPage(surah: number, ayah: number, atEnd = false): number {
+  const intPage = getPageForVerse(surah, ayah);
+  const pageStart = PAGE_TO_FIRST_VERSE[intPage - 1];
+  if (!pageStart) return atEnd ? intPage + 1 : intPage;
+
+  let idx = -1;
+  let total = 0;
+  let cur: VerseRef = { surah: pageStart.surah, ayah: pageStart.ayah };
+
+  for (let i = 0; i < 300; i++) {
+    if (cur.surah === surah && cur.ayah === ayah) idx = total;
+    total++;
+    const n = nextVerse(cur.surah, cur.ayah);
+    if (!n || getPageForVerse(n.surah, n.ayah) > intPage) break;
+    cur = n;
+  }
+
+  if (idx < 0 || total === 0) return atEnd ? intPage + 1 : intPage;
+  return intPage + (atEnd ? idx + 1 : idx) / total;
+}
+
+/**
  * Given a start position and page budget, find the best stopping point.
  * Priority: surah_end > juz > hizb_quarter > page_end > verse_split
  */
@@ -397,16 +423,21 @@ export function resolvePageTarget(
     const PRIORITY: Record<PageTargetResult['snapReason'], number> = {
       surah_end: 0, juz: 1, hizb_quarter: 2, page_end: 3, verse_split: 4,
     };
+    const startFrac = getFractionalPage(startSurah, startAyah);
+    const targetFrac = startFrac + pagesTarget;
     candidates.sort((a, b) => {
       const dp = PRIORITY[a.reason] - PRIORITY[b.reason];
       if (dp !== 0) return dp;
-      return Math.abs(a.page - targetPage) - Math.abs(b.page - targetPage);
+      const aFrac = getFractionalPage(a.surah, a.ayah, true);
+      const bFrac = getFractionalPage(b.surah, b.ayah, true);
+      return Math.abs(aFrac - targetFrac) - Math.abs(bFrac - targetFrac);
     });
     const best = candidates[0];
+    const bestFrac = getFractionalPage(best.surah, best.ayah, true);
     return {
       endSurah: best.surah,
       endAyah: best.ayah,
-      actualPages: best.page - startPage,
+      actualPages: Math.max(0, bestFrac - startFrac),
       snapReason: best.reason,
     };
   }

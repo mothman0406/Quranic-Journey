@@ -349,6 +349,8 @@ function DailyGoalsSection({ childId }: { childId: string }) {
   const [saved, setSaved] = useState<"memorize" | "review" | null>(null);
   const [memorizeValue, setMemorizeValue] = useState<number | null>(null);
   const [reviewValue, setReviewValue] = useState<number | null>(null);
+  const [showMemorizeCustom, setShowMemorizeCustom] = useState(false);
+  const [memorizeCustomInput, setMemorizeCustomInput] = useState("");
 
   const { data: child } = useQuery({
     queryKey: ["child", childId],
@@ -397,6 +399,7 @@ function DailyGoalsSection({ childId }: { childId: string }) {
               key={o.value}
               onClick={() => {
                 setMemorizeValue(o.value);
+                setShowMemorizeCustom(false);
                 mutation.mutate({ memorizePagePerDay: o.value });
               }}
               className={cn(
@@ -409,7 +412,57 @@ function DailyGoalsSection({ childId }: { childId: string }) {
               {o.label}
             </button>
           ))}
+          {activeMemorize !== undefined && !MEMORIZE_OPTIONS.some(o => o.value === activeMemorize) && !showMemorizeCustom && (
+            <button
+              onClick={() => { setShowMemorizeCustom(true); setMemorizeCustomInput(String(activeMemorize)); }}
+              className="rounded-xl border px-3 py-2 text-sm font-medium border-primary bg-primary/5 text-primary"
+            >
+              {activeMemorize} pages
+            </button>
+          )}
+          <button
+            onClick={() => { setShowMemorizeCustom(!showMemorizeCustom); setMemorizeCustomInput(String(activeMemorize ?? "")); }}
+            className={cn(
+              "rounded-xl border px-3 py-2 text-sm font-medium transition-all",
+              showMemorizeCustom
+                ? "border-primary bg-primary/5 text-primary"
+                : "border-border text-muted-foreground hover:border-primary/40"
+            )}
+          >
+            Custom…
+          </button>
         </div>
+        {showMemorizeCustom && (
+          <div className="flex gap-2 items-center mt-2">
+            <input
+              type="number"
+              min="0.1"
+              max="10"
+              step="0.25"
+              value={memorizeCustomInput}
+              onChange={(e) => setMemorizeCustomInput(e.target.value)}
+              placeholder="e.g. 0.75"
+              className="w-24 rounded-xl border border-border px-3 py-2 text-sm bg-background"
+              autoFocus
+            />
+            <button
+              onClick={() => {
+                const v = parseFloat(memorizeCustomInput);
+                if (!isNaN(v) && v > 0) {
+                  setMemorizeValue(v);
+                  mutation.mutate({ memorizePagePerDay: v });
+                }
+                setShowMemorizeCustom(false);
+              }}
+              className="rounded-xl border border-primary bg-primary/5 text-primary px-3 py-2 text-sm font-medium"
+            >
+              Set
+            </button>
+            <button onClick={() => setShowMemorizeCustom(false)} className="text-sm text-muted-foreground">
+              Cancel
+            </button>
+          </div>
+        )}
       </div>
 
       <Divider />

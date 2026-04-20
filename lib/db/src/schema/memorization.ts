@@ -55,6 +55,7 @@ export const dailyProgressTable = pgTable("daily_progress", {
   memTargetSurah: integer("mem_target_surah"),
   memTargetAyahStart: integer("mem_target_ayah_start"),
   memTargetAyahEnd: integer("mem_target_ayah_end"),
+  memTargetEndSurah: integer("mem_target_end_surah"),
   memCompletedAyahEnd: integer("mem_completed_ayah_end"),
   memStatus: text("mem_status").notNull().default("not_started"),
   reviewTargetCount: integer("review_target_count"),
