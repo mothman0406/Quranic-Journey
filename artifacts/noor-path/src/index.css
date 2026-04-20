@@ -250,14 +250,14 @@
 
 /* Mushaf (Quran reading) text */
 .mushaf-text {
-  font-family: 'Amiri Quran', 'Amiri', serif;
+  font-family: 'KFGQPC Hafs', 'Amiri Quran', serif;
   direction: rtl;
   unicode-bidi: bidi-override;
 }
 
 .mushaf-page-content {
   direction: rtl;
-  font-family: 'Amiri Quran', 'Amiri', serif;
+  font-family: 'KFGQPC Hafs', 'Amiri Quran', serif;
   color: #1a0a00;
 }
 
@@ -346,7 +346,7 @@
 }
 
 .mushaf-bismillah {
-  font-family: 'Amiri Quran', 'Amiri', serif;
+  font-family: 'KFGQPC Hafs', 'Amiri Quran', serif;
   font-size: clamp(1.1rem, 3vw, 1.4rem);
   color: #1a0a00;
   text-align: center;

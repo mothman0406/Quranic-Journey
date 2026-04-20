@@ -320,7 +320,7 @@ function AyahSheet({
             lang="ar"
             className="bg-amber-50 rounded-xl p-4 mb-4 border border-amber-100"
             style={{
-              fontFamily: '"Scheherazade New", "Amiri Quran", serif',
+              fontFamily: '"KFGQPC Hafs", "Amiri Quran", serif',
               fontSize: "clamp(18px, 4vw, 26px)",
               lineHeight: 2.2,
               textAlign: "right",
@@ -832,7 +832,7 @@ export default function MushafReaderPage() {
             dir="rtl"
             lang="ar"
             style={{
-              fontFamily: '"Scheherazade New", "Amiri Quran", serif',
+              fontFamily: '"KFGQPC Hafs", "Amiri Quran", serif',
               fontSize: "clamp(15px, 2.3vw, 24px)",
               lineHeight: 2.2,
               padding: "20px 20px 12px",
