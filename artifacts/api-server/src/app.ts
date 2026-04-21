@@ -29,8 +29,16 @@ app.use(
   }),
 );
 
-// Allow requests from the Vite dev server
-app.use(cors({ origin: "http://localhost:5173", credentials: true }));
+// Allow requests from the local browser and LAN-loaded phone dev server.
+app.use(
+  cors({
+    origin: [
+      "http://localhost:5173",
+      "http://10.100.148.251:5173",
+    ],
+    credentials: true,
+  }),
+);
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
