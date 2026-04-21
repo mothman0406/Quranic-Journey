@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { CelebrationOverlay } from "@/components/celebration-overlay";
 import { useParams, Link, useSearch, useLocation } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { updateMemorization, getChildDashboard } from "@workspace/api-client-react";
+import { updateMemorization, getChildDashboard, listMemorization } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
@@ -2922,8 +2922,15 @@ export default function QuranMemorizePage() {
   });
 
   const saveMutation = useMutation({
-    mutationFn: (qualityRating: number) => {
-      const memorizedAyahs = Array.from({ length: toAyah - fromAyah + 1 }, (_, i) => fromAyah + i);
+    mutationFn: async (qualityRating: number) => {
+      const latestMemData = await qc.ensureQueryData({
+        queryKey: ["memorization", childId],
+        queryFn: () => listMemorization(parseInt(childId)),
+      });
+      const existingMemorizedAyahs =
+        latestMemData?.progress?.find((p) => p.surahNumber === selectedChapter!.id)?.memorizedAyahs ?? [];
+      const currentSessionAyahs = Array.from({ length: toAyah - fromAyah + 1 }, (_, i) => fromAyah + i);
+      const memorizedAyahs = Array.from(new Set([...existingMemorizedAyahs, ...currentSessionAyahs])).sort((a, b) => a - b);
       const isComplete = toAyah >= selectedChapter!.verses_count;
       const payload = {
         surahId: selectedChapter!.id,
