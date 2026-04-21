@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { updateMemorization, listMemorization } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { VersePlayer } from "@/components/verse-player";
 import {
   Select,
   SelectContent,
@@ -16,8 +17,6 @@ import { cn } from "@/lib/utils";
 import {
   ChevronLeft,
   ChevronRight,
-  Play,
-  Pause,
   Copy,
   BookOpen,
   Eye,
@@ -137,10 +136,6 @@ function pad(n: number, len: number) {
   return String(n).padStart(len, "0");
 }
 
-function buildAudioUrl(surah: number, verse: number): string {
-  return `https://everyayah.com/data/Husary_64kbps/${pad(surah, 3)}${pad(verse, 3)}.mp3`;
-}
-
 function isBeforeVerseKey(a: string, b: string): boolean {
   const [aSurah, aVerse] = a.split(":").map(Number);
   const [bSurah, bVerse] = b.split(":").map(Number);
@@ -216,75 +211,13 @@ function AyahSheet({
   onClose: () => void;
 }) {
   const [, setLocation] = useLocation();
-  const [playing, setPlaying] = useState(false);
   const [copied, setCopied] = useState(false);
-  const [highlightedWordIdx, setHighlightedWordIdx] = useState(-1);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-  const rafRef = useRef<number>(0);
-
-  const sheetWords = useMemo(
-    () => ayah.text_uthmani.split(/\s+/).filter(Boolean),
-    [ayah.text_uthmani]
-  );
 
   const { data: translation, isLoading: translationLoading } = useQuery({
     queryKey: ["translation", ayah.verseKey],
     queryFn: () => fetchTranslation(ayah.verseKey),
     staleTime: Infinity,
   });
-
-  const tickHighlight = useCallback(() => {
-    const audio = audioRef.current;
-    if (!audio || audio.paused) return;
-    const dur = audio.duration || 0;
-    const frac = dur > 0 ? audio.currentTime / dur : 0;
-    const idx = Math.min(Math.floor(frac * sheetWords.length), sheetWords.length - 1);
-    setHighlightedWordIdx(idx);
-    rafRef.current = requestAnimationFrame(tickHighlight);
-  }, [sheetWords.length]);
-
-  // Stop audio when verse changes or sheet unmounts
-  useEffect(() => {
-    return () => {
-      cancelAnimationFrame(rafRef.current);
-      if (audioRef.current) {
-        audioRef.current.pause();
-        audioRef.current.src = "";
-        audioRef.current = null;
-      }
-      setPlaying(false);
-      setHighlightedWordIdx(-1);
-    };
-  }, [ayah.verseKey]);
-
-  const handlePlay = () => {
-    if (playing && audioRef.current) {
-      audioRef.current.pause();
-      cancelAnimationFrame(rafRef.current);
-      setPlaying(false);
-      return;
-    }
-    if (audioRef.current) {
-      audioRef.current.pause();
-      cancelAnimationFrame(rafRef.current);
-      audioRef.current.src = "";
-    }
-    const audio = new Audio(buildAudioUrl(ayah.surahId, ayah.verseNum));
-    audio.onended = () => {
-      setPlaying(false);
-      setHighlightedWordIdx(-1);
-      cancelAnimationFrame(rafRef.current);
-    };
-    audio.onerror = () => {
-      setPlaying(false);
-      cancelAnimationFrame(rafRef.current);
-    };
-    audioRef.current = audio;
-    audio.play().then(() => {
-      setPlaying(true);
-      rafRef.current = requestAnimationFrame(tickHighlight);
-    }).catch(() => setPlaying(false));
-  };
 
   const handleCopy = async () => {
     try {
@@ -320,31 +253,14 @@ function AyahSheet({
             </button>
           </div>
 
-          {/* Arabic text */}
-          <div
-            dir="rtl"
-            lang="ar"
-            className="bg-amber-50 rounded-xl p-4 mb-4 border border-amber-100"
-            style={{
-              fontFamily: '"KFGQPC Hafs", "Amiri Quran", serif',
-              fontSize: "clamp(18px, 4vw, 26px)",
-              lineHeight: 2.2,
-              textAlign: "right",
-              color: "#1a1a1a",
-            }}
-          >
-            {sheetWords.map((w, i) => (
-              <span
-                key={i}
-                style={{
-                  backgroundColor: i === highlightedWordIdx ? "#fcd34d" : undefined,
-                  borderRadius: i === highlightedWordIdx ? "3px" : undefined,
-                  padding: "0 0.05em",
-                }}
-              >
-                {w}{i < sheetWords.length - 1 ? " " : ""}
-              </span>
-            ))}
+          {/* Arabic text + timing-based playback */}
+          <div className="bg-amber-50 rounded-xl p-4 mb-4 border border-amber-100">
+            <VersePlayer
+              arabic={ayah.text_uthmani}
+              surahNumber={ayah.surahId}
+              verseNumber={ayah.verseNum}
+              size="md"
+            />
           </div>
 
           {/* Translation */}
@@ -359,14 +275,7 @@ function AyahSheet({
           </div>
 
           {/* Action buttons */}
-          <div className="grid grid-cols-2 gap-2 mb-2">
-            <button
-              onClick={handlePlay}
-              className="flex items-center justify-center gap-2 py-2.5 rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-700 text-sm font-medium active:bg-emerald-100"
-            >
-              {playing ? <Pause size={14} /> : <Play size={14} />}
-              {playing ? "Pause" : "Play Ayah"}
-            </button>
+          <div className="grid grid-cols-1 gap-2 mb-2">
             <button
               onClick={handleCopy}
               className="flex items-center justify-center gap-2 py-2.5 rounded-xl border border-amber-200 bg-amber-50 text-amber-700 text-sm font-medium active:bg-amber-100"
@@ -497,20 +406,26 @@ export default function MushafReaderPage() {
 
   const markMutation = useMutation({
     mutationFn: async () => {
-      const bySurah = new Map<number, number[]>();
+      const latestMemData =
+        (await queryClient.ensureQueryData({
+          queryKey: ["memorization", childId],
+          queryFn: () => listMemorization(parseInt(childId, 10)),
+        })) ?? memData;
+      const latestProgress = latestMemData?.progress ?? [];
+      const bySurahNumber = new Map<number, number[]>();
       for (const vk of selectedVerseKeys) {
         const parts = vk.split(":");
-        const s = parseInt(parts[0], 10);
-        const v = parseInt(parts[1], 10);
-        if (!bySurah.has(s)) bySurah.set(s, []);
-        bySurah.get(s)!.push(v);
+        const canonicalSurahNumber = parseInt(parts[0], 10);
+        const verseNumber = parseInt(parts[1], 10);
+        if (!bySurahNumber.has(canonicalSurahNumber)) bySurahNumber.set(canonicalSurahNumber, []);
+        bySurahNumber.get(canonicalSurahNumber)!.push(verseNumber);
       }
-      for (const [surahId, newAyahs] of bySurah) {
+      for (const [canonicalSurahNumber, newAyahs] of bySurahNumber) {
         const existing =
-          memData?.progress?.find((p) => p.surahId === surahId)?.memorizedAyahs ?? [];
+          latestProgress.find((p) => p.surahNumber === canonicalSurahNumber)?.memorizedAyahs ?? [];
         const merged = Array.from(new Set([...existing, ...newAyahs])).sort((a, b) => a - b);
         await updateMemorization(parseInt(childId, 10), {
-          surahId,
+          surahId: canonicalSurahNumber,
           memorizedAyahs: merged,
         });
       }
@@ -1150,7 +1065,7 @@ export default function MushafReaderPage() {
         <div className="fixed bottom-20 left-0 right-0 flex justify-center z-30 px-4 pointer-events-none">
           <button
             onClick={() => markMutation.mutate()}
-            disabled={markMutation.isPending}
+            disabled={markMutation.isPending || !memData}
             className="flex items-center gap-2 bg-emerald-600 text-white text-sm font-semibold px-6 py-3 rounded-full shadow-xl pointer-events-auto active:bg-emerald-700 disabled:opacity-70"
           >
             <Check size={15} />
