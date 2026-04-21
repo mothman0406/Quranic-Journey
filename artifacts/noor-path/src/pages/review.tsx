@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { CelebrationOverlay } from "@/components/celebration-overlay";
 import { useParams, Link } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -9,8 +9,10 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ChildNav } from "@/components/child-nav";
 import { RECITERS, type Reciter, buildAudioUrl } from "@/components/verse-player";
-import { ChevronLeft, CheckCircle, RefreshCw, AlertCircle, Eye, EyeOff, Languages, Pause, Play, SkipBack, SkipForward } from "lucide-react";
+import { ChevronLeft, CheckCircle, RefreshCw, AlertCircle, Eye, EyeOff, Languages, Pause, Play, SkipBack, SkipForward, Settings2, X } from "lucide-react";
 import { cn } from "@/lib/utils";
+
+const QURAN_API = "https://api.quran.com/api/v4";
 
 const QUALITY_LABELS = [
   "Forgot completely",
@@ -29,10 +31,225 @@ const QUALITY_COLORS = [
   "bg-emerald-200 text-emerald-800",
 ];
 
-// ─── MushafReviewSheet ────────────────────────────────────────────────────────
-// Continuous surah review surface with one sequential player for the whole chunk.
+type ApiWord = {
+  position: number;
+  text_uthmani: string;
+  char_type_name: string;
+  line_number: number;
+  translation?: string | { text: string; language_name: string };
+};
 
-function MushafReviewSheet({
+type PageVerseData = {
+  verse_key: string;
+  text_uthmani: string;
+  text_uthmani_tajweed?: string;
+  words?: ApiWord[];
+};
+
+type ChapterVerseData = {
+  verse_number: number;
+  verse_key: string;
+  text_uthmani: string;
+  text_uthmani_tajweed?: string;
+  page_number?: number;
+};
+
+type LineWord = {
+  verse_key: string;
+  surahId: number;
+  verseNum: number;
+  position: number;
+  wordIdxInVerse: number;
+  text_uthmani: string;
+  char_type_name: string;
+  line_number: number;
+  translation?: string;
+};
+
+type MushafChapter = {
+  id: number;
+  name_arabic: string;
+  name_simple: string;
+  translated_name: { name: string };
+  bismillah_pre: boolean;
+};
+
+type MushafThemeConfig = {
+  name: string;
+  banner: string;
+  bannerBorder: string;
+  accent: string;
+  parchment: string;
+  textColor: string;
+};
+
+const MUSHAF_REVIEW_THEMES = {
+  madinah: {
+    name: "Madinah",
+    banner: "#1a4a5c",
+    bannerBorder: "#c9a84c",
+    accent: "#c9a84c",
+    parchment: "#fdf6e3",
+    textColor: "#1a1a1a",
+  },
+  ottoman: {
+    name: "Ottoman",
+    banner: "#4a1a2c",
+    bannerBorder: "#d4a843",
+    accent: "#d4a843",
+    parchment: "#fdf0e0",
+    textColor: "#22160f",
+  },
+  forest: {
+    name: "Classic",
+    banner: "#0d2b1a",
+    bannerBorder: "#c9a84c",
+    accent: "#c9a84c",
+    parchment: "#f8f2e4",
+    textColor: "#102019",
+  },
+  night: {
+    name: "Night",
+    banner: "#102032",
+    bannerBorder: "#b9c8d8",
+    accent: "#b9c8d8",
+    parchment: "#111827",
+    textColor: "#e5d9bf",
+  },
+} satisfies Record<string, MushafThemeConfig>;
+
+const MUSHAF_FONTS = [
+  { id: "hafs", label: "Hafs", family: '"KFGQPC Hafs", "Amiri Quran", serif' },
+  { id: "scheherazade", label: "Scheherazade", family: '"Scheherazade New", "Amiri Quran", serif' },
+  { id: "amiri", label: "Amiri", family: '"Amiri Quran", serif' },
+] as const;
+
+const TAJWEED_CSS = `
+.mushaf-page .ham_wasl,
+.mushaf-page .slnt,
+.mushaf-page .lam_shamsiyya,
+.mushaf-page .madda_normal,
+.mushaf-page .madda_permissible,
+.mushaf-page .madda_necessary,
+.mushaf-page .madda_obligatory,
+.mushaf-page .qalaqah,
+.mushaf-page .ikhafa_shafawi,
+.mushaf-page .ikhafa,
+.mushaf-page .idgham_ghunna,
+.mushaf-page .idgham_wo_ghunna,
+.mushaf-page .idgham_mutajanisayn,
+.mushaf-page .idgham_mutaqaribain,
+.mushaf-page .idgham_shafawi,
+.mushaf-page .iqlab,
+.mushaf-page .ghunna { color: inherit; }
+`;
+
+function stripTashkeel(s: string): string {
+  return (
+    s
+      .replace(/\u0670/g, "ا")
+      .replace(/[\u0610-\u061A\u064B-\u065F\u06D6-\u06DC\u06DF-\u06E4\u06E7\u06E8\u06EA-\u06ED]/g, "")
+      .replace(/[ـ]/g, "")
+      .replace(/[أإآاٱ]/g, "ا")
+      .trim() || s
+  );
+}
+
+const stripVerseEndHtml = (html: string): string =>
+  html
+    .replace(/(<span[^>]*>[\u06DD\u0660-\u0669\s]+<\/span>\s*)+$/, "")
+    .replace(/[\u06DD\u0660-\u0669\s]+$/, "")
+    .trimEnd();
+
+function splitTajweedIntoWords(html: string): string[] {
+  if (!html) return [];
+  return html.split(/(?<=>)\s+(?=<)/).filter((s) => s.length > 0);
+}
+
+function buildLineGroups(
+  verses: PageVerseData[]
+): Array<{ lineNum: number; words: LineWord[] }> | null {
+  const all: LineWord[] = [];
+  for (const pv of verses) {
+    if (!pv.words?.length) return null;
+    const [surahStr, verseStr] = pv.verse_key.split(":");
+    const surahId = parseInt(surahStr, 10);
+    const verseNum = parseInt(verseStr, 10);
+    const verseTokens = (pv.text_uthmani ?? "").split(/\s+/).filter(Boolean);
+    let lastMatchedJ = -1;
+    for (const w of pv.words) {
+      let wordIdxInVerse: number;
+      if (w.char_type_name === "end") {
+        wordIdxInVerse = -1;
+      } else {
+        const target = stripTashkeel(w.text_uthmani);
+        let found = -1;
+        for (let j = lastMatchedJ + 1; j < verseTokens.length; j++) {
+          if (stripTashkeel(verseTokens[j]) === target) {
+            found = j;
+            break;
+          }
+        }
+        if (found !== -1) {
+          lastMatchedJ = found;
+          wordIdxInVerse = found;
+        } else {
+          wordIdxInVerse = w.position - 1;
+        }
+      }
+      all.push({
+        verse_key: pv.verse_key,
+        surahId,
+        verseNum,
+        position: w.position,
+        wordIdxInVerse,
+        text_uthmani: w.text_uthmani,
+        char_type_name: w.char_type_name,
+        line_number: w.line_number,
+        translation:
+          typeof w.translation === "object" && w.translation !== null
+            ? (w.translation as { text?: string }).text ?? ""
+            : w.translation,
+      });
+    }
+  }
+
+  if (all.length === 0) return null;
+  const map = new Map<number, LineWord[]>();
+  for (const word of all) {
+    if (!map.has(word.line_number)) map.set(word.line_number, []);
+    map.get(word.line_number)!.push(word);
+  }
+  return [...map.entries()]
+    .sort(([a], [b]) => a - b)
+    .map(([lineNum, words]) => ({ lineNum, words }));
+}
+
+async function fetchVersesByPage(pageNumber: number): Promise<{ verses: PageVerseData[] }> {
+  const r = await fetch(
+    `${QURAN_API}/verses/by_page/${pageNumber}?words=true&fields=text_uthmani,text_uthmani_tajweed&word_fields=text_uthmani,line_number,char_type_name,translation&per_page=50`
+  );
+  if (!r.ok) throw new Error(`Failed to fetch page ${pageNumber}`);
+  return r.json();
+}
+
+async function fetchVersesBySurah(
+  surahNumber: number
+): Promise<{ verses: ChapterVerseData[] }> {
+  const r = await fetch(
+    `${QURAN_API}/verses/by_chapter/${surahNumber}?fields=text_uthmani,text_uthmani_tajweed,page_number&per_page=300`
+  );
+  if (!r.ok) throw new Error(`Failed to fetch surah ${surahNumber}`);
+  return r.json();
+}
+
+async function fetchAllChapters(): Promise<{ chapters: MushafChapter[] }> {
+  const r = await fetch(`${QURAN_API}/chapters?language=en`);
+  if (!r.ok) throw new Error("Failed to fetch chapters");
+  return r.json();
+}
+
+function MushafReviewView({
   childId,
   surahId,
   surahNumber,
@@ -58,6 +275,11 @@ function MushafReviewSheet({
   const [rating, setRating] = useState<number | null>(null);
   const [showTranslation, setShowTranslation] = useState(false);
   const [blurDuringRecitation, setBlurDuringRecitation] = useState(false);
+  const [showTajweed, setShowTajweed] = useState(false);
+  const [showSettingsPanel, setShowSettingsPanel] = useState(false);
+  const [showRatingSheet, setShowRatingSheet] = useState(false);
+  const [mushafTheme, setMushafTheme] = useState<keyof typeof MUSHAF_REVIEW_THEMES>("night");
+  const [mushafFont, setMushafFont] = useState<(typeof MUSHAF_FONTS)[number]["id"]>("hafs");
   const [activeVerseIndex, setActiveVerseIndex] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isLoadingAudio, setIsLoadingAudio] = useState(false);
@@ -66,14 +288,111 @@ function MushafReviewSheet({
   const loadedVerseIndexRef = useRef<number | null>(null);
   const playbackRateRef = useRef(playbackRate);
   const sessionReciterRef = useRef(sessionReciter);
+  const scrollRootRef = useRef<HTMLDivElement | null>(null);
+  const pageContentRefs = useRef<Record<number, HTMLDivElement | null>>({});
 
-  const { data: surah, isLoading } = useQuery({
+  const { data: reviewSurah, isLoading: reviewSurahLoading } = useQuery({
     queryKey: ["surah", surahId],
     queryFn: () => getSurah(surahId),
   });
 
-  const verses = surah?.verses ?? [];
+  const { data: chapterVersesData, isLoading: chapterLoading } = useQuery({
+    queryKey: ["review-mushaf-surah", surahNumber],
+    queryFn: () => fetchVersesBySurah(surahNumber),
+    staleTime: Infinity,
+  });
+
+  const { data: chaptersData } = useQuery({
+    queryKey: ["review-chapters"],
+    queryFn: fetchAllChapters,
+    staleTime: Infinity,
+  });
+
+  const chapterVerses = chapterVersesData?.verses ?? [];
+  const chapters = chaptersData?.chapters ?? [];
+  const reviewVerses = reviewSurah?.verses ?? [];
+
+  const pageNumbers = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          chapterVerses
+            .map((v) => v.page_number)
+            .filter((p): p is number => typeof p === "number")
+        )
+      ),
+    [chapterVerses]
+  );
+
+  const { data: pageBundlesData, isLoading: pagesLoading } = useQuery({
+    queryKey: ["review-mushaf-pages", surahNumber, pageNumbers.join(",")],
+    queryFn: async () =>
+      Promise.all(
+        pageNumbers.map(async (pageNumber) => ({
+          pageNumber,
+          verses: (await fetchVersesByPage(pageNumber)).verses,
+        }))
+      ),
+    enabled: pageNumbers.length > 0,
+    staleTime: Infinity,
+  });
+
+  const verses = chapterVerses;
   const activeVerse = verses[activeVerseIndex] ?? null;
+  const activeVerseNumber = activeVerse?.verse_number ?? 1;
+  const activeVerseKey = activeVerse?.verse_key ?? `${surahNumber}:1`;
+  const activePageNumber = activeVerse?.page_number ?? pageNumbers[0] ?? 0;
+  const fontFamily =
+    MUSHAF_FONTS.find((font) => font.id === mushafFont)?.family ?? MUSHAF_FONTS[0].family;
+  const theme = MUSHAF_REVIEW_THEMES[mushafTheme];
+
+  const translationByVerse = useMemo(
+    () =>
+      new Map<number, string>(
+        reviewVerses.map((verse: { number: number; translation: string }) => [
+          verse.number,
+          verse.translation,
+        ])
+      ),
+    [reviewVerses]
+  );
+
+  const tajweedWordsByVerse = useMemo(
+    () =>
+      new Map<string, string[]>(
+        chapterVerses.map((verse) => [
+          verse.verse_key,
+          splitTajweedIntoWords(stripVerseEndHtml(verse.text_uthmani_tajweed ?? "")),
+        ])
+      ),
+    [chapterVerses]
+  );
+
+  const plainWordCountByVerse = useMemo(
+    () =>
+      new Map<string, number>(
+        chapterVerses.map((verse) => [
+          verse.verse_key,
+          verse.text_uthmani.split(/\s+/).filter(Boolean).length,
+        ])
+      ),
+    [chapterVerses]
+  );
+
+  const verseIndexByNumber = useMemo(
+    () => new Map<number, number>(chapterVerses.map((verse, index) => [verse.verse_number, index])),
+    [chapterVerses]
+  );
+
+  const pageBundles = useMemo(
+    () =>
+      (pageBundlesData ?? []).map((bundle) => ({
+        pageNumber: bundle.pageNumber,
+        verses: bundle.verses,
+        lineGroups: buildLineGroups(bundle.verses),
+      })),
+    [pageBundlesData]
+  );
 
   function clearAudio() {
     playbackTokenRef.current += 1;
@@ -98,7 +417,7 @@ function MushafReviewSheet({
     const token = playbackTokenRef.current;
     const audio = new Audio();
     audio.preload = "auto";
-    audio.src = buildAudioUrl(sessionReciterRef.current, surahNumber, verse.number);
+    audio.src = buildAudioUrl(sessionReciterRef.current, surahNumber, verse.verse_number);
     audio.playbackRate = playbackRateRef.current;
     audioRef.current = audio;
     loadedVerseIndexRef.current = index;
@@ -184,6 +503,9 @@ function MushafReviewSheet({
     setRating(null);
     setShowTranslation(false);
     setBlurDuringRecitation(false);
+    setShowTajweed(false);
+    setShowSettingsPanel(false);
+    setShowRatingSheet(false);
   }, [surahId]);
 
   useEffect(() => {
@@ -198,274 +520,646 @@ function MushafReviewSheet({
     clearAudio();
   }, [sessionReciter.id]);
 
+  useEffect(() => {
+    if (!scrollRootRef.current) return;
+    const node = scrollRootRef.current.querySelector<HTMLElement>(
+      `[data-review-ayah="${activeVerseKey}"]`
+    );
+    if (node) {
+      node.scrollIntoView({ behavior: isPlaying ? "smooth" : "auto", block: "center" });
+    }
+  }, [activeVerseKey, isPlaying]);
+
+  useEffect(() => {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        for (const bundle of pageBundles) {
+          const el = pageContentRefs.current[bundle.pageNumber];
+          if (!el) continue;
+          const availableHeight = Math.max(320, el.clientHeight);
+          let lo = 0.62;
+          let hi = 1.08;
+          let best = 0.62;
+          for (let i = 0; i < 28; i++) {
+            const mid = (lo + hi) / 2;
+            el.style.fontSize = mid + "em";
+            const fitsHeight = el.scrollHeight <= availableHeight;
+            const fitsWidth = el.scrollWidth <= el.clientWidth + 2;
+            if (fitsHeight && fitsWidth) {
+              best = mid;
+              lo = mid;
+            } else {
+              hi = mid;
+            }
+          }
+          el.style.fontSize = best + "em";
+        }
+      });
+    });
+  }, [pageBundles, mushafFont, mushafTheme, showTajweed, blurDuringRecitation, activeVerseNumber]);
+
+  const isLoading = reviewSurahLoading || chapterLoading || pagesLoading;
+
   return (
-    <div className="min-h-screen bg-background pb-24">
-      <div className="pattern-bg text-white px-4 pt-8 pb-12">
-        <div className="max-w-lg mx-auto">
+    <div className="min-h-screen bg-[#05070b] pb-40 text-white">
+      <style>{TAJWEED_CSS}</style>
+      <div className="sticky top-0 z-30 bg-gradient-to-b from-[#05070b] via-[#05070b]/96 to-transparent px-4 pt-5 pb-4">
+        <div className="max-w-3xl mx-auto grid grid-cols-[auto_1fr_auto] items-center gap-3">
           <button
+            type="button"
             onClick={onClose}
-            className="flex items-center gap-1 text-emerald-200 text-sm mb-4"
+            className="inline-flex h-14 w-14 items-center justify-center rounded-full border border-white/10 bg-white/5 text-white shadow-[0_8px_30px_rgba(0,0,0,0.35)] backdrop-blur"
+            aria-label="Back to review"
           >
-            <ChevronLeft size={16} /> Back to Review
+            <ChevronLeft size={22} />
           </button>
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-xl font-bold">Self-Test</h1>
-              <p className="text-emerald-200 text-sm mt-1">
-                {surahName} · Recite from memory, then reveal to check
-              </p>
+
+          <div className="flex justify-center">
+            <div className="min-w-[190px] max-w-[250px] rounded-[24px] border border-white/10 bg-white/[0.06] px-5 py-3 text-center shadow-[0_10px_32px_rgba(0,0,0,0.35)] backdrop-blur">
+              <p className="truncate text-2xl font-bold leading-none text-white">{surahName}</p>
+              {activePageNumber > 0 && (
+                <p className="mt-1 text-sm text-white/60">Page {activePageNumber}</p>
+              )}
             </div>
-            {surah && (
-              <p className="arabic-text text-3xl text-amber-300">{surah.nameArabic}</p>
-            )}
           </div>
+
+          <button
+            type="button"
+            onClick={() => setShowSettingsPanel(true)}
+            className="inline-flex h-14 w-14 items-center justify-center rounded-full border border-white/10 bg-white/5 text-white shadow-[0_8px_30px_rgba(0,0,0,0.35)] backdrop-blur"
+            aria-label="Open mushaf settings"
+          >
+            <Settings2 size={20} />
+          </button>
         </div>
       </div>
 
-      <div className="max-w-lg mx-auto px-4 -mt-6 space-y-4">
-        {/* Audio controls */}
-        <Card className="border-border">
-          <CardContent className="p-3 space-y-3">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <p className="text-xs font-semibold text-foreground">Review Audio</p>
-                <p className="text-[11px] text-muted-foreground">
-                  Play the surah continuously and follow the highlighted ayah
-                </p>
-              </div>
-              <Badge variant="outline" className="text-[11px]">
-                {activeVerse ? `Ayah ${activeVerse.number} of ${verses.length}` : "Ready"}
-              </Badge>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              <label className="space-y-1">
-                <span className="text-[11px] font-medium text-muted-foreground">Reciter</span>
-                <select
-                  value={sessionReciter.id}
-                  onChange={(e) =>
-                    onSessionReciterChange(RECITERS.find((r) => r.id === e.target.value)!)
-                  }
-                  className="w-full text-xs border border-border rounded-lg px-2 py-2 bg-background"
-                >
-                  {RECITERS.map((r) => (
-                    <option key={r.id} value={r.id}>
-                      {r.fullName}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              <label className="space-y-1">
-                <span className="text-[11px] font-medium text-muted-foreground">Speed</span>
-                <select
-                  value={String(playbackRate)}
-                  onChange={(e) => onPlaybackRateChange(parseFloat(e.target.value))}
-                  className="w-full text-xs border border-border rounded-lg px-2 py-2 bg-background"
-                >
-                  <option value="1">1.0x</option>
-                  <option value="1.25">1.25x</option>
-                  <option value="1.5">1.5x</option>
-                  <option value="1.75">1.75x</option>
-                  <option value="2">2.0x</option>
-                </select>
-              </label>
-            </div>
-
-            <div className="flex items-center gap-2 flex-wrap">
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                className="rounded-full"
-                disabled={activeVerseIndex <= 0 || verses.length === 0}
-                onClick={() => handleJumpToIndex(activeVerseIndex - 1)}
-              >
-                <SkipBack size={14} className="mr-1" />
-                Prev
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                className="rounded-full"
-                disabled={verses.length === 0 || isLoadingAudio}
-                onClick={() => void handlePlayPause()}
-              >
-                {isPlaying ? (
-                  <>
-                    <Pause size={14} className="mr-1" />
-                    Pause
-                  </>
-                ) : (
-                  <>
-                    <Play size={14} className="mr-1" />
-                    {isLoadingAudio ? "Loading..." : "Play Surah"}
-                  </>
-                )}
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                className="rounded-full"
-                disabled={activeVerseIndex >= verses.length - 1 || verses.length === 0}
-                onClick={() => handleJumpToIndex(activeVerseIndex + 1)}
-              >
-                Next
-                <SkipForward size={14} className="ml-1" />
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                variant={showTranslation ? "default" : "outline"}
-                className="rounded-full"
-                onClick={() => setShowTranslation((prev) => !prev)}
-              >
-                <Languages size={14} className="mr-1" />
-                {showTranslation ? "Hide Translation" : "Show Translation"}
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                variant={blurDuringRecitation ? "default" : "outline"}
-                className="rounded-full"
-                onClick={() => setBlurDuringRecitation((prev) => !prev)}
-              >
-                {blurDuringRecitation ? (
-                  <EyeOff size={14} className="mr-1" />
-                ) : (
-                  <Eye size={14} className="mr-1" />
-                )}
-                {blurDuringRecitation ? "Blur On" : "Blur Off"}
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Continuous surah review sheet */}
+      <div className="max-w-3xl mx-auto px-4 pt-2 space-y-4">
         {isLoading ? (
-          <Card className="border-border">
-            <CardContent className="p-5 space-y-3">
-              {[1, 2, 3, 4].map((i) => (
-                <Skeleton key={i} className="h-10 rounded-xl" />
-              ))}
-            </CardContent>
-          </Card>
+          <div className="space-y-4">
+            {[1, 2].map((i) => (
+              <Card key={i} className="border-border">
+                <CardContent className="p-5 space-y-3">
+                  {Array.from({ length: 9 }, (_, idx) => (
+                    <Skeleton key={idx} className="h-8 rounded-xl" />
+                  ))}
+                </CardContent>
+              </Card>
+            ))}
+          </div>
         ) : (
-          <Card className="border-amber-200 bg-gradient-to-b from-amber-50 to-white shadow-sm">
-            <CardContent className="p-5">
-              <div className="mb-4 flex items-center justify-between gap-3">
-                <div>
-                  <p className="text-sm font-semibold text-foreground">Continuous Review</p>
-                  <p className="text-xs text-muted-foreground">
-                    Tap any ayah to start playback from there
-                  </p>
+          <div ref={scrollRootRef} className="space-y-5">
+            {pageBundles.map((bundle) => {
+              const pageTargetVerses = bundle.verses.filter((verse) => {
+                const [verseSurah] = verse.verse_key.split(":").map(Number);
+                return verseSurah === surahNumber;
+              });
+              const lineGroups = bundle.lineGroups;
+              const surahsStartingOnPage = new Set<number>();
+              for (const verse of bundle.verses) {
+                const [verseSurah, verseNum] = verse.verse_key.split(":").map(Number);
+                if (verseNum === 1) surahsStartingOnPage.add(verseSurah);
+              }
+
+              return (
+                <div
+                  key={bundle.pageNumber}
+                  className="mx-auto rounded-xl border shadow-md overflow-hidden"
+                  style={{
+                    width: "min(680px, 96vw)",
+                    height: "min(70vh, 760px)",
+                    background: `linear-gradient(to bottom, ${theme.parchment}, ${theme.parchment})`,
+                    borderColor: `${theme.bannerBorder}33`,
+                    boxShadow: "0 18px 60px rgba(0,0,0,0.45)",
+                    display: "flex",
+                    flexDirection: "column",
+                  }}
+                >
+                  <div
+                    className="text-center py-2.5 border-b"
+                    style={{ borderColor: `${theme.bannerBorder}55` }}
+                  >
+                    <span className="text-xs tracking-widest" style={{ color: theme.bannerBorder }}>
+                      {bundle.pageNumber}
+                    </span>
+                  </div>
+
+                  <div
+                    className="mushaf-page"
+                    ref={(node) => {
+                      pageContentRefs.current[bundle.pageNumber] = node;
+                    }}
+                    dir="rtl"
+                    lang="ar"
+                    style={{
+                      fontFamily,
+                      fontSize: "clamp(14px, 2.2vh, 28px)",
+                      lineHeight: 2.15,
+                      padding: "20px 24px 8px",
+                      color: theme.textColor,
+                      overflowX: "hidden",
+                      flex: 1,
+                      minHeight: 0,
+                    }}
+                  >
+                    {lineGroups ? (
+                      (() => {
+                        const nodes: React.ReactNode[] = [];
+                        const seenSurahIds = new Set<number>();
+
+                        for (const { lineNum, words: lws } of lineGroups) {
+                          const newSurahs: number[] = [];
+                          for (const lw of lws) {
+                            if (!seenSurahIds.has(lw.surahId)) {
+                              seenSurahIds.add(lw.surahId);
+                              newSurahs.push(lw.surahId);
+                            }
+                          }
+
+                          for (const sid of newSurahs) {
+                            if (!surahsStartingOnPage.has(sid)) continue;
+                            const chapter = chapters.find((c) => c.id === sid);
+                            const isCurrentSurah = sid === surahNumber;
+                            nodes.push(
+                              <div
+                                key={`hdr-${bundle.pageNumber}-${sid}`}
+                                style={{
+                                  textAlign: "center",
+                                  margin: "10px 0 4px",
+                                  direction: "rtl",
+                                  opacity: isCurrentSurah ? 1 : 0.18,
+                                }}
+                              >
+                                <div
+                                  style={{
+                                    display: "flex",
+                                    alignItems: "center",
+                                    justifyContent: "center",
+                                    gap: 12,
+                                  }}
+                                >
+                                  <span
+                                    style={{
+                                      flex: 1,
+                                      height: 1,
+                                      background: theme.bannerBorder,
+                                      maxWidth: 60,
+                                      display: "block",
+                                    }}
+                                  />
+                                  <span
+                                    style={{
+                                      fontFamily,
+                                      fontSize: "0.9em",
+                                      color: isCurrentSurah ? theme.textColor : theme.bannerBorder,
+                                      fontWeight: 500,
+                                    }}
+                                  >
+                                    {chapter?.name_arabic ?? `سُورَة ${sid}`}
+                                  </span>
+                                  <span
+                                    style={{
+                                      flex: 1,
+                                      height: 1,
+                                      background: theme.bannerBorder,
+                                      maxWidth: 60,
+                                      display: "block",
+                                    }}
+                                  />
+                                </div>
+                                {sid !== 9 && (
+                                  <div style={{ display: "flex", justifyContent: "center", margin: "4px 0 2px" }}>
+                                    <span style={{ fontFamily, fontSize: "1.1em", color: theme.bannerBorder, direction: "rtl" }}>
+                                      بِسْمِ ٱللَّهِ ٱلرَّحْمَٰنِ ٱلرَّحِيمِ
+                                    </span>
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          }
+
+                          nodes.push(
+                            <div
+                              key={`ln-${bundle.pageNumber}-${lineNum}`}
+                              style={{
+                                display: "flex",
+                                direction: "rtl",
+                                justifyContent: "center",
+                                alignItems: "center",
+                                flexWrap: "nowrap",
+                                lineHeight: 2.15,
+                                padding: "0 4px",
+                                width: "100%",
+                                gap: "0.3em",
+                              }}
+                            >
+                              {lws.map((lw) => {
+                                const isTargetSurah = lw.surahId === surahNumber;
+                                const isActiveAyah = isTargetSurah && lw.verseNum === activeVerseNumber;
+                                const shouldBlur = blurDuringRecitation
+                                  ? isTargetSurah
+                                    ? !isPlaying || !isActiveAyah
+                                    : true
+                                  : false;
+                                const verseOpacity = isTargetSurah
+                                  ? shouldBlur
+                                    ? 0.45
+                                    : isActiveAyah
+                                    ? 1
+                                    : 0.94
+                                  : shouldBlur
+                                  ? 0.1
+                                  : 0.18;
+                                const clickIndex = verseIndexByNumber.get(lw.verseNum);
+                                const clickable = isTargetSurah && clickIndex !== undefined;
+
+                                if (lw.char_type_name === "end") {
+                                  return (
+                                    <span
+                                      key={`${lw.verse_key}:${lw.position}`}
+                                      data-review-ayah={lw.verse_key}
+                                      onClick={() => clickable && handleJumpToIndex(clickIndex)}
+                                      style={{
+                                        display: "inline-flex",
+                                        alignItems: "center",
+                                        justifyContent: "center",
+                                        width: "1.9em",
+                                        height: "1.9em",
+                                        borderRadius: "50%",
+                                        border: `1.5px solid ${isActiveAyah ? theme.banner : theme.bannerBorder}`,
+                                        background: isActiveAyah ? `${theme.bannerBorder}30` : `${theme.parchment}`,
+                                        flexShrink: 0,
+                                        userSelect: "none",
+                                        direction: "ltr",
+                                        cursor: clickable ? "pointer" : "default",
+                                        opacity: verseOpacity,
+                                        filter: shouldBlur ? "blur(4px)" : "none",
+                                      }}
+                                    >
+                                      <span
+                                        style={{
+                                          fontSize: "0.58em",
+                                          color: isActiveAyah ? theme.banner : theme.bannerBorder,
+                                          fontFamily: "Georgia, serif",
+                                          lineHeight: 1,
+                                        }}
+                                      >
+                                        {lw.verseNum}
+                                      </span>
+                                    </span>
+                                  );
+                                }
+
+                                const tajweedWords = tajweedWordsByVerse.get(lw.verse_key) ?? [];
+                                const hasValidTajweed =
+                                  showTajweed &&
+                                  tajweedWords.length === (plainWordCountByVerse.get(lw.verse_key) ?? 0);
+                                const wordMarkup =
+                                  hasValidTajweed && lw.wordIdxInVerse >= 0 ? (
+                                    <span
+                                      dangerouslySetInnerHTML={{
+                                        __html: tajweedWords[lw.wordIdxInVerse] ?? lw.text_uthmani,
+                                      }}
+                                    />
+                                  ) : (
+                                    <>{lw.text_uthmani}</>
+                                  );
+
+                                return (
+                                  <span
+                                    key={`${lw.verse_key}:${lw.position}`}
+                                    data-review-ayah={lw.verse_key}
+                                    onClick={() => clickable && handleJumpToIndex(clickIndex)}
+                                    className={cn(
+                                      "inline-block rounded-sm transition-all duration-150",
+                                      clickable && "cursor-pointer"
+                                    )}
+                                    style={{
+                                      opacity: verseOpacity,
+                                      filter: shouldBlur ? "blur(6px)" : "none",
+                                      userSelect: shouldBlur ? "none" : "text",
+                                      padding: "0 0.04em",
+                                      background: isActiveAyah ? `${theme.bannerBorder}33` : "transparent",
+                                      color: isActiveAyah ? theme.textColor : undefined,
+                                    }}
+                                  >
+                                    {wordMarkup}
+                                  </span>
+                                );
+                              })}
+                            </div>
+                          );
+                        }
+                        return nodes;
+                      })()
+                    ) : (
+                      <div className="space-y-4 py-4">
+                        {pageTargetVerses.map((verse) => {
+                          const verseNum = parseInt(verse.verse_key.split(":")[1], 10);
+                          const isActiveAyah = verseNum === activeVerseNumber;
+                          const clickIndex = verseIndexByNumber.get(verseNum);
+                          const shouldBlur = blurDuringRecitation && (!isPlaying || !isActiveAyah);
+                          return (
+                            <div
+                              key={verse.verse_key}
+                              data-review-ayah={verse.verse_key}
+                              onClick={() => clickIndex !== undefined && handleJumpToIndex(clickIndex)}
+                              className="rounded-2xl px-4 py-3"
+                              style={{
+                                cursor: clickIndex !== undefined ? "pointer" : "default",
+                                background: isActiveAyah ? `${theme.bannerBorder}20` : "transparent",
+                              }}
+                            >
+                              <p
+                                style={{
+                                  filter: shouldBlur ? "blur(6px)" : "none",
+                                  opacity: shouldBlur ? 0.5 : 1,
+                                }}
+                              >
+                                {verse.text_uthmani}
+                              </p>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
                 </div>
-                <Badge className="bg-amber-100 text-amber-800 border-0">
-                  {surah?.verses?.length ?? 0} ayahs
+              );
+            })}
+          </div>
+        )}
+
+        {showTranslation && reviewVerses.length > 0 && (
+          <Card className="mx-auto w-full border-border" style={{ maxWidth: "min(680px, 96vw)" }}>
+            <CardContent className="p-4">
+              <div className="mb-3 flex items-center justify-between">
+                <p className="text-sm font-semibold text-foreground">Translation Support</p>
+                <Badge variant="outline" className="text-[11px]">
+                  Optional
                 </Badge>
               </div>
-
-              <div
-                className="space-y-3 arabic-text"
-                dir="rtl"
-                lang="ar"
-                style={{
-                  fontFamily: '"Scheherazade New", "Amiri Quran", serif',
-                  fontSize: "clamp(24px, 3vw, 34px)",
-                  lineHeight: 2.1,
-                }}
-              >
-                {verses.map((verse, index) => {
-                  const isActive = index === activeVerseIndex;
-                  const isBlurred =
-                    blurDuringRecitation && (!isPlaying || !isActive);
-                  return (
-                    <div
-                      key={verse.number}
-                      onClick={() => handleJumpToIndex(index)}
-                      className={cn(
-                        "rounded-2xl px-4 py-3 transition-colors cursor-pointer",
-                        isActive
-                          ? "bg-amber-100/80 ring-1 ring-amber-300 shadow-sm"
-                          : "hover:bg-amber-50/70"
-                      )}
-                    >
-                      <div className="flex flex-row-reverse items-start gap-3">
-                        <span className="mt-1 inline-flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full border border-amber-300 bg-white text-xs font-semibold text-amber-800">
-                          {verse.number}
-                        </span>
-                        <div className="flex-1 text-right">
-                          <p
-                            className={cn("text-foreground transition-all duration-150", isActive && "text-amber-950")}
-                            style={
-                              isBlurred
-                                ? {
-                                    filter: "blur(6px)",
-                                    userSelect: "none",
-                                    opacity: 0.6,
-                                  }
-                                : undefined
-                            }
-                          >
-                            {verse.arabic}
-                          </p>
-                          {showTranslation && (
-                            <p
-                              className="mt-2 text-left text-sm leading-relaxed text-muted-foreground not-italic transition-all duration-150"
-                              style={isBlurred ? { filter: "blur(4px)", opacity: 0.55 } : undefined}
-                            >
-                              "{verse.translation}"
-                            </p>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
+              <div className="space-y-3">
+                {reviewVerses.map((verse: { number: number; translation: string }) => (
+                  <div key={verse.number} className="rounded-xl border border-border/70 bg-muted/20 p-3">
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                      Ayah {verse.number}
+                    </p>
+                    <p className="mt-1 text-sm leading-relaxed text-foreground/80">
+                      {translationByVerse.get(verse.number)}
+                    </p>
+                  </div>
+                ))}
               </div>
             </CardContent>
           </Card>
         )}
+      </div>
 
-        {/* Rate yourself */}
-        <Card className="border-border">
-          <CardContent className="p-4">
-            <p className="text-sm font-semibold text-foreground mb-3">Rate your recitation</p>
-            <div className="space-y-2 mb-4">
-              {[0, 1, 2, 3, 4, 5].map((q) => (
-                <button
-                  key={q}
-                  onClick={() => setRating(q)}
-                  className={`w-full flex items-center gap-3 p-2.5 rounded-xl text-left transition-all border ${
-                    rating === q
-                      ? "border-primary bg-primary/5 scale-[1.01]"
-                      : "border-transparent hover:bg-muted"
-                  }`}
+      <div className="fixed inset-x-0 bottom-20 z-[60] px-4 pointer-events-none">
+        <div className="mx-auto w-full max-w-md pointer-events-auto">
+          <Card className="border-white/10 bg-[#0d1016]/92 shadow-[0_18px_48px_rgba(0,0,0,0.45)] backdrop-blur">
+            <CardContent className="p-2.5">
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="rounded-full px-3 border-white/10 bg-white/5 text-white hover:bg-white/10"
+                  onClick={() => setShowSettingsPanel(true)}
                 >
-                  <div
-                    className={`flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold ${
-                      rating === q ? "bg-primary text-white" : "bg-muted text-muted-foreground"
+                  <Settings2 size={14} />
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="rounded-full px-3 border-white/10 bg-white/5 text-white hover:bg-white/10"
+                  disabled={activeVerseIndex <= 0 || verses.length === 0}
+                  onClick={() => handleJumpToIndex(activeVerseIndex - 1)}
+                >
+                  <SkipBack size={14} />
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  className="flex-1 rounded-full bg-emerald-600 text-white hover:bg-emerald-500"
+                  disabled={verses.length === 0 || isLoadingAudio}
+                  onClick={() => void handlePlayPause()}
+                >
+                  {isPlaying ? <Pause size={14} className="mr-1" /> : <Play size={14} className="mr-1" />}
+                  {isPlaying ? "Pause" : isLoadingAudio ? "Loading..." : "Play"}
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="rounded-full px-3 border-white/10 bg-white/5 text-white hover:bg-white/10"
+                  disabled={activeVerseIndex >= verses.length - 1 || verses.length === 0}
+                  onClick={() => handleJumpToIndex(activeVerseIndex + 1)}
+                >
+                  <SkipForward size={14} />
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  className="rounded-full px-4 bg-white text-[#0d1016] hover:bg-white/90"
+                  onClick={() => setShowRatingSheet(true)}
+                >
+                  Rate
+                </Button>
+              </div>
+              <div className="mt-2 flex items-center justify-center">
+                <span className="text-[11px] font-medium text-white/65">
+                  {activePageNumber > 0 ? `${activePageNumber}` : "Ready"}
+                </span>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+
+      {showSettingsPanel && (
+        <>
+          <div className="fixed inset-0 z-50 bg-black/40" onClick={() => setShowSettingsPanel(false)} />
+          <div className="fixed inset-x-0 bottom-0 z-50 rounded-t-3xl bg-background shadow-2xl">
+            <div className="mx-auto w-full max-w-md px-4 pb-8 pt-4">
+              <div className="mx-auto mb-4 h-1.5 w-12 rounded-full bg-muted" />
+              <div className="mb-4 flex items-center justify-between">
+                <div>
+                  <p className="text-base font-semibold text-foreground">Mushaf Settings</p>
+                  <p className="text-xs text-muted-foreground">Keep the reading surface calm and uncluttered.</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowSettingsPanel(false)}
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-border"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+
+              <div className="space-y-3">
+                <label className="space-y-1 block">
+                  <span className="text-[11px] font-medium text-muted-foreground">Reciter</span>
+                  <select
+                    value={sessionReciter.id}
+                    onChange={(e) =>
+                      onSessionReciterChange(RECITERS.find((r) => r.id === e.target.value)!)
+                    }
+                    className="w-full text-sm border border-border rounded-xl px-3 py-3 bg-background"
+                  >
+                    {RECITERS.map((r) => (
+                      <option key={r.id} value={r.id}>
+                        {r.fullName}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="space-y-1 block">
+                  <span className="text-[11px] font-medium text-muted-foreground">Speed</span>
+                  <select
+                    value={String(playbackRate)}
+                    onChange={(e) => onPlaybackRateChange(parseFloat(e.target.value))}
+                    className="w-full text-sm border border-border rounded-xl px-3 py-3 bg-background"
+                  >
+                    <option value="1">1.0x</option>
+                    <option value="1.25">1.25x</option>
+                    <option value="1.5">1.5x</option>
+                    <option value="1.75">1.75x</option>
+                    <option value="2">2.0x</option>
+                  </select>
+                </label>
+
+                <label className="space-y-1 block">
+                  <span className="text-[11px] font-medium text-muted-foreground">Theme</span>
+                  <select
+                    value={mushafTheme}
+                    onChange={(e) => setMushafTheme(e.target.value as keyof typeof MUSHAF_REVIEW_THEMES)}
+                    className="w-full text-sm border border-border rounded-xl px-3 py-3 bg-background"
+                  >
+                    {Object.entries(MUSHAF_REVIEW_THEMES).map(([id, config]) => (
+                      <option key={id} value={id}>
+                        {config.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="space-y-1 block">
+                  <span className="text-[11px] font-medium text-muted-foreground">Font</span>
+                  <select
+                    value={mushafFont}
+                    onChange={(e) => setMushafFont(e.target.value as (typeof MUSHAF_FONTS)[number]["id"])}
+                    className="w-full text-sm border border-border rounded-xl px-3 py-3 bg-background"
+                  >
+                    {MUSHAF_FONTS.map((font) => (
+                      <option key={font.id} value={font.id}>
+                        {font.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="space-y-1 block">
+                  <span className="text-[11px] font-medium text-muted-foreground">Text</span>
+                  <select
+                    value={showTajweed ? "tajweed" : "plain"}
+                    onChange={(e) => setShowTajweed(e.target.value === "tajweed")}
+                    className="w-full text-sm border border-border rounded-xl px-3 py-3 bg-background"
+                  >
+                    <option value="plain">Plain</option>
+                    <option value="tajweed">Tajweed</option>
+                  </select>
+                </label>
+
+                <div className="grid grid-cols-2 gap-2 pt-1">
+                  <Button
+                    type="button"
+                    variant={showTranslation ? "default" : "outline"}
+                    className="rounded-full"
+                    onClick={() => setShowTranslation((prev) => !prev)}
+                  >
+                    <Languages size={14} className="mr-1" />
+                    {showTranslation ? "Hide Translation" : "Translation"}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant={blurDuringRecitation ? "default" : "outline"}
+                    className="rounded-full"
+                    onClick={() => setBlurDuringRecitation((prev) => !prev)}
+                  >
+                    {blurDuringRecitation ? <EyeOff size={14} className="mr-1" /> : <Eye size={14} className="mr-1" />}
+                    {blurDuringRecitation ? "Blur On" : "Blur Off"}
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
+
+      {showRatingSheet && (
+        <>
+          <div className="fixed inset-0 z-50 bg-black/40" onClick={() => setShowRatingSheet(false)} />
+          <div className="fixed inset-x-0 bottom-0 z-50 rounded-t-3xl bg-background shadow-2xl">
+            <div className="mx-auto w-full max-w-md px-4 pb-8 pt-4">
+              <div className="mx-auto mb-4 h-1.5 w-12 rounded-full bg-muted" />
+              <div className="mb-4 flex items-center justify-between">
+                <div>
+                  <p className="text-base font-semibold text-foreground">How did you do?</p>
+                  <p className="text-xs text-muted-foreground">Rate the recitation without leaving the mushaf.</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowRatingSheet(false)}
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-border"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+
+              <div className="space-y-2 mb-4">
+                {[0, 1, 2, 3, 4, 5].map((q) => (
+                  <button
+                    key={q}
+                    onClick={() => setRating(q)}
+                    className={`w-full flex items-center gap-3 p-2.5 rounded-xl text-left transition-all border ${
+                      rating === q
+                        ? "border-primary bg-primary/5 scale-[1.01]"
+                        : "border-transparent hover:bg-muted"
                     }`}
                   >
-                    {q}
-                  </div>
-                  <span className={`text-xs ${QUALITY_COLORS[q]} px-2 py-0.5 rounded-full`}>
-                    {QUALITY_LABELS[q]}
-                  </span>
-                </button>
-              ))}
+                    <div
+                      className={`flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold ${
+                        rating === q ? "bg-primary text-white" : "bg-muted text-muted-foreground"
+                      }`}
+                    >
+                      {q}
+                    </div>
+                    <span className={`text-xs ${QUALITY_COLORS[q]} px-2 py-0.5 rounded-full`}>
+                      {QUALITY_LABELS[q]}
+                    </span>
+                  </button>
+                ))}
+              </div>
+
+              <Button
+                className="w-full rounded-full"
+                disabled={rating === null}
+                onClick={() => {
+                  if (rating === null) return;
+                  setShowRatingSheet(false);
+                  onRated(rating);
+                }}
+              >
+                <CheckCircle size={14} className="mr-1" /> Submit Review
+              </Button>
             </div>
-            <Button
-              className="w-full"
-              disabled={rating === null}
-              onClick={() => rating !== null && onRated(rating)}
-            >
-              <CheckCircle size={14} className="mr-1" /> Submit Review
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
+          </div>
+        </>
+      )}
 
       <ChildNav childId={childId} />
     </div>
@@ -644,7 +1338,7 @@ export default function ReviewPage() {
   // ── Mushaf self-test view ──
   if (mushafItem) {
     return (
-      <MushafReviewSheet
+      <MushafReviewView
         childId={childId}
         surahId={mushafItem.surahId}
         surahNumber={mushafItem.surahNumber}

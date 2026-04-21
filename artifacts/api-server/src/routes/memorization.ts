@@ -159,6 +159,12 @@ router.get("/children/:childId/memorization", async (req, res) => {
     const existing = progress.find(p => p.surahId === surah.id);
     if (existing) console.log("[memorization GET] joined surah", surah.id, "(number", surah.number, ") →", existing.status);
     const parsedAyahs: number[] = (() => { try { return JSON.parse(existing?.memorizedAyahs || "[]"); } catch { return []; } })();
+    const normalizedAyahs =
+      parsedAyahs.length > 0
+        ? parsedAyahs
+        : (existing?.versesMemorized || 0) > 0
+        ? Array.from({ length: existing!.versesMemorized }, (_, i) => i + 1)
+        : [];
     return {
       id: existing?.id || 0,
       childId,
@@ -167,7 +173,7 @@ router.get("/children/:childId/memorization", async (req, res) => {
       surahNumber: surah.number,
       status: existing?.status || "not_started",
       versesMemorized: existing?.versesMemorized || 0,
-      memorizedAyahs: parsedAyahs,
+      memorizedAyahs: normalizedAyahs,
       totalVerses: surah.verseCount,
       percentComplete: existing ? Math.round((existing.versesMemorized / surah.verseCount) * 100) : 0,
       lastPracticed: existing?.lastPracticed?.toISOString() || null,
