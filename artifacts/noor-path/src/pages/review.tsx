@@ -8,8 +8,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ChildNav } from "@/components/child-nav";
-import { RECITERS, type Reciter, buildAudioUrl, buildWordAudioUrl } from "@/components/verse-player";
-import { ChevronLeft, CheckCircle, RefreshCw, AlertCircle, Eye, EyeOff, Volume2 } from "lucide-react";
+import { RECITERS, type Reciter, buildAudioUrl } from "@/components/verse-player";
+import { ChevronLeft, CheckCircle, RefreshCw, AlertCircle, Eye, EyeOff, Languages, Pause, Play, SkipBack, SkipForward } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const QUALITY_LABELS = [
@@ -29,20 +29,18 @@ const QUALITY_COLORS = [
   "bg-emerald-200 text-emerald-800",
 ];
 
-function pad(n: number, len: number) {
-  return String(n).padStart(len, "0");
-}
-
 // ─── MushafReviewSheet ────────────────────────────────────────────────────────
-// Self-test mushaf view: verses are hidden until revealed.
-// Tapping a verse number plays the full verse audio.
-// Tapping a word plays that word's audio.
+// Continuous surah review surface with one sequential player for the whole chunk.
 
 function MushafReviewSheet({
   childId,
   surahId,
   surahNumber,
   surahName,
+  sessionReciter,
+  onSessionReciterChange,
+  playbackRate,
+  onPlaybackRateChange,
   onClose,
   onRated,
 }: {
@@ -50,59 +48,155 @@ function MushafReviewSheet({
   surahId: number;
   surahNumber: number;
   surahName: string;
+  sessionReciter: Reciter;
+  onSessionReciterChange: (reciter: Reciter) => void;
+  playbackRate: number;
+  onPlaybackRateChange: (rate: number) => void;
   onClose: () => void;
   onRated: (quality: number) => void;
 }) {
-  const [reciter, setReciter] = useState<Reciter>(
-    () => RECITERS.find((r) => r.id === "husary")!
-  );
-  const [revealedVerses, setRevealedVerses] = useState<Set<number>>(new Set());
-  const [allRevealed, setAllRevealed] = useState(false);
   const [rating, setRating] = useState<number | null>(null);
+  const [showTranslation, setShowTranslation] = useState(false);
+  const [blurDuringRecitation, setBlurDuringRecitation] = useState(false);
+  const [activeVerseIndex, setActiveVerseIndex] = useState(0);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [isLoadingAudio, setIsLoadingAudio] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const playbackTokenRef = useRef(0);
+  const loadedVerseIndexRef = useRef<number | null>(null);
+  const playbackRateRef = useRef(playbackRate);
+  const sessionReciterRef = useRef(sessionReciter);
 
   const { data: surah, isLoading } = useQuery({
     queryKey: ["surah", surahId],
     queryFn: () => getSurah(surahId),
   });
 
-  function playAudio(url: string) {
-    if (audioRef.current) {
-      audioRef.current.pause();
-      audioRef.current.src = url;
-      audioRef.current.play().catch(() => {});
-    } else {
-      const a = new Audio(url);
-      audioRef.current = a;
-      a.play().catch(() => {});
+  const verses = surah?.verses ?? [];
+  const activeVerse = verses[activeVerseIndex] ?? null;
+
+  function clearAudio() {
+    playbackTokenRef.current += 1;
+    const audio = audioRef.current;
+    if (audio) {
+      audio.onended = null;
+      audio.onerror = null;
+      audio.pause();
+      audio.src = "";
+    }
+    audioRef.current = null;
+    loadedVerseIndexRef.current = null;
+    setIsPlaying(false);
+    setIsLoadingAudio(false);
+  }
+
+  async function playFromIndex(index: number) {
+    const verse = verses[index];
+    if (!verse) return;
+
+    clearAudio();
+    const token = playbackTokenRef.current;
+    const audio = new Audio();
+    audio.preload = "auto";
+    audio.src = buildAudioUrl(sessionReciterRef.current, surahNumber, verse.number);
+    audio.playbackRate = playbackRateRef.current;
+    audioRef.current = audio;
+    loadedVerseIndexRef.current = index;
+    setActiveVerseIndex(index);
+    setIsLoadingAudio(true);
+
+    audio.onended = () => {
+      if (playbackTokenRef.current !== token) return;
+      if (index < verses.length - 1) {
+        void playFromIndex(index + 1);
+      } else {
+        setIsPlaying(false);
+        setIsLoadingAudio(false);
+      }
+    };
+
+    audio.onerror = () => {
+      if (playbackTokenRef.current !== token) return;
+      setIsPlaying(false);
+      setIsLoadingAudio(false);
+    };
+
+    try {
+      await audio.play();
+      if (playbackTokenRef.current !== token) {
+        audio.pause();
+        return;
+      }
+      setIsPlaying(true);
+      setIsLoadingAudio(false);
+    } catch {
+      if (playbackTokenRef.current !== token) return;
+      setIsPlaying(false);
+      setIsLoadingAudio(false);
     }
   }
 
-  function playVerse(verseNumber: number) {
-    playAudio(buildAudioUrl(reciter, surahNumber, verseNumber));
+  async function handlePlayPause() {
+    if (isPlaying && audioRef.current) {
+      audioRef.current.pause();
+      setIsPlaying(false);
+      return;
+    }
+
+    if (
+      audioRef.current &&
+      loadedVerseIndexRef.current === activeVerseIndex &&
+      (
+        !Number.isFinite(audioRef.current.duration) ||
+        audioRef.current.currentTime < Math.max(0, audioRef.current.duration - 0.05)
+      )
+    ) {
+      try {
+        audioRef.current.playbackRate = playbackRateRef.current;
+        setIsLoadingAudio(true);
+        await audioRef.current.play();
+        setIsPlaying(true);
+      } catch {
+        setIsPlaying(false);
+      } finally {
+        setIsLoadingAudio(false);
+      }
+      return;
+    }
+
+    await playFromIndex(activeVerseIndex);
   }
 
-  function playWord(verseNumber: number, wordIndex: number) {
-    // wordIndex is 1-based position within the verse
-    playAudio(buildWordAudioUrl(surahNumber, verseNumber, wordIndex));
+  function handleJumpToIndex(index: number) {
+    if (index < 0 || index >= verses.length) return;
+    void playFromIndex(index);
   }
 
-  function toggleReveal(verseNumber: number) {
-    setRevealedVerses((prev) => {
-      const next = new Set(prev);
-      if (next.has(verseNumber)) { next.delete(verseNumber); } else { next.add(verseNumber); }
-      return next;
-    });
-  }
+  useEffect(() => {
+    return () => {
+      clearAudio();
+    };
+  }, []);
 
-  function revealAll() {
-    const all = new Set((surah?.verses ?? []).map((v) => v.number));
-    setRevealedVerses(all);
-    setAllRevealed(true);
-  }
+  useEffect(() => {
+    clearAudio();
+    setActiveVerseIndex(0);
+    setRating(null);
+    setShowTranslation(false);
+    setBlurDuringRecitation(false);
+  }, [surahId]);
 
-  const verses = surah?.verses ?? [];
-  const revealedCount = revealedVerses.size;
+  useEffect(() => {
+    playbackRateRef.current = playbackRate;
+    if (audioRef.current) {
+      audioRef.current.playbackRate = playbackRate;
+    }
+  }, [playbackRate]);
+
+  useEffect(() => {
+    sessionReciterRef.current = sessionReciter;
+    clearAudio();
+  }, [sessionReciter.id]);
 
   return (
     <div className="min-h-screen bg-background pb-24">
@@ -128,134 +222,249 @@ function MushafReviewSheet({
         </div>
       </div>
 
-      <div className="max-w-lg mx-auto px-4 -mt-6 space-y-3">
-        {/* Reciter + reveal all row */}
+      <div className="max-w-lg mx-auto px-4 -mt-6 space-y-4">
+        {/* Audio controls */}
         <Card className="border-border">
-          <CardContent className="p-3 flex items-center justify-between gap-3">
-            <select
-              value={reciter.id}
-              onChange={(e) => setReciter(RECITERS.find((r) => r.id === e.target.value)!)}
-              className="text-xs border border-border rounded-lg px-2 py-1.5 bg-background flex-1"
-            >
-              {RECITERS.map((r) => (
-                <option key={r.id} value={r.id}>
-                  {r.fullName}
-                </option>
-              ))}
-            </select>
-            <Button size="sm" variant="outline" className="h-8 text-xs" onClick={revealAll}>
-              <Eye size={12} className="mr-1" />
-              {allRevealed ? "All Shown" : "Reveal All"}
-            </Button>
+          <CardContent className="p-3 space-y-3">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-xs font-semibold text-foreground">Review Audio</p>
+                <p className="text-[11px] text-muted-foreground">
+                  Play the surah continuously and follow the highlighted ayah
+                </p>
+              </div>
+              <Badge variant="outline" className="text-[11px]">
+                {activeVerse ? `Ayah ${activeVerse.number} of ${verses.length}` : "Ready"}
+              </Badge>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <label className="space-y-1">
+                <span className="text-[11px] font-medium text-muted-foreground">Reciter</span>
+                <select
+                  value={sessionReciter.id}
+                  onChange={(e) =>
+                    onSessionReciterChange(RECITERS.find((r) => r.id === e.target.value)!)
+                  }
+                  className="w-full text-xs border border-border rounded-lg px-2 py-2 bg-background"
+                >
+                  {RECITERS.map((r) => (
+                    <option key={r.id} value={r.id}>
+                      {r.fullName}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="space-y-1">
+                <span className="text-[11px] font-medium text-muted-foreground">Speed</span>
+                <select
+                  value={String(playbackRate)}
+                  onChange={(e) => onPlaybackRateChange(parseFloat(e.target.value))}
+                  className="w-full text-xs border border-border rounded-lg px-2 py-2 bg-background"
+                >
+                  <option value="1">1.0x</option>
+                  <option value="1.25">1.25x</option>
+                  <option value="1.5">1.5x</option>
+                  <option value="1.75">1.75x</option>
+                  <option value="2">2.0x</option>
+                </select>
+              </label>
+            </div>
+
+            <div className="flex items-center gap-2 flex-wrap">
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="rounded-full"
+                disabled={activeVerseIndex <= 0 || verses.length === 0}
+                onClick={() => handleJumpToIndex(activeVerseIndex - 1)}
+              >
+                <SkipBack size={14} className="mr-1" />
+                Prev
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                className="rounded-full"
+                disabled={verses.length === 0 || isLoadingAudio}
+                onClick={() => void handlePlayPause()}
+              >
+                {isPlaying ? (
+                  <>
+                    <Pause size={14} className="mr-1" />
+                    Pause
+                  </>
+                ) : (
+                  <>
+                    <Play size={14} className="mr-1" />
+                    {isLoadingAudio ? "Loading..." : "Play Surah"}
+                  </>
+                )}
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="rounded-full"
+                disabled={activeVerseIndex >= verses.length - 1 || verses.length === 0}
+                onClick={() => handleJumpToIndex(activeVerseIndex + 1)}
+              >
+                Next
+                <SkipForward size={14} className="ml-1" />
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant={showTranslation ? "default" : "outline"}
+                className="rounded-full"
+                onClick={() => setShowTranslation((prev) => !prev)}
+              >
+                <Languages size={14} className="mr-1" />
+                {showTranslation ? "Hide Translation" : "Show Translation"}
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant={blurDuringRecitation ? "default" : "outline"}
+                className="rounded-full"
+                onClick={() => setBlurDuringRecitation((prev) => !prev)}
+              >
+                {blurDuringRecitation ? (
+                  <EyeOff size={14} className="mr-1" />
+                ) : (
+                  <Eye size={14} className="mr-1" />
+                )}
+                {blurDuringRecitation ? "Blur On" : "Blur Off"}
+              </Button>
+            </div>
           </CardContent>
         </Card>
 
-        {/* Hint */}
-        <div className="bg-amber-50 border border-amber-200 rounded-xl px-3 py-2 text-xs text-amber-700">
-          Tap a verse number to hear it. Tap any word to hear that word. Tap "Reveal" to show a verse.
-        </div>
-
-        {/* Verses */}
+        {/* Continuous surah review sheet */}
         {isLoading ? (
-          <div className="space-y-2">
-            {[1, 2, 3].map((i) => (
-              <Skeleton key={i} className="h-16 rounded-2xl" />
-            ))}
-          </div>
-        ) : (
-          <div className="space-y-2">
-            {verses.map((verse) => {
-              const revealed = revealedVerses.has(verse.number) || allRevealed;
-              const words = verse.arabic.split(/\s+/).filter(Boolean);
-              return (
-                <Card key={verse.number} className="border-border">
-                  <CardContent className="p-3">
-                    <div className="flex items-center justify-between mb-2">
-                      {/* Verse number — tap to play full verse */}
-                      <button
-                        onClick={() => playVerse(verse.number)}
-                        className="flex items-center gap-1.5 bg-primary/10 hover:bg-primary/20 transition-colors rounded-full px-2.5 py-1"
-                      >
-                        <Volume2 size={11} className="text-primary" />
-                        <span className="text-xs font-bold text-primary">{verse.number}</span>
-                      </button>
-                      <button
-                        onClick={() => toggleReveal(verse.number)}
-                        className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
-                      >
-                        {revealed ? (
-                          <><EyeOff size={12} /> Hide</>
-                        ) : (
-                          <><Eye size={12} /> Reveal</>
-                        )}
-                      </button>
-                    </div>
-
-                    {revealed ? (
-                      <div className="flex flex-wrap gap-1 justify-end" dir="rtl">
-                        {words.map((word, wi) => (
-                          <button
-                            key={wi}
-                            onClick={() => playWord(verse.number, wi + 1)}
-                            className="arabic-text text-xl text-foreground hover:text-primary hover:bg-primary/5 px-1 rounded transition-colors"
-                          >
-                            {word}
-                          </button>
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="text-center py-2">
-                        <p className="text-xs text-muted-foreground italic">
-                          Recite from memory, then tap Reveal
-                        </p>
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-              );
-            })}
-          </div>
-        )}
-
-        {/* Rate yourself */}
-        {revealedCount > 0 && (
           <Card className="border-border">
-            <CardContent className="p-4">
-              <p className="text-sm font-semibold text-foreground mb-3">Rate your recitation</p>
-              <div className="space-y-2 mb-4">
-                {[0, 1, 2, 3, 4, 5].map((q) => (
-                  <button
-                    key={q}
-                    onClick={() => setRating(q)}
-                    className={`w-full flex items-center gap-3 p-2.5 rounded-xl text-left transition-all border ${
-                      rating === q
-                        ? "border-primary bg-primary/5 scale-[1.01]"
-                        : "border-transparent hover:bg-muted"
-                    }`}
-                  >
-                    <div
-                      className={`flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold ${
-                        rating === q ? "bg-primary text-white" : "bg-muted text-muted-foreground"
-                      }`}
-                    >
-                      {q}
-                    </div>
-                    <span className={`text-xs ${QUALITY_COLORS[q]} px-2 py-0.5 rounded-full`}>
-                      {QUALITY_LABELS[q]}
-                    </span>
-                  </button>
-                ))}
+            <CardContent className="p-5 space-y-3">
+              {[1, 2, 3, 4].map((i) => (
+                <Skeleton key={i} className="h-10 rounded-xl" />
+              ))}
+            </CardContent>
+          </Card>
+        ) : (
+          <Card className="border-amber-200 bg-gradient-to-b from-amber-50 to-white shadow-sm">
+            <CardContent className="p-5">
+              <div className="mb-4 flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-sm font-semibold text-foreground">Continuous Review</p>
+                  <p className="text-xs text-muted-foreground">
+                    Tap any ayah to start playback from there
+                  </p>
+                </div>
+                <Badge className="bg-amber-100 text-amber-800 border-0">
+                  {surah?.verses?.length ?? 0} ayahs
+                </Badge>
               </div>
-              <Button
-                className="w-full"
-                disabled={rating === null}
-                onClick={() => rating !== null && onRated(rating)}
+
+              <div
+                className="space-y-3 arabic-text"
+                dir="rtl"
+                lang="ar"
+                style={{
+                  fontFamily: '"Scheherazade New", "Amiri Quran", serif',
+                  fontSize: "clamp(24px, 3vw, 34px)",
+                  lineHeight: 2.1,
+                }}
               >
-                <CheckCircle size={14} className="mr-1" /> Submit Review
-              </Button>
+                {verses.map((verse, index) => {
+                  const isActive = index === activeVerseIndex;
+                  const isBlurred =
+                    blurDuringRecitation && (!isPlaying || !isActive);
+                  return (
+                    <div
+                      key={verse.number}
+                      onClick={() => handleJumpToIndex(index)}
+                      className={cn(
+                        "rounded-2xl px-4 py-3 transition-colors cursor-pointer",
+                        isActive
+                          ? "bg-amber-100/80 ring-1 ring-amber-300 shadow-sm"
+                          : "hover:bg-amber-50/70"
+                      )}
+                    >
+                      <div className="flex flex-row-reverse items-start gap-3">
+                        <span className="mt-1 inline-flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full border border-amber-300 bg-white text-xs font-semibold text-amber-800">
+                          {verse.number}
+                        </span>
+                        <div className="flex-1 text-right">
+                          <p
+                            className={cn("text-foreground transition-all duration-150", isActive && "text-amber-950")}
+                            style={
+                              isBlurred
+                                ? {
+                                    filter: "blur(6px)",
+                                    userSelect: "none",
+                                    opacity: 0.6,
+                                  }
+                                : undefined
+                            }
+                          >
+                            {verse.arabic}
+                          </p>
+                          {showTranslation && (
+                            <p
+                              className="mt-2 text-left text-sm leading-relaxed text-muted-foreground not-italic transition-all duration-150"
+                              style={isBlurred ? { filter: "blur(4px)", opacity: 0.55 } : undefined}
+                            >
+                              "{verse.translation}"
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             </CardContent>
           </Card>
         )}
+
+        {/* Rate yourself */}
+        <Card className="border-border">
+          <CardContent className="p-4">
+            <p className="text-sm font-semibold text-foreground mb-3">Rate your recitation</p>
+            <div className="space-y-2 mb-4">
+              {[0, 1, 2, 3, 4, 5].map((q) => (
+                <button
+                  key={q}
+                  onClick={() => setRating(q)}
+                  className={`w-full flex items-center gap-3 p-2.5 rounded-xl text-left transition-all border ${
+                    rating === q
+                      ? "border-primary bg-primary/5 scale-[1.01]"
+                      : "border-transparent hover:bg-muted"
+                  }`}
+                >
+                  <div
+                    className={`flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold ${
+                      rating === q ? "bg-primary text-white" : "bg-muted text-muted-foreground"
+                    }`}
+                  >
+                    {q}
+                  </div>
+                  <span className={`text-xs ${QUALITY_COLORS[q]} px-2 py-0.5 rounded-full`}>
+                    {QUALITY_LABELS[q]}
+                  </span>
+                </button>
+              ))}
+            </div>
+            <Button
+              className="w-full"
+              disabled={rating === null}
+              onClick={() => rating !== null && onRated(rating)}
+            >
+              <CheckCircle size={14} className="mr-1" /> Submit Review
+            </Button>
+          </CardContent>
+        </Card>
       </div>
 
       <ChildNav childId={childId} />
@@ -300,6 +509,10 @@ export default function ReviewPage() {
   const [completedSurahIds, setCompletedSurahIds] = useState<Set<number>>(
     new Set(storedSession?.completedItemsData?.map((i: any) => i.surahId) ?? [])
   );
+  const [sessionReciter, setSessionReciter] = useState<Reciter>(
+    () => RECITERS.find((r) => r.id === "husary")!
+  );
+  const [sessionPlaybackRate, setSessionPlaybackRate] = useState(1);
   const [completedItemsData, setCompletedItemsData] = useState<Array<{surahId: number; surahName?: string | null; surahNumber: number}>>(
     storedSession?.completedItemsData ?? []
   );
@@ -436,6 +649,10 @@ export default function ReviewPage() {
         surahId={mushafItem.surahId}
         surahNumber={mushafItem.surahNumber}
         surahName={mushafItem.surahName}
+        sessionReciter={sessionReciter}
+        onSessionReciterChange={setSessionReciter}
+        playbackRate={sessionPlaybackRate}
+        onPlaybackRateChange={setSessionPlaybackRate}
         onClose={() => setMushafItem(null)}
         onRated={(quality) =>
           reviewMutation.mutate({ surahId: mushafItem.surahId, quality })
