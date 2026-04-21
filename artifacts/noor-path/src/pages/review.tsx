@@ -425,17 +425,14 @@ function MushafReviewView({
   const sessionReciterRef = useRef(sessionReciter);
   const scrollRootRef = useRef<HTMLDivElement | null>(null);
   const pageContentRefs = useRef<Record<number, HTMLDivElement | null>>({});
-  const headerRef = useRef<HTMLDivElement | null>(null);
   const playerRef = useRef<HTMLDivElement | null>(null);
   const [visibleViewportHeight, setVisibleViewportHeight] = useState<number>(
     () =>
       typeof window !== "undefined"
-        ? Math.round(window.visualViewport?.height ?? window.innerHeight)
+        ? Math.round(window.innerHeight)
         : 0,
   );
-  const [headerHeight, setHeaderHeight] = useState(0);
   const [playerHeight, setPlayerHeight] = useState(0);
-  const [playerTop, setPlayerTop] = useState(0);
 
   const { data: chapterVersesData, isLoading: chapterLoading } = useQuery({
     queryKey: ["review-mushaf-surah", surahNumber],
@@ -530,17 +527,16 @@ function MushafReviewView({
   const fallbackBottomNavHeight = 72; // nav + browser chrome before the player is measured
   const fallbackBottomChrome = 24;
   const reservedBottomSpace =
-    visibleViewportHeight > 0 && playerTop > 0
-      ? Math.max(0, visibleViewportHeight - playerTop + 8)
+    playerHeight > 0
+      ? playerHeight + fallbackPlayerBottomOffset + 8
       : playerHeight +
         fallbackPlayerBottomOffset +
         fallbackBottomNavHeight +
         fallbackBottomChrome;
-  const hasMeasuredPlayerFrame = visibleViewportHeight > 0 && playerTop > 0;
+  const hasMeasuredPlayerFrame = playerHeight > 0;
   const settingsSheetBottomSpace = reservedBottomSpace + 12;
-  const settingsSheetMaxHeight = hasMeasuredPlayerFrame
-    ? `${Math.max(260, playerTop - 20)}px`
-    : visibleViewportHeight > 0
+  const settingsSheetMaxHeight =
+    visibleViewportHeight > 0
       ? `${Math.max(260, visibleViewportHeight - settingsSheetBottomSpace - 16)}px`
       : "min(70vh, 520px)";
   const pageBottomPadding = hasMeasuredPlayerFrame
@@ -679,7 +675,7 @@ function MushafReviewView({
   }, [sessionReciter.id]);
 
   useEffect(() => {
-    if (!scrollRootRef.current) return;
+    if (isSinglePageLayout || !scrollRootRef.current) return;
     const node = scrollRootRef.current.querySelector<HTMLElement>(
       `[data-review-ayah="${activeVerseKey}"]`,
     );
@@ -689,45 +685,56 @@ function MushafReviewView({
         block: "center",
       });
     }
-  }, [activeVerseKey, isPlaying]);
+  }, [activeVerseKey, isPlaying, isSinglePageLayout]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
 
     const updateViewportMetrics = () => {
-      setVisibleViewportHeight(
-        Math.round(window.visualViewport?.height ?? window.innerHeight),
-      );
-      setHeaderHeight(headerRef.current?.offsetHeight ?? 0);
+      setVisibleViewportHeight(Math.round(window.innerHeight));
       const playerRect = playerRef.current?.getBoundingClientRect();
       setPlayerHeight(playerRect ? Math.round(playerRect.height) : 0);
-      setPlayerTop(playerRect ? Math.round(playerRect.top) : 0);
     };
 
     updateViewportMetrics();
 
-    const viewport = window.visualViewport;
     window.addEventListener("resize", updateViewportMetrics);
-    viewport?.addEventListener("resize", updateViewportMetrics);
-    viewport?.addEventListener("scroll", updateViewportMetrics);
 
     const resizeObserver =
       typeof ResizeObserver !== "undefined"
         ? new ResizeObserver(() => updateViewportMetrics())
         : null;
 
-    if (resizeObserver && headerRef.current) {
-      resizeObserver.observe(headerRef.current);
-    }
     if (resizeObserver && playerRef.current) {
       resizeObserver.observe(playerRef.current);
     }
 
     return () => {
       window.removeEventListener("resize", updateViewportMetrics);
-      viewport?.removeEventListener("resize", updateViewportMetrics);
-      viewport?.removeEventListener("scroll", updateViewportMetrics);
       resizeObserver?.disconnect();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+
+    const html = document.documentElement;
+    const body = document.body;
+    const previousHtmlOverflow = html.style.overflow;
+    const previousHtmlOverscrollBehavior = html.style.overscrollBehavior;
+    const previousBodyOverflow = body.style.overflow;
+    const previousBodyOverscrollBehavior = body.style.overscrollBehavior;
+
+    html.style.overflow = "hidden";
+    html.style.overscrollBehavior = "none";
+    body.style.overflow = "hidden";
+    body.style.overscrollBehavior = "none";
+
+    return () => {
+      html.style.overflow = previousHtmlOverflow;
+      html.style.overscrollBehavior = previousHtmlOverscrollBehavior;
+      body.style.overflow = previousBodyOverflow;
+      body.style.overscrollBehavior = previousBodyOverscrollBehavior;
     };
   }, []);
 
@@ -764,10 +771,8 @@ function MushafReviewView({
     pageBundles,
     showTajweed,
     blurDuringRecitation,
-    activeVerseNumber,
     isSinglePageLayout,
     visibleViewportHeight,
-    playerTop,
   ]);
 
   const isLoading = chapterLoading || pagesLoading;
@@ -778,11 +783,11 @@ function MushafReviewView({
       style={{
         background: `linear-gradient(to bottom, ${BAYAAN_PAGE_THEME.screenTint}, ${BAYAAN_PAGE_THEME.screen})`,
         color: BAYAAN_PAGE_THEME.screenText,
+        overscrollBehavior: "none",
       }}
     >
       <style>{TAJWEED_CSS}</style>
       <div
-        ref={headerRef}
         className="z-30 flex-none px-4 pt-3 pb-2"
         style={{
           background: `linear-gradient(to bottom, ${BAYAAN_PAGE_THEME.screenTint}, rgba(247, 242, 231, 0.64), transparent)`,
