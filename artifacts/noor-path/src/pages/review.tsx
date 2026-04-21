@@ -2,14 +2,36 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { CelebrationOverlay } from "@/components/celebration-overlay";
 import { useParams, Link } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { listReviews, completeReview, getSurah, getChildDashboard } from "@workspace/api-client-react";
+import {
+  listReviews,
+  completeReview,
+  getSurah,
+  getChildDashboard,
+} from "@workspace/api-client-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ChildNav } from "@/components/child-nav";
-import { RECITERS, type Reciter, buildAudioUrl } from "@/components/verse-player";
-import { ChevronLeft, CheckCircle, RefreshCw, AlertCircle, Eye, EyeOff, Languages, Pause, Play, SkipBack, SkipForward, Settings2, X } from "lucide-react";
+import {
+  RECITERS,
+  type Reciter,
+  buildAudioUrl,
+} from "@/components/verse-player";
+import {
+  ChevronLeft,
+  CheckCircle,
+  RefreshCw,
+  AlertCircle,
+  Eye,
+  EyeOff,
+  Pause,
+  Play,
+  SkipBack,
+  SkipForward,
+  Settings2,
+  X,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const QURAN_API = "https://api.quran.com/api/v4";
@@ -74,57 +96,71 @@ type MushafChapter = {
   bismillah_pre: boolean;
 };
 
-type MushafThemeConfig = {
-  name: string;
-  banner: string;
-  bannerBorder: string;
-  accent: string;
-  parchment: string;
-  textColor: string;
-};
+const BAYAAN_MUSHAF_TEXT =
+  '"BayaanDigitalKhatt", "KFGQPC Hafs", "Amiri Quran", serif';
+const BAYAAN_MUSHAF_HEADER =
+  '"BayaanSurahQCF", "BayaanDigitalKhatt", "KFGQPC Hafs", serif';
+const BAYAAN_MUSHAF_DIVIDER = '"BayaanQuranCommon", serif';
+const BAYAAN_SURAH_DIVIDER_CHAR = "\uE000";
+const BAYAAN_BASMALLAH = "بِسْمِ ٱللَّهِ ٱلرَّحْمَٰنِ ٱلرَّحِيمِ";
+const BAYAAN_PAGE_THEME = {
+  screen: "#efe8da",
+  screenTint: "#f7f2e7",
+  screenText: "#1c1912",
+  chromeBorder: "#d8cfbb",
+  chromeMuted: "#7d7157",
+  page: "#fffdf8",
+  pageEdge: "#f5efe0",
+  pageBorder: "#d7ccb2",
+  pageRule: "#cdbb8b",
+  pageLabel: "#8f7d56",
+  pageText: "#1f1a13",
+  pageMuted: "#b0a184",
+  markerBorder: "#bea15c",
+  markerText: "#866622",
+  markerSurface: "#fffaf0",
+  activeHighlight: "rgba(190, 161, 92, 0.18)",
+  activeMarker: "#9c7b31",
+  activeMarkerBg: "rgba(190, 161, 92, 0.24)",
+} as const;
 
-const MUSHAF_REVIEW_THEMES = {
-  madinah: {
-    name: "Madinah",
-    banner: "#1a4a5c",
-    bannerBorder: "#c9a84c",
-    accent: "#c9a84c",
-    parchment: "#fdf6e3",
-    textColor: "#1a1a1a",
-  },
-  ottoman: {
-    name: "Ottoman",
-    banner: "#4a1a2c",
-    bannerBorder: "#d4a843",
-    accent: "#d4a843",
-    parchment: "#fdf0e0",
-    textColor: "#22160f",
-  },
-  forest: {
-    name: "Classic",
-    banner: "#0d2b1a",
-    bannerBorder: "#c9a84c",
-    accent: "#c9a84c",
-    parchment: "#f8f2e4",
-    textColor: "#102019",
-  },
-  night: {
-    name: "Night",
-    banner: "#102032",
-    bannerBorder: "#b9c8d8",
-    accent: "#b9c8d8",
-    parchment: "#111827",
-    textColor: "#e5d9bf",
-  },
-} satisfies Record<string, MushafThemeConfig>;
+const JUZ_START_PAGES = [
+  1, 22, 42, 62, 82, 102, 121, 142, 162, 182, 201, 222, 242, 262, 282, 302, 322,
+  342, 362, 382, 402, 422, 442, 462, 482, 502, 522, 542, 562, 582,
+] as const;
 
-const MUSHAF_FONTS = [
-  { id: "hafs", label: "Hafs", family: '"KFGQPC Hafs", "Amiri Quran", serif' },
-  { id: "scheherazade", label: "Scheherazade", family: '"Scheherazade New", "Amiri Quran", serif' },
-  { id: "amiri", label: "Amiri", family: '"Amiri Quran", serif' },
+const BAYAAN_QCF_SURAH_CODEPOINTS = [
+  0xfc45, 0xfc46, 0xfc47, 0xfc4a, 0xfc4b, 0xfc4e, 0xfc4f, 0xfc51, 0xfc52,
+  0xfc53, 0xfc55, 0xfc56, 0xfc58, 0xfc5a, 0xfc5b, 0xfc5c, 0xfc5d, 0xfc5e,
+  0xfc61, 0xfc62, 0xfc64, 0xfb51, 0xfb52, 0xfb54, 0xfb55, 0xfb57, 0xfb58,
+  0xfb5a, 0xfb5b, 0xfb5d, 0xfb5e, 0xfb60, 0xfb61, 0xfb63, 0xfb64, 0xfb66,
+  0xfb67, 0xfb69, 0xfb6a, 0xfb6c, 0xfb6d, 0xfb6f, 0xfb70, 0xfb72, 0xfb73,
+  0xfb75, 0xfb76, 0xfb78, 0xfb79, 0xfb7b, 0xfb7c, 0xfb7e, 0xfb7f, 0xfb81,
+  0xfb82, 0xfb84, 0xfb85, 0xfb87, 0xfb88, 0xfb8a, 0xfb8b, 0xfb8d, 0xfb8e,
+  0xfb90, 0xfb91, 0xfb93, 0xfb94, 0xfb96, 0xfb97, 0xfb99, 0xfb9a, 0xfb9c,
+  0xfb9d, 0xfb9f, 0xfba0, 0xfba2, 0xfba3, 0xfba5, 0xfba6, 0xfba8, 0xfba9,
+  0xfbab, 0xfbac, 0xfbae, 0xfbaf, 0xfbb1, 0xfbb2, 0xfbb4, 0xfbb5, 0xfbb7,
+  0xfbb8, 0xfbba, 0xfbbb, 0xfbbd, 0xfbbe, 0xfbc0, 0xfbc1, 0xfbd3, 0xfbd4,
+  0xfbd6, 0xfbd7, 0xfbd9, 0xfbda, 0xfbdc, 0xfbdd, 0xfbdf, 0xfbe0, 0xfbe2,
+  0xfbe3, 0xfbe5, 0xfbe6, 0xfbe8, 0xfbe9, 0xfbeb,
 ] as const;
 
 const TAJWEED_CSS = `
+@font-face {
+  font-family: "BayaanDigitalKhatt";
+  src: url("/fonts/bayaan/digital-khatt.otf") format("opentype");
+  font-display: swap;
+}
+@font-face {
+  font-family: "BayaanQuranCommon";
+  src: url("/fonts/bayaan/quran-common.ttf") format("truetype");
+  font-display: swap;
+}
+@font-face {
+  font-family: "BayaanSurahQCF";
+  src: url("/fonts/bayaan/surah-name-qcf.ttf") format("truetype");
+  font-display: swap;
+}
 .mushaf-page .ham_wasl,
 .mushaf-page .slnt,
 .mushaf-page .lam_shamsiyya,
@@ -144,11 +180,111 @@ const TAJWEED_CSS = `
 .mushaf-page .ghunna { color: inherit; }
 `;
 
+function getJuzForPage(pageNumber: number): number {
+  for (let i = JUZ_START_PAGES.length - 1; i >= 0; i -= 1) {
+    if (pageNumber >= JUZ_START_PAGES[i]) return i + 1;
+  }
+  return 1;
+}
+
+function getBayaanSurahGlyph(surahNumber: number): string {
+  const codepoint = BAYAAN_QCF_SURAH_CODEPOINTS[surahNumber - 1];
+  return codepoint ? String.fromCodePoint(codepoint) : "";
+}
+
+function getArabicSurahNamesForPage(
+  verses: PageVerseData[],
+  chapters: MushafChapter[],
+): string {
+  const surahIds = Array.from(
+    new Set(verses.map((verse) => Number(verse.verse_key.split(":")[0]))),
+  ).filter((surahId) => Number.isFinite(surahId));
+
+  return surahIds
+    .map(
+      (surahId) =>
+        chapters.find((chapter) => chapter.id === surahId)?.name_arabic ??
+        `سُورَة ${surahId}`,
+    )
+    .join(" · ");
+}
+
+function BayaanSurahBanner({
+  surahNumber,
+  surahName,
+}: {
+  surahNumber: number;
+  surahName: string;
+}) {
+  const surahGlyph = getBayaanSurahGlyph(surahNumber);
+
+  return (
+    <div
+      style={{
+        display: "flex",
+        justifyContent: "center",
+        margin: "0.28em 0 0.06em",
+      }}
+    >
+      <div
+        style={{
+          position: "relative",
+          width: "min(100%, 13.8em)",
+          minHeight: "1.72em",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
+        <span
+          aria-hidden
+          style={{
+            position: "absolute",
+            inset: 0,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            fontFamily: BAYAAN_MUSHAF_DIVIDER,
+            fontSize: "1.78em",
+            lineHeight: 1,
+            color: BAYAAN_PAGE_THEME.pageRule,
+            pointerEvents: "none",
+          }}
+        >
+          {BAYAAN_SURAH_DIVIDER_CHAR}
+        </span>
+        <span
+          dir="rtl"
+          style={{
+            position: "relative",
+            display: "inline-flex",
+            alignItems: "center",
+            justifyContent: "center",
+            fontFamily: surahGlyph
+              ? BAYAAN_MUSHAF_HEADER
+              : '"Scheherazade New", "Amiri Quran", serif',
+            fontSize: surahGlyph ? "1.02em" : "0.86em",
+            lineHeight: 1,
+            color: BAYAAN_PAGE_THEME.pageLabel,
+            whiteSpace: "nowrap",
+            letterSpacing: 0,
+          }}
+        >
+          {surahGlyph || surahName}
+        </span>
+      </div>
+    </div>
+  );
+}
+
 function stripTashkeel(s: string): string {
   return (
     s
       .replace(/\u0670/g, "ا")
-      .replace(/[\u0610-\u061A\u064B-\u065F\u06D6-\u06DC\u06DF-\u06E4\u06E7\u06E8\u06EA-\u06ED]/g, "")
+      .replace(
+        /[\u0610-\u061A\u064B-\u065F\u06D6-\u06DC\u06DF-\u06E4\u06E7\u06E8\u06EA-\u06ED]/g,
+        "",
+      )
       .replace(/[ـ]/g, "")
       .replace(/[أإآاٱ]/g, "ا")
       .trim() || s
@@ -167,7 +303,7 @@ function splitTajweedIntoWords(html: string): string[] {
 }
 
 function buildLineGroups(
-  verses: PageVerseData[]
+  verses: PageVerseData[],
 ): Array<{ lineNum: number; words: LineWord[] }> | null {
   const all: LineWord[] = [];
   for (const pv of verses) {
@@ -208,7 +344,7 @@ function buildLineGroups(
         line_number: w.line_number,
         translation:
           typeof w.translation === "object" && w.translation !== null
-            ? (w.translation as { text?: string }).text ?? ""
+            ? ((w.translation as { text?: string }).text ?? "")
             : w.translation,
       });
     }
@@ -225,19 +361,21 @@ function buildLineGroups(
     .map(([lineNum, words]) => ({ lineNum, words }));
 }
 
-async function fetchVersesByPage(pageNumber: number): Promise<{ verses: PageVerseData[] }> {
+async function fetchVersesByPage(
+  pageNumber: number,
+): Promise<{ verses: PageVerseData[] }> {
   const r = await fetch(
-    `${QURAN_API}/verses/by_page/${pageNumber}?words=true&fields=text_uthmani,text_uthmani_tajweed&word_fields=text_uthmani,line_number,char_type_name,translation&per_page=50`
+    `${QURAN_API}/verses/by_page/${pageNumber}?words=true&fields=text_uthmani,text_uthmani_tajweed&word_fields=text_uthmani,line_number,char_type_name,translation&per_page=50`,
   );
   if (!r.ok) throw new Error(`Failed to fetch page ${pageNumber}`);
   return r.json();
 }
 
 async function fetchVersesBySurah(
-  surahNumber: number
+  surahNumber: number,
 ): Promise<{ verses: ChapterVerseData[] }> {
   const r = await fetch(
-    `${QURAN_API}/verses/by_chapter/${surahNumber}?fields=text_uthmani,text_uthmani_tajweed,page_number&per_page=300`
+    `${QURAN_API}/verses/by_chapter/${surahNumber}?fields=text_uthmani,text_uthmani_tajweed,page_number&per_page=300`,
   );
   if (!r.ok) throw new Error(`Failed to fetch surah ${surahNumber}`);
   return r.json();
@@ -273,13 +411,10 @@ function MushafReviewView({
   onRated: (quality: number) => void;
 }) {
   const [rating, setRating] = useState<number | null>(null);
-  const [showTranslation, setShowTranslation] = useState(false);
   const [blurDuringRecitation, setBlurDuringRecitation] = useState(false);
   const [showTajweed, setShowTajweed] = useState(false);
   const [showSettingsPanel, setShowSettingsPanel] = useState(false);
   const [showRatingSheet, setShowRatingSheet] = useState(false);
-  const [mushafTheme, setMushafTheme] = useState<keyof typeof MUSHAF_REVIEW_THEMES>("night");
-  const [mushafFont, setMushafFont] = useState<(typeof MUSHAF_FONTS)[number]["id"]>("hafs");
   const [activeVerseIndex, setActiveVerseIndex] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isLoadingAudio, setIsLoadingAudio] = useState(false);
@@ -290,11 +425,17 @@ function MushafReviewView({
   const sessionReciterRef = useRef(sessionReciter);
   const scrollRootRef = useRef<HTMLDivElement | null>(null);
   const pageContentRefs = useRef<Record<number, HTMLDivElement | null>>({});
-
-  const { data: reviewSurah, isLoading: reviewSurahLoading } = useQuery({
-    queryKey: ["surah", surahId],
-    queryFn: () => getSurah(surahId),
-  });
+  const headerRef = useRef<HTMLDivElement | null>(null);
+  const playerRef = useRef<HTMLDivElement | null>(null);
+  const [visibleViewportHeight, setVisibleViewportHeight] = useState<number>(
+    () =>
+      typeof window !== "undefined"
+        ? Math.round(window.visualViewport?.height ?? window.innerHeight)
+        : 0,
+  );
+  const [headerHeight, setHeaderHeight] = useState(0);
+  const [playerHeight, setPlayerHeight] = useState(0);
+  const [playerTop, setPlayerTop] = useState(0);
 
   const { data: chapterVersesData, isLoading: chapterLoading } = useQuery({
     queryKey: ["review-mushaf-surah", surahNumber],
@@ -310,7 +451,6 @@ function MushafReviewView({
 
   const chapterVerses = chapterVersesData?.verses ?? [];
   const chapters = chaptersData?.chapters ?? [];
-  const reviewVerses = reviewSurah?.verses ?? [];
 
   const pageNumbers = useMemo(
     () =>
@@ -318,10 +458,10 @@ function MushafReviewView({
         new Set(
           chapterVerses
             .map((v) => v.page_number)
-            .filter((p): p is number => typeof p === "number")
-        )
+            .filter((p): p is number => typeof p === "number"),
+        ),
       ),
-    [chapterVerses]
+    [chapterVerses],
   );
 
   const { data: pageBundlesData, isLoading: pagesLoading } = useQuery({
@@ -331,7 +471,7 @@ function MushafReviewView({
         pageNumbers.map(async (pageNumber) => ({
           pageNumber,
           verses: (await fetchVersesByPage(pageNumber)).verses,
-        }))
+        })),
       ),
     enabled: pageNumbers.length > 0,
     staleTime: Infinity,
@@ -342,30 +482,19 @@ function MushafReviewView({
   const activeVerseNumber = activeVerse?.verse_number ?? 1;
   const activeVerseKey = activeVerse?.verse_key ?? `${surahNumber}:1`;
   const activePageNumber = activeVerse?.page_number ?? pageNumbers[0] ?? 0;
-  const fontFamily =
-    MUSHAF_FONTS.find((font) => font.id === mushafFont)?.family ?? MUSHAF_FONTS[0].family;
-  const theme = MUSHAF_REVIEW_THEMES[mushafTheme];
-
-  const translationByVerse = useMemo(
-    () =>
-      new Map<number, string>(
-        reviewVerses.map((verse: { number: number; translation: string }) => [
-          verse.number,
-          verse.translation,
-        ])
-      ),
-    [reviewVerses]
-  );
+  const fontFamily = BAYAAN_MUSHAF_TEXT;
 
   const tajweedWordsByVerse = useMemo(
     () =>
       new Map<string, string[]>(
         chapterVerses.map((verse) => [
           verse.verse_key,
-          splitTajweedIntoWords(stripVerseEndHtml(verse.text_uthmani_tajweed ?? "")),
-        ])
+          splitTajweedIntoWords(
+            stripVerseEndHtml(verse.text_uthmani_tajweed ?? ""),
+          ),
+        ]),
       ),
-    [chapterVerses]
+    [chapterVerses],
   );
 
   const plainWordCountByVerse = useMemo(
@@ -374,14 +503,17 @@ function MushafReviewView({
         chapterVerses.map((verse) => [
           verse.verse_key,
           verse.text_uthmani.split(/\s+/).filter(Boolean).length,
-        ])
+        ]),
       ),
-    [chapterVerses]
+    [chapterVerses],
   );
 
   const verseIndexByNumber = useMemo(
-    () => new Map<number, number>(chapterVerses.map((verse, index) => [verse.verse_number, index])),
-    [chapterVerses]
+    () =>
+      new Map<number, number>(
+        chapterVerses.map((verse, index) => [verse.verse_number, index]),
+      ),
+    [chapterVerses],
   );
 
   const pageBundles = useMemo(
@@ -391,8 +523,32 @@ function MushafReviewView({
         verses: bundle.verses,
         lineGroups: buildLineGroups(bundle.verses),
       })),
-    [pageBundlesData]
+    [pageBundlesData],
   );
+  const isSinglePageLayout = pageBundles.length <= 1;
+  const fallbackPlayerBottomOffset = 80; // matches the fixed player `bottom-20`
+  const fallbackBottomNavHeight = 72; // nav + browser chrome before the player is measured
+  const fallbackBottomChrome = 24;
+  const reservedBottomSpace =
+    visibleViewportHeight > 0 && playerTop > 0
+      ? Math.max(0, visibleViewportHeight - playerTop + 8)
+      : playerHeight +
+        fallbackPlayerBottomOffset +
+        fallbackBottomNavHeight +
+        fallbackBottomChrome;
+  const hasMeasuredPlayerFrame = visibleViewportHeight > 0 && playerTop > 0;
+  const settingsSheetBottomSpace = reservedBottomSpace + 12;
+  const settingsSheetMaxHeight = hasMeasuredPlayerFrame
+    ? `${Math.max(260, playerTop - 20)}px`
+    : visibleViewportHeight > 0
+      ? `${Math.max(260, visibleViewportHeight - settingsSheetBottomSpace - 16)}px`
+      : "min(70vh, 520px)";
+  const pageBottomPadding = hasMeasuredPlayerFrame
+    ? `${reservedBottomSpace}px`
+    : `calc(${reservedBottomSpace}px + env(safe-area-inset-bottom, 0px))`;
+  const settingsSheetBottom = hasMeasuredPlayerFrame
+    ? `${settingsSheetBottomSpace}px`
+    : `calc(${settingsSheetBottomSpace}px + env(safe-area-inset-bottom, 0px))`;
 
   function clearAudio() {
     playbackTokenRef.current += 1;
@@ -417,7 +573,11 @@ function MushafReviewView({
     const token = playbackTokenRef.current;
     const audio = new Audio();
     audio.preload = "auto";
-    audio.src = buildAudioUrl(sessionReciterRef.current, surahNumber, verse.verse_number);
+    audio.src = buildAudioUrl(
+      sessionReciterRef.current,
+      surahNumber,
+      verse.verse_number,
+    );
     audio.playbackRate = playbackRateRef.current;
     audioRef.current = audio;
     loadedVerseIndexRef.current = index;
@@ -465,10 +625,9 @@ function MushafReviewView({
     if (
       audioRef.current &&
       loadedVerseIndexRef.current === activeVerseIndex &&
-      (
-        !Number.isFinite(audioRef.current.duration) ||
-        audioRef.current.currentTime < Math.max(0, audioRef.current.duration - 0.05)
-      )
+      (!Number.isFinite(audioRef.current.duration) ||
+        audioRef.current.currentTime <
+          Math.max(0, audioRef.current.duration - 0.05))
     ) {
       try {
         audioRef.current.playbackRate = playbackRateRef.current;
@@ -501,7 +660,6 @@ function MushafReviewView({
     clearAudio();
     setActiveVerseIndex(0);
     setRating(null);
-    setShowTranslation(false);
     setBlurDuringRecitation(false);
     setShowTajweed(false);
     setShowSettingsPanel(false);
@@ -523,12 +681,55 @@ function MushafReviewView({
   useEffect(() => {
     if (!scrollRootRef.current) return;
     const node = scrollRootRef.current.querySelector<HTMLElement>(
-      `[data-review-ayah="${activeVerseKey}"]`
+      `[data-review-ayah="${activeVerseKey}"]`,
     );
     if (node) {
-      node.scrollIntoView({ behavior: isPlaying ? "smooth" : "auto", block: "center" });
+      node.scrollIntoView({
+        behavior: isPlaying ? "smooth" : "auto",
+        block: "center",
+      });
     }
   }, [activeVerseKey, isPlaying]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const updateViewportMetrics = () => {
+      setVisibleViewportHeight(
+        Math.round(window.visualViewport?.height ?? window.innerHeight),
+      );
+      setHeaderHeight(headerRef.current?.offsetHeight ?? 0);
+      const playerRect = playerRef.current?.getBoundingClientRect();
+      setPlayerHeight(playerRect ? Math.round(playerRect.height) : 0);
+      setPlayerTop(playerRect ? Math.round(playerRect.top) : 0);
+    };
+
+    updateViewportMetrics();
+
+    const viewport = window.visualViewport;
+    window.addEventListener("resize", updateViewportMetrics);
+    viewport?.addEventListener("resize", updateViewportMetrics);
+    viewport?.addEventListener("scroll", updateViewportMetrics);
+
+    const resizeObserver =
+      typeof ResizeObserver !== "undefined"
+        ? new ResizeObserver(() => updateViewportMetrics())
+        : null;
+
+    if (resizeObserver && headerRef.current) {
+      resizeObserver.observe(headerRef.current);
+    }
+    if (resizeObserver && playerRef.current) {
+      resizeObserver.observe(playerRef.current);
+    }
+
+    return () => {
+      window.removeEventListener("resize", updateViewportMetrics);
+      viewport?.removeEventListener("resize", updateViewportMetrics);
+      viewport?.removeEventListener("scroll", updateViewportMetrics);
+      resizeObserver?.disconnect();
+    };
+  }, []);
 
   useEffect(() => {
     requestAnimationFrame(() => {
@@ -536,14 +737,17 @@ function MushafReviewView({
         for (const bundle of pageBundles) {
           const el = pageContentRefs.current[bundle.pageNumber];
           if (!el) continue;
-          const availableHeight = Math.max(320, el.clientHeight);
-          let lo = 0.62;
-          let hi = 1.08;
-          let best = 0.62;
+          const availableHeight = Math.max(
+            320,
+            el.clientHeight - (isSinglePageLayout ? 16 : 4),
+          );
+          let lo = isSinglePageLayout ? 0.72 : 0.62;
+          let hi = isSinglePageLayout ? 1.24 : 1.08;
+          let best = lo;
           for (let i = 0; i < 28; i++) {
             const mid = (lo + hi) / 2;
             el.style.fontSize = mid + "em";
-            const fitsHeight = el.scrollHeight <= availableHeight;
+            const fitsHeight = el.scrollHeight <= availableHeight - 2;
             const fitsWidth = el.scrollWidth <= el.clientWidth + 2;
             if (fitsHeight && fitsWidth) {
               best = mid;
@@ -556,29 +760,70 @@ function MushafReviewView({
         }
       });
     });
-  }, [pageBundles, mushafFont, mushafTheme, showTajweed, blurDuringRecitation, activeVerseNumber]);
+  }, [
+    pageBundles,
+    showTajweed,
+    blurDuringRecitation,
+    activeVerseNumber,
+    isSinglePageLayout,
+    visibleViewportHeight,
+    playerTop,
+  ]);
 
-  const isLoading = reviewSurahLoading || chapterLoading || pagesLoading;
+  const isLoading = chapterLoading || pagesLoading;
 
   return (
-    <div className="min-h-screen bg-[#05070b] pb-40 text-white">
+    <div
+      className="flex h-[100dvh] flex-col overflow-hidden"
+      style={{
+        background: `linear-gradient(to bottom, ${BAYAAN_PAGE_THEME.screenTint}, ${BAYAAN_PAGE_THEME.screen})`,
+        color: BAYAAN_PAGE_THEME.screenText,
+      }}
+    >
       <style>{TAJWEED_CSS}</style>
-      <div className="sticky top-0 z-30 bg-gradient-to-b from-[#05070b] via-[#05070b]/96 to-transparent px-4 pt-5 pb-4">
+      <div
+        ref={headerRef}
+        className="z-30 flex-none px-4 pt-3 pb-2"
+        style={{
+          background: `linear-gradient(to bottom, ${BAYAAN_PAGE_THEME.screenTint}, rgba(247, 242, 231, 0.64), transparent)`,
+        }}
+      >
         <div className="max-w-3xl mx-auto grid grid-cols-[auto_1fr_auto] items-center gap-3">
           <button
             type="button"
             onClick={onClose}
-            className="inline-flex h-14 w-14 items-center justify-center rounded-full border border-white/10 bg-white/5 text-white shadow-[0_8px_30px_rgba(0,0,0,0.35)] backdrop-blur"
+            className="inline-flex h-11 w-11 items-center justify-center rounded-full shadow-[0_10px_26px_rgba(89,72,32,0.12)]"
+            style={{
+              border: `1px solid ${BAYAAN_PAGE_THEME.chromeBorder}`,
+              background: "rgba(255, 252, 245, 0.92)",
+              color: BAYAAN_PAGE_THEME.screenText,
+            }}
             aria-label="Back to review"
           >
-            <ChevronLeft size={22} />
+            <ChevronLeft size={18} />
           </button>
 
           <div className="flex justify-center">
-            <div className="min-w-[190px] max-w-[250px] rounded-[24px] border border-white/10 bg-white/[0.06] px-5 py-3 text-center shadow-[0_10px_32px_rgba(0,0,0,0.35)] backdrop-blur">
-              <p className="truncate text-2xl font-bold leading-none text-white">{surahName}</p>
+            <div
+              className="min-w-[164px] max-w-[224px] rounded-[20px] px-4 py-2.5 text-center shadow-[0_12px_28px_rgba(89,72,32,0.12)]"
+              style={{
+                border: `1px solid ${BAYAAN_PAGE_THEME.chromeBorder}`,
+                background: "rgba(255, 252, 245, 0.94)",
+              }}
+            >
+              <p
+                className="truncate text-xl font-bold leading-none"
+                style={{ color: BAYAAN_PAGE_THEME.screenText }}
+              >
+                {surahName}
+              </p>
               {activePageNumber > 0 && (
-                <p className="mt-1 text-sm text-white/60">Page {activePageNumber}</p>
+                <p
+                  className="mt-0.5 text-xs"
+                  style={{ color: BAYAAN_PAGE_THEME.chromeMuted }}
+                >
+                  Page {activePageNumber}
+                </p>
               )}
             </div>
           </div>
@@ -586,338 +831,414 @@ function MushafReviewView({
           <button
             type="button"
             onClick={() => setShowSettingsPanel(true)}
-            className="inline-flex h-14 w-14 items-center justify-center rounded-full border border-white/10 bg-white/5 text-white shadow-[0_8px_30px_rgba(0,0,0,0.35)] backdrop-blur"
+            className="inline-flex h-11 w-11 items-center justify-center rounded-full shadow-[0_10px_26px_rgba(89,72,32,0.12)]"
+            style={{
+              border: `1px solid ${BAYAAN_PAGE_THEME.chromeBorder}`,
+              background: "rgba(255, 252, 245, 0.92)",
+              color: BAYAAN_PAGE_THEME.screenText,
+            }}
             aria-label="Open mushaf settings"
           >
-            <Settings2 size={20} />
+            <Settings2 size={16} />
           </button>
         </div>
       </div>
 
-      <div className="max-w-3xl mx-auto px-4 pt-2 space-y-4">
-        {isLoading ? (
-          <div className="space-y-4">
-            {[1, 2].map((i) => (
-              <Card key={i} className="border-border">
-                <CardContent className="p-5 space-y-3">
-                  {Array.from({ length: 9 }, (_, idx) => (
-                    <Skeleton key={idx} className="h-8 rounded-xl" />
-                  ))}
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        ) : (
-          <div ref={scrollRootRef} className="space-y-5">
-            {pageBundles.map((bundle) => {
-              const pageTargetVerses = bundle.verses.filter((verse) => {
-                const [verseSurah] = verse.verse_key.split(":").map(Number);
-                return verseSurah === surahNumber;
-              });
-              const lineGroups = bundle.lineGroups;
-              const surahsStartingOnPage = new Set<number>();
-              for (const verse of bundle.verses) {
-                const [verseSurah, verseNum] = verse.verse_key.split(":").map(Number);
-                if (verseNum === 1) surahsStartingOnPage.add(verseSurah);
+      <div className="flex-1 min-h-0">
+        <div
+          className="mx-auto flex h-full max-w-3xl flex-col px-4 pt-2"
+          style={{
+            paddingBottom: pageBottomPadding,
+          }}
+        >
+          {isLoading ? (
+            <div className="space-y-4">
+              {[1, 2].map((i) => (
+                <Card key={i} className="border-border">
+                  <CardContent className="p-5 space-y-3">
+                    {Array.from({ length: 9 }, (_, idx) => (
+                      <Skeleton key={idx} className="h-8 rounded-xl" />
+                    ))}
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          ) : (
+            <div
+              ref={scrollRootRef}
+              className={cn(
+                "flex-1 min-h-0",
+                isSinglePageLayout
+                  ? "flex items-stretch justify-center overflow-hidden"
+                  : "space-y-5 overflow-y-auto pr-1",
+              )}
+              style={
+                !isSinglePageLayout
+                  ? { WebkitOverflowScrolling: "touch" }
+                  : undefined
               }
+            >
+              {pageBundles.map((bundle) => {
+                const pageTargetVerses = bundle.verses.filter((verse) => {
+                  const [verseSurah] = verse.verse_key.split(":").map(Number);
+                  return verseSurah === surahNumber;
+                });
+                const pageSurahNames = getArabicSurahNamesForPage(
+                  bundle.verses,
+                  chapters,
+                );
+                const lineGroups = bundle.lineGroups;
+                const surahsStartingOnPage = new Set<number>();
+                for (const verse of bundle.verses) {
+                  const [verseSurah, verseNum] = verse.verse_key
+                    .split(":")
+                    .map(Number);
+                  if (verseNum === 1) surahsStartingOnPage.add(verseSurah);
+                }
 
-              return (
-                <div
-                  key={bundle.pageNumber}
-                  className="mx-auto rounded-xl border shadow-md overflow-hidden"
-                  style={{
-                    width: "min(680px, 96vw)",
-                    height: "min(70vh, 760px)",
-                    background: `linear-gradient(to bottom, ${theme.parchment}, ${theme.parchment})`,
-                    borderColor: `${theme.bannerBorder}33`,
-                    boxShadow: "0 18px 60px rgba(0,0,0,0.45)",
-                    display: "flex",
-                    flexDirection: "column",
-                  }}
-                >
+                return (
                   <div
-                    className="text-center py-2.5 border-b"
-                    style={{ borderColor: `${theme.bannerBorder}55` }}
-                  >
-                    <span className="text-xs tracking-widest" style={{ color: theme.bannerBorder }}>
-                      {bundle.pageNumber}
-                    </span>
-                  </div>
-
-                  <div
-                    className="mushaf-page"
-                    ref={(node) => {
-                      pageContentRefs.current[bundle.pageNumber] = node;
-                    }}
-                    dir="rtl"
-                    lang="ar"
+                    key={bundle.pageNumber}
+                    className={cn(
+                      "mx-auto overflow-hidden rounded-[24px] shadow-[0_18px_42px_rgba(120,92,34,0.14)]",
+                      isSinglePageLayout && "h-full",
+                    )}
                     style={{
-                      fontFamily,
-                      fontSize: "clamp(14px, 2.2vh, 28px)",
-                      lineHeight: 2.15,
-                      padding: "20px 24px 8px",
-                      color: theme.textColor,
-                      overflowX: "hidden",
-                      flex: 1,
-                      minHeight: 0,
+                      width: "min(680px, 96vw)",
+                      height: isSinglePageLayout ? "100%" : "min(70vh, 760px)",
+                      background: `linear-gradient(to bottom, ${BAYAAN_PAGE_THEME.page}, ${BAYAAN_PAGE_THEME.pageEdge})`,
+                      border: `1px solid ${BAYAAN_PAGE_THEME.pageBorder}`,
+                      display: "flex",
+                      flexDirection: "column",
                     }}
                   >
-                    {lineGroups ? (
-                      (() => {
-                        const nodes: React.ReactNode[] = [];
-                        const seenSurahIds = new Set<number>();
+                    <div
+                      className="flex items-center justify-between gap-3 px-5 py-2 text-[11px]"
+                      style={{
+                        borderBottom: `1px solid ${BAYAAN_PAGE_THEME.pageBorder}`,
+                        color: BAYAAN_PAGE_THEME.pageLabel,
+                      }}
+                    >
+                      <span
+                        dir="rtl"
+                        className="truncate"
+                        style={{
+                          fontFamily:
+                            '"Scheherazade New", "Amiri Quran", serif',
+                          fontSize: "1.05em",
+                          letterSpacing: 0,
+                        }}
+                      >
+                        {pageSurahNames}
+                      </span>
+                      <span className="shrink-0 tracking-[0.22em]">
+                        JUZ {getJuzForPage(bundle.pageNumber)}
+                      </span>
+                    </div>
 
-                        for (const { lineNum, words: lws } of lineGroups) {
-                          const newSurahs: number[] = [];
-                          for (const lw of lws) {
-                            if (!seenSurahIds.has(lw.surahId)) {
-                              seenSurahIds.add(lw.surahId);
-                              newSurahs.push(lw.surahId);
+                    <div
+                      className="mushaf-page"
+                      ref={(node) => {
+                        pageContentRefs.current[bundle.pageNumber] = node;
+                      }}
+                      dir="rtl"
+                      lang="ar"
+                      style={{
+                        fontFamily,
+                        fontSize: "clamp(14px, 2.2vh, 28px)",
+                        lineHeight: 1.98,
+                        padding: isSinglePageLayout
+                          ? "10px 18px 4px"
+                          : "14px 22px 6px",
+                        color: BAYAAN_PAGE_THEME.pageText,
+                        textAlign: "justify",
+                        textAlignLast: "right",
+                        textJustify: "inter-word",
+                        fontFeatureSettings: '"kern" 1, "liga" 1, "calt" 1',
+                        overflowX: "hidden",
+                        overflowY: "hidden",
+                        flex: 1,
+                        minHeight: 0,
+                      }}
+                    >
+                      {lineGroups ? (
+                        (() => {
+                          const nodes: React.ReactNode[] = [];
+                          const seenSurahIds = new Set<number>();
+
+                          for (const { lineNum, words: lws } of lineGroups) {
+                            const newSurahs: number[] = [];
+                            for (const lw of lws) {
+                              if (!seenSurahIds.has(lw.surahId)) {
+                                seenSurahIds.add(lw.surahId);
+                                newSurahs.push(lw.surahId);
+                              }
                             }
-                          }
 
-                          for (const sid of newSurahs) {
-                            if (!surahsStartingOnPage.has(sid)) continue;
-                            const chapter = chapters.find((c) => c.id === sid);
-                            const isCurrentSurah = sid === surahNumber;
-                            nodes.push(
-                              <div
-                                key={`hdr-${bundle.pageNumber}-${sid}`}
-                                style={{
-                                  textAlign: "center",
-                                  margin: "10px 0 4px",
-                                  direction: "rtl",
-                                  opacity: isCurrentSurah ? 1 : 0.18,
-                                }}
-                              >
+                            for (const sid of newSurahs) {
+                              if (!surahsStartingOnPage.has(sid)) continue;
+                              const chapter = chapters.find(
+                                (c) => c.id === sid,
+                              );
+                              const isCurrentSurah = sid === surahNumber;
+                              nodes.push(
                                 <div
+                                  key={`hdr-${bundle.pageNumber}-${sid}`}
                                   style={{
-                                    display: "flex",
-                                    alignItems: "center",
-                                    justifyContent: "center",
-                                    gap: 12,
+                                    textAlign: "center",
+                                    margin: "0.1em 0 0.18em",
+                                    direction: "rtl",
+                                    opacity: isCurrentSurah ? 1 : 0.18,
                                   }}
                                 >
-                                  <span
-                                    style={{
-                                      flex: 1,
-                                      height: 1,
-                                      background: theme.bannerBorder,
-                                      maxWidth: 60,
-                                      display: "block",
-                                    }}
+                                  <BayaanSurahBanner
+                                    surahNumber={sid}
+                                    surahName={
+                                      chapter?.name_arabic ?? `سُورَة ${sid}`
+                                    }
                                   />
-                                  <span
-                                    style={{
-                                      fontFamily,
-                                      fontSize: "0.9em",
-                                      color: isCurrentSurah ? theme.textColor : theme.bannerBorder,
-                                      fontWeight: 500,
-                                    }}
-                                  >
-                                    {chapter?.name_arabic ?? `سُورَة ${sid}`}
-                                  </span>
-                                  <span
-                                    style={{
-                                      flex: 1,
-                                      height: 1,
-                                      background: theme.bannerBorder,
-                                      maxWidth: 60,
-                                      display: "block",
-                                    }}
-                                  />
-                                </div>
-                                {sid !== 9 && (
-                                  <div style={{ display: "flex", justifyContent: "center", margin: "4px 0 2px" }}>
-                                    <span style={{ fontFamily, fontSize: "1.1em", color: theme.bannerBorder, direction: "rtl" }}>
-                                      بِسْمِ ٱللَّهِ ٱلرَّحْمَٰنِ ٱلرَّحِيمِ
-                                    </span>
-                                  </div>
-                                )}
-                              </div>
-                            );
-                          }
-
-                          nodes.push(
-                            <div
-                              key={`ln-${bundle.pageNumber}-${lineNum}`}
-                              style={{
-                                display: "flex",
-                                direction: "rtl",
-                                justifyContent: "center",
-                                alignItems: "center",
-                                flexWrap: "nowrap",
-                                lineHeight: 2.15,
-                                padding: "0 4px",
-                                width: "100%",
-                                gap: "0.3em",
-                              }}
-                            >
-                              {lws.map((lw) => {
-                                const isTargetSurah = lw.surahId === surahNumber;
-                                const isActiveAyah = isTargetSurah && lw.verseNum === activeVerseNumber;
-                                const shouldBlur = blurDuringRecitation
-                                  ? isTargetSurah
-                                    ? !isPlaying || !isActiveAyah
-                                    : true
-                                  : false;
-                                const verseOpacity = isTargetSurah
-                                  ? shouldBlur
-                                    ? 0.45
-                                    : isActiveAyah
-                                    ? 1
-                                    : 0.94
-                                  : shouldBlur
-                                  ? 0.1
-                                  : 0.18;
-                                const clickIndex = verseIndexByNumber.get(lw.verseNum);
-                                const clickable = isTargetSurah && clickIndex !== undefined;
-
-                                if (lw.char_type_name === "end") {
-                                  return (
-                                    <span
-                                      key={`${lw.verse_key}:${lw.position}`}
-                                      data-review-ayah={lw.verse_key}
-                                      onClick={() => clickable && handleJumpToIndex(clickIndex)}
+                                  {sid !== 9 && (
+                                    <div
                                       style={{
-                                        display: "inline-flex",
-                                        alignItems: "center",
+                                        display: "flex",
                                         justifyContent: "center",
-                                        width: "1.9em",
-                                        height: "1.9em",
-                                        borderRadius: "50%",
-                                        border: `1.5px solid ${isActiveAyah ? theme.banner : theme.bannerBorder}`,
-                                        background: isActiveAyah ? `${theme.bannerBorder}30` : `${theme.parchment}`,
-                                        flexShrink: 0,
-                                        userSelect: "none",
-                                        direction: "ltr",
-                                        cursor: clickable ? "pointer" : "default",
-                                        opacity: verseOpacity,
-                                        filter: shouldBlur ? "blur(4px)" : "none",
+                                        margin: "0.02em 0 0.18em",
                                       }}
                                     >
                                       <span
                                         style={{
-                                          fontSize: "0.58em",
-                                          color: isActiveAyah ? theme.banner : theme.bannerBorder,
-                                          fontFamily: "Georgia, serif",
-                                          lineHeight: 1,
+                                          fontFamily: BAYAAN_MUSHAF_TEXT,
+                                          fontSize: "1.16em",
+                                          color: BAYAAN_PAGE_THEME.pageLabel,
+                                          direction: "rtl",
+                                          lineHeight: 1.2,
+                                          fontFeatureSettings: '"basm" 1',
                                         }}
                                       >
-                                        {lw.verseNum}
+                                        {BAYAAN_BASMALLAH}
                                       </span>
-                                    </span>
-                                  );
-                                }
+                                    </div>
+                                  )}
+                                </div>,
+                              );
+                            }
 
-                                const tajweedWords = tajweedWordsByVerse.get(lw.verse_key) ?? [];
-                                const hasValidTajweed =
-                                  showTajweed &&
-                                  tajweedWords.length === (plainWordCountByVerse.get(lw.verse_key) ?? 0);
-                                const wordMarkup =
-                                  hasValidTajweed && lw.wordIdxInVerse >= 0 ? (
-                                    <span
-                                      dangerouslySetInnerHTML={{
-                                        __html: tajweedWords[lw.wordIdxInVerse] ?? lw.text_uthmani,
-                                      }}
-                                    />
-                                  ) : (
-                                    <>{lw.text_uthmani}</>
-                                  );
-
-                                return (
-                                  <span
-                                    key={`${lw.verse_key}:${lw.position}`}
-                                    data-review-ayah={lw.verse_key}
-                                    onClick={() => clickable && handleJumpToIndex(clickIndex)}
-                                    className={cn(
-                                      "inline-block rounded-sm transition-all duration-150",
-                                      clickable && "cursor-pointer"
-                                    )}
-                                    style={{
-                                      opacity: verseOpacity,
-                                      filter: shouldBlur ? "blur(6px)" : "none",
-                                      userSelect: shouldBlur ? "none" : "text",
-                                      padding: "0 0.04em",
-                                      background: isActiveAyah ? `${theme.bannerBorder}33` : "transparent",
-                                      color: isActiveAyah ? theme.textColor : undefined,
-                                    }}
-                                  >
-                                    {wordMarkup}
-                                  </span>
-                                );
-                              })}
-                            </div>
-                          );
-                        }
-                        return nodes;
-                      })()
-                    ) : (
-                      <div className="space-y-4 py-4">
-                        {pageTargetVerses.map((verse) => {
-                          const verseNum = parseInt(verse.verse_key.split(":")[1], 10);
-                          const isActiveAyah = verseNum === activeVerseNumber;
-                          const clickIndex = verseIndexByNumber.get(verseNum);
-                          const shouldBlur = blurDuringRecitation && (!isPlaying || !isActiveAyah);
-                          return (
-                            <div
-                              key={verse.verse_key}
-                              data-review-ayah={verse.verse_key}
-                              onClick={() => clickIndex !== undefined && handleJumpToIndex(clickIndex)}
-                              className="rounded-2xl px-4 py-3"
-                              style={{
-                                cursor: clickIndex !== undefined ? "pointer" : "default",
-                                background: isActiveAyah ? `${theme.bannerBorder}20` : "transparent",
-                              }}
-                            >
-                              <p
+                            nodes.push(
+                              <div
+                                key={`ln-${bundle.pageNumber}-${lineNum}`}
                                 style={{
-                                  filter: shouldBlur ? "blur(6px)" : "none",
-                                  opacity: shouldBlur ? 0.5 : 1,
+                                  display: "flex",
+                                  direction: "rtl",
+                                  justifyContent: "center",
+                                  alignItems: "center",
+                                  flexWrap: "nowrap",
+                                  lineHeight: 1.98,
+                                  padding: "0 2px",
+                                  width: "100%",
+                                  gap: "0.18em",
                                 }}
                               >
-                                {verse.text_uthmani}
-                              </p>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
+                                {lws.map((lw) => {
+                                  const isTargetSurah =
+                                    lw.surahId === surahNumber;
+                                  const isActiveAyah =
+                                    isTargetSurah &&
+                                    lw.verseNum === activeVerseNumber;
+                                  const shouldBlur = blurDuringRecitation
+                                    ? isTargetSurah
+                                      ? !isPlaying || !isActiveAyah
+                                      : true
+                                    : false;
+                                  const verseOpacity = isTargetSurah
+                                    ? shouldBlur
+                                      ? 0.38
+                                      : isActiveAyah
+                                        ? 1
+                                        : 0.97
+                                    : shouldBlur
+                                      ? 0.06
+                                      : 0.16;
+                                  const clickIndex = verseIndexByNumber.get(
+                                    lw.verseNum,
+                                  );
+                                  const clickable =
+                                    isTargetSurah && clickIndex !== undefined;
 
-        {showTranslation && reviewVerses.length > 0 && (
-          <Card className="mx-auto w-full border-border" style={{ maxWidth: "min(680px, 96vw)" }}>
-            <CardContent className="p-4">
-              <div className="mb-3 flex items-center justify-between">
-                <p className="text-sm font-semibold text-foreground">Translation Support</p>
-                <Badge variant="outline" className="text-[11px]">
-                  Optional
-                </Badge>
-              </div>
-              <div className="space-y-3">
-                {reviewVerses.map((verse: { number: number; translation: string }) => (
-                  <div key={verse.number} className="rounded-xl border border-border/70 bg-muted/20 p-3">
-                    <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                      Ayah {verse.number}
-                    </p>
-                    <p className="mt-1 text-sm leading-relaxed text-foreground/80">
-                      {translationByVerse.get(verse.number)}
-                    </p>
+                                  if (lw.char_type_name === "end") {
+                                    return (
+                                      <span
+                                        key={`${lw.verse_key}:${lw.position}`}
+                                        data-review-ayah={lw.verse_key}
+                                        onClick={() =>
+                                          clickable &&
+                                          handleJumpToIndex(clickIndex)
+                                        }
+                                        style={{
+                                          display: "inline-flex",
+                                          alignItems: "center",
+                                          justifyContent: "center",
+                                          width: "1.84em",
+                                          height: "1.84em",
+                                          borderRadius: "50%",
+                                          border: `1.5px solid ${isActiveAyah ? BAYAAN_PAGE_THEME.activeMarker : BAYAAN_PAGE_THEME.markerBorder}`,
+                                          background: isActiveAyah
+                                            ? BAYAAN_PAGE_THEME.activeMarkerBg
+                                            : BAYAAN_PAGE_THEME.markerSurface,
+                                          flexShrink: 0,
+                                          userSelect: "none",
+                                          direction: "ltr",
+                                          cursor: clickable
+                                            ? "pointer"
+                                            : "default",
+                                          opacity: verseOpacity,
+                                          filter: shouldBlur
+                                            ? "blur(4px)"
+                                            : "none",
+                                        }}
+                                      >
+                                        <span
+                                          style={{
+                                            fontSize: "0.58em",
+                                            color: isActiveAyah
+                                              ? BAYAAN_PAGE_THEME.activeMarker
+                                              : BAYAAN_PAGE_THEME.markerText,
+                                            fontFamily: "Georgia, serif",
+                                            lineHeight: 1,
+                                          }}
+                                        >
+                                          {lw.verseNum}
+                                        </span>
+                                      </span>
+                                    );
+                                  }
+
+                                  const tajweedWords =
+                                    tajweedWordsByVerse.get(lw.verse_key) ?? [];
+                                  const hasValidTajweed =
+                                    showTajweed &&
+                                    tajweedWords.length ===
+                                      (plainWordCountByVerse.get(
+                                        lw.verse_key,
+                                      ) ?? 0);
+                                  const wordMarkup =
+                                    hasValidTajweed &&
+                                    lw.wordIdxInVerse >= 0 ? (
+                                      <span
+                                        dangerouslySetInnerHTML={{
+                                          __html:
+                                            tajweedWords[lw.wordIdxInVerse] ??
+                                            lw.text_uthmani,
+                                        }}
+                                      />
+                                    ) : (
+                                      <>{lw.text_uthmani}</>
+                                    );
+
+                                  return (
+                                    <span
+                                      key={`${lw.verse_key}:${lw.position}`}
+                                      data-review-ayah={lw.verse_key}
+                                      onClick={() =>
+                                        clickable &&
+                                        handleJumpToIndex(clickIndex)
+                                      }
+                                      className={cn(
+                                        "inline-block rounded-sm transition-all duration-150",
+                                        clickable && "cursor-pointer",
+                                      )}
+                                      style={{
+                                        opacity: verseOpacity,
+                                        filter: shouldBlur
+                                          ? "blur(6px)"
+                                          : "none",
+                                        userSelect: shouldBlur
+                                          ? "none"
+                                          : "text",
+                                        padding: "0 0.03em",
+                                        background: isActiveAyah
+                                          ? BAYAAN_PAGE_THEME.activeHighlight
+                                          : "transparent",
+                                        color: isActiveAyah
+                                          ? BAYAAN_PAGE_THEME.pageText
+                                          : undefined,
+                                      }}
+                                    >
+                                      {wordMarkup}
+                                    </span>
+                                  );
+                                })}
+                              </div>,
+                            );
+                          }
+                          return nodes;
+                        })()
+                      ) : (
+                        <div className="space-y-4 py-4">
+                          {pageTargetVerses.map((verse) => {
+                            const verseNum = parseInt(
+                              verse.verse_key.split(":")[1],
+                              10,
+                            );
+                            const isActiveAyah = verseNum === activeVerseNumber;
+                            const clickIndex = verseIndexByNumber.get(verseNum);
+                            const shouldBlur =
+                              blurDuringRecitation &&
+                              (!isPlaying || !isActiveAyah);
+                            return (
+                              <div
+                                key={verse.verse_key}
+                                data-review-ayah={verse.verse_key}
+                                onClick={() =>
+                                  clickIndex !== undefined &&
+                                  handleJumpToIndex(clickIndex)
+                                }
+                                className="rounded-2xl px-4 py-3"
+                                style={{
+                                  cursor:
+                                    clickIndex !== undefined
+                                      ? "pointer"
+                                      : "default",
+                                  background: isActiveAyah
+                                    ? BAYAAN_PAGE_THEME.activeHighlight
+                                    : "transparent",
+                                }}
+                              >
+                                <p
+                                  style={{
+                                    filter: shouldBlur ? "blur(6px)" : "none",
+                                    opacity: shouldBlur ? 0.5 : 1,
+                                  }}
+                                >
+                                  {verse.text_uthmani}
+                                </p>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                    <div
+                      className="py-1.5 text-center text-[11px] tracking-[0.24em]"
+                      style={{
+                        borderTop: `1px solid ${BAYAAN_PAGE_THEME.pageBorder}`,
+                        color: BAYAAN_PAGE_THEME.pageLabel,
+                      }}
+                    >
+                      {bundle.pageNumber}
+                    </div>
                   </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        )}
+                );
+              })}
+            </div>
+          )}
+        </div>
       </div>
 
       <div className="fixed inset-x-0 bottom-20 z-[60] px-4 pointer-events-none">
-        <div className="mx-auto w-full max-w-md pointer-events-auto">
+        <div
+          ref={playerRef}
+          className="mx-auto w-full max-w-md pointer-events-auto"
+        >
           <Card className="border-white/10 bg-[#0d1016]/92 shadow-[0_18px_48px_rgba(0,0,0,0.45)] backdrop-blur">
             <CardContent className="p-2.5">
               <div className="flex items-center gap-2">
@@ -947,7 +1268,11 @@ function MushafReviewView({
                   disabled={verses.length === 0 || isLoadingAudio}
                   onClick={() => void handlePlayPause()}
                 >
-                  {isPlaying ? <Pause size={14} className="mr-1" /> : <Play size={14} className="mr-1" />}
+                  {isPlaying ? (
+                    <Pause size={14} className="mr-1" />
+                  ) : (
+                    <Play size={14} className="mr-1" />
+                  )}
                   {isPlaying ? "Pause" : isLoadingAudio ? "Loading..." : "Play"}
                 </Button>
                 <Button
@@ -955,7 +1280,9 @@ function MushafReviewView({
                   size="sm"
                   variant="outline"
                   className="rounded-full px-3 border-white/10 bg-white/5 text-white hover:bg-white/10"
-                  disabled={activeVerseIndex >= verses.length - 1 || verses.length === 0}
+                  disabled={
+                    activeVerseIndex >= verses.length - 1 || verses.length === 0
+                  }
                   onClick={() => handleJumpToIndex(activeVerseIndex + 1)}
                 >
                   <SkipForward size={14} />
@@ -980,34 +1307,68 @@ function MushafReviewView({
       </div>
 
       {showSettingsPanel && (
-        <>
-          <div className="fixed inset-0 z-50 bg-black/40" onClick={() => setShowSettingsPanel(false)} />
-          <div className="fixed inset-x-0 bottom-0 z-50 rounded-t-3xl bg-background shadow-2xl">
-            <div className="mx-auto w-full max-w-md px-4 pb-8 pt-4">
-              <div className="mx-auto mb-4 h-1.5 w-12 rounded-full bg-muted" />
-              <div className="mb-4 flex items-center justify-between">
-                <div>
-                  <p className="text-base font-semibold text-foreground">Mushaf Settings</p>
-                  <p className="text-xs text-muted-foreground">Keep the reading surface calm and uncluttered.</p>
+        <div
+          className="fixed inset-0 z-[80]"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Mushaf settings"
+        >
+          <div
+            className="absolute inset-0 bg-black/40"
+            onClick={() => setShowSettingsPanel(false)}
+          />
+          <div
+            className="absolute inset-x-0 flex justify-center px-3 pointer-events-none"
+            style={{
+              bottom: settingsSheetBottom,
+            }}
+          >
+            <div
+              className="pointer-events-auto mx-auto flex w-full max-w-md flex-col overflow-hidden rounded-3xl bg-background text-foreground shadow-2xl"
+              style={{ maxHeight: settingsSheetMaxHeight }}
+            >
+              <div className="flex-none px-4 pb-3 pt-4 text-foreground">
+                <div className="mx-auto mb-4 h-1.5 w-12 rounded-full bg-muted" />
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-base font-semibold text-foreground">
+                      Mushaf Settings
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      Keep the reading surface calm and uncluttered.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowSettingsPanel(false)}
+                    className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-border"
+                  >
+                    <X size={16} />
+                  </button>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => setShowSettingsPanel(false)}
-                  className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-border"
-                >
-                  <X size={16} />
-                </button>
               </div>
 
-              <div className="space-y-3">
+              <div
+                className="space-y-3 overflow-y-auto px-4 pb-6"
+                style={{
+                  WebkitOverflowScrolling: "touch",
+                  overscrollBehavior: "contain",
+                  paddingBottom:
+                    "calc(24px + env(safe-area-inset-bottom, 0px))",
+                }}
+              >
                 <label className="space-y-1 block">
-                  <span className="text-[11px] font-medium text-muted-foreground">Reciter</span>
+                  <span className="text-[11px] font-medium text-muted-foreground">
+                    Reciter
+                  </span>
                   <select
                     value={sessionReciter.id}
                     onChange={(e) =>
-                      onSessionReciterChange(RECITERS.find((r) => r.id === e.target.value)!)
+                      onSessionReciterChange(
+                        RECITERS.find((r) => r.id === e.target.value)!,
+                      )
                     }
-                    className="w-full text-sm border border-border rounded-xl px-3 py-3 bg-background"
+                    className="w-full rounded-xl border border-border bg-background px-3 py-3 text-sm text-foreground"
                   >
                     {RECITERS.map((r) => (
                       <option key={r.id} value={r.id}>
@@ -1018,11 +1379,15 @@ function MushafReviewView({
                 </label>
 
                 <label className="space-y-1 block">
-                  <span className="text-[11px] font-medium text-muted-foreground">Speed</span>
+                  <span className="text-[11px] font-medium text-muted-foreground">
+                    Speed
+                  </span>
                   <select
                     value={String(playbackRate)}
-                    onChange={(e) => onPlaybackRateChange(parseFloat(e.target.value))}
-                    className="w-full text-sm border border-border rounded-xl px-3 py-3 bg-background"
+                    onChange={(e) =>
+                      onPlaybackRateChange(parseFloat(e.target.value))
+                    }
+                    className="w-full rounded-xl border border-border bg-background px-3 py-3 text-sm text-foreground"
                   >
                     <option value="1">1.0x</option>
                     <option value="1.25">1.25x</option>
@@ -1033,132 +1398,150 @@ function MushafReviewView({
                 </label>
 
                 <label className="space-y-1 block">
-                  <span className="text-[11px] font-medium text-muted-foreground">Theme</span>
-                  <select
-                    value={mushafTheme}
-                    onChange={(e) => setMushafTheme(e.target.value as keyof typeof MUSHAF_REVIEW_THEMES)}
-                    className="w-full text-sm border border-border rounded-xl px-3 py-3 bg-background"
-                  >
-                    {Object.entries(MUSHAF_REVIEW_THEMES).map(([id, config]) => (
-                      <option key={id} value={id}>
-                        {config.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-
-                <label className="space-y-1 block">
-                  <span className="text-[11px] font-medium text-muted-foreground">Font</span>
-                  <select
-                    value={mushafFont}
-                    onChange={(e) => setMushafFont(e.target.value as (typeof MUSHAF_FONTS)[number]["id"])}
-                    className="w-full text-sm border border-border rounded-xl px-3 py-3 bg-background"
-                  >
-                    {MUSHAF_FONTS.map((font) => (
-                      <option key={font.id} value={font.id}>
-                        {font.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-
-                <label className="space-y-1 block">
-                  <span className="text-[11px] font-medium text-muted-foreground">Text</span>
+                  <span className="text-[11px] font-medium text-muted-foreground">
+                    Text
+                  </span>
                   <select
                     value={showTajweed ? "tajweed" : "plain"}
-                    onChange={(e) => setShowTajweed(e.target.value === "tajweed")}
-                    className="w-full text-sm border border-border rounded-xl px-3 py-3 bg-background"
+                    onChange={(e) =>
+                      setShowTajweed(e.target.value === "tajweed")
+                    }
+                    className="w-full rounded-xl border border-border bg-background px-3 py-3 text-sm text-foreground"
                   >
                     <option value="plain">Plain</option>
                     <option value="tajweed">Tajweed</option>
                   </select>
                 </label>
 
-                <div className="grid grid-cols-2 gap-2 pt-1">
-                  <Button
-                    type="button"
-                    variant={showTranslation ? "default" : "outline"}
-                    className="rounded-full"
-                    onClick={() => setShowTranslation((prev) => !prev)}
-                  >
-                    <Languages size={14} className="mr-1" />
-                    {showTranslation ? "Hide Translation" : "Translation"}
-                  </Button>
+                <div className="rounded-2xl border border-border/80 bg-muted/25 px-3 py-3">
+                  <p className="text-[11px] font-medium text-muted-foreground">
+                    Layout
+                  </p>
+                  <p className="mt-1 text-sm text-foreground">
+                    Bayaan-style mushaf
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Digital Khatt text with QCF surah headers is fixed in review
+                    mode.
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-1 gap-2 pt-1">
                   <Button
                     type="button"
                     variant={blurDuringRecitation ? "default" : "outline"}
                     className="rounded-full"
                     onClick={() => setBlurDuringRecitation((prev) => !prev)}
                   >
-                    {blurDuringRecitation ? <EyeOff size={14} className="mr-1" /> : <Eye size={14} className="mr-1" />}
+                    {blurDuringRecitation ? (
+                      <EyeOff size={14} className="mr-1" />
+                    ) : (
+                      <Eye size={14} className="mr-1" />
+                    )}
                     {blurDuringRecitation ? "Blur On" : "Blur Off"}
                   </Button>
                 </div>
               </div>
             </div>
           </div>
-        </>
+        </div>
       )}
 
       {showRatingSheet && (
-        <>
-          <div className="fixed inset-0 z-50 bg-black/40" onClick={() => setShowRatingSheet(false)} />
-          <div className="fixed inset-x-0 bottom-0 z-50 rounded-t-3xl bg-background shadow-2xl">
-            <div className="mx-auto w-full max-w-md px-4 pb-8 pt-4">
-              <div className="mx-auto mb-4 h-1.5 w-12 rounded-full bg-muted" />
-              <div className="mb-4 flex items-center justify-between">
-                <div>
-                  <p className="text-base font-semibold text-foreground">How did you do?</p>
-                  <p className="text-xs text-muted-foreground">Rate the recitation without leaving the mushaf.</p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setShowRatingSheet(false)}
-                  className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-border"
-                >
-                  <X size={16} />
-                </button>
-              </div>
-
-              <div className="space-y-2 mb-4">
-                {[0, 1, 2, 3, 4, 5].map((q) => (
+        <div
+          className="fixed inset-0 z-[80]"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Review rating"
+        >
+          <div
+            className="absolute inset-0 bg-black/40"
+            onClick={() => setShowRatingSheet(false)}
+          />
+          <div
+            className="absolute inset-x-0 flex justify-center px-3 pointer-events-none"
+            style={{
+              bottom: settingsSheetBottom,
+            }}
+          >
+            <div
+              className="pointer-events-auto mx-auto flex w-full max-w-md flex-col overflow-hidden rounded-3xl bg-background text-foreground shadow-2xl"
+              style={{ maxHeight: settingsSheetMaxHeight }}
+            >
+              <div className="flex-none px-4 pb-3 pt-4 text-foreground">
+                <div className="mx-auto mb-4 h-1.5 w-12 rounded-full bg-muted" />
+                <div className="mb-4 flex items-center justify-between">
+                  <div>
+                    <p className="text-base font-semibold text-foreground">
+                      How did you do?
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      Rate the recitation without leaving the mushaf.
+                    </p>
+                  </div>
                   <button
-                    key={q}
-                    onClick={() => setRating(q)}
-                    className={`w-full flex items-center gap-3 p-2.5 rounded-xl text-left transition-all border ${
-                      rating === q
-                        ? "border-primary bg-primary/5 scale-[1.01]"
-                        : "border-transparent hover:bg-muted"
-                    }`}
+                    type="button"
+                    onClick={() => setShowRatingSheet(false)}
+                    className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-border"
                   >
-                    <div
-                      className={`flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold ${
-                        rating === q ? "bg-primary text-white" : "bg-muted text-muted-foreground"
-                      }`}
-                    >
-                      {q}
-                    </div>
-                    <span className={`text-xs ${QUALITY_COLORS[q]} px-2 py-0.5 rounded-full`}>
-                      {QUALITY_LABELS[q]}
-                    </span>
+                    <X size={16} />
                   </button>
-                ))}
+                </div>
               </div>
 
-              <Button
-                className="w-full rounded-full"
-                disabled={rating === null}
-                onClick={() => {
-                  if (rating === null) return;
-                  setShowRatingSheet(false);
-                  onRated(rating);
+              <div
+                className="overflow-y-auto px-4 pb-6"
+                style={{
+                  WebkitOverflowScrolling: "touch",
+                  overscrollBehavior: "contain",
+                  paddingBottom:
+                    "calc(24px + env(safe-area-inset-bottom, 0px))",
                 }}
               >
-                <CheckCircle size={14} className="mr-1" /> Submit Review
-              </Button>
+                <div className="mb-4 space-y-2">
+                  {[0, 1, 2, 3, 4, 5].map((q) => (
+                    <button
+                      key={q}
+                      onClick={() => setRating(q)}
+                      className={`w-full flex items-center gap-3 p-2.5 rounded-xl text-left transition-all border ${
+                        rating === q
+                          ? "border-primary bg-primary/5 scale-[1.01]"
+                          : "border-transparent hover:bg-muted"
+                      }`}
+                    >
+                      <div
+                        className={`flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold ${
+                          rating === q
+                            ? "bg-primary text-white"
+                            : "bg-muted text-muted-foreground"
+                        }`}
+                      >
+                        {q}
+                      </div>
+                      <span
+                        className={`text-xs ${QUALITY_COLORS[q]} px-2 py-0.5 rounded-full`}
+                      >
+                        {QUALITY_LABELS[q]}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+
+                <Button
+                  className="w-full rounded-full"
+                  disabled={rating === null}
+                  onClick={() => {
+                    if (rating === null) return;
+                    setShowRatingSheet(false);
+                    onRated(rating);
+                  }}
+                >
+                  <CheckCircle size={14} className="mr-1" /> Submit Review
+                </Button>
+              </div>
             </div>
           </div>
-        </>
+        </div>
       )}
 
       <ChildNav childId={childId} />
@@ -1173,7 +1556,7 @@ export default function ReviewPage() {
 
   const getTodayLocal = () => {
     const d = new Date();
-    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
   };
   const SESSION_KEY = `child-${childId}-review-session`;
 
@@ -1184,7 +1567,9 @@ export default function ReviewPage() {
       const parsed = JSON.parse(stored);
       if (parsed.date !== getTodayLocal()) return null;
       return parsed;
-    } catch { return null; }
+    } catch {
+      return null;
+    }
   };
   const storedSession = loadSession();
 
@@ -1197,37 +1582,60 @@ export default function ReviewPage() {
   const [flashcardIndex, setFlashcardIndex] = useState<number | null>(null);
   const [flashcardRating, setFlashcardRating] = useState<number | null>(null);
   const [flashcardShowVerses, setFlashcardShowVerses] = useState(false);
-  const [sessionDone, setSessionDone] = useState<boolean>(storedSession?.sessionDone ?? false);
+  const [sessionDone, setSessionDone] = useState<boolean>(
+    storedSession?.sessionDone ?? false,
+  );
   const [showReviewCelebration, setShowReviewCelebration] = useState(false);
-  const [completedCount, setCompletedCount] = useState<number>(storedSession?.completedItemsData?.length ?? 0);
+  const [completedCount, setCompletedCount] = useState<number>(
+    storedSession?.completedItemsData?.length ?? 0,
+  );
   const [completedSurahIds, setCompletedSurahIds] = useState<Set<number>>(
-    new Set(storedSession?.completedItemsData?.map((i: any) => i.surahId) ?? [])
+    new Set(
+      storedSession?.completedItemsData?.map((i: any) => i.surahId) ?? [],
+    ),
   );
   const [sessionReciter, setSessionReciter] = useState<Reciter>(
-    () => RECITERS.find((r) => r.id === "husary")!
+    () => RECITERS.find((r) => r.id === "husary")!,
   );
   const [sessionPlaybackRate, setSessionPlaybackRate] = useState(1);
-  const [completedItemsData, setCompletedItemsData] = useState<Array<{surahId: number; surahName?: string | null; surahNumber: number}>>(
-    storedSession?.completedItemsData ?? []
-  );
+  const [completedItemsData, setCompletedItemsData] = useState<
+    Array<{ surahId: number; surahName?: string | null; surahNumber: number }>
+  >(storedSession?.completedItemsData ?? []);
   const sessionTotalRef = useRef<number>(storedSession?.sessionTotal ?? 0);
-  const sessionSurahsRef = useRef<typeof dueToday | null>(storedSession?.sessionSurahs ?? null);
-  const dueTodayRef = useRef<{surahId: number; surahName?: string | null; surahNumber: number}[]>([]);
+  const sessionSurahsRef = useRef<typeof dueToday | null>(
+    storedSession?.sessionSurahs ?? null,
+  );
+  const dueTodayRef = useRef<
+    { surahId: number; surahName?: string | null; surahNumber: number }[]
+  >([]);
   const qc = useQueryClient();
 
   const saveSession = (updates: {
     sessionDone?: boolean;
-    completedItemsData?: Array<{surahId: number; surahName?: string | null; surahNumber: number}>;
+    completedItemsData?: Array<{
+      surahId: number;
+      surahName?: string | null;
+      surahNumber: number;
+    }>;
     sessionSurahs?: typeof dueToday;
     sessionTotal?: number;
   }) => {
     try {
-      const current = (() => { try { return JSON.parse(localStorage.getItem(SESSION_KEY) || '{}'); } catch { return {}; } })();
-      localStorage.setItem(SESSION_KEY, JSON.stringify({
-        ...current,
-        date: getTodayLocal(),
-        ...updates,
-      }));
+      const current = (() => {
+        try {
+          return JSON.parse(localStorage.getItem(SESSION_KEY) || "{}");
+        } catch {
+          return {};
+        }
+      })();
+      localStorage.setItem(
+        SESSION_KEY,
+        JSON.stringify({
+          ...current,
+          date: getTodayLocal(),
+          ...updates,
+        }),
+      );
     } catch {}
   };
 
@@ -1240,7 +1648,9 @@ export default function ReviewPage() {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
-    }).then(() => qc.invalidateQueries({ queryKey: ["dashboard", childId] })).catch(() => {});
+    })
+      .then(() => qc.invalidateQueries({ queryKey: ["dashboard", childId] }))
+      .catch(() => {});
   };
 
   const { data, isLoading } = useQuery({
@@ -1274,8 +1684,8 @@ export default function ReviewPage() {
       sessionDone || completedCount >= sessionTotal
         ? "completed"
         : completedCount > 0
-        ? "in_progress"
-        : "not_started";
+          ? "in_progress"
+          : "not_started";
     syncReviewDailyProgress({
       reviewStatus,
       reviewCompletedCount: completedCount,
@@ -1284,7 +1694,8 @@ export default function ReviewPage() {
   }, [data, completedCount, sessionDone]);
 
   // Fetch current flashcard surah if in flashcard mode
-  const flashcardItem = flashcardIndex !== null ? sessionSurahs[flashcardIndex] : null;
+  const flashcardItem =
+    flashcardIndex !== null ? sessionSurahs[flashcardIndex] : null;
   const { data: flashcardSurahData } = useQuery({
     queryKey: ["surah", flashcardItem?.surahId],
     queryFn: () => getSurah(flashcardItem!.surahId),
@@ -1299,11 +1710,22 @@ export default function ReviewPage() {
         durationMinutes: 5,
       }),
     onSuccess: (_, variables) => {
-      const completedItem = dueTodayRef.current.find(i => i.surahId === variables.surahId);
+      const completedItem = dueTodayRef.current.find(
+        (i) => i.surahId === variables.surahId,
+      );
       if (completedItem) {
-        const newItemsData = completedItemsData.some(i => i.surahId === completedItem.surahId)
+        const newItemsData = completedItemsData.some(
+          (i) => i.surahId === completedItem.surahId,
+        )
           ? completedItemsData
-          : [...completedItemsData, { surahId: completedItem.surahId, surahName: completedItem.surahName, surahNumber: completedItem.surahNumber }];
+          : [
+              ...completedItemsData,
+              {
+                surahId: completedItem.surahId,
+                surahName: completedItem.surahName,
+                surahNumber: completedItem.surahNumber,
+              },
+            ];
         setCompletedItemsData(newItemsData);
         saveSession({ completedItemsData: newItemsData });
       }
@@ -1363,7 +1785,11 @@ export default function ReviewPage() {
         <div className="pattern-bg text-white px-4 pt-8 pb-12">
           <div className="max-w-lg mx-auto">
             <button
-              onClick={() => { setFlashcardIndex(null); setFlashcardRating(null); setFlashcardShowVerses(false); }}
+              onClick={() => {
+                setFlashcardIndex(null);
+                setFlashcardRating(null);
+                setFlashcardShowVerses(false);
+              }}
               className="flex items-center gap-1 text-emerald-200 text-sm mb-4"
             >
               <ChevronLeft size={16} /> Back to Review List
@@ -1372,7 +1798,8 @@ export default function ReviewPage() {
               <div>
                 <h1 className="text-xl font-bold">Flashcard Review</h1>
                 <p className="text-emerald-200 text-sm mt-1">
-                  {flashcardIndex + 1} of {sessionTotalRef.current} · {sessionTotalRef.current - flashcardIndex - 1} remaining
+                  {flashcardIndex + 1} of {sessionTotalRef.current} ·{" "}
+                  {sessionTotalRef.current - flashcardIndex - 1} remaining
                 </p>
               </div>
               <div className="w-14 h-14 rounded-full bg-white/15 border border-white/20 flex items-center justify-center">
@@ -1388,7 +1815,8 @@ export default function ReviewPage() {
               <CardContent className="p-3 flex items-center gap-2">
                 <AlertCircle size={14} className="text-orange-600" />
                 <p className="text-xs text-orange-700">
-                  This surah was due on {flashcardItem.dueDate} — let's catch up!
+                  This surah was due on {flashcardItem.dueDate} — let's catch
+                  up!
                 </p>
               </CardContent>
             </Card>
@@ -1398,9 +1826,12 @@ export default function ReviewPage() {
             <CardContent className="p-5">
               <div className="flex items-center justify-between mb-4">
                 <div>
-                  <p className="font-bold text-lg text-foreground">{flashcardItem.surahName}</p>
+                  <p className="font-bold text-lg text-foreground">
+                    {flashcardItem.surahName}
+                  </p>
                   <p className="text-xs text-muted-foreground">
-                    Surah {flashcardItem.surahNumber} · Due {flashcardItem.dueDate}
+                    Surah {flashcardItem.surahNumber} · Due{" "}
+                    {flashcardItem.dueDate}
                   </p>
                 </div>
                 <p className="arabic-text text-3xl text-primary">
@@ -1417,15 +1848,25 @@ export default function ReviewPage() {
                 className="w-full mb-3"
                 onClick={() => setFlashcardShowVerses(!flashcardShowVerses)}
               >
-                {flashcardShowVerses ? "Hide Verses" : "Show Verses (if needed)"}
+                {flashcardShowVerses
+                  ? "Hide Verses"
+                  : "Show Verses (if needed)"}
               </Button>
               {flashcardShowVerses &&
                 verses.map((verse) => (
-                  <div key={verse.number} className="mb-3 pb-3 border-b border-border last:border-0">
-                    <p className="arabic-text text-xl text-foreground text-right mb-1" dir="rtl">
+                  <div
+                    key={verse.number}
+                    className="mb-3 pb-3 border-b border-border last:border-0"
+                  >
+                    <p
+                      className="arabic-text text-xl text-foreground text-right mb-1"
+                      dir="rtl"
+                    >
                       {verse.arabic}
                     </p>
-                    <p className="text-xs text-primary italic">{verse.transliteration}</p>
+                    <p className="text-xs text-primary italic">
+                      {verse.transliteration}
+                    </p>
                     <p className="text-xs text-muted-foreground mt-0.5">
                       "{verse.translation}"
                     </p>
@@ -1459,7 +1900,9 @@ export default function ReviewPage() {
                     >
                       {q}
                     </div>
-                    <span className={`text-xs ${QUALITY_COLORS[q]} px-2 py-0.5 rounded-full`}>
+                    <span
+                      className={`text-xs ${QUALITY_COLORS[q]} px-2 py-0.5 rounded-full`}
+                    >
                       {QUALITY_LABELS[q]}
                     </span>
                   </button>
@@ -1470,7 +1913,10 @@ export default function ReviewPage() {
                 disabled={flashcardRating === null || reviewMutation.isPending}
                 onClick={() =>
                   flashcardRating !== null &&
-                  reviewMutation.mutate({ surahId: flashcardItem.surahId, quality: flashcardRating })
+                  reviewMutation.mutate({
+                    surahId: flashcardItem.surahId,
+                    quality: flashcardRating,
+                  })
                 }
               >
                 <CheckCircle size={14} className="mr-1" />
@@ -1500,14 +1946,25 @@ export default function ReviewPage() {
   }
 
   // ── Genuinely no reviews today (not just all completed this session) ──
-  if (!sessionDone && data !== undefined && sessionSurahs.length === 0 && completedItemsData.length === 0) {
+  if (
+    !sessionDone &&
+    data !== undefined &&
+    sessionSurahs.length === 0 &&
+    completedItemsData.length === 0
+  ) {
     return (
       <div className="min-h-screen bg-background pb-24 flex flex-col items-center justify-center px-4">
         <div className="text-center max-w-sm">
           <div className="text-6xl mb-4">✅</div>
-          <h2 className="text-2xl font-bold text-foreground mb-2">All Caught Up!</h2>
-          <p className="text-muted-foreground mb-2">No surahs due for review today. Keep memorizing!</p>
-          <p className="text-xs text-muted-foreground mb-6">Consistent review is the key to strong memorization.</p>
+          <h2 className="text-2xl font-bold text-foreground mb-2">
+            All Caught Up!
+          </h2>
+          <p className="text-muted-foreground mb-2">
+            No surahs due for review today. Keep memorizing!
+          </p>
+          <p className="text-xs text-muted-foreground mb-6">
+            Consistent review is the key to strong memorization.
+          </p>
           <Link href={`/child/${childId}`}>
             <Button className="w-full rounded-full">Back to Dashboard</Button>
           </Link>
@@ -1520,166 +1977,193 @@ export default function ReviewPage() {
   // ── Default: surah card grid (also shown when sessionDone — completed rows stay visible) ──
   return (
     <>
-    <div className="min-h-screen bg-background pb-24">
-      <div className="pattern-bg text-white px-4 pt-8 pb-12">
-        <div className="max-w-lg mx-auto">
-          <Link href={`/child/${childId}`}>
-            <button className="flex items-center gap-1 text-emerald-200 text-sm mb-4">
-              <ChevronLeft size={16} /> Dashboard
-            </button>
-          </Link>
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-xl font-bold">Review Session</h1>
-              <p className="text-emerald-200 text-sm mt-1">
-                {completedCount > 0 || sessionDone
-                  ? `${completedCount}/${sessionTotalRef.current} surahs done`
-                  : `${sessionSurahs.length} surah${sessionSurahs.length !== 1 ? "s" : ""} due today`
-                }
-              </p>
-            </div>
-            <div className="w-14 h-14 rounded-full bg-white/15 border border-white/20 flex items-center justify-center">
-              <RefreshCw size={24} className="text-white" />
+      <div className="min-h-screen bg-background pb-24">
+        <div className="pattern-bg text-white px-4 pt-8 pb-12">
+          <div className="max-w-lg mx-auto">
+            <Link href={`/child/${childId}`}>
+              <button className="flex items-center gap-1 text-emerald-200 text-sm mb-4">
+                <ChevronLeft size={16} /> Dashboard
+              </button>
+            </Link>
+            <div className="flex items-center justify-between">
+              <div>
+                <h1 className="text-xl font-bold">Review Session</h1>
+                <p className="text-emerald-200 text-sm mt-1">
+                  {completedCount > 0 || sessionDone
+                    ? `${completedCount}/${sessionTotalRef.current} surahs done`
+                    : `${sessionSurahs.length} surah${sessionSurahs.length !== 1 ? "s" : ""} due today`}
+                </p>
+              </div>
+              <div className="w-14 h-14 rounded-full bg-white/15 border border-white/20 flex items-center justify-center">
+                <RefreshCw size={24} className="text-white" />
+              </div>
             </div>
           </div>
         </div>
-      </div>
 
-      <div className="max-w-lg mx-auto px-4 -mt-6 space-y-3">
-        {/* Due today cards */}
-        {(() => {
-          // Use frozen session snapshot — immune to refetch changes
-          const pendingItems = sessionSurahs.filter(item => !completedSurahIds.has(item.surahId));
+        <div className="max-w-lg mx-auto px-4 -mt-6 space-y-3">
+          {/* Due today cards */}
+          {(() => {
+            // Use frozen session snapshot — immune to refetch changes
+            const pendingItems = sessionSurahs.filter(
+              (item) => !completedSurahIds.has(item.surahId),
+            );
 
-          return (
-            <>
-              {sessionDone && (
-                <Card className="border-emerald-300 bg-emerald-50">
-                  <CardContent className="p-4 text-center">
-                    <p className="text-2xl mb-1">🏆</p>
-                    <p className="font-bold text-emerald-800">All done for today!</p>
-                    <p className="text-xs text-emerald-700 mt-1">Great job! Come back tomorrow for your next review.</p>
-                  </CardContent>
-                </Card>
-              )}
-              {!sessionDone && pendingItems.map((item) => {
-                const idx = sessionSurahs.indexOf(item);
-                return (
-                  <Card
-                    key={item.id}
-                    className={cn("border-border", item.isOverdue && "border-orange-200")}
-                  >
-                    <CardContent className="p-4">
-                      <div className="flex items-center justify-between mb-3">
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <p className="font-bold text-foreground">{item.surahName}</p>
-                            {item.isOverdue && (
-                              <Badge className="bg-orange-100 text-orange-700 border-0 text-[10px]">
-                                Overdue
-                              </Badge>
-                            )}
-                          </div>
-                          <p className="text-xs text-muted-foreground mt-0.5">
-                            Surah {item.surahNumber} · Due {item.dueDate}
-                          </p>
-                        </div>
-                        <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center text-sm font-bold text-primary">
-                          {item.surahNumber}
-                        </div>
-                      </div>
-                      <div className="flex gap-2">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="flex-1 h-8 text-xs"
-                          onClick={() =>
-                            setMushafItem({
-                              surahId: item.surahId,
-                              surahNumber: item.surahNumber,
-                              surahName: item.surahName ?? "",
-                              reviewItemId: item.id,
-                            })
-                          }
-                        >
-                          Mushaf View
-                        </Button>
-                        <Button
-                          size="sm"
-                          className="flex-1 h-8 text-xs"
-                          onClick={() => setFlashcardIndex(idx)}
-                        >
-                          Flashcard
-                        </Button>
-                      </div>
+            return (
+              <>
+                {sessionDone && (
+                  <Card className="border-emerald-300 bg-emerald-50">
+                    <CardContent className="p-4 text-center">
+                      <p className="text-2xl mb-1">🏆</p>
+                      <p className="font-bold text-emerald-800">
+                        All done for today!
+                      </p>
+                      <p className="text-xs text-emerald-700 mt-1">
+                        Great job! Come back tomorrow for your next review.
+                      </p>
                     </CardContent>
                   </Card>
-                );
-              })}
-              {completedItemsData.map((item) => (
-                <div
-                  key={`done-${item.surahId}`}
-                  className="flex items-center gap-3 px-4 py-2.5 rounded-xl bg-emerald-50 border border-emerald-200"
-                >
-                  <CheckCircle size={16} className="text-emerald-500 flex-shrink-0" />
-                  <p className="text-sm font-medium text-emerald-800 flex-1">{item.surahName}</p>
-                  <span className="text-xs text-emerald-600 font-medium">Reviewed ✓</span>
-                </div>
-              ))}
-            </>
-          );
-        })()}
-
-        {/* Upcoming */}
-        {!sessionDone && (data?.upcoming ?? []).length > 0 && (
-          <Card className="border-border">
-            <CardContent className="p-4">
-              <p className="text-sm font-semibold text-foreground mb-3">Upcoming Reviews</p>
-              <div className="space-y-2">
-                {(data?.upcoming ?? []).slice(0, 5).map((item) => (
-                  <div key={item.id} className="flex items-center justify-between text-xs">
-                    <span className="text-foreground font-medium">{item.surahName}</span>
-                    <Badge variant="secondary">{item.dueDate}</Badge>
+                )}
+                {!sessionDone &&
+                  pendingItems.map((item) => {
+                    const idx = sessionSurahs.indexOf(item);
+                    return (
+                      <Card
+                        key={item.id}
+                        className={cn(
+                          "border-border",
+                          item.isOverdue && "border-orange-200",
+                        )}
+                      >
+                        <CardContent className="p-4">
+                          <div className="flex items-center justify-between mb-3">
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <p className="font-bold text-foreground">
+                                  {item.surahName}
+                                </p>
+                                {item.isOverdue && (
+                                  <Badge className="bg-orange-100 text-orange-700 border-0 text-[10px]">
+                                    Overdue
+                                  </Badge>
+                                )}
+                              </div>
+                              <p className="text-xs text-muted-foreground mt-0.5">
+                                Surah {item.surahNumber} · Due {item.dueDate}
+                              </p>
+                            </div>
+                            <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center text-sm font-bold text-primary">
+                              {item.surahNumber}
+                            </div>
+                          </div>
+                          <div className="flex gap-2">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="flex-1 h-8 text-xs"
+                              onClick={() =>
+                                setMushafItem({
+                                  surahId: item.surahId,
+                                  surahNumber: item.surahNumber,
+                                  surahName: item.surahName ?? "",
+                                  reviewItemId: item.id,
+                                })
+                              }
+                            >
+                              Mushaf View
+                            </Button>
+                            <Button
+                              size="sm"
+                              className="flex-1 h-8 text-xs"
+                              onClick={() => setFlashcardIndex(idx)}
+                            >
+                              Flashcard
+                            </Button>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    );
+                  })}
+                {completedItemsData.map((item) => (
+                  <div
+                    key={`done-${item.surahId}`}
+                    className="flex items-center gap-3 px-4 py-2.5 rounded-xl bg-emerald-50 border border-emerald-200"
+                  >
+                    <CheckCircle
+                      size={16}
+                      className="text-emerald-500 flex-shrink-0"
+                    />
+                    <p className="text-sm font-medium text-emerald-800 flex-1">
+                      {item.surahName}
+                    </p>
+                    <span className="text-xs text-emerald-600 font-medium">
+                      Reviewed ✓
+                    </span>
                   </div>
                 ))}
-              </div>
-            </CardContent>
-          </Card>
-        )}
-        {sessionDone && (
-          <div className="pb-2 space-y-2">
-            <Button
-              className="w-full rounded-full"
-              variant="outline"
-              onClick={() => {
-                localStorage.removeItem(SESSION_KEY);
-                setSessionDone(false);
-                setCompletedCount(0);
-                setCompletedSurahIds(new Set());
-                setCompletedItemsData([]);
-                sessionTotalRef.current = 0;
-                sessionSurahsRef.current = null;
-                qc.invalidateQueries({ queryKey: ["reviews", childId] });
-                qc.invalidateQueries({ queryKey: ["dashboard", childId] });
-              }}
-            >
-              Next Day's Review →
-            </Button>
-            <Link href={`/child/${childId}`}>
-              <Button className="w-full rounded-full" variant="ghost">Back to Dashboard</Button>
-            </Link>
-          </div>
-        )}
-      </div>
+              </>
+            );
+          })()}
 
-      <ChildNav childId={childId} />
-    </div>
-    <CelebrationOverlay
-      show={showReviewCelebration}
-      onDone={() => setShowReviewCelebration(false)}
-      message="Review Complete!"
-      subMessage="Excellent revision!"
-    />
+          {/* Upcoming */}
+          {!sessionDone && (data?.upcoming ?? []).length > 0 && (
+            <Card className="border-border">
+              <CardContent className="p-4">
+                <p className="text-sm font-semibold text-foreground mb-3">
+                  Upcoming Reviews
+                </p>
+                <div className="space-y-2">
+                  {(data?.upcoming ?? []).slice(0, 5).map((item) => (
+                    <div
+                      key={item.id}
+                      className="flex items-center justify-between text-xs"
+                    >
+                      <span className="text-foreground font-medium">
+                        {item.surahName}
+                      </span>
+                      <Badge variant="secondary">{item.dueDate}</Badge>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+          {sessionDone && (
+            <div className="pb-2 space-y-2">
+              <Button
+                className="w-full rounded-full"
+                variant="outline"
+                onClick={() => {
+                  localStorage.removeItem(SESSION_KEY);
+                  setSessionDone(false);
+                  setCompletedCount(0);
+                  setCompletedSurahIds(new Set());
+                  setCompletedItemsData([]);
+                  sessionTotalRef.current = 0;
+                  sessionSurahsRef.current = null;
+                  qc.invalidateQueries({ queryKey: ["reviews", childId] });
+                  qc.invalidateQueries({ queryKey: ["dashboard", childId] });
+                }}
+              >
+                Next Day's Review →
+              </Button>
+              <Link href={`/child/${childId}`}>
+                <Button className="w-full rounded-full" variant="ghost">
+                  Back to Dashboard
+                </Button>
+              </Link>
+            </div>
+          )}
+        </div>
+
+        <ChildNav childId={childId} />
+      </div>
+      <CelebrationOverlay
+        show={showReviewCelebration}
+        onDone={() => setShowReviewCelebration(false)}
+        message="Review Complete!"
+        subMessage="Excellent revision!"
+      />
     </>
   );
 }
