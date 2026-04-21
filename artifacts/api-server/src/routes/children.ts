@@ -701,15 +701,17 @@ router.post("/children/:childId/daily-progress", async (req, res) => {
   if (!await ownsChild(req.user.id, childId)) { res.status(403).json({ error: "Forbidden" }); return; }
   const _d = new Date();
   const today = `${_d.getFullYear()}-${String(_d.getMonth()+1).padStart(2,'0')}-${String(_d.getDate()).padStart(2,'0')}`;
-  const { memStatus, memCompletedAyahEnd, reviewStatus, reviewCompletedCount } = req.body;
+  const { memStatus, memCompletedAyahEnd, reviewStatus, reviewCompletedCount, reviewTargetCount } = req.body;
   let [row] = await db.select().from(dailyProgressTable)
     .where(and(eq(dailyProgressTable.childId, childId), eq(dailyProgressTable.date, today)));
   const updates: Record<string, unknown> = { updatedAt: new Date() };
   // Never downgrade a completed status — the /memorization route sets it authoritatively
   if (memStatus && !(row?.memStatus === 'completed' && memStatus !== 'completed')) updates.memStatus = memStatus;
   if (memCompletedAyahEnd != null) updates.memCompletedAyahEnd = memCompletedAyahEnd;
-  if (reviewStatus) updates.reviewStatus = reviewStatus;
+  // Preserve a completed review session for the day unless the client also reports completed.
+  if (reviewStatus && !(row?.reviewStatus === 'completed' && reviewStatus !== 'completed')) updates.reviewStatus = reviewStatus;
   if (reviewCompletedCount != null) updates.reviewCompletedCount = reviewCompletedCount;
+  if (reviewTargetCount != null) updates.reviewTargetCount = reviewTargetCount;
   if (row) {
     [row] = await db.update(dailyProgressTable).set(updates).where(eq(dailyProgressTable.id, row.id)).returning();
   }

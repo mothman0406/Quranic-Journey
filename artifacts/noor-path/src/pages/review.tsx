@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useEffect, useState, useRef } from "react";
 import { CelebrationOverlay } from "@/components/celebration-overlay";
 import { useParams, Link } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -324,6 +324,18 @@ export default function ReviewPage() {
     } catch {}
   };
 
+  const syncReviewDailyProgress = (body: {
+    reviewStatus?: "not_started" | "in_progress" | "completed";
+    reviewCompletedCount?: number;
+    reviewTargetCount?: number;
+  }) => {
+    fetch(`/api/children/${childId}/daily-progress`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    }).then(() => qc.invalidateQueries({ queryKey: ["dashboard", childId] })).catch(() => {});
+  };
+
   const { data, isLoading } = useQuery({
     queryKey: ["reviews", childId],
     queryFn: () => listReviews(parseInt(childId)),
@@ -346,6 +358,23 @@ export default function ReviewPage() {
     saveSession({ sessionSurahs: dueToday, sessionTotal: dueToday.length });
   }
   const sessionSurahs = sessionSurahsRef.current ?? dueToday;
+
+  useEffect(() => {
+    if (!data) return;
+    const sessionTotal = sessionTotalRef.current;
+    if (sessionTotal <= 0) return;
+    const reviewStatus =
+      sessionDone || completedCount >= sessionTotal
+        ? "completed"
+        : completedCount > 0
+        ? "in_progress"
+        : "not_started";
+    syncReviewDailyProgress({
+      reviewStatus,
+      reviewCompletedCount: completedCount,
+      reviewTargetCount: sessionTotal,
+    });
+  }, [data, completedCount, sessionDone]);
 
   // Fetch current flashcard surah if in flashcard mode
   const flashcardItem = flashcardIndex !== null ? sessionSurahs[flashcardIndex] : null;
@@ -376,11 +405,6 @@ export default function ReviewPage() {
       const newCount = completedCount + 1;
       setCompletedCount(newCount);
       const sessionTotal = sessionTotalRef.current;
-      fetch(`/api/children/${childId}/daily-progress`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ reviewCompletedCount: newCount }),
-      }).then(() => qc.invalidateQueries({ queryKey: ["dashboard", childId] })).catch(() => {});
       // Advance or finish — use sessionTotal (stable) not dueToday.length (shrinks on refetch)
       if (flashcardIndex !== null) {
         setFlashcardRating(null);

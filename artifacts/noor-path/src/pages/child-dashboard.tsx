@@ -64,6 +64,16 @@ export default function ChildDashboard() {
     reviewCompletedCount: number;
   };
   const todayProgress = (data as { todayProgress?: TodayProgress } | undefined)?.todayProgress;
+  const hasReviewWorkToday =
+    reviewsDueToday > 0 ||
+    todayProgress?.reviewStatus === "completed" ||
+    (todayProgress?.reviewCompletedCount ?? 0) > 0;
+  const reviewTotalForToday =
+    todayProgress?.reviewTargetCount != null
+      ? todayProgress.reviewTargetCount
+      : reviewsData !== undefined && todayProgress?.reviewCompletedCount != null
+      ? (reviewsData.dueToday?.length ?? 0) + todayProgress.reviewCompletedCount
+      : reviewsDueToday;
   const earned = achievements.filter(a => a.earned).length;
 
   return (
@@ -132,7 +142,7 @@ export default function ChildDashboard() {
                   </div>
                 </Link>
               )}
-              {reviewsDueToday > 0 && (
+              {hasReviewWorkToday && (
                 <Link href={`/child/${childId}/review`}>
                   <div className="flex items-center gap-3 p-3 rounded-xl bg-amber-50 border border-amber-200 hover:bg-amber-100 transition-colors cursor-pointer">
                     <div className="w-9 h-9 rounded-xl bg-amber-100 flex items-center justify-center"><RefreshCw size={16} className="text-amber-600" /></div>
@@ -142,7 +152,7 @@ export default function ChildDashboard() {
                         {reviewSessionDone ? (
                           <p className="text-xs text-muted-foreground">{reviewSessionTotal ?? reviewSessionCompleted}/{reviewSessionTotal ?? reviewSessionCompleted} surahs done</p>
                         ) : reviewsData !== undefined && todayProgress?.reviewCompletedCount != null && todayProgress.reviewCompletedCount > 0 ? (
-                          <p className="text-xs text-muted-foreground">{todayProgress.reviewCompletedCount}/{reviewsData.dueToday?.length === 0 ? todayProgress.reviewCompletedCount : (reviewsData.dueToday?.length ?? 0) + todayProgress.reviewCompletedCount} surahs done</p>
+                          <p className="text-xs text-muted-foreground">{todayProgress.reviewCompletedCount}/{Math.max(reviewTotalForToday, todayProgress.reviewCompletedCount)} surahs done</p>
                         ) : (
                           <p className="text-xs text-muted-foreground">{reviewsDueToday} surah{reviewsDueToday > 1 ? "s" : ""} to review today</p>
                         )}
