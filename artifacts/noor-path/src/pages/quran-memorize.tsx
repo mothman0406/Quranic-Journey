@@ -882,6 +882,7 @@ interface PlayerProps {
   triggerReciteMode?: boolean;
   onReciteTriggered?: () => void;
   onReciteComplete?: (score: number) => void;
+  onBeforeOpenLeaveModal?: () => void;
 }
 
 function MemorizationPlayer({
@@ -903,6 +904,7 @@ function MemorizationPlayer({
   triggerReciteMode,
   onReciteTriggered,
   onReciteComplete,
+  onBeforeOpenLeaveModal,
 }: PlayerProps) {
   const [, setLocation] = useLocation();
   const queryClient = useQueryClient();
@@ -1692,6 +1694,16 @@ function MemorizationPlayer({
   const phaseLabel = isCumulative
     ? `Ayahs ${fromAyah}–${cumUpTo} · Pass ${cumPass}/${reviewRepeatCount}`
     : `Ayah ${currentAyahNum} · ${repeatCount}× repeat`;
+  const openLeaveModal = useCallback(
+    (destination?: string) => {
+      if (destination) {
+        leaveDestinationRef.current = destination;
+      }
+      onBeforeOpenLeaveModal?.();
+      setShowLeaveModal(true);
+    },
+    [onBeforeOpenLeaveModal],
+  );
 
   return (
     <div
@@ -1717,7 +1729,7 @@ function MemorizationPlayer({
         }}
       >
         <button
-          onClick={() => setShowLeaveModal(true)}
+          onClick={() => openLeaveModal()}
           style={{
             display: "flex", alignItems: "center", gap: 4,
             color: localDarkMode ? "#9ca3af" : "#6b7280",
@@ -2709,9 +2721,8 @@ function MemorizationPlayer({
           childId={childId}
           onClose={() => setTappedAyah(null)}
           onViewInFullQuran={() => {
-            leaveDestinationRef.current = `/child/${childId}/mushaf-reader?page=${activePage ?? 1}`;
             setTappedAyah(null);
-            setShowLeaveModal(true);
+            openLeaveModal(`/child/${childId}/mushaf-reader?page=${activePage ?? 1}`);
           }}
         />
       )}
@@ -2885,9 +2896,8 @@ function MemorizationPlayer({
             {/* View in Full Mushaf */}
             <button
               onClick={() => {
-                leaveDestinationRef.current = `/child/${childId}/mushaf-reader?page=${activePage ?? 1}`;
                 setShowSettingsPanel(false);
-                setShowLeaveModal(true);
+                openLeaveModal(`/child/${childId}/mushaf-reader?page=${activePage ?? 1}`);
               }}
               style={{
                 display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
@@ -3710,6 +3720,7 @@ export default function QuranMemorizePage() {
         triggerReciteMode={triggerReciteMode}
         onReciteTriggered={() => setTriggerReciteMode(false)}
         onReciteComplete={handleReciteComplete}
+        onBeforeOpenLeaveModal={() => setShowReadyModal(false)}
       />
 
       {showReadyModal && (
