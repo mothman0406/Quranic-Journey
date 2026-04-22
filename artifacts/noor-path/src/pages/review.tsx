@@ -145,8 +145,9 @@ const BAYAAN_PAGE_THEME = {
   activeMarkerBg: "rgba(190, 161, 92, 0.24)",
 } as const;
 
-const REVIEW_PLAYER_DOCK_SPACE = 140;
-const REVIEW_SHEET_DOCK_SPACE = 152;
+const REVIEW_PLAYER_DOCK_SPACE = 132;
+const REVIEW_SHEET_DOCK_SPACE = 144;
+const reviewMushafScaleCache = new Map<string, number>();
 
 const JUZ_START_PAGES = [
   1, 22, 42, 62, 82, 102, 121, 142, 162, 182, 201, 222, 242, 262, 282, 302, 322,
@@ -456,6 +457,20 @@ function buildLineGroups(
     .map(([lineNum, words]) => ({ lineNum, words }));
 }
 
+function getReviewScaleCacheKey(
+  mushafFitContentKey: string,
+  pageNumber: number,
+  viewportWidth: number,
+  viewportHeight: number,
+) {
+  return [
+    mushafFitContentKey,
+    pageNumber,
+    viewportWidth,
+    viewportHeight,
+  ].join("|");
+}
+
 async function fetchVersesByPage(
   pageNumber: number,
 ): Promise<{ verses: PageVerseData[] }> {
@@ -532,6 +547,9 @@ function MushafReviewView({
   const pageContentRefs = useRef<Record<number, HTMLDivElement | null>>({});
   const pageMeasureRefs = useRef<Record<number, HTMLDivElement | null>>({});
   const fittedMushafContentKeyRef = useRef<string | null>(null);
+  const viewportWidthRef = useRef<number>(
+    typeof window !== "undefined" ? Math.round(window.innerWidth) : 0,
+  );
   const [visibleViewportHeight, setVisibleViewportHeight] = useState<number>(
     () => (typeof window !== "undefined" ? Math.round(window.innerHeight) : 0),
   );
@@ -652,6 +670,7 @@ function MushafReviewView({
   const isSinglePageLayout = pageBundles.length <= 1;
   const canRunStableMushafFit = mushafFontsReady && pageBundles.length > 0;
   const isMushafContentVisible = canRunStableMushafFit && isMushafFitReady;
+  const scaleCacheViewportWidth = viewportWidthRef.current;
   const settingsSheetMaxHeight =
     visibleViewportHeight > 0
       ? `${Math.max(260, visibleViewportHeight - REVIEW_SHEET_DOCK_SPACE - 16)}px`
@@ -851,8 +870,10 @@ function MushafReviewView({
   useEffect(() => {
     if (typeof window === "undefined") return;
 
-    const updateViewportMetrics = () =>
+    const updateViewportMetrics = () => {
+      viewportWidthRef.current = Math.round(window.innerWidth);
       setVisibleViewportHeight(Math.round(window.innerHeight));
+    };
 
     updateViewportMetrics();
     window.addEventListener("resize", updateViewportMetrics);
@@ -956,8 +977,15 @@ function MushafReviewView({
           const availableWidth = Math.max(0, el.clientWidth - paddingX);
           const availableHeight = Math.max(0, el.clientHeight - paddingY);
           let lo = isSinglePageLayout ? 0.72 : 0.62;
-          let hi = isSinglePageLayout ? 1.56 : 1.08;
+          let hi = isSinglePageLayout ? 1.72 : 1.16;
           let best = lo;
+          const scaleCacheKey = getReviewScaleCacheKey(
+            mushafFitContentKey,
+            bundle.pageNumber,
+            viewportWidthRef.current,
+            visibleViewportHeight,
+          );
+          const cachedScale = reviewMushafScaleCache.get(scaleCacheKey) ?? null;
           const parentFontSize = parseFloat(
             getComputedStyle(el.parentElement ?? el).fontSize,
           );
@@ -969,6 +997,23 @@ function MushafReviewView({
             currentFontSize > 0
               ? currentFontSize / parentFontSize
               : null;
+
+          if (
+            cachedScale !== null &&
+            cachedScale >= lo &&
+            cachedScale <= hi
+          ) {
+            el.style.fontSize = `${cachedScale}em`;
+            const cachedFitsHeight =
+              (measureEl?.scrollHeight ?? 0) <= availableHeight + 1;
+            const cachedFitsWidth =
+              (measureEl?.scrollWidth ?? 0) <= availableWidth + 1;
+            if (cachedFitsHeight && cachedFitsWidth) {
+              best = cachedScale;
+              reviewMushafScaleCache.set(scaleCacheKey, cachedScale);
+              continue;
+            }
+          }
 
           if (
             currentScale !== null &&
@@ -1000,6 +1045,7 @@ function MushafReviewView({
             }
           }
           el.style.fontSize = best + "em";
+          reviewMushafScaleCache.set(scaleCacheKey, best);
         }
         if (!cancelled) {
           fittedMushafContentKeyRef.current = mushafFitContentKey;
@@ -1025,8 +1071,9 @@ function MushafReviewView({
 
   return (
     <div
-      className="flex h-[100dvh] flex-col overflow-hidden"
+      className="flex flex-col overflow-hidden"
       style={{
+        height: "100vh",
         background: `linear-gradient(to bottom, ${BAYAAN_PAGE_THEME.screenTint}, ${BAYAAN_PAGE_THEME.screen})`,
         color: BAYAAN_PAGE_THEME.screenText,
         overscrollBehavior: "none",
@@ -1133,6 +1180,14 @@ function MushafReviewView({
               }
             >
               {pageBundles.map((bundle) => {
+                const cachedScale = reviewMushafScaleCache.get(
+                  getReviewScaleCacheKey(
+                    mushafFitContentKey,
+                    bundle.pageNumber,
+                    scaleCacheViewportWidth,
+                    visibleViewportHeight,
+                  ),
+                );
                 const pageTargetVerses = bundle.verses.filter((verse) => {
                   const [verseSurah] = verse.verse_key.split(":").map(Number);
                   return verseSurah === surahNumber;
@@ -1199,7 +1254,10 @@ function MushafReviewView({
                       lang="ar"
                       style={{
                         fontFamily,
-                        fontSize: "clamp(14px, 2.2vh, 28px)",
+                        fontSize:
+                          cachedScale !== undefined
+                            ? `${cachedScale}em`
+                            : "clamp(14px, 2.2vh, 28px)",
                         lineHeight: 1.98,
                         padding: isSinglePageLayout
                           ? "6px 1px 2px"
@@ -1507,7 +1565,7 @@ function MushafReviewView({
       <div
         className="fixed inset-x-0 z-[60] px-4 pointer-events-none"
         style={{
-          bottom: "calc(env(safe-area-inset-bottom, 0px) + 0.5rem)",
+          bottom: "calc(env(safe-area-inset-bottom, 0px) + 0.25rem)",
         }}
       >
         <div
