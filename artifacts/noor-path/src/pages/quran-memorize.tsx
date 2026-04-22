@@ -905,6 +905,7 @@ function MemorizationPlayer({
   onReciteComplete,
 }: PlayerProps) {
   const [, setLocation] = useLocation();
+  const queryClient = useQueryClient();
   const leaveDestinationRef = useRef<string | null>(null);
 
   const reciter = RECITERS.find((r) => r.id === "husary")!;
@@ -1028,7 +1029,7 @@ function MemorizationPlayer({
   // Mushaf page context — fetch all verses on the current mushaf page so we can
   // render the full page with out-of-range verses grayed out.
   const activePage = activeVerse?.page_number;
-  const { data: pageVersesData } = useQuery({
+  const { data: pageVersesData, isLoading: pageVersesLoading } = useQuery({
     queryKey: ["verses-by-page", activePage],
     queryFn: () => fetchVersesByPage(activePage!),
     enabled: activePage !== undefined,
@@ -1077,6 +1078,25 @@ function MemorizationPlayer({
     [sessionVerses]
   );
   const sessionSpansMultiplePages = sessionPageNumbers.length > 1;
+
+  useEffect(() => {
+    if (activePage === undefined) return;
+    const activeSessionPageIdx = sessionPageNumbers.indexOf(activePage);
+    if (activeSessionPageIdx < 0) return;
+
+    const adjacentPages = [
+      sessionPageNumbers[activeSessionPageIdx - 1],
+      sessionPageNumbers[activeSessionPageIdx + 1],
+    ].filter((pageNumber): pageNumber is number => pageNumber !== undefined);
+
+    for (const pageNumber of adjacentPages) {
+      void queryClient.prefetchQuery({
+        queryKey: ["verses-by-page", pageNumber],
+        queryFn: () => fetchVersesByPage(pageNumber),
+        staleTime: Infinity,
+      });
+    }
+  }, [queryClient, activePage, sessionPageNumbers]);
 
   // Speech recognition — runs only while recite mode is active.
   useEffect(() => {
@@ -1648,9 +1668,15 @@ function MemorizationPlayer({
     canUseBayaanFit && activePage !== undefined
       ? getCachedScale(activePage)
       : undefined;
-  const isMushafPageContentVisible = canUseBayaanFit
-    ? isMushafContentVisible
-    : true;
+  const shouldHoldPendingPageFrame =
+    activePage !== undefined &&
+    pageVersesLoading &&
+    pageVerses.length === 0;
+  const isMushafPageContentVisible = shouldHoldPendingPageFrame
+    ? false
+    : canUseBayaanFit
+      ? isMushafContentVisible
+      : true;
 
   // Page navigation derived values for multi-page recite sessions
   const currentWordPage = sessionVerses[reciteVerseIndex]?.page_number;
@@ -1912,7 +1938,7 @@ function MemorizationPlayer({
                 })()}
 
                 {/* ── Fallback flow rendering (no word data yet) ── */}
-                {!lineGroups && displayList.map(
+                {!shouldHoldPendingPageFrame && !lineGroups && displayList.map(
                   ({ surahId, verseNum, surahVerse, pageVerse }, listIdx) => {
                     const isActiveSurah = surahId === chapter.id;
                     const isActive =
