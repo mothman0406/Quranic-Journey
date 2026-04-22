@@ -1211,7 +1211,7 @@ function MushafReviewView({
                         fontSize: "clamp(14px, 2.2vh, 28px)",
                         lineHeight: 1.98,
                         padding: isSinglePageLayout
-                          ? "8px 12px 2px"
+                          ? "8px 10px 2px"
                           : "14px 22px 6px",
                         color: BAYAAN_PAGE_THEME.pageText,
                         textAlign: "justify",
@@ -1300,10 +1300,10 @@ function MushafReviewView({
                                   flexWrap: "nowrap",
                                   lineHeight: 1.98,
                                   padding: isSinglePageLayout
-                                    ? "0 1px"
+                                    ? "0 0.5px"
                                     : "0 2px",
                                   width: "100%",
-                                  gap: isSinglePageLayout ? "0.08em" : "0.18em",
+                                  gap: isSinglePageLayout ? "0.07em" : "0.18em",
                                 }}
                               >
                                 {lws.map((lw) => {
