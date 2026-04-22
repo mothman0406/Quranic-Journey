@@ -553,7 +553,8 @@ function MushafReviewView({
       audio.onended = null;
       audio.onerror = null;
       audio.pause();
-      audio.src = "";
+      audio.removeAttribute("src");
+      audio.load();
     }
     audioRef.current = null;
     loadedVerseIndexRef.current = null;
@@ -565,19 +566,27 @@ function MushafReviewView({
     const verse = verses[index];
     if (!verse) return;
 
-    clearAudio();
+    playbackTokenRef.current += 1;
     const token = playbackTokenRef.current;
-    const audio = new Audio();
+    const audio = audioRef.current ?? new Audio();
+    audio.onended = null;
+    audio.onerror = null;
+    audio.pause();
+    audio.currentTime = 0;
+    audio.crossOrigin = "anonymous";
     audio.preload = "auto";
+    audio.setAttribute("playsinline", "true");
     audio.src = buildAudioUrl(
       sessionReciterRef.current,
       surahNumber,
       verse.verse_number,
     );
+    audio.load();
     audio.playbackRate = playbackRateRef.current;
     audioRef.current = audio;
     loadedVerseIndexRef.current = index;
     setActiveVerseIndex(index);
+    setIsPlaying(false);
     setIsLoadingAudio(true);
 
     audio.onended = () => {
@@ -599,7 +608,6 @@ function MushafReviewView({
     try {
       await audio.play();
       if (playbackTokenRef.current !== token) {
-        audio.pause();
         return;
       }
       setIsPlaying(true);
