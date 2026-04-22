@@ -528,10 +528,18 @@ function MushafReviewView({
   const scrollRootRef = useRef<HTMLDivElement | null>(null);
   const pageContentRefs = useRef<Record<number, HTMLDivElement | null>>({});
   const playerRef = useRef<HTMLDivElement | null>(null);
+  const fittedMushafContentKeyRef = useRef<string | null>(null);
   const [visibleViewportHeight, setVisibleViewportHeight] = useState<number>(
     () => (typeof window !== "undefined" ? Math.round(window.innerHeight) : 0),
   );
   const [playerHeight, setPlayerHeight] = useState(0);
+  const [lockedPlayerHeight, setLockedPlayerHeight] = useState<number | null>(
+    null,
+  );
+  const [mushafFontsReady, setMushafFontsReady] = useState(() =>
+    typeof document === "undefined" ? false : !("fonts" in document),
+  );
+  const [isMushafFitReady, setIsMushafFitReady] = useState(false);
 
   const { data: chapterVersesData, isLoading: chapterLoading } = useQuery({
     queryKey: ["review-mushaf-surah", surahNumber],
@@ -631,18 +639,33 @@ function MushafReviewView({
       })),
     [pageBundlesData],
   );
+  const mushafFitContentKey = useMemo(
+    () =>
+      [
+        surahId,
+        showTajweed ? "tajweed" : "plain",
+        pageBundles
+          .map((bundle) => `${bundle.pageNumber}:${bundle.verses.length}`)
+          .join(","),
+      ].join("|"),
+    [surahId, showTajweed, pageBundles],
+  );
   const isSinglePageLayout = pageBundles.length <= 1;
+  const canRunStableMushafFit =
+    mushafFontsReady && playerHeight > 0 && pageBundles.length > 0;
+  const isMushafContentVisible = canRunStableMushafFit && isMushafFitReady;
+  const effectivePlayerHeight = lockedPlayerHeight ?? playerHeight;
   const fallbackPlayerBottomOffset = 12;
   const fallbackBottomNavHeight = 0;
   const fallbackBottomChrome = 24;
   const reservedBottomSpace =
-    playerHeight > 0
-      ? playerHeight + fallbackPlayerBottomOffset + 8
-      : playerHeight +
+    effectivePlayerHeight > 0
+      ? effectivePlayerHeight + fallbackPlayerBottomOffset + 8
+      : effectivePlayerHeight +
         fallbackPlayerBottomOffset +
         fallbackBottomNavHeight +
         fallbackBottomChrome;
-  const hasMeasuredPlayerFrame = playerHeight > 0;
+  const hasMeasuredPlayerFrame = effectivePlayerHeight > 0;
   const settingsSheetBottomSpace = reservedBottomSpace + 12;
   const settingsSheetMaxHeight =
     visibleViewportHeight > 0
@@ -792,6 +815,47 @@ function MushafReviewView({
   }, [sessionReciter.id]);
 
   useEffect(() => {
+    if (typeof document === "undefined") return;
+    if (!("fonts" in document)) {
+      setMushafFontsReady(true);
+      return;
+    }
+
+    let cancelled = false;
+    setMushafFontsReady(false);
+
+    Promise.all([
+      document.fonts.load('1em "BayaanDigitalKhatt"', BAYAAN_BASMALLAH),
+      document.fonts.load('1em "BayaanQuranCommon"', BAYAAN_SURAH_DIVIDER_CHAR),
+      document.fonts.load(
+        '1em "BayaanSurahQCF"',
+        getBayaanSurahGlyph(surahNumber) || surahName,
+      ),
+      document.fonts.ready,
+    ])
+      .catch(() => {})
+      .then(() => {
+        if (!cancelled) {
+          setMushafFontsReady(true);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [surahNumber, surahName]);
+
+  useEffect(() => {
+    fittedMushafContentKeyRef.current = null;
+    setLockedPlayerHeight(null);
+    setIsMushafFitReady(false);
+    for (const el of Object.values(pageContentRefs.current)) {
+      if (!el) continue;
+      el.style.fontSize = "";
+    }
+  }, [mushafFitContentKey]);
+
+  useEffect(() => {
     if (isSinglePageLayout || !scrollRootRef.current) return;
     const node = scrollRootRef.current.querySelector<HTMLElement>(
       `[data-review-ayah="${activeVerseKey}"]`,
@@ -856,17 +920,69 @@ function MushafReviewView({
   }, []);
 
   useEffect(() => {
-    requestAnimationFrame(() => {
+    if (!canRunStableMushafFit) return;
+    if (fittedMushafContentKeyRef.current === mushafFitContentKey) return;
+
+    let cancelled = false;
+    let rafId = 0;
+    let stableFrameCount = 0;
+    let lastSignature = "";
+
+    const captureLayoutSignature = () => {
+      const parts: string[] = [];
+      for (const bundle of pageBundles) {
+        const el = pageContentRefs.current[bundle.pageNumber];
+        if (!el) return null;
+        const clientWidth = Math.round(el.clientWidth);
+        const clientHeight = Math.round(el.clientHeight);
+        const scrollWidth = Math.round(el.scrollWidth);
+        const scrollHeight = Math.round(el.scrollHeight);
+        if (clientWidth <= 0 || clientHeight <= 0) return null;
+        parts.push(
+          [
+            bundle.pageNumber,
+            clientWidth,
+            clientHeight,
+            scrollWidth,
+            scrollHeight,
+          ].join(":"),
+        );
+      }
+      return parts.join("|");
+    };
+
+    const fitWhenStable = () => {
+      if (cancelled) return;
+
+      const signature = captureLayoutSignature();
+      if (!signature) {
+        rafId = requestAnimationFrame(fitWhenStable);
+        return;
+      }
+
+      if (signature === lastSignature) {
+        stableFrameCount += 1;
+      } else {
+        lastSignature = signature;
+        stableFrameCount = 0;
+      }
+
+      if (stableFrameCount < 2) {
+        rafId = requestAnimationFrame(fitWhenStable);
+        return;
+      }
+
       requestAnimationFrame(() => {
+        if (cancelled) return;
         for (const bundle of pageBundles) {
           const el = pageContentRefs.current[bundle.pageNumber];
           if (!el) continue;
           const availableHeight = Math.max(
             320,
-            el.clientHeight - (isSinglePageLayout ? 16 : 4),
+            el.clientHeight - (isSinglePageLayout ? 8 : 4),
           );
           let lo = isSinglePageLayout ? 0.72 : 0.62;
-          let hi = isSinglePageLayout ? 1.24 : 1.08;
+          let hi = isSinglePageLayout ? 1.56 : 1.08;
           let best = lo;
           for (let i = 0; i < 28; i++) {
             const mid = (lo + hi) / 2;
@@ -882,15 +998,36 @@ function MushafReviewView({
           }
           el.style.fontSize = best + "em";
         }
+        if (!cancelled) {
+          const measuredPlayerHeight = Math.round(
+            playerRef.current?.getBoundingClientRect().height ?? playerHeight,
+          );
+          setLockedPlayerHeight((current) => {
+            if (
+              current !== null &&
+              Math.abs(current - measuredPlayerHeight) <= 3
+            ) {
+              return current;
+            }
+            return measuredPlayerHeight > 0 ? measuredPlayerHeight : current;
+          });
+          fittedMushafContentKeyRef.current = mushafFitContentKey;
+          setIsMushafFitReady(true);
+        }
       });
-    });
+    };
+
+    rafId = requestAnimationFrame(fitWhenStable);
+
+    return () => {
+      cancelled = true;
+      cancelAnimationFrame(rafId);
+    };
   }, [
+    canRunStableMushafFit,
+    mushafFitContentKey,
     pageBundles,
-    showTajweed,
-    blurDuringRecitation,
     isSinglePageLayout,
-    playerHeight,
-    visibleViewportHeight,
   ]);
 
   const isLoading = chapterLoading || pagesLoading;
@@ -927,13 +1064,7 @@ function MushafReviewView({
           </button>
 
           <div className="flex justify-center">
-            <div
-              className="min-w-[148px] max-w-[208px] rounded-[18px] px-3.5 py-2 text-center shadow-[0_12px_28px_rgba(89,72,32,0.12)]"
-              style={{
-                border: `1px solid ${BAYAAN_PAGE_THEME.chromeBorder}`,
-                background: "rgba(255, 252, 245, 0.94)",
-              }}
-            >
+            <div className="px-2 text-center">
               <p
                 className="truncate text-lg font-bold leading-none"
                 style={{ color: BAYAAN_PAGE_THEME.screenText }}
@@ -1036,7 +1167,7 @@ function MushafReviewView({
                       isSinglePageLayout && "h-full",
                     )}
                     style={{
-                      width: "min(680px, 96vw)",
+                      width: isSinglePageLayout ? "100%" : "min(680px, 100%)",
                       height: isSinglePageLayout ? "100%" : "min(70vh, 760px)",
                       background: `linear-gradient(to bottom, ${BAYAAN_PAGE_THEME.page}, ${BAYAAN_PAGE_THEME.pageEdge})`,
                       border: `1px solid ${BAYAAN_PAGE_THEME.pageBorder}`,
@@ -1080,7 +1211,7 @@ function MushafReviewView({
                         fontSize: "clamp(14px, 2.2vh, 28px)",
                         lineHeight: 1.98,
                         padding: isSinglePageLayout
-                          ? "10px 18px 4px"
+                          ? "8px 12px 2px"
                           : "14px 22px 6px",
                         color: BAYAAN_PAGE_THEME.pageText,
                         textAlign: "justify",
@@ -1091,6 +1222,9 @@ function MushafReviewView({
                         overflowY: "hidden",
                         flex: 1,
                         minHeight: 0,
+                        visibility: isMushafContentVisible
+                          ? "visible"
+                          : "hidden",
                       }}
                     >
                       {lineGroups ? (
@@ -1165,9 +1299,11 @@ function MushafReviewView({
                                   alignItems: "center",
                                   flexWrap: "nowrap",
                                   lineHeight: 1.98,
-                                  padding: "0 2px",
+                                  padding: isSinglePageLayout
+                                    ? "0 1px"
+                                    : "0 2px",
                                   width: "100%",
-                                  gap: "0.18em",
+                                  gap: isSinglePageLayout ? "0.08em" : "0.18em",
                                 }}
                               >
                                 {lws.map((lw) => {
