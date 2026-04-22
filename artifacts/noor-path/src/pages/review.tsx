@@ -906,16 +906,16 @@ function MushafReviewView({
     >
       <style>{TAJWEED_CSS}</style>
       <div
-        className="z-30 flex-none px-4 pt-3 pb-2"
+        className="z-30 flex-none px-4 pt-2 pb-1.5"
         style={{
           background: `linear-gradient(to bottom, ${BAYAAN_PAGE_THEME.screenTint}, rgba(247, 242, 231, 0.64), transparent)`,
         }}
       >
-        <div className="max-w-3xl mx-auto grid grid-cols-[auto_1fr_auto] items-center gap-3">
+        <div className="max-w-3xl mx-auto grid grid-cols-[auto_1fr_auto] items-center gap-2.5">
           <button
             type="button"
             onClick={onClose}
-            className="inline-flex h-11 w-11 items-center justify-center rounded-full shadow-[0_10px_26px_rgba(89,72,32,0.12)]"
+            className="inline-flex h-10 w-10 items-center justify-center rounded-full shadow-[0_10px_26px_rgba(89,72,32,0.12)]"
             style={{
               border: `1px solid ${BAYAAN_PAGE_THEME.chromeBorder}`,
               background: "rgba(255, 252, 245, 0.92)",
@@ -923,26 +923,26 @@ function MushafReviewView({
             }}
             aria-label="Back to review"
           >
-            <ChevronLeft size={18} />
+            <ChevronLeft size={17} />
           </button>
 
           <div className="flex justify-center">
             <div
-              className="min-w-[164px] max-w-[224px] rounded-[20px] px-4 py-2.5 text-center shadow-[0_12px_28px_rgba(89,72,32,0.12)]"
+              className="min-w-[148px] max-w-[208px] rounded-[18px] px-3.5 py-2 text-center shadow-[0_12px_28px_rgba(89,72,32,0.12)]"
               style={{
                 border: `1px solid ${BAYAAN_PAGE_THEME.chromeBorder}`,
                 background: "rgba(255, 252, 245, 0.94)",
               }}
             >
               <p
-                className="truncate text-xl font-bold leading-none"
+                className="truncate text-lg font-bold leading-none"
                 style={{ color: BAYAAN_PAGE_THEME.screenText }}
               >
                 {surahName}
               </p>
               {activePageNumber > 0 && (
                 <p
-                  className="mt-0.5 text-xs"
+                  className="mt-0.5 text-[11px]"
                   style={{ color: BAYAAN_PAGE_THEME.chromeMuted }}
                 >
                   Page {activePageNumber}
@@ -963,7 +963,7 @@ function MushafReviewView({
           <button
             type="button"
             onClick={() => setShowSettingsPanel(true)}
-            className="inline-flex h-11 w-11 items-center justify-center rounded-full shadow-[0_10px_26px_rgba(89,72,32,0.12)]"
+            className="inline-flex h-10 w-10 items-center justify-center rounded-full shadow-[0_10px_26px_rgba(89,72,32,0.12)]"
             style={{
               border: `1px solid ${BAYAAN_PAGE_THEME.chromeBorder}`,
               background: "rgba(255, 252, 245, 0.92)",
@@ -971,7 +971,7 @@ function MushafReviewView({
             }}
             aria-label="Open mushaf settings"
           >
-            <Settings2 size={16} />
+            <Settings2 size={15} />
           </button>
         </div>
       </div>
