@@ -583,6 +583,12 @@ function MushafReviewView({
     queueTotal && queueTotal > 1 && queuePosition
       ? `${queuePosition} of ${queueTotal}`
       : null;
+  const shouldPromptRatingOnNext =
+    !!canSkipSurah &&
+    !!queueTotal &&
+    queueTotal > 1 &&
+    verses.length > 0 &&
+    activeVerseIndex >= verses.length - 1;
 
   const tajweedWordsByVerse = useMemo(
     () =>
@@ -1412,9 +1418,15 @@ function MushafReviewView({
                   variant="outline"
                   className="rounded-full px-3 border-white/10 bg-white/5 text-white hover:bg-white/10"
                   disabled={
-                    activeVerseIndex >= verses.length - 1 || verses.length === 0
+                    (!shouldPromptRatingOnNext &&
+                      activeVerseIndex >= verses.length - 1) ||
+                    verses.length === 0
                   }
-                  onClick={() => handleJumpToIndex(activeVerseIndex + 1)}
+                  onClick={() =>
+                    shouldPromptRatingOnNext
+                      ? setShowRatingSheet(true)
+                      : handleJumpToIndex(activeVerseIndex + 1)
+                  }
                 >
                   <SkipForward size={14} />
                 </Button>
