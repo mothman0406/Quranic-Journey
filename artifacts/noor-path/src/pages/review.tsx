@@ -20,6 +20,7 @@ import {
 } from "@/components/verse-player";
 import {
   ChevronLeft,
+  Check,
   CheckCircle,
   RefreshCw,
   AlertCircle,
@@ -95,6 +96,26 @@ type MushafChapter = {
   translated_name: { name: string };
   bismillah_pre: boolean;
 };
+
+type ReviewMushafItem = {
+  surahId: number;
+  surahNumber: number;
+  surahName: string;
+  reviewItemId: number;
+};
+
+type ReviewSessionItem = {
+  id: number;
+  surahId: number;
+  surahNumber: number;
+  surahName?: string | null;
+  dueDate?: string;
+  isOverdue?: boolean;
+};
+
+function sortReviewItemsForMushaf(items: ReviewSessionItem[]) {
+  return [...items].sort((a, b) => a.surahNumber - b.surahNumber);
+}
 
 const BAYAAN_MUSHAF_TEXT =
   '"BayaanDigitalKhatt", "KFGQPC Hafs", "Amiri Quran", serif';
@@ -345,9 +366,7 @@ function splitTajweedIntoWords(html: string): string[] {
 
       if (tagName && !isSelfClosingTag) {
         if (isClosingTag) {
-          const tagIndex = openTags
-            .map((tag) => tag.name)
-            .lastIndexOf(tagName);
+          const tagIndex = openTags.map((tag) => tag.name).lastIndexOf(tagName);
           if (tagIndex >= 0) {
             openTags.splice(tagIndex, 1);
           }
@@ -465,23 +484,33 @@ function MushafReviewView({
   surahId,
   surahNumber,
   surahName,
+  queuePosition,
+  queueTotal,
+  canSkipSurah,
+  nextSurahName,
   sessionReciter,
   onSessionReciterChange,
   playbackRate,
   onPlaybackRateChange,
   onClose,
   onRated,
+  onSkipSurah,
 }: {
   childId: string;
   surahId: number;
   surahNumber: number;
   surahName: string;
+  queuePosition?: number;
+  queueTotal?: number;
+  canSkipSurah?: boolean;
+  nextSurahName?: string | null;
   sessionReciter: Reciter;
   onSessionReciterChange: (reciter: Reciter) => void;
   playbackRate: number;
   onPlaybackRateChange: (rate: number) => void;
   onClose: () => void;
   onRated: (quality: number) => void;
+  onSkipSurah?: () => void;
 }) {
   const [rating, setRating] = useState<number | null>(null);
   const [blurDuringRecitation, setBlurDuringRecitation] = useState(false);
@@ -500,10 +529,7 @@ function MushafReviewView({
   const pageContentRefs = useRef<Record<number, HTMLDivElement | null>>({});
   const playerRef = useRef<HTMLDivElement | null>(null);
   const [visibleViewportHeight, setVisibleViewportHeight] = useState<number>(
-    () =>
-      typeof window !== "undefined"
-        ? Math.round(window.innerHeight)
-        : 0,
+    () => (typeof window !== "undefined" ? Math.round(window.innerHeight) : 0),
   );
   const [playerHeight, setPlayerHeight] = useState(0);
 
@@ -553,6 +579,10 @@ function MushafReviewView({
   const activeVerseKey = activeVerse?.verse_key ?? `${surahNumber}:1`;
   const activePageNumber = activeVerse?.page_number ?? pageNumbers[0] ?? 0;
   const fontFamily = BAYAAN_MUSHAF_TEXT;
+  const queueLabel =
+    queueTotal && queueTotal > 1 && queuePosition
+      ? `${queuePosition} of ${queueTotal}`
+      : null;
 
   const tajweedWordsByVerse = useMemo(
     () =>
@@ -596,8 +626,8 @@ function MushafReviewView({
     [pageBundlesData],
   );
   const isSinglePageLayout = pageBundles.length <= 1;
-  const fallbackPlayerBottomOffset = 80; // matches the fixed player `bottom-20`
-  const fallbackBottomNavHeight = 72; // nav + browser chrome before the player is measured
+  const fallbackPlayerBottomOffset = 12;
+  const fallbackBottomNavHeight = 0;
   const fallbackBottomChrome = 24;
   const reservedBottomSpace =
     playerHeight > 0
@@ -853,6 +883,7 @@ function MushafReviewView({
     showTajweed,
     blurDuringRecitation,
     isSinglePageLayout,
+    playerHeight,
     visibleViewportHeight,
   ]);
 
@@ -909,6 +940,15 @@ function MushafReviewView({
                   style={{ color: BAYAAN_PAGE_THEME.chromeMuted }}
                 >
                   Page {activePageNumber}
+                  {queueLabel ? ` • ${queueLabel}` : ""}
+                </p>
+              )}
+              {activePageNumber <= 0 && queueLabel && (
+                <p
+                  className="mt-0.5 text-xs"
+                  style={{ color: BAYAAN_PAGE_THEME.chromeMuted }}
+                >
+                  {queueLabel}
                 </p>
               )}
             </div>
@@ -1320,7 +1360,12 @@ function MushafReviewView({
         </div>
       </div>
 
-      <div className="fixed inset-x-0 bottom-20 z-[60] px-4 pointer-events-none">
+      <div
+        className="fixed inset-x-0 z-[60] px-4 pointer-events-none"
+        style={{
+          bottom: "calc(env(safe-area-inset-bottom, 0px) + 0.5rem)",
+        }}
+      >
         <div
           ref={playerRef}
           className="mx-auto w-full max-w-md pointer-events-auto"
@@ -1373,17 +1418,21 @@ function MushafReviewView({
                 >
                   <SkipForward size={14} />
                 </Button>
+              </div>
+              <div className="mt-1 flex flex-col items-center gap-1 text-center">
+                <p className="text-[11px] text-white/74">
+                  When you finish reciting, tap Finish &amp; Rate.
+                </p>
                 <Button
                   type="button"
                   size="sm"
-                  className="rounded-full px-4 bg-white text-[#0d1016] hover:bg-white/90"
+                  className="h-9 w-full max-w-[240px] rounded-full bg-white px-4 text-[12px] font-semibold text-[#0d1016] shadow-[0_10px_24px_rgba(0,0,0,0.18)] hover:bg-white/90"
                   onClick={() => setShowRatingSheet(true)}
                 >
-                  Rate
+                  <CheckCircle size={14} className="mr-1.5" />
+                  Finish &amp; Rate
                 </Button>
-              </div>
-              <div className="mt-2 flex items-center justify-center">
-                <span className="text-[11px] font-medium text-white/65">
+                <span className="block text-[10px] font-medium text-white/45">
                   {activePageNumber > 0 ? `${activePageNumber}` : "Ready"}
                 </span>
               </div>
@@ -1613,6 +1662,30 @@ function MushafReviewView({
                   ))}
                 </div>
 
+                {canSkipSurah && onSkipSurah && (
+                  <>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="mb-2 w-full rounded-full"
+                      onClick={() => {
+                        setShowRatingSheet(false);
+                        setRating(null);
+                        onSkipSurah();
+                      }}
+                    >
+                      <SkipForward size={14} className="mr-1" />
+                      Skip This Surah
+                    </Button>
+                    {nextSurahName && (
+                      <p className="mb-3 text-center text-[11px] text-muted-foreground">
+                        This keeps {surahName} pending and moves on to{" "}
+                        {nextSurahName}.
+                      </p>
+                    )}
+                  </>
+                )}
+
                 <Button
                   className="w-full rounded-full"
                   disabled={rating === null}
@@ -1629,8 +1702,6 @@ function MushafReviewView({
           </div>
         </div>
       )}
-
-      <ChildNav childId={childId} />
     </div>
   );
 }
@@ -1659,12 +1730,12 @@ export default function ReviewPage() {
   };
   const storedSession = loadSession();
 
-  const [mushafItem, setMushafItem] = useState<{
-    surahId: number;
-    surahNumber: number;
-    surahName: string;
-    reviewItemId: number;
-  } | null>(null);
+  const [mushafItem, setMushafItem] = useState<ReviewMushafItem | null>(null);
+  const [mushafBatch, setMushafBatch] = useState<ReviewMushafItem[]>([]);
+  const [mushafBatchIndex, setMushafBatchIndex] = useState<number | null>(null);
+  const [selectedMushafSurahIds, setSelectedMushafSurahIds] = useState<
+    number[]
+  >([]);
   const [flashcardIndex, setFlashcardIndex] = useState<number | null>(null);
   const [flashcardRating, setFlashcardRating] = useState<number | null>(null);
   const [flashcardShowVerses, setFlashcardShowVerses] = useState(false);
@@ -1787,6 +1858,183 @@ export default function ReviewPage() {
     queryFn: () => getSurah(flashcardItem!.surahId),
     enabled: !!flashcardItem,
   });
+  const pendingItems: ReviewSessionItem[] = useMemo(
+    () =>
+      sessionSurahs.filter(
+        (item: ReviewSessionItem) => !completedSurahIds.has(item.surahId),
+      ),
+    [sessionSurahs, completedSurahIds],
+  );
+  const hasMushafBatchSelection = selectedMushafSurahIds.length > 0;
+  const selectedMushafPendingIndices = useMemo(
+    () =>
+      pendingItems.reduce<number[]>((acc, item, index) => {
+        if (selectedMushafSurahIds.includes(item.surahId)) {
+          acc.push(index);
+        }
+        return acc;
+      }, []),
+    [pendingItems, selectedMushafSurahIds],
+  );
+  const selectedMushafBatchStartIndex = selectedMushafPendingIndices[0] ?? null;
+  const selectedMushafBatchEndIndex =
+    selectedMushafPendingIndices[selectedMushafPendingIndices.length - 1] ??
+    null;
+  const selectedMushafBatchItems = useMemo(
+    () =>
+      sortReviewItemsForMushaf(
+        pendingItems.filter((item: ReviewSessionItem) =>
+          selectedMushafSurahIds.includes(item.surahId),
+        ),
+      ),
+    [pendingItems, selectedMushafSurahIds],
+  );
+  const selectedMushafBatchStartItem = selectedMushafBatchItems[0] ?? null;
+  const mushafBatchNeighborIndices = useMemo(() => {
+    const indices = new Set<number>();
+    if (
+      selectedMushafBatchStartIndex === null ||
+      selectedMushafBatchEndIndex === null
+    ) {
+      return indices;
+    }
+    if (selectedMushafBatchStartIndex > 0) {
+      indices.add(selectedMushafBatchStartIndex - 1);
+    }
+    if (selectedMushafBatchEndIndex < pendingItems.length - 1) {
+      indices.add(selectedMushafBatchEndIndex + 1);
+    }
+    return indices;
+  }, [
+    pendingItems.length,
+    selectedMushafBatchEndIndex,
+    selectedMushafBatchStartIndex,
+  ]);
+  const currentMushafItem =
+    mushafBatchIndex !== null
+      ? (mushafBatch[mushafBatchIndex] ?? null)
+      : mushafItem;
+  const currentMushafNextItem =
+    mushafBatchIndex !== null
+      ? (mushafBatch[mushafBatchIndex + 1] ?? null)
+      : null;
+  const currentMushafQueueTotal =
+    mushafBatchIndex !== null ? mushafBatch.length : undefined;
+  const currentMushafQueuePosition =
+    mushafBatchIndex !== null ? mushafBatchIndex + 1 : undefined;
+
+  const buildMushafItem = (item: ReviewSessionItem): ReviewMushafItem => ({
+    surahId: item.surahId,
+    surahNumber: item.surahNumber,
+    surahName: item.surahName ?? "",
+    reviewItemId: item.id,
+  });
+
+  const closeMushafView = () => {
+    setMushafItem(null);
+    setMushafBatch([]);
+    setMushafBatchIndex(null);
+  };
+
+  const startSingleMushaf = (item: ReviewSessionItem) => {
+    setSelectedMushafSurahIds([]);
+    setMushafBatch([]);
+    setMushafBatchIndex(null);
+    setMushafItem(buildMushafItem(item));
+  };
+
+  const toggleMushafBatchSelection = (itemIndex: number) => {
+    const item = pendingItems[itemIndex];
+    if (!item) return;
+
+    setSelectedMushafSurahIds((prev) => {
+      const orderedSelectedIndices = pendingItems.reduce<number[]>(
+        (acc, pendingItem, pendingIndex) => {
+          if (prev.includes(pendingItem.surahId)) {
+            acc.push(pendingIndex);
+          }
+          return acc;
+        },
+        [],
+      );
+      const isSelected = prev.includes(item.surahId);
+
+      if (orderedSelectedIndices.length === 0) {
+        return [item.surahId];
+      }
+
+      const firstIndex = orderedSelectedIndices[0];
+      const lastIndex =
+        orderedSelectedIndices[orderedSelectedIndices.length - 1];
+
+      if (isSelected) {
+        if (orderedSelectedIndices.length === 1) {
+          return [];
+        }
+        if (itemIndex === firstIndex) {
+          return pendingItems
+            .slice(firstIndex + 1, lastIndex + 1)
+            .map((pendingItem) => pendingItem.surahId);
+        }
+        if (itemIndex === lastIndex) {
+          return pendingItems
+            .slice(firstIndex, lastIndex)
+            .map((pendingItem) => pendingItem.surahId);
+        }
+        return prev;
+      }
+
+      if (itemIndex === firstIndex - 1 || itemIndex === lastIndex + 1) {
+        return pendingItems
+          .slice(
+            Math.min(itemIndex, firstIndex),
+            Math.max(itemIndex, lastIndex) + 1,
+          )
+          .map((pendingItem) => pendingItem.surahId);
+      }
+
+      return prev;
+    });
+  };
+
+  const startMushafBatch = (items: ReviewSessionItem[]) => {
+    const queue = sortReviewItemsForMushaf(items).map(buildMushafItem);
+    if (queue.length === 0) return;
+    setMushafItem(null);
+    setMushafBatch(queue);
+    setMushafBatchIndex(0);
+    setSelectedMushafSurahIds([]);
+  };
+
+  const advanceMushafBatch = () => {
+    if (mushafBatchIndex === null) {
+      closeMushafView();
+      return;
+    }
+    if (mushafBatchIndex >= mushafBatch.length - 1) {
+      closeMushafView();
+      return;
+    }
+    setMushafBatchIndex((index) => (index ?? 0) + 1);
+  };
+
+  useEffect(() => {
+    const pendingIds = new Set(
+      pendingItems.map((item: ReviewSessionItem) => item.surahId),
+    );
+    setSelectedMushafSurahIds((prev) => {
+      const next =
+        pendingIds.size < 2
+          ? []
+          : pendingItems
+              .map((item: ReviewSessionItem) => item.surahId)
+              .filter((id) => prev.includes(id) && pendingIds.has(id));
+      return next.length === prev.length &&
+        next.every((id, index) => id === prev[index])
+        ? prev
+        : next;
+    });
+  }, [pendingItems]);
 
   const reviewMutation = useMutation({
     mutationFn: ({ surahId, quality }: { surahId: number; quality: number }) =>
@@ -1832,8 +2080,12 @@ export default function ReviewPage() {
         } else {
           setFlashcardIndex((i) => (i ?? 0) + 1);
         }
-      } else if (mushafItem) {
-        setMushafItem(null);
+      } else if (currentMushafItem) {
+        if (mushafBatchIndex !== null) {
+          advanceMushafBatch();
+        } else {
+          setMushafItem(null);
+        }
         if (newCount >= sessionTotal) {
           setSessionDone(true);
           saveSession({ sessionDone: true });
@@ -1844,21 +2096,26 @@ export default function ReviewPage() {
   });
 
   // ── Mushaf self-test view ──
-  if (mushafItem) {
+  if (currentMushafItem) {
     return (
       <MushafReviewView
         childId={childId}
-        surahId={mushafItem.surahId}
-        surahNumber={mushafItem.surahNumber}
-        surahName={mushafItem.surahName}
+        surahId={currentMushafItem.surahId}
+        surahNumber={currentMushafItem.surahNumber}
+        surahName={currentMushafItem.surahName}
+        queuePosition={currentMushafQueuePosition}
+        queueTotal={currentMushafQueueTotal}
+        canSkipSurah={!!currentMushafNextItem}
+        nextSurahName={currentMushafNextItem?.surahName ?? null}
         sessionReciter={sessionReciter}
         onSessionReciterChange={setSessionReciter}
         playbackRate={sessionPlaybackRate}
         onPlaybackRateChange={setSessionPlaybackRate}
-        onClose={() => setMushafItem(null)}
+        onClose={closeMushafView}
         onRated={(quality) =>
-          reviewMutation.mutate({ surahId: mushafItem.surahId, quality })
+          reviewMutation.mutate({ surahId: currentMushafItem.surahId, quality })
         }
+        onSkipSurah={currentMushafNextItem ? advanceMushafBatch : undefined}
       />
     );
   }
@@ -2090,11 +2347,6 @@ export default function ReviewPage() {
         <div className="max-w-lg mx-auto px-4 -mt-6 space-y-3">
           {/* Due today cards */}
           {(() => {
-            // Use frozen session snapshot — immune to refetch changes
-            const pendingItems = sessionSurahs.filter(
-              (item) => !completedSurahIds.has(item.surahId),
-            );
-
             return (
               <>
                 {sessionDone && (
@@ -2110,24 +2362,143 @@ export default function ReviewPage() {
                     </CardContent>
                   </Card>
                 )}
+                {!sessionDone && pendingItems.length > 1 && (
+                  <Card className="border-border/80 bg-card shadow-sm">
+                    <CardContent className="space-y-3 p-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold text-foreground">
+                            Review A Few Together
+                          </p>
+                          <p className="mt-0.5 text-[11px] text-muted-foreground">
+                            Use the corner circles to build one connected mushaf
+                            run.
+                          </p>
+                        </div>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-8 shrink-0 rounded-full px-3 text-xs"
+                          onClick={() =>
+                            setSelectedMushafSurahIds(
+                              selectedMushafSurahIds.length ===
+                                pendingItems.length
+                                ? []
+                                : pendingItems.map(
+                                    (item: ReviewSessionItem) => item.surahId,
+                                  ),
+                            )
+                          }
+                        >
+                          {selectedMushafSurahIds.length === pendingItems.length
+                            ? "Clear All"
+                            : "Select All"}
+                        </Button>
+                      </div>
+
+                      {hasMushafBatchSelection ? (
+                        <div className="rounded-2xl border border-primary/25 bg-primary/5 px-3 py-3">
+                          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                            <div className="min-w-0 flex-1">
+                              <p className="text-sm font-semibold text-foreground">
+                                {selectedMushafSurahIds.length} selected
+                              </p>
+                              <p className="mt-0.5 text-[11px] text-muted-foreground">
+                                {selectedMushafBatchStartItem
+                                  ? `Starts with ${selectedMushafBatchStartItem.surahName} and moves forward.`
+                                  : "Choose at least one surah to start."}
+                              </p>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <Button
+                                size="sm"
+                                className="rounded-full"
+                                onClick={() =>
+                                  startMushafBatch(selectedMushafBatchItems)
+                                }
+                              >
+                                Start Mushaf
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="rounded-full"
+                                onClick={() => setSelectedMushafSurahIds([])}
+                              >
+                                Clear
+                              </Button>
+                            </div>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="rounded-2xl border border-dashed border-border bg-muted/20 px-3 py-2.5 text-[11px] text-muted-foreground">
+                          Choose the first surah, then expand the selection with
+                          the neighboring cards.
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                )}
                 {!sessionDone &&
-                  pendingItems.map((item) => {
-                    const idx = sessionSurahs.indexOf(item);
+                  pendingItems.map((item: ReviewSessionItem, pendingIndex) => {
+                    const sessionIndex = sessionSurahs.indexOf(item);
+                    const isSelectedForBatch = selectedMushafSurahIds.includes(
+                      item.surahId,
+                    );
+                    const isNeighborForBatch =
+                      hasMushafBatchSelection &&
+                      mushafBatchNeighborIndices.has(pendingIndex);
+                    const canToggleForBatch =
+                      !hasMushafBatchSelection ||
+                      isSelectedForBatch ||
+                      isNeighborForBatch;
                     return (
                       <Card
                         key={item.id}
                         className={cn(
                           "border-border",
                           item.isOverdue && "border-orange-200",
+                          isSelectedForBatch &&
+                            "border-primary bg-primary/5 shadow-sm",
+                          isNeighborForBatch &&
+                            "border-primary/25 bg-primary/[0.03]",
+                          hasMushafBatchSelection &&
+                            !canToggleForBatch &&
+                            "opacity-80",
                         )}
                       >
-                        <CardContent className="p-4">
-                          <div className="flex items-center justify-between mb-3">
-                            <div>
+                        <CardContent
+                          className={cn(
+                            "p-4",
+                            hasMushafBatchSelection &&
+                              canToggleForBatch &&
+                              "cursor-pointer transition-colors",
+                          )}
+                          onClick={
+                            hasMushafBatchSelection && canToggleForBatch
+                              ? () => toggleMushafBatchSelection(pendingIndex)
+                              : undefined
+                          }
+                        >
+                          <div className="mb-3 flex items-start justify-between gap-3">
+                            <div className="min-w-0 flex-1">
                               <div className="flex items-center gap-2">
                                 <p className="font-bold text-foreground">
                                   {item.surahName}
                                 </p>
+                                {isSelectedForBatch && (
+                                  <Badge className="bg-primary text-primary-foreground border-0 text-[10px]">
+                                    Selected
+                                  </Badge>
+                                )}
+                                {isNeighborForBatch && (
+                                  <Badge
+                                    variant="secondary"
+                                    className="border-0 text-[10px]"
+                                  >
+                                    Next to Select
+                                  </Badge>
+                                )}
                                 {item.isOverdue && (
                                   <Badge className="bg-orange-100 text-orange-700 border-0 text-[10px]">
                                     Overdue
@@ -2138,34 +2509,68 @@ export default function ReviewPage() {
                                 Surah {item.surahNumber} · Due {item.dueDate}
                               </p>
                             </div>
-                            <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center text-sm font-bold text-primary">
-                              {item.surahNumber}
+                            <div className="flex items-start gap-2">
+                              {pendingItems.length > 1 && (
+                                <button
+                                  type="button"
+                                  aria-label={
+                                    isSelectedForBatch
+                                      ? `Remove ${item.surahName} from batch`
+                                      : `Add ${item.surahName} to batch`
+                                  }
+                                  disabled={!canToggleForBatch}
+                                  className={cn(
+                                    "inline-flex h-8 w-8 items-center justify-center rounded-full border transition-colors",
+                                    isSelectedForBatch
+                                      ? "border-primary bg-primary text-primary-foreground"
+                                      : canToggleForBatch
+                                        ? "border-primary/35 bg-background text-primary"
+                                        : "border-border bg-muted/40 text-muted-foreground/60",
+                                  )}
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    toggleMushafBatchSelection(pendingIndex);
+                                  }}
+                                >
+                                  {isSelectedForBatch ? (
+                                    <Check size={14} />
+                                  ) : (
+                                    <span className="h-2.5 w-2.5 rounded-full border border-current/60" />
+                                  )}
+                                </button>
+                              )}
+                              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-sm font-bold text-primary">
+                                {item.surahNumber}
+                              </div>
                             </div>
                           </div>
-                          <div className="flex gap-2">
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="flex-1 h-8 text-xs"
-                              onClick={() =>
-                                setMushafItem({
-                                  surahId: item.surahId,
-                                  surahNumber: item.surahNumber,
-                                  surahName: item.surahName ?? "",
-                                  reviewItemId: item.id,
-                                })
-                              }
-                            >
-                              Mushaf View
-                            </Button>
-                            <Button
-                              size="sm"
-                              className="flex-1 h-8 text-xs"
-                              onClick={() => setFlashcardIndex(idx)}
-                            >
-                              Flashcard
-                            </Button>
-                          </div>
+                          {hasMushafBatchSelection ? (
+                            <div className="rounded-xl border border-dashed border-border/80 bg-background/70 px-3 py-2 text-xs text-muted-foreground">
+                              {isSelectedForBatch
+                                ? "Included in this mushaf run. Tap the edge of the selection to shrink it."
+                                : isNeighborForBatch
+                                  ? "Tap this card to extend the connected batch."
+                                  : "Only the cards touching your current batch can be added next."}
+                            </div>
+                          ) : (
+                            <div className="flex gap-2">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="flex-1 h-8 text-xs"
+                                onClick={() => startSingleMushaf(item)}
+                              >
+                                Mushaf View
+                              </Button>
+                              <Button
+                                size="sm"
+                                className="flex-1 h-8 text-xs"
+                                onClick={() => setFlashcardIndex(sessionIndex)}
+                              >
+                                Flashcard
+                              </Button>
+                            </div>
+                          )}
                         </CardContent>
                       </Card>
                     );
@@ -2199,7 +2604,7 @@ export default function ReviewPage() {
                   Upcoming Reviews
                 </p>
                 <div className="space-y-2">
-                  {(data?.upcoming ?? []).slice(0, 5).map((item) => (
+                  {(data?.upcoming ?? []).slice(0, 5).map((item: any) => (
                     <div
                       key={item.id}
                       className="flex items-center justify-between text-xs"
