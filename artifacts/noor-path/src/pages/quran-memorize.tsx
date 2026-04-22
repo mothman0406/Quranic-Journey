@@ -1452,6 +1452,11 @@ function MemorizationPlayer({
   }, [activeVerseNumber]);
 
   useEffect(() => { setTappedWord(null); }, [activeVerseNumber]);
+  useEffect(() => {
+    if (!isBlindMode) return;
+    setTappedWord(null);
+    setTappedAyah(null);
+  }, [isBlindMode]);
 
   const rangeLength = toAyah - fromAyah + 1;
   const currentIndexInRange = currentAyahNum - fromAyah;
@@ -1894,6 +1899,13 @@ function MemorizationPlayer({
                           if (isActive) {
                             const isHighlighted = highlightedWord === wi;
                             const isPast = playing && highlightedWord > wi;
+                            const toggleBlindAyahReveal = () =>
+                              setRevealedAyahs((p) => {
+                                const n = new Set(p);
+                                if (n.has(lw.verseNum)) n.delete(lw.verseNum);
+                                else n.add(lw.verseNum);
+                                return n;
+                              });
                             if (isReciteMode) {
                               const ri = activeWordToReciteIdx.get(wi);
                               const rvIdx = reciteActiveVerseNumber - fromAyah;
@@ -1907,7 +1919,19 @@ function MemorizationPlayer({
                               return <span key={k} className="inline-block transition-all duration-100 rounded-sm px-[0.1em]" style={rs}>{wc}</span>;
                             }
                             if (isBlindMode && !revealedAyahs.has(lw.verseNum)) {
-                              return <span key={k} className="inline-block transition-all duration-100 rounded-sm px-[0.1em]" style={{ filter: "blur(6px)", userSelect: "none", cursor: "pointer" }} onClick={() => setRevealedAyahs((p) => { const n = new Set(p); n.add(lw.verseNum); return n; })}>{wc}</span>;
+                              return <span key={k} className="inline-block transition-all duration-100 rounded-sm px-[0.1em]" style={{ filter: "blur(6px)", userSelect: "none", cursor: "pointer" }} onClick={toggleBlindAyahReveal}>{wc}</span>;
+                            }
+                            if (isBlindMode) {
+                              return (
+                                <span
+                                  key={k}
+                                  onClick={toggleBlindAyahReveal}
+                                  className={cn("inline-block transition-all duration-100 rounded-sm px-[0.1em] cursor-pointer", isHighlighted ? (isCumulative ? "bg-teal-300 text-teal-900 scale-110 shadow-sm" : "bg-amber-300 text-amber-900 scale-110 shadow-sm") : isPast ? "opacity-35" : "")}
+                                  style={!isHighlighted ? { backgroundColor: "rgba(254,240,138,0.25)" } : {}}
+                                >
+                                  {wc}
+                                </span>
+                              );
                             }
                             return (
                               <span
@@ -2675,7 +2699,7 @@ function MemorizationPlayer({
       </div>
 
       {/* ── Word translation tooltip ── */}
-      {tappedWord && (
+      {!isBlindMode && tappedWord && (
         <div
           className="fixed bottom-28 left-0 right-0 z-50 flex justify-center px-4 pointer-events-none"
           onClick={() => setTappedWord(null)}
@@ -2714,7 +2738,7 @@ function MemorizationPlayer({
       )}
 
       {/* ── Ayah bottom sheet ── */}
-      {tappedAyah && (
+      {!isBlindMode && tappedAyah && (
         <AyahSheet
           key={tappedAyah.verseKey}
           ayah={tappedAyah}
