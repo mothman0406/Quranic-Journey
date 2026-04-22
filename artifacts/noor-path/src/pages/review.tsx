@@ -161,23 +161,30 @@ const TAJWEED_CSS = `
   src: url("/fonts/bayaan/surah-name-qcf.ttf") format("truetype");
   font-display: swap;
 }
+.mushaf-page tajweed {
+  color: inherit;
+}
 .mushaf-page .ham_wasl,
 .mushaf-page .slnt,
 .mushaf-page .lam_shamsiyya,
-.mushaf-page .madda_normal,
-.mushaf-page .madda_permissible,
+.mushaf-page .lam_shamsiyyah { color: #8f7d56; }
+.mushaf-page .madda_normal { color: #c2410c; }
+.mushaf-page .madda_permissible { color: #ea580c; }
 .mushaf-page .madda_necessary,
-.mushaf-page .madda_obligatory,
-.mushaf-page .qalaqah,
+.mushaf-page .madda_obligatory { color: #dc2626; }
+.mushaf-page .qalaqah { color: #16a34a; }
 .mushaf-page .ikhafa_shafawi,
 .mushaf-page .ikhafa,
+.mushaf-page .iqlab { color: #2563eb; }
 .mushaf-page .idgham_ghunna,
+.mushaf-page .idgham_ghunnah,
+.mushaf-page .ghunna,
+.mushaf-page .ghunnah { color: #7c3aed; }
 .mushaf-page .idgham_wo_ghunna,
+.mushaf-page .idgham_wo_ghunnah,
 .mushaf-page .idgham_mutajanisayn,
 .mushaf-page .idgham_mutaqaribain,
-.mushaf-page .idgham_shafawi,
-.mushaf-page .iqlab,
-.mushaf-page .ghunna { color: inherit; }
+.mushaf-page .idgham_shafawi { color: #0f766e; }
 `;
 
 function getJuzForPage(pageNumber: number): number {
@@ -299,7 +306,73 @@ const stripVerseEndHtml = (html: string): string =>
 
 function splitTajweedIntoWords(html: string): string[] {
   if (!html) return [];
-  return html.split(/(?<=>)\s+(?=<)/).filter((s) => s.length > 0);
+
+  const words: string[] = [];
+  const openTags: Array<{ name: string; raw: string }> = [];
+  const closeActiveTags = () =>
+    openTags
+      .slice()
+      .reverse()
+      .map((tag) => `</${tag.name}>`)
+      .join("");
+  const reopenActiveTags = () => openTags.map((tag) => tag.raw).join("");
+  const hasTextContent = (chunk: string) =>
+    chunk.replace(/<[^>]+>/g, "").trim().length > 0;
+  const pushWord = (chunk: string) => {
+    if (!hasTextContent(chunk)) return;
+    words.push(`${chunk}${closeActiveTags()}`);
+  };
+
+  let current = "";
+  let i = 0;
+  while (i < html.length) {
+    const char = html[i];
+
+    if (char === "<") {
+      const tagEnd = html.indexOf(">", i);
+      if (tagEnd === -1) {
+        current += html.slice(i);
+        break;
+      }
+
+      const rawTag = html.slice(i, tagEnd + 1);
+      current += rawTag;
+
+      const tagNameMatch = rawTag.match(/^<\s*\/?\s*([a-zA-Z0-9:-]+)/);
+      const tagName = tagNameMatch?.[1];
+      const isClosingTag = /^<\s*\//.test(rawTag);
+      const isSelfClosingTag = /\/\s*>$/.test(rawTag);
+
+      if (tagName && !isSelfClosingTag) {
+        if (isClosingTag) {
+          const tagIndex = openTags
+            .map((tag) => tag.name)
+            .lastIndexOf(tagName);
+          if (tagIndex >= 0) {
+            openTags.splice(tagIndex, 1);
+          }
+        } else {
+          openTags.push({ name: tagName, raw: rawTag });
+        }
+      }
+
+      i = tagEnd + 1;
+      continue;
+    }
+
+    if (/\s/.test(char)) {
+      pushWord(current);
+      current = reopenActiveTags();
+      while (i < html.length && /\s/.test(html[i])) i += 1;
+      continue;
+    }
+
+    current += char;
+    i += 1;
+  }
+
+  pushWord(current);
+  return words;
 }
 
 function buildLineGroups(
