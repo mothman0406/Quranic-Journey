@@ -10,6 +10,9 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { ChildNav } from "@/components/child-nav";
 import { RECITERS, type Reciter } from "@/components/verse-player";
+import { BayaanMushafPageCard } from "@/components/mushaf/bayaan/BayaanMushafPageCard";
+import { getArabicSurahNamesForPage } from "@/components/mushaf/bayaan/bayaan-utils";
+import { useBayaanMushafFit } from "@/components/mushaf/bayaan/useBayaanMushafFit";
 import {
   ChevronLeft,
   ChevronRight,
@@ -968,7 +971,6 @@ function MemorizationPlayer({
     }
   }, [localDarkMode]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const theme = MUSHAF_THEMES[mushafTheme] as MushafThemeConfig;
   const setMushafTheme = (t: keyof typeof MUSHAF_THEMES) => {
     try { localStorage.setItem("mushaf-theme", t); } catch { /* ignore */ }
     setMushafThemeState(t);
@@ -1606,6 +1608,49 @@ function MemorizationPlayer({
     }
     return [...map.entries()].sort(([a], [b]) => a - b).map(([lineNum, wds]) => ({ lineNum, words: wds }));
   }, [displayList]);
+  const pageSurahNames = useMemo(
+    () =>
+      pageVerses.length > 0
+        ? getArabicSurahNamesForPage(pageVerses, allChapters)
+        : chapter.name_arabic,
+    [pageVerses, allChapters, chapter.name_arabic],
+  );
+  const canUseBayaanFit = activePage !== undefined && pageVerses.length > 0;
+  const mushafFitPageNumbers = useMemo(
+    () => (canUseBayaanFit && activePage !== undefined ? [activePage] : []),
+    [canUseBayaanFit, activePage],
+  );
+  const mushafFitContentKey = useMemo(
+    () =>
+      [
+        chapter.id,
+        activePage ?? 0,
+        lineGroups ? "line-groups" : "fallback",
+        displayList
+          .map(({ surahId, verseNum }) => `${surahId}:${verseNum}`)
+          .join(","),
+      ].join("|"),
+    [chapter.id, activePage, lineGroups, displayList],
+  );
+  const {
+    pageContentRefs,
+    pageMeasureRefs,
+    isMushafContentVisible,
+    getCachedScale,
+  } = useBayaanMushafFit({
+    surahNumber: chapter.id,
+    surahName: chapter.name_arabic,
+    mushafFitContentKey,
+    pageNumbers: mushafFitPageNumbers,
+    isSinglePageLayout: true,
+  });
+  const cachedMushafScale =
+    canUseBayaanFit && activePage !== undefined
+      ? getCachedScale(activePage)
+      : undefined;
+  const isMushafPageContentVisible = canUseBayaanFit
+    ? isMushafContentVisible
+    : true;
 
   // Page navigation derived values for multi-page recite sessions
   const currentWordPage = sessionVerses[reciteVerseIndex]?.page_number;
@@ -1703,45 +1748,37 @@ function MemorizationPlayer({
           </div>
         ) : (
           <div
-            className="mushaf-page"
+            className="w-full max-w-[680px] flex-1 min-h-0"
             style={{
-              width: "min(680px, 96vw)",
-              height: "100%",
               display: "flex",
               flexDirection: "column",
             }}
           >
-            {/* Clean page card */}
-            <div
-              style={{
-                flex: 1,
-                overflow: "hidden",
-                display: "flex",
-                flexDirection: "column",
-                background: localDarkMode ? theme.parchment : "#ffffff",
-                boxShadow: "0 2px 20px rgba(0,0,0,0.08)",
-                borderRadius: 12,
+            <BayaanMushafPageCard
+              pageNumber={activePage ?? 1}
+              pageSurahNames={pageSurahNames}
+              isSinglePageLayout
+              cachedScale={cachedMushafScale}
+              isContentVisible={isMushafPageContentVisible}
+              pageContentRef={(node) => {
+                if (activePage === undefined) return;
+                pageContentRefs.current[activePage] = node;
+              }}
+              pageMeasureRef={(node) => {
+                if (activePage === undefined) return;
+                pageMeasureRefs.current[activePage] = node;
               }}
             >
-
               {/* Verse body */}
               <div
                 className="arabic-text select-none"
                 dir="rtl"
                 lang="ar"
                 style={{
-                  fontFamily: '"Scheherazade New", "Amiri Quran", "me_quran", serif',
-                  fontSize: "clamp(14px, 2.2vh, 28px)",
                   lineHeight: 2.0,
-                  textAlign: "justify",
-                  textAlignLast: "right",
-                  textJustify: "inter-word",
-                  wordSpacing: "0.06em",
-                  letterSpacing: "0.01em",
-                  color: localDarkMode ? (theme.textColor ?? "#e8d5b0") : "#1a1a1a",
+                  color: "inherit",
                   flex: 1,
                   overflow: "hidden",
-                  padding: "20px 24px 8px",
                   minHeight: 0,
                 }}
               >
@@ -2214,27 +2251,7 @@ function MemorizationPlayer({
                   }
                 )}
               </div>
-
-              {/* Page number */}
-              <div
-                style={{
-                  padding: "6px 16px 14px",
-                  textAlign: "center",
-                  borderTop: `1px solid ${localDarkMode ? "#2a2a2a" : "#f5f5f5"}`,
-                }}
-              >
-                <span
-                  style={{
-                    fontSize: 11,
-                    color: "#9ca3af",
-                    letterSpacing: "0.05em",
-                    fontVariantNumeric: "tabular-nums",
-                  }}
-                >
-                  {activePage ?? ""}
-                </span>
-              </div>
-            </div>
+            </BayaanMushafPageCard>
           </div>
         )}
       </div>
