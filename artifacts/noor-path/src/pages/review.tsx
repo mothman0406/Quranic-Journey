@@ -18,6 +18,23 @@ import {
   type Reciter,
   buildAudioUrl,
 } from "@/components/verse-player";
+import { BayaanSurahBanner } from "@/components/mushaf/bayaan/BayaanSurahBanner";
+import { BayaanMushafPageCard } from "@/components/mushaf/bayaan/BayaanMushafPageCard";
+import {
+  BAYAAN_BASMALLAH,
+  BAYAAN_MUSHAF_TEXT,
+  BAYAAN_PAGE_THEME,
+  TAJWEED_CSS,
+} from "@/components/mushaf/bayaan/bayaan-constants";
+import {
+  type MushafChapter,
+  type PageVerseData,
+  buildLineGroups,
+  getArabicSurahNamesForPage,
+  splitTajweedIntoWords,
+  stripVerseEndHtml,
+} from "@/components/mushaf/bayaan/bayaan-utils";
+import { useBayaanMushafFit } from "@/components/mushaf/bayaan/useBayaanMushafFit";
 import {
   ChevronLeft,
   Check,
@@ -54,47 +71,12 @@ const QUALITY_COLORS = [
   "bg-emerald-200 text-emerald-800",
 ];
 
-type ApiWord = {
-  position: number;
-  text_uthmani: string;
-  char_type_name: string;
-  line_number: number;
-  translation?: string | { text: string; language_name: string };
-};
-
-type PageVerseData = {
-  verse_key: string;
-  text_uthmani: string;
-  text_uthmani_tajweed?: string;
-  words?: ApiWord[];
-};
-
 type ChapterVerseData = {
   verse_number: number;
   verse_key: string;
   text_uthmani: string;
   text_uthmani_tajweed?: string;
   page_number?: number;
-};
-
-type LineWord = {
-  verse_key: string;
-  surahId: number;
-  verseNum: number;
-  position: number;
-  wordIdxInVerse: number;
-  text_uthmani: string;
-  char_type_name: string;
-  line_number: number;
-  translation?: string;
-};
-
-type MushafChapter = {
-  id: number;
-  name_arabic: string;
-  name_simple: string;
-  translated_name: { name: string };
-  bismillah_pre: boolean;
 };
 
 type ReviewMushafItem = {
@@ -117,359 +99,8 @@ function sortReviewItemsForMushaf(items: ReviewSessionItem[]) {
   return [...items].sort((a, b) => a.surahNumber - b.surahNumber);
 }
 
-const BAYAAN_MUSHAF_TEXT =
-  '"BayaanDigitalKhatt", "KFGQPC Hafs", "Amiri Quran", serif';
-const BAYAAN_MUSHAF_HEADER =
-  '"BayaanSurahQCF", "BayaanDigitalKhatt", "KFGQPC Hafs", serif';
-const BAYAAN_MUSHAF_DIVIDER = '"BayaanQuranCommon", serif';
-const BAYAAN_SURAH_DIVIDER_CHAR = "\uE000";
-const BAYAAN_BASMALLAH = "بِسْمِ ٱللَّهِ ٱلرَّحْمَٰنِ ٱلرَّحِيمِ";
-const BAYAAN_PAGE_THEME = {
-  screen: "#efe8da",
-  screenTint: "#f7f2e7",
-  screenText: "#1c1912",
-  chromeBorder: "#d8cfbb",
-  chromeMuted: "#7d7157",
-  page: "#fffdf8",
-  pageEdge: "#f5efe0",
-  pageBorder: "#d7ccb2",
-  pageRule: "#cdbb8b",
-  pageLabel: "#8f7d56",
-  pageText: "#1f1a13",
-  pageMuted: "#b0a184",
-  markerBorder: "#bea15c",
-  markerText: "#866622",
-  markerSurface: "#fffaf0",
-  activeHighlight: "rgba(190, 161, 92, 0.18)",
-  activeMarker: "#9c7b31",
-  activeMarkerBg: "rgba(190, 161, 92, 0.24)",
-} as const;
-
 const REVIEW_PLAYER_DOCK_SPACE = 132;
 const REVIEW_SHEET_DOCK_SPACE = 144;
-const reviewMushafScaleCache = new Map<string, number>();
-
-const JUZ_START_PAGES = [
-  1, 22, 42, 62, 82, 102, 121, 142, 162, 182, 201, 222, 242, 262, 282, 302, 322,
-  342, 362, 382, 402, 422, 442, 462, 482, 502, 522, 542, 562, 582,
-] as const;
-
-const BAYAAN_QCF_SURAH_CODEPOINTS = [
-  0xfc45, 0xfc46, 0xfc47, 0xfc4a, 0xfc4b, 0xfc4e, 0xfc4f, 0xfc51, 0xfc52,
-  0xfc53, 0xfc55, 0xfc56, 0xfc58, 0xfc5a, 0xfc5b, 0xfc5c, 0xfc5d, 0xfc5e,
-  0xfc61, 0xfc62, 0xfc64, 0xfb51, 0xfb52, 0xfb54, 0xfb55, 0xfb57, 0xfb58,
-  0xfb5a, 0xfb5b, 0xfb5d, 0xfb5e, 0xfb60, 0xfb61, 0xfb63, 0xfb64, 0xfb66,
-  0xfb67, 0xfb69, 0xfb6a, 0xfb6c, 0xfb6d, 0xfb6f, 0xfb70, 0xfb72, 0xfb73,
-  0xfb75, 0xfb76, 0xfb78, 0xfb79, 0xfb7b, 0xfb7c, 0xfb7e, 0xfb7f, 0xfb81,
-  0xfb82, 0xfb84, 0xfb85, 0xfb87, 0xfb88, 0xfb8a, 0xfb8b, 0xfb8d, 0xfb8e,
-  0xfb90, 0xfb91, 0xfb93, 0xfb94, 0xfb96, 0xfb97, 0xfb99, 0xfb9a, 0xfb9c,
-  0xfb9d, 0xfb9f, 0xfba0, 0xfba2, 0xfba3, 0xfba5, 0xfba6, 0xfba8, 0xfba9,
-  0xfbab, 0xfbac, 0xfbae, 0xfbaf, 0xfbb1, 0xfbb2, 0xfbb4, 0xfbb5, 0xfbb7,
-  0xfbb8, 0xfbba, 0xfbbb, 0xfbbd, 0xfbbe, 0xfbc0, 0xfbc1, 0xfbd3, 0xfbd4,
-  0xfbd6, 0xfbd7, 0xfbd9, 0xfbda, 0xfbdc, 0xfbdd, 0xfbdf, 0xfbe0, 0xfbe2,
-  0xfbe3, 0xfbe5, 0xfbe6, 0xfbe8, 0xfbe9, 0xfbeb,
-] as const;
-
-const TAJWEED_CSS = `
-@font-face {
-  font-family: "BayaanDigitalKhatt";
-  src: url("/fonts/bayaan/digital-khatt.otf") format("opentype");
-  font-display: swap;
-}
-@font-face {
-  font-family: "BayaanQuranCommon";
-  src: url("/fonts/bayaan/quran-common.ttf") format("truetype");
-  font-display: swap;
-}
-@font-face {
-  font-family: "BayaanSurahQCF";
-  src: url("/fonts/bayaan/surah-name-qcf.ttf") format("truetype");
-  font-display: swap;
-}
-.mushaf-page tajweed {
-  color: inherit;
-}
-.mushaf-page .ham_wasl,
-.mushaf-page .slnt,
-.mushaf-page .lam_shamsiyya,
-.mushaf-page .lam_shamsiyyah { color: #8f7d56; }
-.mushaf-page .madda_normal { color: #c2410c; }
-.mushaf-page .madda_permissible { color: #ea580c; }
-.mushaf-page .madda_necessary,
-.mushaf-page .madda_obligatory { color: #dc2626; }
-.mushaf-page .qalaqah { color: #16a34a; }
-.mushaf-page .ikhafa_shafawi,
-.mushaf-page .ikhafa,
-.mushaf-page .iqlab { color: #2563eb; }
-.mushaf-page .idgham_ghunna,
-.mushaf-page .idgham_ghunnah,
-.mushaf-page .ghunna,
-.mushaf-page .ghunnah { color: #7c3aed; }
-.mushaf-page .idgham_wo_ghunna,
-.mushaf-page .idgham_wo_ghunnah,
-.mushaf-page .idgham_mutajanisayn,
-.mushaf-page .idgham_mutaqaribain,
-.mushaf-page .idgham_shafawi { color: #0f766e; }
-`;
-
-function getJuzForPage(pageNumber: number): number {
-  for (let i = JUZ_START_PAGES.length - 1; i >= 0; i -= 1) {
-    if (pageNumber >= JUZ_START_PAGES[i]) return i + 1;
-  }
-  return 1;
-}
-
-function getBayaanSurahGlyph(surahNumber: number): string {
-  const codepoint = BAYAAN_QCF_SURAH_CODEPOINTS[surahNumber - 1];
-  return codepoint ? String.fromCodePoint(codepoint) : "";
-}
-
-function getArabicSurahNamesForPage(
-  verses: PageVerseData[],
-  chapters: MushafChapter[],
-): string {
-  const surahIds = Array.from(
-    new Set(verses.map((verse) => Number(verse.verse_key.split(":")[0]))),
-  ).filter((surahId) => Number.isFinite(surahId));
-
-  return surahIds
-    .map(
-      (surahId) =>
-        chapters.find((chapter) => chapter.id === surahId)?.name_arabic ??
-        `سُورَة ${surahId}`,
-    )
-    .join(" · ");
-}
-
-function BayaanSurahBanner({
-  surahNumber,
-  surahName,
-}: {
-  surahNumber: number;
-  surahName: string;
-}) {
-  const surahGlyph = getBayaanSurahGlyph(surahNumber);
-
-  return (
-    <div
-      style={{
-        display: "flex",
-        justifyContent: "center",
-        margin: "0.22em 0 0.04em",
-      }}
-    >
-      <div
-        style={{
-          position: "relative",
-          width: "min(100%, 13.4em)",
-          minHeight: "1.72em",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-        }}
-      >
-        <span
-          aria-hidden
-          style={{
-            position: "absolute",
-            inset: 0,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            fontFamily: BAYAAN_MUSHAF_DIVIDER,
-            fontSize: "1.78em",
-            lineHeight: 1,
-            color: BAYAAN_PAGE_THEME.pageRule,
-            pointerEvents: "none",
-          }}
-        >
-          {BAYAAN_SURAH_DIVIDER_CHAR}
-        </span>
-        <span
-          dir="rtl"
-          style={{
-            position: "relative",
-            display: "inline-flex",
-            alignItems: "center",
-            justifyContent: "center",
-            fontFamily: surahGlyph
-              ? BAYAAN_MUSHAF_HEADER
-              : '"Scheherazade New", "Amiri Quran", serif',
-            fontSize: surahGlyph ? "1.02em" : "0.86em",
-            lineHeight: 1,
-            color: BAYAAN_PAGE_THEME.pageLabel,
-            whiteSpace: "nowrap",
-            letterSpacing: 0,
-          }}
-        >
-          {surahGlyph || surahName}
-        </span>
-      </div>
-    </div>
-  );
-}
-
-function stripTashkeel(s: string): string {
-  return (
-    s
-      .replace(/\u0670/g, "ا")
-      .replace(
-        /[\u0610-\u061A\u064B-\u065F\u06D6-\u06DC\u06DF-\u06E4\u06E7\u06E8\u06EA-\u06ED]/g,
-        "",
-      )
-      .replace(/[ـ]/g, "")
-      .replace(/[أإآاٱ]/g, "ا")
-      .trim() || s
-  );
-}
-
-const stripVerseEndHtml = (html: string): string =>
-  html
-    .replace(/(<span[^>]*>[\u06DD\u0660-\u0669\s]+<\/span>\s*)+$/, "")
-    .replace(/[\u06DD\u0660-\u0669\s]+$/, "")
-    .trimEnd();
-
-function splitTajweedIntoWords(html: string): string[] {
-  if (!html) return [];
-
-  const words: string[] = [];
-  const openTags: Array<{ name: string; raw: string }> = [];
-  const closeActiveTags = () =>
-    openTags
-      .slice()
-      .reverse()
-      .map((tag) => `</${tag.name}>`)
-      .join("");
-  const reopenActiveTags = () => openTags.map((tag) => tag.raw).join("");
-  const hasTextContent = (chunk: string) =>
-    chunk.replace(/<[^>]+>/g, "").trim().length > 0;
-  const pushWord = (chunk: string) => {
-    if (!hasTextContent(chunk)) return;
-    words.push(`${chunk}${closeActiveTags()}`);
-  };
-
-  let current = "";
-  let i = 0;
-  while (i < html.length) {
-    const char = html[i];
-
-    if (char === "<") {
-      const tagEnd = html.indexOf(">", i);
-      if (tagEnd === -1) {
-        current += html.slice(i);
-        break;
-      }
-
-      const rawTag = html.slice(i, tagEnd + 1);
-      current += rawTag;
-
-      const tagNameMatch = rawTag.match(/^<\s*\/?\s*([a-zA-Z0-9:-]+)/);
-      const tagName = tagNameMatch?.[1];
-      const isClosingTag = /^<\s*\//.test(rawTag);
-      const isSelfClosingTag = /\/\s*>$/.test(rawTag);
-
-      if (tagName && !isSelfClosingTag) {
-        if (isClosingTag) {
-          const tagIndex = openTags.map((tag) => tag.name).lastIndexOf(tagName);
-          if (tagIndex >= 0) {
-            openTags.splice(tagIndex, 1);
-          }
-        } else {
-          openTags.push({ name: tagName, raw: rawTag });
-        }
-      }
-
-      i = tagEnd + 1;
-      continue;
-    }
-
-    if (/\s/.test(char)) {
-      pushWord(current);
-      current = reopenActiveTags();
-      while (i < html.length && /\s/.test(html[i])) i += 1;
-      continue;
-    }
-
-    current += char;
-    i += 1;
-  }
-
-  pushWord(current);
-  return words;
-}
-
-function buildLineGroups(
-  verses: PageVerseData[],
-): Array<{ lineNum: number; words: LineWord[] }> | null {
-  const all: LineWord[] = [];
-  for (const pv of verses) {
-    if (!pv.words?.length) return null;
-    const [surahStr, verseStr] = pv.verse_key.split(":");
-    const surahId = parseInt(surahStr, 10);
-    const verseNum = parseInt(verseStr, 10);
-    const verseTokens = (pv.text_uthmani ?? "").split(/\s+/).filter(Boolean);
-    let lastMatchedJ = -1;
-    for (const w of pv.words) {
-      let wordIdxInVerse: number;
-      if (w.char_type_name === "end") {
-        wordIdxInVerse = -1;
-      } else {
-        const target = stripTashkeel(w.text_uthmani);
-        let found = -1;
-        for (let j = lastMatchedJ + 1; j < verseTokens.length; j++) {
-          if (stripTashkeel(verseTokens[j]) === target) {
-            found = j;
-            break;
-          }
-        }
-        if (found !== -1) {
-          lastMatchedJ = found;
-          wordIdxInVerse = found;
-        } else {
-          wordIdxInVerse = w.position - 1;
-        }
-      }
-      all.push({
-        verse_key: pv.verse_key,
-        surahId,
-        verseNum,
-        position: w.position,
-        wordIdxInVerse,
-        text_uthmani: w.text_uthmani,
-        char_type_name: w.char_type_name,
-        line_number: w.line_number,
-        translation:
-          typeof w.translation === "object" && w.translation !== null
-            ? ((w.translation as { text?: string }).text ?? "")
-            : w.translation,
-      });
-    }
-  }
-
-  if (all.length === 0) return null;
-  const map = new Map<number, LineWord[]>();
-  for (const word of all) {
-    if (!map.has(word.line_number)) map.set(word.line_number, []);
-    map.get(word.line_number)!.push(word);
-  }
-  return [...map.entries()]
-    .sort(([a], [b]) => a - b)
-    .map(([lineNum, words]) => ({ lineNum, words }));
-}
-
-function getReviewScaleCacheKey(
-  mushafFitContentKey: string,
-  pageNumber: number,
-  viewportWidth: number,
-  viewportHeight: number,
-) {
-  return [
-    mushafFitContentKey,
-    pageNumber,
-    viewportWidth,
-    viewportHeight,
-  ].join("|");
-}
 
 async function fetchVersesByPage(
   pageNumber: number,
@@ -544,19 +175,6 @@ function MushafReviewView({
   const playbackRateRef = useRef(playbackRate);
   const sessionReciterRef = useRef(sessionReciter);
   const scrollRootRef = useRef<HTMLDivElement | null>(null);
-  const pageContentRefs = useRef<Record<number, HTMLDivElement | null>>({});
-  const pageMeasureRefs = useRef<Record<number, HTMLDivElement | null>>({});
-  const fittedMushafContentKeyRef = useRef<string | null>(null);
-  const viewportWidthRef = useRef<number>(
-    typeof window !== "undefined" ? Math.round(window.innerWidth) : 0,
-  );
-  const [visibleViewportHeight, setVisibleViewportHeight] = useState<number>(
-    () => (typeof window !== "undefined" ? Math.round(window.innerHeight) : 0),
-  );
-  const [mushafFontsReady, setMushafFontsReady] = useState(() =>
-    typeof document === "undefined" ? false : !("fonts" in document),
-  );
-  const [isMushafFitReady, setIsMushafFitReady] = useState(false);
 
   const { data: chapterVersesData, isLoading: chapterLoading } = useQuery({
     queryKey: ["review-mushaf-surah", surahNumber],
@@ -603,7 +221,6 @@ function MushafReviewView({
   const activeVerseNumber = activeVerse?.verse_number ?? 1;
   const activeVerseKey = activeVerse?.verse_key ?? `${surahNumber}:1`;
   const activePageNumber = activeVerse?.page_number ?? pageNumbers[0] ?? 0;
-  const fontFamily = BAYAAN_MUSHAF_TEXT;
   const queueLabel =
     queueTotal && queueTotal > 1 && queuePosition
       ? `${queuePosition} of ${queueTotal}`
@@ -652,6 +269,10 @@ function MushafReviewView({
       })),
     [pageBundlesData],
   );
+  const fitPageNumbers = useMemo(
+    () => pageBundles.map((bundle) => bundle.pageNumber),
+    [pageBundles],
+  );
   const mushafFitContentKey = useMemo(
     () =>
       [
@@ -664,9 +285,19 @@ function MushafReviewView({
     [surahId, showTajweed, pageBundles],
   );
   const isSinglePageLayout = pageBundles.length <= 1;
-  const canRunStableMushafFit = mushafFontsReady && pageBundles.length > 0;
-  const isMushafContentVisible = canRunStableMushafFit && isMushafFitReady;
-  const scaleCacheViewportWidth = viewportWidthRef.current;
+  const {
+    pageContentRefs,
+    pageMeasureRefs,
+    visibleViewportHeight,
+    isMushafContentVisible,
+    getCachedScale,
+  } = useBayaanMushafFit({
+    surahNumber,
+    surahName,
+    mushafFitContentKey,
+    pageNumbers: fitPageNumbers,
+    isSinglePageLayout,
+  });
   const settingsSheetMaxHeight =
     visibleViewportHeight > 0
       ? `${Math.max(260, visibleViewportHeight - REVIEW_SHEET_DOCK_SPACE - 16)}px`
@@ -811,46 +442,6 @@ function MushafReviewView({
   }, [sessionReciter.id]);
 
   useEffect(() => {
-    if (typeof document === "undefined") return;
-    if (!("fonts" in document)) {
-      setMushafFontsReady(true);
-      return;
-    }
-
-    let cancelled = false;
-    setMushafFontsReady(false);
-
-    Promise.all([
-      document.fonts.load('1em "BayaanDigitalKhatt"', BAYAAN_BASMALLAH),
-      document.fonts.load('1em "BayaanQuranCommon"', BAYAAN_SURAH_DIVIDER_CHAR),
-      document.fonts.load(
-        '1em "BayaanSurahQCF"',
-        getBayaanSurahGlyph(surahNumber) || surahName,
-      ),
-      document.fonts.ready,
-    ])
-      .catch(() => {})
-      .then(() => {
-        if (!cancelled) {
-          setMushafFontsReady(true);
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [surahNumber, surahName]);
-
-  useEffect(() => {
-    fittedMushafContentKeyRef.current = null;
-    setIsMushafFitReady(false);
-    for (const el of Object.values(pageContentRefs.current)) {
-      if (!el) continue;
-      el.style.fontSize = "";
-    }
-  }, [mushafFitContentKey]);
-
-  useEffect(() => {
     if (isSinglePageLayout || !scrollRootRef.current) return;
     const node = scrollRootRef.current.querySelector<HTMLElement>(
       `[data-review-ayah="${activeVerseKey}"]`,
@@ -862,22 +453,6 @@ function MushafReviewView({
       });
     }
   }, [activeVerseKey, isPlaying, isSinglePageLayout]);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-
-    const updateViewportMetrics = () => {
-      viewportWidthRef.current = Math.round(window.innerWidth);
-      setVisibleViewportHeight(Math.round(window.innerHeight));
-    };
-
-    updateViewportMetrics();
-    window.addEventListener("resize", updateViewportMetrics);
-
-    return () => {
-      window.removeEventListener("resize", updateViewportMetrics);
-    };
-  }, []);
 
   useEffect(() => {
     if (typeof document === "undefined") return;
@@ -901,167 +476,6 @@ function MushafReviewView({
       body.style.overscrollBehavior = previousBodyOverscrollBehavior;
     };
   }, []);
-
-  useEffect(() => {
-    if (!canRunStableMushafFit) return;
-    if (fittedMushafContentKeyRef.current === mushafFitContentKey) return;
-
-    let cancelled = false;
-    let rafId = 0;
-    let stableFrameCount = 0;
-    let lastSignature = "";
-
-    const captureLayoutSignature = () => {
-      const parts: string[] = [];
-      for (const bundle of pageBundles) {
-        const el = pageContentRefs.current[bundle.pageNumber];
-        const measureEl = pageMeasureRefs.current[bundle.pageNumber] ?? el;
-        if (!el) return null;
-        const clientWidth = Math.round(el.clientWidth);
-        const clientHeight = Math.round(el.clientHeight);
-        const scrollWidth = Math.round(measureEl?.scrollWidth ?? 0);
-        const scrollHeight = Math.round(measureEl?.scrollHeight ?? 0);
-        if (clientWidth <= 0 || clientHeight <= 0) return null;
-        parts.push(
-          [
-            bundle.pageNumber,
-            clientWidth,
-            clientHeight,
-            scrollWidth,
-            scrollHeight,
-          ].join(":"),
-        );
-      }
-      return parts.join("|");
-    };
-
-    const fitWhenStable = () => {
-      if (cancelled) return;
-
-      const signature = captureLayoutSignature();
-      if (!signature) {
-        rafId = requestAnimationFrame(fitWhenStable);
-        return;
-      }
-
-      if (signature === lastSignature) {
-        stableFrameCount += 1;
-      } else {
-        lastSignature = signature;
-        stableFrameCount = 0;
-      }
-
-      if (stableFrameCount < 2) {
-        rafId = requestAnimationFrame(fitWhenStable);
-        return;
-      }
-
-      requestAnimationFrame(() => {
-        if (cancelled) return;
-        for (const bundle of pageBundles) {
-          const el = pageContentRefs.current[bundle.pageNumber];
-          const measureEl = pageMeasureRefs.current[bundle.pageNumber] ?? el;
-          if (!el) continue;
-          // Measure the intrinsic content wrapper, not the clipped flex box.
-          const layoutStyles = getComputedStyle(el);
-          const paddingX =
-            parseFloat(layoutStyles.paddingLeft) +
-            parseFloat(layoutStyles.paddingRight);
-          const paddingY =
-            parseFloat(layoutStyles.paddingTop) +
-            parseFloat(layoutStyles.paddingBottom);
-          const availableWidth = Math.max(0, el.clientWidth - paddingX);
-          const availableHeight = Math.max(0, el.clientHeight - paddingY);
-          let lo = isSinglePageLayout ? 0.72 : 0.62;
-          let hi = isSinglePageLayout ? 1.72 : 1.16;
-          let best = lo;
-          const scaleCacheKey = getReviewScaleCacheKey(
-            mushafFitContentKey,
-            bundle.pageNumber,
-            viewportWidthRef.current,
-            visibleViewportHeight,
-          );
-          const cachedScale = reviewMushafScaleCache.get(scaleCacheKey) ?? null;
-          const parentFontSize = parseFloat(
-            getComputedStyle(el.parentElement ?? el).fontSize,
-          );
-          const currentFontSize = parseFloat(getComputedStyle(el).fontSize);
-          const currentScale =
-            Number.isFinite(parentFontSize) &&
-            parentFontSize > 0 &&
-            Number.isFinite(currentFontSize) &&
-            currentFontSize > 0
-              ? currentFontSize / parentFontSize
-              : null;
-
-          if (
-            cachedScale !== null &&
-            cachedScale >= lo &&
-            cachedScale <= hi
-          ) {
-            el.style.fontSize = `${cachedScale}em`;
-            const cachedFitsHeight =
-              (measureEl?.scrollHeight ?? 0) <= availableHeight + 1;
-            const cachedFitsWidth =
-              (measureEl?.scrollWidth ?? 0) <= availableWidth + 1;
-            if (cachedFitsHeight && cachedFitsWidth) {
-              best = cachedScale;
-              reviewMushafScaleCache.set(scaleCacheKey, cachedScale);
-              continue;
-            }
-          }
-
-          if (
-            currentScale !== null &&
-            currentScale >= lo &&
-            currentScale <= hi
-          ) {
-            el.style.fontSize = `${currentScale}em`;
-            const currentFitsHeight =
-              (measureEl?.scrollHeight ?? 0) <= availableHeight + 1;
-            const currentFitsWidth =
-              (measureEl?.scrollWidth ?? 0) <= availableWidth + 1;
-
-            // Preserve the larger pre-fit layout when it already fits.
-            if (currentFitsHeight && currentFitsWidth) {
-              continue;
-            }
-          }
-
-          for (let i = 0; i < 28; i++) {
-            const mid = (lo + hi) / 2;
-            el.style.fontSize = mid + "em";
-            const fitsHeight = (measureEl?.scrollHeight ?? 0) <= availableHeight + 1;
-            const fitsWidth = (measureEl?.scrollWidth ?? 0) <= availableWidth + 1;
-            if (fitsHeight && fitsWidth) {
-              best = mid;
-              lo = mid;
-            } else {
-              hi = mid;
-            }
-          }
-          el.style.fontSize = best + "em";
-          reviewMushafScaleCache.set(scaleCacheKey, best);
-        }
-        if (!cancelled) {
-          fittedMushafContentKeyRef.current = mushafFitContentKey;
-          setIsMushafFitReady(true);
-        }
-      });
-    };
-
-    rafId = requestAnimationFrame(fitWhenStable);
-
-    return () => {
-      cancelled = true;
-      cancelAnimationFrame(rafId);
-    };
-  }, [
-    canRunStableMushafFit,
-    mushafFitContentKey,
-    pageBundles,
-    isSinglePageLayout,
-  ]);
 
   const isLoading = chapterLoading || pagesLoading;
 
@@ -1176,14 +590,7 @@ function MushafReviewView({
               }
             >
               {pageBundles.map((bundle) => {
-                const cachedScale = reviewMushafScaleCache.get(
-                  getReviewScaleCacheKey(
-                    mushafFitContentKey,
-                    bundle.pageNumber,
-                    scaleCacheViewportWidth,
-                    visibleViewportHeight,
-                  ),
-                );
+                const cachedScale = getCachedScale(bundle.pageNumber);
                 const pageTargetVerses = bundle.verses.filter((verse) => {
                   const [verseSurah] = verse.verse_key.split(":").map(Number);
                   return verseSurah === surahNumber;
@@ -1202,85 +609,21 @@ function MushafReviewView({
                 }
 
                 return (
-                  <div
+                  <BayaanMushafPageCard
                     key={bundle.pageNumber}
-                    className={cn(
-                      "mx-auto overflow-hidden rounded-[24px] shadow-[0_18px_42px_rgba(120,92,34,0.14)]",
-                      isSinglePageLayout && "h-full",
-                    )}
-                    style={{
-                      width: isSinglePageLayout ? "100%" : "min(680px, 100%)",
-                      height: isSinglePageLayout ? "100%" : "min(70vh, 760px)",
-                      background: `linear-gradient(to bottom, ${BAYAAN_PAGE_THEME.page}, ${BAYAAN_PAGE_THEME.pageEdge})`,
-                      border: `1px solid ${BAYAAN_PAGE_THEME.pageBorder}`,
-                      display: "flex",
-                      flexDirection: "column",
+                    pageNumber={bundle.pageNumber}
+                    pageSurahNames={pageSurahNames}
+                    isSinglePageLayout={isSinglePageLayout}
+                    cachedScale={cachedScale}
+                    isContentVisible={isMushafContentVisible}
+                    pageContentRef={(node) => {
+                      pageContentRefs.current[bundle.pageNumber] = node;
+                    }}
+                    pageMeasureRef={(node) => {
+                      pageMeasureRefs.current[bundle.pageNumber] = node;
                     }}
                   >
-                    <div
-                      className="flex items-center justify-between gap-3 px-5 py-2 text-[11px]"
-                      style={{
-                        borderBottom: `1px solid ${BAYAAN_PAGE_THEME.pageBorder}`,
-                        color: BAYAAN_PAGE_THEME.pageLabel,
-                      }}
-                    >
-                      <span
-                        dir="rtl"
-                        className="truncate"
-                        style={{
-                          fontFamily:
-                            '"Scheherazade New", "Amiri Quran", serif',
-                          fontSize: "1.05em",
-                          letterSpacing: 0,
-                        }}
-                      >
-                        {pageSurahNames}
-                      </span>
-                      <span className="shrink-0 tracking-[0.22em]">
-                        JUZ {getJuzForPage(bundle.pageNumber)}
-                      </span>
-                    </div>
-
-                    <div
-                      className="mushaf-page"
-                      ref={(node) => {
-                        pageContentRefs.current[bundle.pageNumber] = node;
-                      }}
-                      dir="rtl"
-                      lang="ar"
-                      style={{
-                        fontFamily,
-                        fontSize:
-                          cachedScale !== undefined
-                            ? `${cachedScale}em`
-                            : "clamp(14px, 2.2vh, 28px)",
-                        lineHeight: 1.98,
-                        padding: isSinglePageLayout
-                          ? "6px 1px 2px"
-                          : "14px 22px 6px",
-                        color: BAYAAN_PAGE_THEME.pageText,
-                        textAlign: "justify",
-                        textAlignLast: "right",
-                        textJustify: "inter-word",
-                        fontFeatureSettings: '"kern" 1, "liga" 1, "calt" 1',
-                        overflowX: "hidden",
-                        overflowY: "hidden",
-                        flex: 1,
-                        minHeight: 0,
-                        visibility: isMushafContentVisible
-                          ? "visible"
-                          : "hidden",
-                      }}
-                    >
-                      <div
-                        ref={(node) => {
-                          pageMeasureRefs.current[bundle.pageNumber] = node;
-                        }}
-                        style={{
-                          width: "100%",
-                        }}
-                      >
-                        {lineGroups ? (
+                    {lineGroups ? (
                           (() => {
                             const nodes: React.ReactNode[] = [];
                             const seenSurahIds = new Set<number>();
@@ -1496,61 +839,50 @@ function MushafReviewView({
                             return nodes;
                           })()
                         ) : (
-                          <div className="space-y-4 py-4">
-                            {pageTargetVerses.map((verse) => {
-                              const verseNum = parseInt(
-                                verse.verse_key.split(":")[1],
-                                10,
-                              );
-                              const isActiveAyah = verseNum === activeVerseNumber;
-                              const clickIndex = verseIndexByNumber.get(verseNum);
-                              const shouldBlur =
-                                blurDuringRecitation &&
-                                (!isPlaying || !isActiveAyah);
-                              return (
-                                <div
-                                  key={verse.verse_key}
-                                  data-review-ayah={verse.verse_key}
-                                  onClick={() =>
-                                    clickIndex !== undefined &&
-                                    handleJumpToIndex(clickIndex)
-                                  }
-                                  className="rounded-2xl px-4 py-3"
-                                  style={{
-                                    cursor:
-                                      clickIndex !== undefined
-                                        ? "pointer"
-                                        : "default",
-                                    background: isActiveAyah
-                                      ? BAYAAN_PAGE_THEME.activeHighlight
-                                      : "transparent",
-                                  }}
-                                >
-                                  <p
-                                    style={{
-                                      filter: shouldBlur ? "blur(6px)" : "none",
-                                      opacity: shouldBlur ? 0.5 : 1,
-                                    }}
-                                  >
-                                    {verse.text_uthmani}
-                                  </p>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        )}
+                      <div className="space-y-4 py-4">
+                        {pageTargetVerses.map((verse) => {
+                          const verseNum = parseInt(
+                            verse.verse_key.split(":")[1],
+                            10,
+                          );
+                          const isActiveAyah = verseNum === activeVerseNumber;
+                          const clickIndex = verseIndexByNumber.get(verseNum);
+                          const shouldBlur =
+                            blurDuringRecitation &&
+                            (!isPlaying || !isActiveAyah);
+                          return (
+                            <div
+                              key={verse.verse_key}
+                              data-review-ayah={verse.verse_key}
+                              onClick={() =>
+                                clickIndex !== undefined &&
+                                handleJumpToIndex(clickIndex)
+                              }
+                              className="rounded-2xl px-4 py-3"
+                              style={{
+                                cursor:
+                                  clickIndex !== undefined
+                                    ? "pointer"
+                                    : "default",
+                                background: isActiveAyah
+                                  ? BAYAAN_PAGE_THEME.activeHighlight
+                                  : "transparent",
+                              }}
+                            >
+                              <p
+                                style={{
+                                  filter: shouldBlur ? "blur(6px)" : "none",
+                                  opacity: shouldBlur ? 0.5 : 1,
+                                }}
+                              >
+                                {verse.text_uthmani}
+                              </p>
+                            </div>
+                          );
+                        })}
                       </div>
-                    </div>
-                    <div
-                      className="py-1.5 text-center text-[11px] tracking-[0.24em]"
-                      style={{
-                        borderTop: `1px solid ${BAYAAN_PAGE_THEME.pageBorder}`,
-                        color: BAYAAN_PAGE_THEME.pageLabel,
-                      }}
-                    >
-                      {bundle.pageNumber}
-                    </div>
-                  </div>
+                    )}
+                  </BayaanMushafPageCard>
                 );
               })}
             </div>
