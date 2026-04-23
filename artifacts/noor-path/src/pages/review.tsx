@@ -50,7 +50,7 @@ import {
   Settings2,
   X,
 } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, getLocalDateHeaderValue } from "@/lib/utils";
 
 const QURAN_API = "https://api.quran.com/api/v4";
 
@@ -1245,23 +1245,45 @@ export default function ReviewPage() {
   const { childId } = useParams<{ childId: string }>();
 
   const getTodayLocal = () => {
-    const d = new Date();
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    return getLocalDateHeaderValue();
   };
-  const SESSION_KEY = `child-${childId}-review-session`;
+  const addDaysToLocalDate = (dateStr: string, days: number) => {
+    const [year, month, day] = dateStr.split("-").map(Number);
+    const next = new Date(year, month - 1, day);
+    next.setDate(next.getDate() + days);
+    return getLocalDateHeaderValue(next);
+  };
+  const todayLocal = getTodayLocal();
+  const LEGACY_SESSION_KEY = `child-${childId}-review-session`;
+  const [activeLocalDate, setActiveLocalDate] = useState<string>(todayLocal);
+  const SESSION_KEY = `${LEGACY_SESSION_KEY}-${activeLocalDate}`;
 
-  const loadSession = () => {
+  const loadSession = (sessionDate: string) => {
     try {
-      const stored = localStorage.getItem(SESSION_KEY);
+      const datedSession = localStorage.getItem(
+        `${LEGACY_SESSION_KEY}-${sessionDate}`,
+      );
+      if (datedSession) {
+        const parsed = JSON.parse(datedSession);
+        if (parsed.date === sessionDate) return parsed;
+      }
+    } catch {
+      return null;
+    }
+
+    if (sessionDate !== todayLocal) return null;
+
+    try {
+      const stored = localStorage.getItem(LEGACY_SESSION_KEY);
       if (!stored) return null;
       const parsed = JSON.parse(stored);
-      if (parsed.date !== getTodayLocal()) return null;
+      if (parsed.date !== sessionDate) return null;
       return parsed;
     } catch {
       return null;
     }
   };
-  const storedSession = loadSession();
+  const storedSession = loadSession(activeLocalDate);
 
   const [mushafItem, setMushafItem] = useState<ReviewMushafItem | null>(null);
   const [mushafBatch, setMushafBatch] = useState<ReviewMushafItem[]>([]);
@@ -1318,7 +1340,7 @@ export default function ReviewPage() {
         SESSION_KEY,
         JSON.stringify({
           ...current,
-          date: getTodayLocal(),
+          date: activeLocalDate,
           ...updates,
         }),
       );
@@ -1332,7 +1354,10 @@ export default function ReviewPage() {
   }) => {
     fetch(`/api/children/${childId}/daily-progress`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        "x-local-date": activeLocalDate,
+      },
       body: JSON.stringify(body),
     })
       .then(() => qc.invalidateQueries({ queryKey: ["dashboard", childId] }))
@@ -1340,16 +1365,40 @@ export default function ReviewPage() {
   };
 
   const { data, isLoading } = useQuery({
-    queryKey: ["reviews", childId],
-    queryFn: () => listReviews(parseInt(childId)),
+    queryKey: ["reviews", childId, activeLocalDate],
+    queryFn: () =>
+      listReviews(parseInt(childId), {
+        headers: { "x-local-date": activeLocalDate },
+      }),
   });
 
   const { data: dashData } = useQuery({
-    queryKey: ["dashboard", childId],
-    queryFn: () => getChildDashboard(parseInt(childId)),
+    queryKey: ["dashboard", childId, activeLocalDate],
+    queryFn: () =>
+      getChildDashboard(parseInt(childId), {
+        headers: { "x-local-date": activeLocalDate },
+      }),
     staleTime: 30_000,
   });
   const todayProgress = (dashData as any)?.todayProgress;
+
+  useEffect(() => {
+    const nextSession = loadSession(activeLocalDate);
+    setSessionDone(nextSession?.sessionDone ?? false);
+    setCompletedCount(nextSession?.completedItemsData?.length ?? 0);
+    setCompletedSurahIds(
+      new Set(nextSession?.completedItemsData?.map((i: any) => i.surahId) ?? []),
+    );
+    setCompletedItemsData(nextSession?.completedItemsData ?? []);
+    setSelectedMushafSurahIds([]);
+    setMushafItem(null);
+    setMushafBatch([]);
+    setMushafBatchIndex(null);
+    setFlashcardIndex(null);
+    setFlashcardRating(null);
+    setFlashcardShowVerses(false);
+    sessionTotalRef.current = nextSession?.sessionTotal ?? 0;
+  }, [activeLocalDate]);
 
   const dueToday = data?.dueToday ?? [];
   dueTodayRef.current = dueToday;
@@ -1365,12 +1414,12 @@ export default function ReviewPage() {
         surahId: item.surahId,
         surahNumber: item.surahNumber,
         surahName: item.surahName,
-        dueDate: getTodayLocal(),
+        dueDate: activeLocalDate,
         isOverdue: false,
       })),
       ...dueToday.filter((item: ReviewSessionItem) => !completedSurahIds.has(item.surahId)),
     ],
-    [completedItemsData, completedSurahIds, dueToday],
+    [activeLocalDate, completedItemsData, completedSurahIds, dueToday],
   );
 
   useEffect(() => {
@@ -1578,11 +1627,17 @@ export default function ReviewPage() {
 
   const reviewMutation = useMutation({
     mutationFn: ({ surahId, quality }: { surahId: number; quality: number }) =>
-      completeReview(parseInt(childId), {
-        surahId,
-        qualityRating: quality,
-        durationMinutes: 5,
-      }),
+      completeReview(
+        parseInt(childId),
+        {
+          surahId,
+          qualityRating: quality,
+          durationMinutes: 5,
+        },
+        {
+          headers: { "x-local-date": activeLocalDate },
+        },
+      ),
     onSuccess: (_, variables) => {
       const shouldFollowLiveQueue = flashcardIndex === completedCount;
       const completedItem = dueTodayRef.current.find(
@@ -2169,14 +2224,15 @@ export default function ReviewPage() {
                 className="w-full rounded-full"
                 variant="outline"
                 onClick={() => {
-                  localStorage.removeItem(SESSION_KEY);
                   setSessionDone(false);
                   setCompletedCount(0);
                   setCompletedSurahIds(new Set());
                   setCompletedItemsData([]);
+                  setShowReviewCelebration(false);
                   sessionTotalRef.current = 0;
-                  qc.invalidateQueries({ queryKey: ["reviews", childId] });
-                  qc.invalidateQueries({ queryKey: ["dashboard", childId] });
+                  setActiveLocalDate((currentDate) =>
+                    addDaysToLocalDate(currentDate, 1),
+                  );
                 }}
               >
                 Next Day's Review →

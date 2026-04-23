@@ -16,14 +16,27 @@ export default function ChildDashboard() {
     const d = new Date();
     return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
   };
+  const todayLocal = getTodayLocal();
+  const datedSessionKey = `child-${childId}-review-session-${todayLocal}`;
+  const legacySessionKey = `child-${childId}-review-session`;
   const reviewSession = (() => {
     try {
-      const stored = localStorage.getItem(`child-${childId}-review-session`);
+      const stored = localStorage.getItem(datedSessionKey);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (parsed.date === todayLocal) return parsed;
+      }
+    } catch {}
+
+    try {
+      const stored = localStorage.getItem(legacySessionKey);
       if (!stored) return null;
       const parsed = JSON.parse(stored);
-      if (parsed.date !== getTodayLocal()) return null;
+      if (parsed.date !== todayLocal) return null;
       return parsed;
-    } catch { return null; }
+    } catch {
+      return null;
+    }
   })();
   const reviewSessionDone = reviewSession?.sessionDone === true;
   const reviewSessionTotal = reviewSession?.sessionTotal as number | undefined;
