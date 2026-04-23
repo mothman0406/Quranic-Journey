@@ -426,18 +426,6 @@ export default function MemorizationPage() {
     },
   });
 
-  // If in study mode, render study view
-  if (studyingSurahId !== null) {
-    return (
-      <SurahStudyView
-        surahId={studyingSurahId}
-        childId={childId}
-        onBack={() => setStudyingSurahId(null)}
-        initialVerseIndex={studyingInitialAyah}
-      />
-    );
-  }
-
   const progress = progressData?.progress ?? [];
   const surahs = surahsData?.surahs ?? [];
   const nextSurah = dashboard?.nextSurah;
@@ -545,6 +533,18 @@ export default function MemorizationPage() {
       }
     };
   }, []);
+
+  // Keep hooks unconditional before switching to the inline ayah-by-ayah view.
+  if (studyingSurahId !== null) {
+    return (
+      <SurahStudyView
+        surahId={studyingSurahId}
+        childId={childId}
+        onBack={() => setStudyingSurahId(null)}
+        initialVerseIndex={studyingInitialAyah}
+      />
+    );
+  }
 
   function handleToggleAyah(item: (typeof progress)[0], ayah: number) {
     const surahMeta = surahs.find((s) => s.id === item.surahId);
