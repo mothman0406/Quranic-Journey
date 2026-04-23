@@ -943,6 +943,7 @@ function MemorizationPlayer({
   const [showPauseModal, setShowPauseModal] = useState(false);
   const [showLeaveModal, setShowLeaveModal] = useState(false);
   const [pauseToAyah, setPauseToAyah] = useState(initialAyah);
+  const [pauseToAyahInput, setPauseToAyahInput] = useState(() => String(initialAyah));
   // Local dark mode: initialised from global setting but does NOT write back to it
   const [localDarkMode, setLocalDarkMode] = useState(() => {
     try { return localStorage.getItem("noor-dark-mode") === "true"; }
@@ -984,6 +985,17 @@ function MemorizationPlayer({
       return darkNow ? "madinah_dark" : "teal";
     } catch { return "teal"; }
   });
+
+  useEffect(() => {
+    setPauseToAyahInput(String(pauseToAyah));
+  }, [pauseToAyah]);
+
+  const commitPauseToAyahInput = useCallback(() => {
+    const parsed = Number.parseInt(pauseToAyahInput, 10);
+    const nextAyah = Math.max(fromAyah, Math.min(toAyah, Number.isNaN(parsed) ? fromAyah : parsed));
+    setPauseToAyah(nextAyah);
+    return nextAyah;
+  }, [fromAyah, pauseToAyahInput, toAyah]);
 
   const [showSettingsPanel, setShowSettingsPanel] = useState(false);
 
@@ -2443,11 +2455,12 @@ function MemorizationPlayer({
                       type="number"
                       min={fromAyah}
                       max={toAyah}
-                      value={pauseToAyah}
-                      onChange={(e) => {
-                        const v = Math.max(fromAyah, Math.min(toAyah, parseInt(e.target.value) || fromAyah));
-                        setPauseToAyah(v);
+                      value={pauseToAyahInput}
+                      onChange={(e) => setPauseToAyahInput(e.target.value)}
+                      onBlur={() => {
+                        commitPauseToAyahInput();
                       }}
+                      onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); }}
                       className="flex-1 border border-border rounded-xl px-3 py-3 text-2xl text-center font-bold outline-none focus:border-primary"
                     />
                     <button
@@ -2464,8 +2477,9 @@ function MemorizationPlayer({
 
                 <button
                   onClick={() => {
+                    const completedToAyah = commitPauseToAyahInput();
                     setShowPauseModal(false);
-                    onPauseAndSave(pauseToAyah);
+                    onPauseAndSave(completedToAyah);
                   }}
                   className="w-full bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-semibold rounded-2xl py-4 text-base transition-colors"
                 >
