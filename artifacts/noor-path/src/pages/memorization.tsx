@@ -665,7 +665,11 @@ export default function MemorizationPage() {
                 {upNextMem ? (
                   <>
                     <p className="text-xs font-semibold text-foreground leading-tight mt-0.5">{upNextMem.surahName}</p>
-                    <p className="text-[10px] text-muted-foreground">{upNextMem.ayahEnd} verses</p>
+                    <p className="text-[10px] text-muted-foreground">
+                      {upNextMem.ayahStart === upNextMem.ayahEnd
+                        ? `Ay ${upNextMem.ayahStart}`
+                        : `Ay ${upNextMem.ayahStart}–${upNextMem.ayahEnd}`}
+                    </p>
                     {upNextSurahId !== undefined && (
                       <div className="mt-auto pt-1.5 flex flex-col gap-1">
                         <button

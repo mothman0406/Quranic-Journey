@@ -60,13 +60,13 @@ const QUALITY_LABELS = [
   "Correct with difficulty",
   "Correct with hesitation",
   "Good",
-  "Perfect",
+  "Excellent",
 ];
 const QUALITY_COLORS = [
   "bg-red-100 text-red-700",
   "bg-red-100 text-red-700",
   "bg-orange-100 text-orange-700",
-  "bg-amber-100 text-amber-700",
+  "bg-orange-100 text-orange-700",
   "bg-emerald-100 text-emerald-700",
   "bg-emerald-200 text-emerald-800",
 ];
@@ -96,7 +96,7 @@ type ReviewSessionItem = {
 };
 
 function sortReviewItemsForMushaf(items: ReviewSessionItem[]) {
-  return [...items].sort((a, b) => a.surahNumber - b.surahNumber);
+  return [...items];
 }
 
 const REVIEW_PLAYER_DOCK_SPACE = 132;
@@ -1292,9 +1292,6 @@ export default function ReviewPage() {
     Array<{ surahId: number; surahName?: string | null; surahNumber: number }>
   >(storedSession?.completedItemsData ?? []);
   const sessionTotalRef = useRef<number>(storedSession?.sessionTotal ?? 0);
-  const sessionSurahsRef = useRef<typeof dueToday | null>(
-    storedSession?.sessionSurahs ?? null,
-  );
   const dueTodayRef = useRef<
     { surahId: number; surahName?: string | null; surahNumber: number }[]
   >([]);
@@ -1307,7 +1304,6 @@ export default function ReviewPage() {
       surahName?: string | null;
       surahNumber: number;
     }>;
-    sessionSurahs?: typeof dueToday;
     sessionTotal?: number;
   }) => {
     try {
@@ -1358,13 +1354,24 @@ export default function ReviewPage() {
   const dueToday = data?.dueToday ?? [];
   dueTodayRef.current = dueToday;
 
-  // Freeze session list on first load — never changes during the session regardless of refetches
-  if (data && sessionSurahsRef.current === null && dueToday.length > 0) {
-    sessionSurahsRef.current = dueToday;
-    sessionTotalRef.current = dueToday.length;
-    saveSession({ sessionSurahs: dueToday, sessionTotal: dueToday.length });
+  if (data && sessionTotalRef.current === 0) {
+    sessionTotalRef.current = completedItemsData.length + dueToday.length;
+    saveSession({ sessionTotal: sessionTotalRef.current });
   }
-  const sessionSurahs = sessionSurahsRef.current ?? dueToday;
+  const sessionSurahs = useMemo<ReviewSessionItem[]>(
+    () => [
+      ...completedItemsData.map((item, index) => ({
+        id: -(index + 1),
+        surahId: item.surahId,
+        surahNumber: item.surahNumber,
+        surahName: item.surahName,
+        dueDate: getTodayLocal(),
+        isOverdue: false,
+      })),
+      ...dueToday.filter((item: ReviewSessionItem) => !completedSurahIds.has(item.surahId)),
+    ],
+    [completedItemsData, completedSurahIds, dueToday],
+  );
 
   useEffect(() => {
     if (!data) return;
@@ -1577,6 +1584,7 @@ export default function ReviewPage() {
         durationMinutes: 5,
       }),
     onSuccess: (_, variables) => {
+      const shouldFollowLiveQueue = flashcardIndex === completedCount;
       const completedItem = dueTodayRef.current.find(
         (i) => i.surahId === variables.surahId,
       );
@@ -1611,7 +1619,9 @@ export default function ReviewPage() {
           setShowReviewCelebration(true);
           setFlashcardIndex(null);
         } else {
-          setFlashcardIndex((i) => (i ?? 0) + 1);
+          setFlashcardIndex(
+            shouldFollowLiveQueue ? newCount : (flashcardIndex ?? 0) + 1,
+          );
         }
       } else if (currentMushafItem) {
         if (mushafBatchIndex !== null) {
@@ -2164,7 +2174,6 @@ export default function ReviewPage() {
                   setCompletedSurahIds(new Set());
                   setCompletedItemsData([]);
                   sessionTotalRef.current = 0;
-                  sessionSurahsRef.current = null;
                   qc.invalidateQueries({ queryKey: ["reviews", childId] });
                   qc.invalidateQueries({ queryKey: ["dashboard", childId] });
                 }}
