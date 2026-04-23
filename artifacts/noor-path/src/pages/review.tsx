@@ -1606,6 +1606,7 @@ export default function ReviewPage() {
       }
       setCompletedSurahIds((prev) => new Set([...prev, variables.surahId]));
       qc.invalidateQueries({ queryKey: ["reviews", childId] });
+      qc.invalidateQueries({ queryKey: ["memorization", childId] });
       const newCount = completedCount + 1;
       setCompletedCount(newCount);
       const sessionTotal = sessionTotalRef.current;

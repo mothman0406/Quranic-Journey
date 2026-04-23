@@ -40,10 +40,43 @@ function getConsecutiveRange(ayahs: number[]): { start: number; end: number } | 
   return { start: sorted[0], end };
 }
 
-function getStatusColor(status: string, percent: number) {
-  if (status === "memorized") return "bg-emerald-500";
+type ReviewStrengthTone = "red" | "orange" | "green";
+
+function getReviewStrengthTone(
+  status: string,
+  strength: number | undefined,
+  isFullyMemorized: boolean,
+): ReviewStrengthTone | null {
+  if (!isFullyMemorized && status !== "needs_review") return null;
+
+  const normalizedStrength = strength ?? 3;
+
+  if (status === "needs_review" && normalizedStrength <= 1) return "red";
+  if (status === "needs_review") return "orange";
+  if (!isFullyMemorized) return null;
+  if (normalizedStrength <= 1) return "red";
+  if (normalizedStrength <= 3) return "orange";
+  return "green";
+}
+
+function getStatusColor(
+  status: string,
+  percent: number,
+  strength: number | undefined,
+  isFullyMemorized: boolean,
+) {
+  const reviewTone = getReviewStrengthTone(status, strength, isFullyMemorized);
+  if (reviewTone === "green") return "bg-emerald-500";
+  if (reviewTone === "orange") return "bg-amber-400";
+  if (reviewTone === "red") return "bg-red-500";
   if (status === "in_progress" || percent > 0) return "bg-amber-400";
   return "bg-muted";
+}
+
+function getReviewToneLabel(reviewTone: ReviewStrengthTone): string {
+  if (reviewTone === "red") return "Review red";
+  if (reviewTone === "orange") return "Review orange";
+  return "Review green";
 }
 
 // ─── SurahStudyView (inline ayah-by-ayah mode, replaces lesson.tsx) ──────────
@@ -613,7 +646,7 @@ export default function MemorizationPage() {
         {newMem && (
           <div className="grid grid-cols-3 gap-2">
             {/* Card 1: Today's Work — full assignment range, informational, taps into mushaf at first verse */}
-            <Link href={`/child/${childId}/quran-memorize?surah=${newMem.surahNumber}&mode=mushaf&fromAyah=${newMem.ayahStart}&toAyah=${newMem.ayahEnd}`}>
+            <Link href={`/child/${childId}/quran-memorize?surah=${newMem.surahNumber}&mode=mushaf&fromAyah=${newMem.ayahStart}&toAyah=${newMem.ayahEnd}&workType=${newMem.workType ?? "new_memorization"}&sessionSource=today`}>
               <Card className={cn(
                 "border cursor-pointer transition-opacity hover:opacity-80",
                 todayMemStatus === "completed"
@@ -675,7 +708,7 @@ export default function MemorizationPage() {
                       <ListOrdered size={9} /> Ayah by Ayah
                     </button>
                   )}
-                  <Link href={`/child/${childId}/quran-memorize?surah=${newMem.currentWorkSurahNumber ?? newMem.surahNumber}&mode=mushaf&fromAyah=${newMem.currentWorkAyahStart ?? newMem.ayahStart}&toAyah=${newMem.currentWorkAyahEnd ?? newMem.ayahEnd}`}>
+                  <Link href={`/child/${childId}/quran-memorize?surah=${newMem.currentWorkSurahNumber ?? newMem.surahNumber}&mode=mushaf&fromAyah=${newMem.currentWorkAyahStart ?? newMem.ayahStart}&toAyah=${newMem.currentWorkAyahEnd ?? newMem.ayahEnd}&workType=${newMem.workType ?? "new_memorization"}&sessionSource=current`}>
                     <button className="flex items-center justify-center gap-0.5 text-[10px] text-amber-700 font-medium border border-amber-300 bg-amber-50/60 px-2 py-1 rounded-full w-full whitespace-nowrap">
                       <BookOpen size={9} /> {newMem.isReviewOnly ? "Recite" : "Mushaf"}
                     </button>
@@ -709,7 +742,7 @@ export default function MemorizationPage() {
                             <ListOrdered size={9} /> Ayah by Ayah
                           </button>
                         )}
-                        <Link href={`/child/${childId}/quran-memorize?surah=${upNextMem!.surahNumber}&mode=mushaf&fromAyah=${upNextMem!.ayahStart}&toAyah=${upNextMem!.ayahEnd}`}>
+                        <Link href={`/child/${childId}/quran-memorize?surah=${upNextMem!.surahNumber}&mode=mushaf&fromAyah=${upNextMem!.ayahStart}&toAyah=${upNextMem!.ayahEnd}&workType=${upNextMem!.workType ?? "new_memorization"}&sessionSource=next`}>
                           <button className="flex items-center justify-center gap-0.5 text-[10px] text-muted-foreground font-medium border border-border bg-muted/30 px-2 py-1 rounded-full w-full whitespace-nowrap">
                             <BookOpen size={9} /> {upNextMem.isReviewOnly ? "Recite" : "Mushaf"}
                           </button>
@@ -810,7 +843,18 @@ export default function MemorizationPage() {
               const isExpanded = expandedSurahId === item.surahId;
               const memorizedAyahs: number[] = item.memorizedAyahs ?? [];
               const range = getConsecutiveRange(memorizedAyahs);
-              const barColor = getStatusColor(item.status, item.percentComplete);
+              const isFullyMemorized = item.versesMemorized >= item.totalVerses;
+              const reviewTone = getReviewStrengthTone(
+                item.status,
+                item.strength,
+                isFullyMemorized,
+              );
+              const barColor = getStatusColor(
+                item.status,
+                item.percentComplete,
+                item.strength,
+                isFullyMemorized,
+              );
 
               return (
                 <Card
@@ -845,8 +889,8 @@ export default function MemorizationPage() {
                       <div className="flex-1 min-w-0">
                         <p className="font-semibold text-sm text-foreground">{item.surahName}</p>
                         <p className="text-xs text-muted-foreground">
-                          {item.status === "memorized"
-                            ? `All ${item.totalVerses} ayahs ✓`
+                          {reviewTone
+                            ? `All ${item.totalVerses} ayahs · ${getReviewToneLabel(reviewTone)}`
                             : item.status === "in_progress" && range
                             ? `Ayahs ${range.start}–${range.end} done · ${item.totalVerses} total`
                             : `${item.totalVerses} ayahs`}
@@ -891,7 +935,7 @@ export default function MemorizationPage() {
                             </Button>
                           </Link>
                         </div>
-                        {item.status !== "memorized" && (
+                        {!isFullyMemorized && (
                           <Button
                             size="sm"
                             className="h-7 text-xs px-2 w-full mt-2"
