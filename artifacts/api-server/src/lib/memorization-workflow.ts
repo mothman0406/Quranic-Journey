@@ -62,6 +62,8 @@ export type SurahMemorizationWorkflow = {
   schedule: SurahMemorizationWorkItem[];
 };
 
+const WHOLE_SURAH_TEST_LABEL = "Whole Surah Test";
+
 function getWorkLabel(workType: MemorizationWorkType): string {
   switch (workType) {
     case "new_memorization":
@@ -140,6 +142,7 @@ export function buildSurahMemorizationWorkflow(
     workType: MemorizationWorkType,
     chunkStartIndex: number,
     chunkEndIndex: number,
+    workLabel = getWorkLabel(workType),
   ) => {
     const firstChunk = chunks[chunkStartIndex];
     const lastChunk = chunks[chunkEndIndex];
@@ -148,7 +151,7 @@ export function buildSurahMemorizationWorkflow(
     schedule.push({
       scheduleIndex: schedule.length,
       workType,
-      workLabel: getWorkLabel(workType),
+      workLabel,
       isReviewOnly: workType !== "new_memorization",
       surahNumber: surah.number,
       surahName: surah.nameTransliteration,
@@ -180,33 +183,34 @@ export function buildSurahMemorizationWorkflow(
     }
 
     if (chunks.length >= 4) {
-      pushWork("cumulative_full", 0, firstBlockEnd);
+      pushWork("cumulative_full", 0, firstBlockEnd, chunks.length === 4 ? WHOLE_SURAH_TEST_LABEL : undefined);
       if (chunks.length === 4) {
         return { enabled: true, chunks, schedule };
       }
 
       let cursor = 4;
-      while (cursor + 3 < chunks.length) {
+      while (cursor < chunks.length) {
         const blockStart = cursor;
-        const blockEnd = cursor + 3;
+        const blockEnd = Math.min(cursor + 3, chunks.length - 1);
         for (let index = blockStart; index <= blockEnd; index += 1) {
           pushWork("new_memorization", index, index);
         }
+        cursor = blockEnd + 1;
+
+        // If the surah finishes at the same point as the next cumulative cycle,
+        // the final full cumulative day doubles as the whole-surah test.
+        if (cursor >= chunks.length) {
+          const finalBlockLength = blockEnd - blockStart + 1;
+          if (finalBlockLength > 1) {
+            pushWork("cumulative_block", blockStart, blockEnd);
+          }
+          pushWork("cumulative_full", 0, blockEnd, WHOLE_SURAH_TEST_LABEL);
+          return { enabled: true, chunks, schedule };
+        }
+
         pushWork("cumulative_block", blockStart, blockEnd);
         pushWork("cumulative_full", 0, blockEnd);
-        cursor = blockEnd + 1;
       }
-
-      for (let index = cursor; index < chunks.length; index += 1) {
-        pushWork("new_memorization", index, index);
-      }
-
-      const lastItem = schedule[schedule.length - 1];
-      if (lastItem?.workType !== "cumulative_full" || lastItem.ayahEnd !== surah.verseCount) {
-        pushWork("final_surah_test", 0, chunks.length - 1);
-      }
-
-      return { enabled: true, chunks, schedule };
     }
 
     pushWork("final_surah_test", 0, chunks.length - 1);

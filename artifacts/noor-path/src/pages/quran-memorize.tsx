@@ -3067,11 +3067,15 @@ export default function QuranMemorizePage() {
         todayMem.workType !== "new_memorization" &&
         todayMem.ayahStart === fromAyah &&
         todayMem.ayahEnd === toAyah;
+      const isTodayWholeSurahTest =
+        isTodayCumulativeSession &&
+        todayMem?.ayahStart === 1 &&
+        todayMem?.ayahEnd === selectedChapter?.verses_count;
       const isComplete = toAyah >= selectedChapter!.verses_count;
       if (isTodayCumulativeSession) {
         setCelebration({
-          message: todayMem?.workType === "final_surah_test" ? "Whole Surah Complete!" : "Cumulative Recitation Complete!",
-          subMessage: todayMem?.workType === "final_surah_test"
+          message: isTodayWholeSurahTest ? "Whole Surah Complete!" : "Cumulative Recitation Complete!",
+          subMessage: isTodayWholeSurahTest
             ? "This surah is ready to move into the separate review cycle."
             : "Today's memorization recitation work is complete.",
         });
