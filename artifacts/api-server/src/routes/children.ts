@@ -63,6 +63,72 @@ function addDays(date: Date, days: number): Date {
   return result;
 }
 
+type InitialSurahLevel = "very_strong" | "solid" | "learning" | "just_started";
+
+type InitialSurahSetupInput = {
+  surahId: number;
+  level: InitialSurahLevel;
+  knownAyahCount: number | null;
+};
+
+function isInitialSurahLevel(value: unknown): value is InitialSurahLevel {
+  return (
+    value === "very_strong" ||
+    value === "solid" ||
+    value === "learning" ||
+    value === "just_started"
+  );
+}
+
+function getLegacyInitialSurahLevel(memorationStrength: unknown): InitialSurahLevel {
+  const parsedStrength = Number(memorationStrength);
+
+  if (parsedStrength >= 5) return "very_strong";
+  if (parsedStrength >= 3) return "solid";
+  if (parsedStrength >= 2) return "learning";
+  return "just_started";
+}
+
+function normalizeInitialSurahSetups(raw: unknown, legacyStrength: unknown): InitialSurahSetupInput[] {
+  if (!Array.isArray(raw)) return [];
+
+  const fallbackLevel = getLegacyInitialSurahLevel(legacyStrength);
+  const seen = new Set<number>();
+
+  return raw.flatMap((entry) => {
+    const surahId =
+      typeof entry === "number"
+        ? entry
+        : typeof entry === "object" && entry !== null
+        ? Number((entry as { surahId?: unknown }).surahId)
+        : NaN;
+
+    if (!Number.isInteger(surahId) || seen.has(surahId)) return [];
+    seen.add(surahId);
+
+    const level =
+      typeof entry === "object" &&
+      entry !== null &&
+      isInitialSurahLevel((entry as { level?: unknown }).level)
+        ? (entry as { level: InitialSurahLevel }).level
+        : fallbackLevel;
+
+    const knownAyahCountRaw =
+      typeof entry === "object" && entry !== null
+        ? (entry as { knownAyahCount?: unknown }).knownAyahCount
+        : null;
+
+    return [{
+      surahId,
+      level,
+      knownAyahCount:
+        knownAyahCountRaw == null || knownAyahCountRaw === ""
+          ? null
+          : Number(knownAyahCountRaw),
+    }];
+  });
+}
+
 function getAchievements(child: typeof childrenTable.$inferSelect, memProgress: (typeof memorizationProgressTable.$inferSelect)[]) {
   const memorizedSurahs = memProgress.filter(m => m.status === "memorized").length;
   const totalVersesMemorized = memProgress.reduce((sum, m) => sum + m.versesMemorized, 0);
@@ -203,7 +269,18 @@ router.get("/children", async (req, res) => {
 });
 
 router.post("/children", async (req, res) => {
-  const { name, age, gender, avatarEmoji, preMemorizedSurahIds, memorationStrength, practiceMinutesPerDay, memorizePagePerDay, reviewPagesPerDay } = req.body;
+  const {
+    name,
+    age,
+    gender,
+    avatarEmoji,
+    preMemorizedSurahIds,
+    memorationStrength,
+    initialSurahSetups,
+    practiceMinutesPerDay,
+    memorizePagePerDay,
+    reviewPagesPerDay,
+  } = req.body;
   const ageGroup = getAgeGroup(age);
   const practiceMinutes = practiceMinutesPerDay || 20;
 
@@ -219,36 +296,68 @@ router.post("/children", async (req, res) => {
   }).returning();
 
   const now = new Date();
+  const normalizedInitialSurahSetups = normalizeInitialSurahSetups(
+    Array.isArray(initialSurahSetups)
+      ? initialSurahSetups
+      : Array.isArray(preMemorizedSurahIds)
+      ? preMemorizedSurahIds.map((surahId: unknown) => ({ surahId }))
+      : [],
+    memorationStrength,
+  );
 
   // Pre-populate memorization for already-known surahs
-  if (preMemorizedSurahIds && Array.isArray(preMemorizedSurahIds) && preMemorizedSurahIds.length > 0) {
-    const strength = memorationStrength || 3; // 1=weak, 3=solid
-    const status = strength >= 3 ? "memorized" : "needs_review";
-
-    for (const surahId of preMemorizedSurahIds) {
-      const surahData = SURAHS.find(s => s.id === surahId);
+  if (normalizedInitialSurahSetups.length > 0) {
+    for (const setup of normalizedInitialSurahSetups) {
+      const surahData = SURAHS.find(s => s.id === setup.surahId);
       if (!surahData) continue;
+
+      const reviewInDays =
+        setup.level === "very_strong" ? 7 :
+        setup.level === "solid" ? 3 :
+        setup.level === "learning" ? 1 :
+        null;
+      const maxPartialAyah = Math.max(1, surahData.verseCount - 1);
+      const versesMemorized =
+        setup.level === "just_started"
+          ? Math.max(
+              1,
+              Math.min(
+                Number.isFinite(setup.knownAyahCount) ? Math.floor(setup.knownAyahCount as number) : 1,
+                maxPartialAyah,
+              ),
+            )
+          : surahData.verseCount;
+      const strength =
+        setup.level === "very_strong" ? 5 :
+        setup.level === "solid" ? 4 :
+        setup.level === "learning" ? 3 :
+        1;
+      const status =
+        setup.level === "just_started"
+          ? "in_progress"
+          : "memorized";
 
       await db.insert(memorizationProgressTable).values({
         childId: child.id,
-        surahId,
-        versesMemorized: surahData.verseCount,
+        surahId: setup.surahId,
+        versesMemorized,
         status,
         lastPracticed: now,
-        nextReviewDate: formatDate(addDays(now, strength >= 3 ? 7 : 1)),
-        reviewCount: 1,
+        nextReviewDate: reviewInDays == null ? null : formatDate(addDays(now, reviewInDays)),
+        reviewCount: setup.level === "just_started" ? 0 : 1,
         strength
       });
 
-      // Add to review schedule
-      await db.insert(reviewScheduleTable).values({
-        childId: child.id,
-        surahId,
-        dueDate: formatDate(addDays(now, strength >= 3 ? 7 : 1)),
-        interval: strength >= 3 ? 7 : 1,
-        easeFactor: 2.5,
-        repetitionCount: 0
-      });
+      if (reviewInDays != null) {
+        await db.insert(reviewScheduleTable).values({
+          childId: child.id,
+          surahId: setup.surahId,
+          dueDate: formatDate(addDays(now, reviewInDays)),
+          interval: reviewInDays,
+          easeFactor: 2.5,
+          repetitionCount: 0
+        });
+      }
     }
   }
 

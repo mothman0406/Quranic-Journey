@@ -32,13 +32,47 @@ const PRACTICE_OPTIONS = [
   { value: 45, label: "45 min", desc: "Intensive — fast track" },
 ];
 
+type InitialSurahLevel = "very_strong" | "solid" | "learning" | "just_started";
+
+type InitialSurahSetup = {
+  surahId: number;
+  level: InitialSurahLevel;
+  knownAyahCount: number | null;
+};
+
+const SURAH_LEVEL_OPTIONS: Array<{
+  value: InitialSurahLevel;
+  label: string;
+  desc: string;
+}> = [
+  {
+    value: "very_strong",
+    label: "Very Strong",
+    desc: "Review as green",
+  },
+  {
+    value: "solid",
+    label: "Solid",
+    desc: "Review as green",
+  },
+  {
+    value: "learning",
+    label: "Learning",
+    desc: "Review as orange",
+  },
+  {
+    value: "just_started",
+    label: "Just Started",
+    desc: "Memorization only",
+  },
+];
+
 type OnboardingForm = {
   name: string;
   age: string;
   gender: "male" | "female";
   avatarEmoji: string;
-  preMemorizedSurahIds: number[];
-  memorationStrength: number;
+  initialSurahSetups: InitialSurahSetup[];
   practiceMinutesPerDay: number;
   memorizePagePerDay: number;
   reviewPagesPerDay: number;
@@ -49,8 +83,7 @@ const DEFAULT_FORM: OnboardingForm = {
   age: "",
   gender: "male",
   avatarEmoji: "⭐",
-  preMemorizedSurahIds: [],
-  memorationStrength: 3,
+  initialSurahSetups: [],
   practiceMinutesPerDay: 20,
   memorizePagePerDay: 1.0,
   reviewPagesPerDay: 2.0,
@@ -81,7 +114,7 @@ export default function Home() {
     queryFn: () => listSurahs(),
     enabled: showAdd,
   });
-  const allSurahs = (surahsData?.surahs ?? []).slice().sort((a, b) => a.number - b.number);
+  const allSurahs = (surahsData?.surahs ?? []).slice().sort((a, b) => a.recommendedOrder - b.recommendedOrder);
 
   const createMutation = useMutation({
     mutationFn: () => fetch("/api/children", {
@@ -92,8 +125,11 @@ export default function Home() {
         age: parseInt(form.age),
         gender: form.gender,
         avatarEmoji: form.avatarEmoji,
-        preMemorizedSurahIds: form.preMemorizedSurahIds,
-        memorationStrength: form.memorationStrength,
+        initialSurahSetups: form.initialSurahSetups.map((setup) => ({
+          surahId: setup.surahId,
+          level: setup.level,
+          knownAyahCount: setup.level === "just_started" ? setup.knownAyahCount : null,
+        })),
         practiceMinutesPerDay: form.practiceMinutesPerDay,
         memorizePagePerDay: form.memorizePagePerDay,
         reviewPagesPerDay: form.reviewPagesPerDay,
@@ -125,8 +161,7 @@ export default function Home() {
         age: 18,
         gender: "male",
         avatarEmoji: "⭐",
-        preMemorizedSurahIds: [],
-        memorationStrength: 3,
+        initialSurahSetups: [],
         practiceMinutesPerDay: 20,
         memorizePagePerDay: 1.0,
         reviewPagesPerDay: 2.0,
@@ -165,49 +200,123 @@ export default function Home() {
     }
   }, [children]);
 
-  const totalSteps = form.preMemorizedSurahIds.length > 0 ? 5 : 4;
+  const selectedSurahIds = form.initialSurahSetups.map((setup) => setup.surahId);
+  const selectedSurahSetups = allSurahs
+    .filter((surah) => selectedSurahIds.includes(surah.id))
+    .map((surah) => ({
+      surah,
+      setup: form.initialSurahSetups.find((entry) => entry.surahId === surah.id)!,
+    }));
+  const levelCounts = form.initialSurahSetups.reduce(
+    (counts, setup) => {
+      counts[setup.level] += 1;
+      return counts;
+    },
+    {
+      very_strong: 0,
+      solid: 0,
+      learning: 0,
+      just_started: 0,
+    } satisfies Record<InitialSurahLevel, number>,
+  );
 
   const canProceedStep1 = form.name.trim().length > 0 && form.age.length > 0 && parseInt(form.age) >= 3;
+  const canProceedStep3 = form.initialSurahSetups.every((setup) => {
+    if (setup.level !== "just_started") return true;
+    const surah = allSurahs.find((entry) => entry.id === setup.surahId);
+    if (!surah) return false;
+    return Number.isInteger(setup.knownAyahCount) && (setup.knownAyahCount ?? 0) >= 1 && (setup.knownAyahCount ?? 0) < surah.verseCount;
+  });
 
   function toggleSurah(id: number) {
     setForm(f => ({
       ...f,
-      preMemorizedSurahIds: f.preMemorizedSurahIds.includes(id)
-        ? f.preMemorizedSurahIds.filter(s => s !== id)
-        : [...f.preMemorizedSurahIds, id]
+      initialSurahSetups: f.initialSurahSetups.some((setup) => setup.surahId === id)
+        ? f.initialSurahSetups.filter((setup) => setup.surahId !== id)
+        : [...f.initialSurahSetups, { surahId: id, level: "solid", knownAyahCount: null }]
     }));
   }
 
   function applyRange() {
     if (rangeFrom === null || rangeTo === null) return;
-    const min = Math.min(rangeFrom, rangeTo);
-    const max = Math.max(rangeFrom, rangeTo);
-    const inRange = allSurahs.filter(s => s.number >= min && s.number <= max).map(s => s.id);
+    const fromIndex = allSurahs.findIndex((surah) => surah.number === rangeFrom);
+    const toIndex = allSurahs.findIndex((surah) => surah.number === rangeTo);
+    if (fromIndex === -1 || toIndex === -1) return;
+
+    const start = Math.min(fromIndex, toIndex);
+    const end = Math.max(fromIndex, toIndex);
+    const inRange = allSurahs.slice(start, end + 1).map((surah) => surah.id);
     setForm(f => ({
       ...f,
-      preMemorizedSurahIds: [...new Set([...f.preMemorizedSurahIds, ...inRange])]
+      initialSurahSetups: [
+        ...f.initialSurahSetups,
+        ...inRange
+          .filter((surahId) => !f.initialSurahSetups.some((setup) => setup.surahId === surahId))
+          .map((surahId) => ({ surahId, level: "solid" as const, knownAyahCount: null })),
+      ]
+    }));
+  }
+
+  function updateSurahLevel(surahId: number, level: InitialSurahLevel) {
+    setForm((current) => ({
+      ...current,
+      initialSurahSetups: current.initialSurahSetups.map((setup) =>
+        setup.surahId === surahId
+          ? {
+              ...setup,
+              level,
+              knownAyahCount: level === "just_started" ? setup.knownAyahCount ?? 1 : null,
+            }
+          : setup,
+      ),
+    }));
+  }
+
+  function updateKnownAyahCount(surahId: number, nextValue: string) {
+    setForm((current) => ({
+      ...current,
+      initialSurahSetups: current.initialSurahSetups.map((setup) =>
+        setup.surahId === surahId
+          ? {
+              ...setup,
+              knownAyahCount: nextValue === "" ? null : Math.max(1, Math.floor(Number(nextValue))),
+            }
+          : setup,
+      ),
+    }));
+  }
+
+  function applyLevelToAll(level: InitialSurahLevel) {
+    setForm((current) => ({
+      ...current,
+      initialSurahSetups: current.initialSurahSetups.map((setup) => ({
+        ...setup,
+        level,
+        knownAyahCount: level === "just_started" ? setup.knownAyahCount ?? 1 : null,
+      })),
     }));
   }
 
   function handleNext() {
     if (step === 1) { setStep(2); return; }
     if (step === 2) {
-      if (form.preMemorizedSurahIds.length > 0) { setStep(3); } else { setStep(4); }
+      if (form.initialSurahSetups.length > 0) { setStep(3); } else { setStep(4); }
       return;
     }
+    if (step === 3 && !canProceedStep3) return;
     if (step === 3) { setStep(4); return; }
     if (step === 4) { setStep(5); return; }
     if (step === 5) { createMutation.mutate(); return; }
   }
 
   function handleBack() {
-    if (step === 4 && form.preMemorizedSurahIds.length === 0) { setStep(2); return; }
+    if (step === 4 && form.initialSurahSetups.length === 0) { setStep(2); return; }
     if (step === 5) { setStep(4); return; }
     setStep(s => s - 1);
   }
 
-  const displayStep = step <= 3 ? step : form.preMemorizedSurahIds.length > 0 ? step : step - 1;
-  const displayTotal = form.preMemorizedSurahIds.length > 0 ? 5 : 4;
+  const displayStep = step <= 3 ? step : form.initialSurahSetups.length > 0 ? step : step - 1;
+  const displayTotal = form.initialSurahSetups.length > 0 ? 5 : 4;
 
   return (
     <div className="min-h-screen bg-background">
@@ -475,7 +584,7 @@ export default function Home() {
         <DialogContent className="max-w-sm mx-4 max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="text-base">
-              {step === 1 ? "Create a Profile" : step === 2 ? "Prior Memorization" : step === 3 ? "How Strong Is the Memorization?" : step === 4 ? "Daily Practice Goal" : "Daily Learning Goals"}
+              {step === 1 ? "Create a Profile" : step === 2 ? "Prior Memorization" : step === 3 ? "How Well Do They Know Each Surah?" : step === 4 ? "Daily Practice Goal" : "Daily Learning Goals"}
             </DialogTitle>
           </DialogHeader>
 
@@ -529,7 +638,7 @@ export default function Home() {
           {step === 2 && (
             <div className="space-y-3">
               <p className="text-sm text-muted-foreground">
-                Which surahs has {form.name || "this profile"} already memorized? Select individually or use Range Selection to mark many at once.
+                Which surahs does {form.name || "this profile"} already know? Select the surahs they know at least some of, then we’ll sort each one into review or memorization.
               </p>
 
               {/* Range picker */}
@@ -573,7 +682,7 @@ export default function Home() {
                     Apply
                   </Button>
                 </div>
-                <p className="text-xs text-muted-foreground">All surahs between the two selected will be added to the selection.</p>
+                <p className="text-xs text-muted-foreground">All surahs between the two selections in NoorPath's learning order will be added.</p>
               </div>
 
               {/* Individual selection list */}
@@ -584,7 +693,7 @@ export default function Home() {
                   </div>
                 ) : (
                   allSurahs.map(s => {
-                    const selected = form.preMemorizedSurahIds.includes(s.id);
+                    const selected = selectedSurahIds.includes(s.id);
                     return (
                       <button
                         key={s.id}
@@ -612,16 +721,16 @@ export default function Home() {
                 )}
               </div>
 
-              {form.preMemorizedSurahIds.length === 0 ? (
+              {form.initialSurahSetups.length === 0 ? (
                 <p className="text-xs text-primary bg-primary/5 rounded-lg p-2 text-center">
                   ✨ Starting fresh? We'll begin with Al-Fatihah — the foundation of every prayer.
                 </p>
               ) : (
                 <p className="text-xs text-primary bg-primary/5 rounded-lg p-2 text-center flex items-center justify-center gap-2">
-                  <span>{form.preMemorizedSurahIds.length} surah{form.preMemorizedSurahIds.length > 1 ? "s" : ""} selected</span>
+                  <span>{form.initialSurahSetups.length} surah{form.initialSurahSetups.length > 1 ? "s" : ""} selected</span>
                   <button
                     className="underline underline-offset-2 text-primary/70 hover:text-primary"
-                    onClick={() => setForm(f => ({ ...f, preMemorizedSurahIds: [] }))}
+                    onClick={() => setForm(f => ({ ...f, initialSurahSetups: [] }))}
                   >
                     Clear all
                   </button>
@@ -630,36 +739,100 @@ export default function Home() {
             </div>
           )}
 
-          {/* Step 3: Memorization strength (only if surahs selected) */}
-          {step === 3 && form.preMemorizedSurahIds.length > 0 && (
+          {/* Step 3: Per-surah starting level */}
+          {step === 3 && form.initialSurahSetups.length > 0 && (
             <div className="space-y-4">
               <p className="text-sm text-muted-foreground">
-                How solid is {form.name || "their"} memorization of the selected surahs?
+                Choose how well {form.name || "they"} know each surah. Green and orange will go into review. Just started will stay in memorization.
               </p>
               <div className="space-y-2">
-                {[
-                  { value: 5, label: "Very Strong", desc: "Can recite confidently from memory, no hesitation", emoji: "🌟" },
-                  { value: 3, label: "Solid",       desc: "Knows it well but could use occasional review",    emoji: "✅" },
-                  { value: 2, label: "Learning",    desc: "Knows most of it but needs more practice",          emoji: "📖" },
-                  { value: 1, label: "Just Started", desc: "Only partially memorized, still very new",         emoji: "🌱" },
-                ].map(opt => (
-                  <button
-                    key={opt.value}
-                    onClick={() => setForm(f => ({ ...f, memorationStrength: opt.value }))}
+                <p className="text-xs font-semibold text-primary">Quick Apply</p>
+                <div className="flex flex-wrap gap-2">
+                  {SURAH_LEVEL_OPTIONS.map((opt) => (
+                    <Button
+                      key={opt.value}
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="h-8 rounded-full px-3 text-xs"
+                      onClick={() => applyLevelToAll(opt.value)}
+                    >
+                      {opt.label}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+              <div className="space-y-2 rounded-xl border border-border bg-muted/20 p-3">
+                {SURAH_LEVEL_OPTIONS.map((opt) => (
+                  <span
                     className={cn(
-                      "w-full flex items-center gap-3 p-3 rounded-xl border text-left transition-all",
-                      form.memorationStrength === opt.value ? "border-primary bg-primary/5" : "border-border hover:bg-muted/50"
+                      "inline-flex items-center rounded-full px-2.5 py-1 text-xs mr-2 mb-2",
+                      opt.value === "very_strong" || opt.value === "solid"
+                        ? "bg-emerald-100 text-emerald-700"
+                        : opt.value === "learning"
+                        ? "bg-orange-100 text-orange-700"
+                        : "bg-rose-100 text-rose-700"
                     )}
+                    key={opt.value}
                   >
-                    <span className="text-2xl">{opt.emoji}</span>
-                    <div>
-                      <p className="text-sm font-medium">{opt.label}</p>
-                      <p className="text-xs text-muted-foreground">{opt.desc}</p>
+                    {opt.label}: {opt.desc}
+                  </span>
+                ))}
+              </div>
+              <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+                {selectedSurahSetups.map(({ surah, setup }) => (
+                  <div key={surah.id} className="rounded-xl border border-border p-3 space-y-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium">{surah.number}. {surah.nameTransliteration}</p>
+                        <p className="text-xs text-muted-foreground">{surah.verseCount} ayahs</p>
+                      </div>
+                      <p className="arabic-text text-sm text-primary shrink-0">{surah.nameArabic}</p>
                     </div>
-                    {form.memorationStrength === opt.value && (
-                      <Check size={16} className="ml-auto text-primary" />
+
+                    <Select
+                      value={setup.level}
+                      onValueChange={(value) => updateSurahLevel(surah.id, value as InitialSurahLevel)}
+                    >
+                      <SelectTrigger className="h-9 text-xs">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {SURAH_LEVEL_OPTIONS.map((opt) => (
+                          <SelectItem key={opt.value} value={opt.value} className="text-xs">
+                            {opt.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+
+                    {setup.level === "just_started" && (
+                      <div className="space-y-1.5">
+                        <Label className="text-xs">Known through ayah</Label>
+                        <div className="flex items-center gap-2">
+                          <Input
+                            type="number"
+                            min={1}
+                            max={Math.max(1, surah.verseCount - 1)}
+                            value={setup.knownAyahCount ?? ""}
+                            onChange={(e) => updateKnownAyahCount(surah.id, e.target.value)}
+                            className="h-8 text-sm"
+                          />
+                          <span className="text-xs text-muted-foreground whitespace-nowrap">
+                            of {surah.verseCount}
+                          </span>
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          Small safe version: this captures a contiguous start from ayah 1 through this ayah, so memorization can continue from the next ayah.
+                        </p>
+                        {(setup.knownAyahCount ?? 0) >= surah.verseCount && (
+                          <p className="text-xs text-destructive">
+                            Choose less than the full surah for Just Started. If they know the full surah, use Learning or one of the green levels instead.
+                          </p>
+                        )}
+                      </div>
                     )}
-                  </button>
+                  </div>
                 ))}
               </div>
             </div>
@@ -774,8 +947,21 @@ export default function Home() {
                 <p className="text-sm"><span className="text-muted-foreground">Name:</span> <span className="font-medium">{form.name}</span></p>
                 <p className="text-sm"><span className="text-muted-foreground">Age:</span> <span className="font-medium">{form.age}</span></p>
                 <p className="text-sm"><span className="text-muted-foreground">Already memorized:</span> <span className="font-medium">
-                  {form.preMemorizedSurahIds.length === 0 ? "Starting fresh" : `${form.preMemorizedSurahIds.length} surah${form.preMemorizedSurahIds.length > 1 ? "s" : ""}`}
+                  {form.initialSurahSetups.length === 0 ? "Starting fresh" : `${form.initialSurahSetups.length} surah${form.initialSurahSetups.length > 1 ? "s" : ""} selected`}
                 </span></p>
+                {form.initialSurahSetups.length > 0 && (
+                  <p className="text-sm">
+                    <span className="text-muted-foreground">Starting levels:</span>{" "}
+                    <span className="font-medium">
+                      {[
+                        levelCounts.very_strong ? `${levelCounts.very_strong} very strong` : null,
+                        levelCounts.solid ? `${levelCounts.solid} solid` : null,
+                        levelCounts.learning ? `${levelCounts.learning} learning` : null,
+                        levelCounts.just_started ? `${levelCounts.just_started} just started` : null,
+                      ].filter(Boolean).join(" · ")}
+                    </span>
+                  </p>
+                )}
                 <p className="text-sm"><span className="text-muted-foreground">Daily practice:</span> <span className="font-medium">{form.practiceMinutesPerDay} min/day</span></p>
                 <p className="text-sm"><span className="text-muted-foreground">New memorization:</span> <span className="font-medium">{form.memorizePagePerDay} page{form.memorizePagePerDay !== 1 ? "s" : ""}/day</span></p>
                 <p className="text-sm"><span className="text-muted-foreground">Daily review:</span> <span className="font-medium">{form.reviewPagesPerDay} page{form.reviewPagesPerDay !== 1 ? "s" : ""}/day</span></p>
@@ -795,6 +981,7 @@ export default function Home() {
               onClick={handleNext}
               disabled={
                 (step === 1 && !canProceedStep1) ||
+                (step === 3 && !canProceedStep3) ||
                 createMutation.isPending
               }
             >
