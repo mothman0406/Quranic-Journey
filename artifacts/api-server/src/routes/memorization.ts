@@ -4,6 +4,7 @@ import { childrenTable, memorizationProgressTable, reviewScheduleTable, dailyPro
 import { eq, and } from "drizzle-orm";
 import { SURAHS } from "../data/surahs.js";
 import { getPageForVerse } from "../data/quran-meta.js";
+import { buildSurahMemorizationWorkflow, hasPendingIntraSurahWork } from "../lib/memorization-workflow.js";
 
 async function ownsChild(parentId: string, childId: number): Promise<boolean> {
   const [child] = await db.select({ parentId: childrenTable.parentId })
@@ -309,19 +310,29 @@ router.post("/children/:childId/memorization", async (req, res) => {
     }).returning();
   }
 
-  // Ensure newly completed surahs enter review even when they were seeded or started earlier.
+  // Long surahs stay inside the memorization workflow until their cumulative
+  // recitation/test days are also complete.
   if (newStatus === "memorized") {
-    const [existingReview] = await db.select().from(reviewScheduleTable)
-      .where(and(eq(reviewScheduleTable.childId, childId), eq(reviewScheduleTable.surahId, normalizedSurahId)));
-    if (!existingReview) {
-      await db.insert(reviewScheduleTable).values({
-        childId,
-        surahId: normalizedSurahId,
-        dueDate: nextReview,
-        interval: strength >= 4 ? 7 : strength >= 3 ? 3 : 1,
-        easeFactor: 2.5,
-        repetitionCount: 0
-      });
+    const [child] = await db.select().from(childrenTable).where(eq(childrenTable.id, childId));
+    if (child) {
+      const workflow = buildSurahMemorizationWorkflow(surah, child.memorizePagePerDay);
+      const dailyRows = await db.select().from(dailyProgressTable).where(eq(dailyProgressTable.childId, childId));
+      const completedMemRows = dailyRows.filter((row) => row.memStatus === "completed");
+
+      if (!hasPendingIntraSurahWork(workflow, record, surah.verseCount, completedMemRows)) {
+        const [existingReview] = await db.select().from(reviewScheduleTable)
+          .where(and(eq(reviewScheduleTable.childId, childId), eq(reviewScheduleTable.surahId, normalizedSurahId)));
+        if (!existingReview) {
+          await db.insert(reviewScheduleTable).values({
+            childId,
+            surahId: normalizedSurahId,
+            dueDate: nextReview,
+            interval: strength >= 4 ? 7 : strength >= 3 ? 3 : 1,
+            easeFactor: 2.5,
+            repetitionCount: 0
+          });
+        }
+      }
     }
   }
 

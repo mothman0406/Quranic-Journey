@@ -74,6 +74,16 @@ export default function ChildDashboard() {
       : reviewsData !== undefined && todayProgress?.reviewCompletedCount != null
       ? (reviewsData.dueToday?.length ?? 0) + todayProgress.reviewCompletedCount
       : reviewsDueToday;
+  const todaysMem = todaysPlan.newMemorization as
+    | {
+        surahName: string;
+        ayahStart: number;
+        ayahEnd: number;
+        workType?: "new_memorization" | "cumulative_block" | "cumulative_full" | "final_surah_test";
+        workLabel?: string;
+        isReviewOnly?: boolean;
+      }
+    | undefined;
   const earned = achievements.filter(a => a.earned).length;
 
   return (
@@ -110,19 +120,19 @@ export default function ChildDashboard() {
               <Badge variant="secondary" className="text-xs">{todaysPlan.totalEstimatedMinutes} min</Badge>
             </div>
             <div className="space-y-2">
-              {todaysPlan.newMemorization && (
+              {todaysMem && (
                 <Link href={`/child/${childId}/memorization`}>
                   <div className="flex items-center gap-3 p-3 rounded-xl bg-primary/5 border border-primary/10 hover:bg-primary/10 transition-colors cursor-pointer">
                     <div className="w-9 h-9 rounded-xl bg-primary/15 flex items-center justify-center"><BookMarked size={16} className="text-primary" /></div>
                     <div className="flex-1">
-                      <p className="text-sm font-medium text-foreground">New Memorization</p>
+                      <p className="text-sm font-medium text-foreground">{todaysMem.workLabel ?? "New Memorization"}</p>
                       <div className="flex items-center gap-1.5 flex-wrap">
                         {todayProgress?.memStatus === "completed" ? (
-                          <p className="text-xs text-muted-foreground">{todaysPlan.newMemorization.surahName} · ✓ Completed</p>
+                          <p className="text-xs text-muted-foreground">{todaysMem.surahName} · ✓ Completed</p>
                         ) : todayProgress?.memStatus === "in_progress" ? (
-                          <p className="text-xs text-muted-foreground">{todaysPlan.newMemorization.surahName} · In Progress</p>
+                          <p className="text-xs text-muted-foreground">{todaysMem.surahName} · In Progress</p>
                         ) : (
-                          <p className="text-xs text-muted-foreground">{todaysPlan.newMemorization.surahName} · Ayah {todaysPlan.newMemorization.ayahStart}–{todaysPlan.newMemorization.ayahEnd}</p>
+                          <p className="text-xs text-muted-foreground">{todaysMem.surahName} · Ayah {todaysMem.ayahStart}–{todaysMem.ayahEnd}</p>
                         )}
                         {todayProgress?.memStatus === "in_progress" && (
                           <span className="text-[10px] font-medium text-amber-600 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded-full">In Progress</span>

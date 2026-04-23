@@ -6,6 +6,12 @@ import { SURAHS } from "../data/surahs.js";
 import { resolvePageTarget, resolveSurahScopedPageTarget, getPageForVerse } from "../data/quran-meta.js";
 import { STORIES } from "../data/stories.js";
 import { DUAS } from "../data/duas.js";
+import {
+  buildSurahMemorizationWorkflow,
+  findMatchingWorkItem,
+  findPendingWorkItem,
+  hasPendingIntraSurahWork,
+} from "../lib/memorization-workflow.js";
 
 const router: IRouter = Router();
 
@@ -21,16 +27,22 @@ function formatChild(c: typeof childrenTable.$inferSelect) {
 // Sorted by recommended learning order (Al-Fatihah first, then back from 114)
 const SURAHS_IN_ORDER = [...SURAHS].sort((a, b) => a.recommendedOrder - b.recommendedOrder);
 
-function isFullyDoneReviewSurah(
-  progress: typeof memorizationProgressTable.$inferSelect,
+function isMemorizationModuleDone(
+  surah: typeof SURAHS[0],
+  progress: typeof memorizationProgressTable.$inferSelect | undefined,
+  pagesTarget: number,
+  completedDailyRows: (typeof dailyProgressTable.$inferSelect)[],
 ): boolean {
-  const surah = SURAHS.find((s) => s.id === progress.surahId);
-  if (!surah) return false;
+  if (!progress) return false;
 
-  return (
+  const fullyMemorized =
     (progress.status === "memorized" || progress.status === "needs_review") &&
-    progress.versesMemorized >= surah.verseCount
-  );
+    progress.versesMemorized >= surah.verseCount;
+
+  if (!fullyMemorized) return false;
+
+  const workflow = buildSurahMemorizationWorkflow(surah, pagesTarget);
+  return !hasPendingIntraSurahWork(workflow, progress, surah.verseCount, completedDailyRows);
 }
 
 function getReviewPriorityRank(
@@ -422,6 +434,8 @@ router.get("/children/:childId/dashboard", async (req, res) => {
   if (child.parentId !== req.user.id) { res.status(403).json({ error: "Forbidden" }); return; }
 
   const memProgress = await db.select().from(memorizationProgressTable).where(eq(memorizationProgressTable.childId, childId));
+  const dailyProgressRows = await db.select().from(dailyProgressTable).where(eq(dailyProgressTable.childId, childId));
+  const completedMemDailyRows = dailyProgressRows.filter((row) => row.memStatus === "completed");
   const _d = new Date();
   const today = `${_d.getFullYear()}-${String(_d.getMonth()+1).padStart(2,'0')}-${String(_d.getDate()).padStart(2,'0')}`;
 
@@ -451,13 +465,24 @@ router.get("/children/:childId/dashboard", async (req, res) => {
   const randomDua = child.hideDuas ? null : DUAS[0];
 
   const memorizedCount = memorizedSurahIds.length;
-  const fullyDoneReviewableSurahIds = new Set(
-    memProgress.filter(isFullyDoneReviewSurah).map((m) => m.surahId)
+
+  // Surahs stay in memorization until their intra-surah cumulative workflow is fully complete.
+  const doneSurahIds = new Set(
+    SURAHS
+      .filter((surah) =>
+        isMemorizationModuleDone(
+          surah,
+          memProgress.find((progress) => progress.surahId === surah.id),
+          child.memorizePagePerDay,
+          completedMemDailyRows,
+        ),
+      )
+      .map((surah) => surah.id),
   );
   const dueReviews = (await db.select().from(reviewScheduleTable).where(
     eq(reviewScheduleTable.childId, childId)
   ))
-    .filter((review) => fullyDoneReviewableSurahIds.has(review.surahId))
+    .filter((review) => doneSurahIds.has(review.surahId))
     .sort((a, b) => {
       const priorityDelta = getReviewPriorityRank(
         memProgress.find((m) => m.surahId === a.surahId),
@@ -470,11 +495,6 @@ router.get("/children/:childId/dashboard", async (req, res) => {
         (SURAHS.find((s) => s.id === b.surahId)?.recommendedOrder ?? Number.MAX_SAFE_INTEGER)
       );
     });
-
-  // Surahs fully done (memorized or needs_review) — excluded from today's target
-  const doneSurahIds = new Set(
-    memProgress.filter(m => m.status === "memorized" || m.status === "needs_review").map(m => m.surahId)
-  );
 
   // Auto goals for dashboard teaser
   const autoGoals = generateAutoGoals(child, memorizedCount, child.practiceMinutesPerDay);
@@ -499,13 +519,19 @@ router.get("/children/:childId/dashboard", async (req, res) => {
       ? inProgressSurah.versesMemorized + 1
       : 1;
   } else {
-    // Pool: in_progress surahs + nextSurahData (the immediate next not-started surah).
+    // Pool: active memorization surahs + nextSurahData (the immediate next not-started surah).
     // Pick the farthest in the Mushaf (highest surah number).
-    const inProgressIds = new Set(
-      memProgress.filter(m => m.status === "in_progress").map(m => m.surahId)
+    const activeMemorizationIds = new Set(
+      memProgress
+        .filter((progress) => {
+          const surah = SURAHS.find((candidate) => candidate.id === progress.surahId);
+          if (!surah || doneSurahIds.has(surah.id)) return false;
+          return progress.status === "in_progress" || progress.versesMemorized > 0;
+        })
+        .map((progress) => progress.surahId),
     );
     const target = SURAHS
-      .filter(s => s.number !== 1 && (inProgressIds.has(s.id) || s.id === nextSurahData?.id))
+      .filter(s => s.number !== 1 && (activeMemorizationIds.has(s.id) || s.id === nextSurahData?.id))
       .sort((a, b) => b.number - a.number)[0];
 
     if (target) {
@@ -518,12 +544,16 @@ router.get("/children/:childId/dashboard", async (req, res) => {
     }
   }
 
+  let memorizationWorkflow = memorizationSurahData
+    ? buildSurahMemorizationWorkflow(memorizationSurahData, child.memorizePagePerDay)
+    : null;
+
   // Extend start backward on the same Mushaf page so the daily assignment
   // fills as close to memorizePagePerDay as possible (e.g. 0.75 pages on a
   // 15-verse page → prefer 11 verses over 6).
   // Use getPageForVerse(s, lastAyah) — not SURAH_START_PAGES — because
   // SURAH_START_PAGES has stale placeholder values (604) for surahs 91-100.
-  if (memorizationSurahData && !inProgressSurah) {
+  if (memorizationSurahData && !inProgressSurah && !memorizationWorkflow?.enabled) {
     const surahPage = getPageForVerse(nextStartSurah, memorizationSurahData.verseCount);
     const totalVersesOnPage = SURAHS.reduce(
       (acc, s) => (getPageForVerse(s.number, s.verseCount) === surahPage ? acc + s.verseCount : acc), 0
@@ -557,31 +587,86 @@ router.get("/children/:childId/dashboard", async (req, res) => {
     }
   }
 
-  const currentSurahName = memorizationSurahData?.nameTransliteration ?? null;
+  if (memorizationSurahData) {
+    memorizationWorkflow = buildSurahMemorizationWorkflow(memorizationSurahData, child.memorizePagePerDay);
+  }
+
+  const activeMemorizationProgress = memorizationSurahData
+    ? memProgress.find((progress) => progress.surahId === memorizationSurahData.id)
+    : undefined;
+  const scheduledWorkItem =
+    memorizationSurahData && memorizationWorkflow?.enabled
+      ? findPendingWorkItem(
+          memorizationWorkflow,
+          activeMemorizationProgress,
+          memorizationSurahData.verseCount,
+          completedMemDailyRows,
+        )
+      : null;
 
   const memTarget = memorizationSurahData
-    ? (inProgressSurah
+    ? (memorizationWorkflow?.enabled
+        ? null
+        : inProgressSurah
         ? resolveSurahScopedPageTarget(nextStartSurah, nextStartAyah, child.memorizePagePerDay)
         : resolvePageTarget(nextStartSurah, nextStartAyah, child.memorizePagePerDay))
     : null;
 
-  let [todayProgress] = await db.select().from(dailyProgressTable)
-    .where(and(eq(dailyProgressTable.childId, childId), eq(dailyProgressTable.date, today)));
+  const desiredMemTargetSurah = scheduledWorkItem?.surahNumber ?? nextStartSurah;
+  const desiredMemTargetAyahStart = scheduledWorkItem?.ayahStart ?? nextStartAyah;
+  const desiredMemTargetAyahEnd = scheduledWorkItem?.ayahEnd ?? memTarget?.endAyah ?? null;
+  const desiredMemTargetEndSurah = scheduledWorkItem?.surahNumber ?? memTarget?.endSurah ?? nextStartSurah;
+
+  let todayProgress = dailyProgressRows.find((row) => row.date === today);
 
   if (!todayProgress) {
     [todayProgress] = await db.insert(dailyProgressTable).values({
       childId,
       date: today,
-      memTargetSurah: nextStartSurah,
-      memTargetAyahStart: nextStartAyah,
-      memTargetAyahEnd: memTarget?.endAyah ?? null,
-      memTargetEndSurah: memTarget?.endSurah ?? nextStartSurah,
+      memTargetSurah: desiredMemTargetSurah,
+      memTargetAyahStart: desiredMemTargetAyahStart,
+      memTargetAyahEnd: desiredMemTargetAyahEnd,
+      memTargetEndSurah: desiredMemTargetEndSurah,
       memStatus: 'not_started',
       reviewTargetCount: null,
       reviewCompletedCount: 0,
       reviewStatus: 'not_started',
     }).returning();
+  } else if (
+    todayProgress.memStatus === "not_started" &&
+    (
+      todayProgress.memTargetSurah !== desiredMemTargetSurah ||
+      todayProgress.memTargetAyahStart !== desiredMemTargetAyahStart ||
+      todayProgress.memTargetAyahEnd !== desiredMemTargetAyahEnd ||
+      todayProgress.memTargetEndSurah !== desiredMemTargetEndSurah
+    )
+  ) {
+    [todayProgress] = await db.update(dailyProgressTable).set({
+      memTargetSurah: desiredMemTargetSurah,
+      memTargetAyahStart: desiredMemTargetAyahStart,
+      memTargetAyahEnd: desiredMemTargetAyahEnd,
+      memTargetEndSurah: desiredMemTargetEndSurah,
+      updatedAt: new Date(),
+    }).where(eq(dailyProgressTable.id, todayProgress.id)).returning();
   }
+
+  const frozenWorkflowItem =
+    memorizationSurahData && memorizationWorkflow?.enabled && todayProgress.memStatus !== "not_started"
+      ? findMatchingWorkItem(memorizationWorkflow, todayProgress)
+      : null;
+  const activeWorkflowItem = frozenWorkflowItem ?? scheduledWorkItem;
+  const nextWorkflowItem =
+    memorizationSurahData && memorizationWorkflow?.enabled && activeWorkflowItem
+      ? findPendingWorkItem(
+          memorizationWorkflow,
+          activeMemorizationProgress,
+          memorizationSurahData.verseCount,
+          completedMemDailyRows,
+          activeWorkflowItem.scheduleIndex,
+        )
+      : null;
+
+  const currentSurahName = activeWorkflowItem?.surahName ?? memorizationSurahData?.nameTransliteration ?? null;
 
   // Serve frozen daily_progress target when in_progress or completed
   let displaySurahNumber = nextStartSurah;
@@ -600,7 +685,24 @@ router.get("/children/:childId/dashboard", async (req, res) => {
 
   const todaysPlan = {
     date: today,
-    newMemorization: displaySurahDataFinal ? (() => {
+    newMemorization: activeWorkflowItem ? {
+      surahName: activeWorkflowItem.surahName,
+      surahNumber: activeWorkflowItem.surahNumber,
+      currentWorkSurahNumber: activeWorkflowItem.currentWorkSurahNumber,
+      currentWorkSurahName: activeWorkflowItem.currentWorkSurahName,
+      currentWorkAyahStart: activeWorkflowItem.currentWorkAyahStart,
+      currentWorkAyahEnd: activeWorkflowItem.currentWorkAyahEnd,
+      surahNameArabic: activeWorkflowItem.surahNameArabic,
+      ayahStart: activeWorkflowItem.ayahStart,
+      ayahEnd: activeWorkflowItem.ayahEnd,
+      endSurahNumber: activeWorkflowItem.surahNumber,
+      pageStart: activeWorkflowItem.pageStart,
+      pageEnd: activeWorkflowItem.pageEnd,
+      workType: activeWorkflowItem.workType,
+      workLabel: activeWorkflowItem.workLabel,
+      isReviewOnly: activeWorkflowItem.isReviewOnly,
+      estimatedMinutes: activeWorkflowItem.estimatedMinutes,
+    } : displaySurahDataFinal ? (() => {
       const frozen = todayProgress.memStatus !== 'not_started' && !!todayProgress.memTargetSurah;
       const endSurah = frozen
         ? (todayProgress.memTargetEndSurah ?? displaySurahNumber)
@@ -653,6 +755,9 @@ router.get("/children/:childId/dashboard", async (req, res) => {
         endSurahNumber: endSurah,
         pageStart: getPageForVerse(displaySurahNumber, displayAyahStart),
         pageEnd: getPageForVerse(endSurah, displayAyahEnd),
+        workType: "new_memorization",
+        workLabel: "New Memorization",
+        isReviewOnly: false,
         snapReason: frozen ? undefined : memTarget?.snapReason,
         estimatedMinutes: 10
       };
@@ -709,6 +814,44 @@ router.get("/children/:childId/dashboard", async (req, res) => {
       reviewCompletedCount: todayProgress.reviewCompletedCount,
     },
     upNextMemorization: (() => {
+      if (nextWorkflowItem) {
+        return {
+          surahName: nextWorkflowItem.surahName,
+          surahNumber: nextWorkflowItem.surahNumber,
+          ayahStart: nextWorkflowItem.ayahStart,
+          ayahEnd: nextWorkflowItem.ayahEnd,
+          pageStart: nextWorkflowItem.pageStart,
+          pageEnd: nextWorkflowItem.pageEnd,
+          workType: nextWorkflowItem.workType,
+          workLabel: nextWorkflowItem.workLabel,
+          isReviewOnly: nextWorkflowItem.isReviewOnly,
+        };
+      }
+
+      const nextSurahExcludingCurrent =
+        activeWorkflowItem && memorizationSurahData
+          ? SURAHS_IN_ORDER.find((surah) => !doneSurahIds.has(surah.id) && surah.id !== memorizationSurahData.id)
+          : null;
+      if (nextSurahExcludingCurrent) {
+        const nextUpProgress = memProgress.find(m => m.surahId === nextSurahExcludingCurrent.id);
+        const ayahStart = nextUpProgress && nextUpProgress.status === "in_progress"
+          ? Math.min(nextUpProgress.versesMemorized + 1, nextSurahExcludingCurrent.verseCount)
+          : 1;
+        const nextUpTarget = resolveSurahScopedPageTarget(nextSurahExcludingCurrent.number, ayahStart, child.memorizePagePerDay);
+        const ayahEnd = Math.min(nextUpTarget.endAyah, nextSurahExcludingCurrent.verseCount);
+
+        return {
+          surahName: nextSurahExcludingCurrent.nameTransliteration,
+          surahNumber: nextSurahExcludingCurrent.number,
+          ayahStart,
+          ayahEnd,
+          pageStart: getPageForVerse(nextSurahExcludingCurrent.number, ayahStart),
+          workType: "new_memorization",
+          workLabel: "New Memorization",
+          isReviewOnly: false,
+        };
+      }
+
       const nextUp = SURAHS_IN_ORDER.find(s => !doneSurahIds.has(s.id));
       if (!nextUp) return null;
 
@@ -725,6 +868,9 @@ router.get("/children/:childId/dashboard", async (req, res) => {
         ayahStart,
         ayahEnd,
         pageStart: getPageForVerse(nextUp.number, ayahStart),
+        workType: "new_memorization",
+        workLabel: "New Memorization",
+        isReviewOnly: false,
       };
     })(),
   });
@@ -849,6 +995,8 @@ router.delete("/children/:childId", async (req, res) => {
 router.post("/children/:childId/daily-progress", async (req, res) => {
   const childId = parseInt(req.params.childId);
   if (!await ownsChild(req.user.id, childId)) { res.status(403).json({ error: "Forbidden" }); return; }
+  const [child] = await db.select().from(childrenTable).where(eq(childrenTable.id, childId));
+  if (!child) { res.status(404).json({ error: "Child not found" }); return; }
   const _d = new Date();
   const today = `${_d.getFullYear()}-${String(_d.getMonth()+1).padStart(2,'0')}-${String(_d.getDate()).padStart(2,'0')}`;
   const { memStatus, memCompletedAyahEnd, reviewStatus, reviewCompletedCount, reviewTargetCount } = req.body;
@@ -865,6 +1013,43 @@ router.post("/children/:childId/daily-progress", async (req, res) => {
   if (row) {
     [row] = await db.update(dailyProgressTable).set(updates).where(eq(dailyProgressTable.id, row.id)).returning();
   }
+
+  if (row?.memStatus === "completed" && row.memTargetSurah) {
+    const endSurah = row.memTargetEndSurah ?? row.memTargetSurah;
+    const surah = SURAHS.find((candidate) => candidate.number === row.memTargetSurah);
+
+    if (surah && endSurah === surah.number) {
+      const [memProgressRow] = await db.select().from(memorizationProgressTable)
+        .where(and(eq(memorizationProgressTable.childId, childId), eq(memorizationProgressTable.surahId, surah.id)));
+
+      if (memProgressRow && memProgressRow.versesMemorized >= surah.verseCount) {
+        const workflow = buildSurahMemorizationWorkflow(surah, child.memorizePagePerDay);
+        const refreshedDailyRows = await db.select().from(dailyProgressTable)
+          .where(eq(dailyProgressTable.childId, childId));
+        const completedMemRows = refreshedDailyRows.filter((dailyRow) => dailyRow.memStatus === "completed");
+
+        if (!hasPendingIntraSurahWork(workflow, memProgressRow, surah.verseCount, completedMemRows)) {
+          const now = new Date();
+          const interval = memProgressRow.strength >= 4 ? 7 : memProgressRow.strength >= 3 ? 3 : 1;
+          const nextReview = formatDate(addDays(now, interval));
+          const [existingReview] = await db.select().from(reviewScheduleTable)
+            .where(and(eq(reviewScheduleTable.childId, childId), eq(reviewScheduleTable.surahId, surah.id)));
+
+          if (!existingReview) {
+            await db.insert(reviewScheduleTable).values({
+              childId,
+              surahId: surah.id,
+              dueDate: nextReview,
+              interval,
+              easeFactor: 2.5,
+              repetitionCount: 0,
+            });
+          }
+        }
+      }
+    }
+  }
+
   res.json(row);
 });
 

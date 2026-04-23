@@ -3000,6 +3000,26 @@ export default function QuranMemorizePage() {
 
   const saveMutation = useMutation({
     mutationFn: async (qualityRating: number) => {
+      const todayMem = dashboard?.todaysPlan?.newMemorization as
+        | {
+            surahNumber?: number;
+            ayahStart?: number;
+            ayahEnd?: number;
+            workType?: "new_memorization" | "cumulative_block" | "cumulative_full" | "final_surah_test";
+          }
+        | undefined;
+      const isTodayCumulativeSession =
+        todayMem?.surahNumber != null &&
+        selectedChapter?.id === todayMem.surahNumber &&
+        todayMem.workType != null &&
+        todayMem.workType !== "new_memorization" &&
+        todayMem.ayahStart === fromAyah &&
+        todayMem.ayahEnd === toAyah;
+
+      if (isTodayCumulativeSession) {
+        return { skippedMemorizationUpdate: true as const };
+      }
+
       const latestMemData = await qc.ensureQueryData({
         queryKey: ["memorization", childId],
         queryFn: () => listMemorization(parseInt(childId)),
@@ -3032,12 +3052,33 @@ export default function QuranMemorizePage() {
       qc.invalidateQueries({ queryKey: ["memorization", childId] });
       qc.invalidateQueries({ queryKey: ["dashboard", childId] });
       setSaveSuccess(true);
+      const todayMem = dashboard?.todaysPlan?.newMemorization as
+        | {
+            surahNumber?: number;
+            ayahStart?: number;
+            ayahEnd?: number;
+            workType?: "new_memorization" | "cumulative_block" | "cumulative_full" | "final_surah_test";
+          }
+        | undefined;
+      const isTodayCumulativeSession =
+        todayMem?.surahNumber != null &&
+        selectedChapter?.id === todayMem.surahNumber &&
+        todayMem.workType != null &&
+        todayMem.workType !== "new_memorization" &&
+        todayMem.ayahStart === fromAyah &&
+        todayMem.ayahEnd === toAyah;
       const isComplete = toAyah >= selectedChapter!.verses_count;
-      if (isComplete) {
+      if (isTodayCumulativeSession) {
+        setCelebration({
+          message: todayMem?.workType === "final_surah_test" ? "Whole Surah Complete!" : "Cumulative Recitation Complete!",
+          subMessage: todayMem?.workType === "final_surah_test"
+            ? "This surah is ready to move into the separate review cycle."
+            : "Today's memorization recitation work is complete.",
+        });
+      } else if (isComplete) {
         setCelebration({ message: "Surah Complete!", subMessage: "You've memorized the full surah!" });
       }
       // Update daily progress if user worked on today's target surah
-      const todayMem = dashboard?.todaysPlan?.newMemorization as { surahNumber?: number; ayahEnd?: number } | undefined;
       if (todayMem?.surahNumber != null && selectedChapter?.id === todayMem.surahNumber) {
         const memStatus = todayMem.ayahEnd != null && toAyah >= todayMem.ayahEnd ? "completed" : "in_progress";
         dailyProgressMutation.mutate({ memStatus, memCompletedAyahEnd: toAyah });
