@@ -81,6 +81,57 @@ async function fetchVersesFromApi(surahNumber: number): Promise<{ number: number
 
 const router: IRouter = Router();
 
+type ReviewPriority = "red" | "orange" | "green";
+
+function getCanonicalReviewOrder(surahId: number): number {
+  return SURAHS.find((s) => s.id === surahId)?.recommendedOrder ?? Number.MAX_SAFE_INTEGER;
+}
+
+function isFullyDoneReviewSurah(
+  progress: typeof memorizationProgressTable.$inferSelect,
+): boolean {
+  const surah = SURAHS.find((s) => s.id === progress.surahId);
+  if (!surah) return false;
+
+  return (
+    (progress.status === "memorized" || progress.status === "needs_review") &&
+    progress.versesMemorized >= surah.verseCount
+  );
+}
+
+function getReviewPriorityFromMemProgress(
+  progress: typeof memorizationProgressTable.$inferSelect,
+): ReviewPriority {
+  const strength = progress.strength ?? 3;
+
+  if (progress.status === "needs_review" && strength <= 1) {
+    return "red";
+  }
+  if (progress.status === "needs_review") {
+    return "orange";
+  }
+  if (strength <= 1) {
+    return "red";
+  }
+  if (strength <= 3) {
+    return "orange";
+  }
+  return "green";
+}
+
+function getReviewPriorityFromQuality(qualityRating: number): ReviewPriority {
+  if (qualityRating <= 1) return "red";
+  if (qualityRating <= 3) return "orange";
+  return "green";
+}
+
+function compareByCanonicalReviewOrder<T extends { mem: typeof memorizationProgressTable.$inferSelect }>(
+  a: T,
+  b: T,
+) {
+  return getCanonicalReviewOrder(a.mem.surahId) - getCanonicalReviewOrder(b.mem.surahId);
+}
+
 function formatDate(date: Date): string {
   return date.toISOString().split("T")[0];
 }
@@ -347,21 +398,11 @@ router.get("/children/:childId/reviews", async (req, res) => {
   // Step 2 — (removed: was deleting unreviewed entries, but Step 4 would immediately recreate
   // them on every refetch, causing new surahs to appear mid-session)
 
-  // Step 3 — Fetch and classify all reviewable surahs
+  // Step 3 — Fetch and classify all fully completed surahs that are eligible for review
   const memProgress = await db.select().from(memorizationProgressTable)
     .where(eq(memorizationProgressTable.childId, childId));
 
-  const reviewable = memProgress.filter(m =>
-    m.status === 'memorized' || m.status === 'needs_review' || m.status === 'in_progress'
-  );
-
-  const maxSurahNumber = Math.max(
-    0,
-    ...reviewable.map(m => SURAHS.find(s => s.id === m.surahId)?.number ?? 0)
-  );
-
-  const isWeak = (m: typeof memProgress[0]) =>
-    m.status === 'needs_review' || (m.strength ?? 1) <= 2;
+  const reviewable = memProgress.filter(isFullyDoneReviewSurah);
 
   // Step 4 — Auto-create missing review schedule entries
   let scheduleRows = await db.select().from(reviewScheduleTable)
@@ -384,41 +425,43 @@ router.get("/children/:childId/reviews", async (req, res) => {
       .where(eq(reviewScheduleTable.childId, childId));
   }
 
-  // Step 5 — Build prioritized review list: weak first, then strong (both desc by surah number)
+  // Step 5 — Build prioritized review list: red, then orange, then green.
   const reviewableWithSchedule = reviewable
     .map(m => ({ mem: m, schedule: scheduleRows.find(r => r.surahId === m.surahId) }))
     .filter((x): x is { mem: typeof memProgress[0]; schedule: typeof scheduleRows[0] } => !!x.schedule);
 
-  const bySurahDesc = (
-    a: { mem: typeof memProgress[0] },
-    b: { mem: typeof memProgress[0] }
-  ) => {
-    const nA = SURAHS.find(s => s.id === a.mem.surahId)?.number ?? 0;
-    const nB = SURAHS.find(s => s.id === b.mem.surahId)?.number ?? 0;
-    return nB - nA;
-  };
+  const redSurahs = reviewableWithSchedule
+    .filter(x => getReviewPriorityFromMemProgress(x.mem) === "red")
+    .sort(compareByCanonicalReviewOrder);
 
-  const weakSurahs = reviewableWithSchedule
-    .filter(x => isWeak(x.mem) && x.schedule.dueDate <= today)
-    .sort(bySurahDesc);
+  const orangeSurahs = reviewableWithSchedule
+    .filter(x => getReviewPriorityFromMemProgress(x.mem) === "orange")
+    .sort(compareByCanonicalReviewOrder);
 
-  const strongSurahs = reviewableWithSchedule
-    .filter(x => !isWeak(x.mem) && x.schedule.dueDate <= today && (SURAHS.find(s => s.id === x.mem.surahId)?.number ?? 0) <= maxSurahNumber)
-    .sort(bySurahDesc);
+  const greenSurahs = reviewableWithSchedule
+    .filter(x => getReviewPriorityFromMemProgress(x.mem) === "green")
+    .sort(compareByCanonicalReviewOrder);
+
+  const orderedQueue = [...redSurahs, ...orangeSurahs, ...greenSurahs];
 
   const withinBudget: typeof scheduleRows = [];
   const overBudget: typeof scheduleRows = [];
   const coveredPages = new Set<number>();
 
   console.log('[review budget] reviewBudget:', reviewBudget,
-    'weak:', weakSurahs.map(x => { const s = SURAHS.find(s2 => s2.id === x.schedule.surahId); const mem = memProgress.find(m => m.surahId === x.schedule.surahId); return `${s?.number}(${mem?.status},str=${mem?.strength})`; }),
-    'strong:', strongSurahs.map(x => { const s = SURAHS.find(s2 => s2.id === x.schedule.surahId); const mem = memProgress.find(m => m.surahId === x.schedule.surahId); return `${s?.number}(${mem?.status},str=${mem?.strength})`; }));
+    'red:', redSurahs.map(x => { const s = SURAHS.find(s2 => s2.id === x.schedule.surahId); const mem = memProgress.find(m => m.surahId === x.schedule.surahId); return `${s?.number}(${mem?.status},str=${mem?.strength})`; }),
+    'orange:', orangeSurahs.map(x => { const s = SURAHS.find(s2 => s2.id === x.schedule.surahId); const mem = memProgress.find(m => m.surahId === x.schedule.surahId); return `${s?.number}(${mem?.status},str=${mem?.strength})`; }),
+    'green:', greenSurahs.map(x => { const s = SURAHS.find(s2 => s2.id === x.schedule.surahId); const mem = memProgress.find(m => m.surahId === x.schedule.surahId); return `${s?.number}(${mem?.status},str=${mem?.strength})`; }));
 
-  // Phase 1 — weak surahs: apply budget with closerToInclude tie-break
-  let anyWeakSkipped = false;
-  for (const { schedule: r } of weakSurahs) {
+  const tryIncludeInQueue = (
+    r: typeof scheduleRows[0],
+    group: ReviewPriority,
+  ) => {
     const surah = SURAHS.find(s => s.id === r.surahId);
-    if (!surah) { withinBudget.push(r); continue; }
+    if (!surah) {
+      withinBudget.push(r);
+      return true;
+    }
     const startPage = getPageForVerse(surah.number, 1);
     const endPage = getPageForVerse(surah.number, surah.verseCount);
     const surahPageSet = new Set<number>();
@@ -428,42 +471,36 @@ router.get("/children/:childId/reviews", async (req, res) => {
     const wouldBeOver = (coveredPages.size + newPages.length) - reviewBudget;
     const closerToInclude = newPages.length > 0 && wouldBeOver <= currentUnder;
     const include = coveredPages.size < reviewBudget || newPages.length === 0 || closerToInclude;
-    console.log(`[review budget] weak surah ${surah.number}: pages=${startPage}-${endPage} newPages=${newPages.length} coveredSize=${coveredPages.size} → ${include ? 'INCLUDE' : 'SKIP'}`);
+    console.log(`[review budget] ${group} surah ${surah.number}: pages=${startPage}-${endPage} newPages=${newPages.length} coveredSize=${coveredPages.size} → ${include ? 'INCLUDE' : 'SKIP'}`);
     if (include) {
       newPages.forEach(p => coveredPages.add(p));
       withinBudget.push(r);
+      return true;
     } else {
-      anyWeakSkipped = true;
       overBudget.push(r);
+      return false;
     }
-  }
+  };
 
-  // Phase 2 — strong surahs: only run if every weak surah fit (never skip weak in favor of strong)
-  for (const { schedule: r } of strongSurahs) {
-    const surah = SURAHS.find(s => s.id === r.surahId);
-    if (!surah) { withinBudget.push(r); continue; }
-    if (anyWeakSkipped) {
-      console.log(`[review budget] strong surah ${surah.number}: SKIP (weak surah was excluded)`);
+  // Step 5b — Walk the queue in canonical priority order and never skip ahead.
+  let queueBlocked = false;
+  for (const { schedule: r, mem } of orderedQueue) {
+    const priority = getReviewPriorityFromMemProgress(mem);
+    const surah = SURAHS.find((s) => s.id === r.surahId);
+    if (queueBlocked) {
+      if (surah) {
+        console.log(`[review budget] ${priority} surah ${surah.number}: SKIP (earlier queue item was excluded)`);
+      }
       overBudget.push(r);
       continue;
     }
-    const startPage = getPageForVerse(surah.number, 1);
-    const endPage = getPageForVerse(surah.number, surah.verseCount);
-    const surahPageSet = new Set<number>();
-    for (let p = startPage; p <= endPage; p++) surahPageSet.add(p);
-    const newPages = [...surahPageSet].filter(p => !coveredPages.has(p));
-    const fits = coveredPages.size + newPages.length <= reviewBudget;
-    console.log(`[review budget] strong surah ${surah.number}: pages=${startPage}-${endPage} newPages=${newPages.length} coveredSize=${coveredPages.size} → ${fits ? 'INCLUDE' : 'SKIP'}`);
-    if (fits) {
-      newPages.forEach(p => coveredPages.add(p));
-      withinBudget.push(r);
-    } else {
-      overBudget.push(r);
+    if (!tryIncludeInQueue(r, priority)) {
+      queueBlocked = true;
     }
   }
 
   // Step 6 — Format response
-  const formatReview = (r: typeof reviewScheduleTable.$inferSelect, isOverdue: boolean, weak: boolean) => {
+  const formatReview = (r: typeof reviewScheduleTable.$inferSelect, isOverdue: boolean, priority: ReviewPriority) => {
     const surah = SURAHS.find(s => s.id === r.surahId);
     return {
       id: r.id,
@@ -477,7 +514,8 @@ router.get("/children/:childId/reviews", async (req, res) => {
       repetitionCount: r.repetitionCount,
       lastReviewed: r.lastReviewed?.toISOString() || null,
       isOverdue,
-      isWeak: weak
+      isWeak: priority !== "green",
+      reviewPriority: priority,
     };
   };
 
@@ -498,16 +536,22 @@ router.get("/children/:childId/reviews", async (req, res) => {
 
   const dueToday = withinBudget.map(r => {
     const mem = memProgress.find(m => m.surahId === r.surahId);
-    return formatReview(r, r.dueDate < today, mem ? isWeak(mem) : false);
+    return formatReview(
+      r,
+      r.dueDate < today,
+      mem ? getReviewPriorityFromMemProgress(mem) : "green",
+    );
   });
 
-  const futureScheduled = reviewableWithSchedule
-    .filter(x => x.schedule.dueDate > today)
-    .map(x => x.schedule);
-  const upcoming = [...overBudget, ...futureScheduled].map(r => {
-    const mem = memProgress.find(m => m.surahId === r.surahId);
-    return formatReview(r, false, mem ? isWeak(mem) : false);
-  });
+  const upcoming = [...overBudget]
+    .map(r => {
+      const mem = memProgress.find(m => m.surahId === r.surahId);
+      return formatReview(
+        r,
+        false,
+        mem ? getReviewPriorityFromMemProgress(mem) : "green",
+      );
+    });
 
   // reviewedToday = only surahs reviewed today that belong to THIS budget session.
   // Simulate the same budget logic on (reviewed-today candidates + withinBudget) combined
@@ -551,7 +595,11 @@ router.get("/children/:childId/reviews", async (req, res) => {
     .filter(x => sessionSurahIds.has(x.schedule.surahId))
     .map(x => {
       const mem = memProgress.find(m => m.surahId === x.schedule.surahId);
-      return formatReview(x.schedule, false, mem ? isWeak(mem) : false);
+      return formatReview(
+        x.schedule,
+        false,
+        mem ? getReviewPriorityFromMemProgress(mem) : "green",
+      );
     });
 
   res.json({ dueToday, upcoming, todayRange, reviewedToday });
@@ -564,6 +612,8 @@ router.post("/children/:childId/reviews", async (req, res) => {
 
   const [review] = await db.select().from(reviewScheduleTable)
     .where(and(eq(reviewScheduleTable.childId, childId), eq(reviewScheduleTable.surahId, surahId)));
+  const [memProgressRow] = await db.select().from(memorizationProgressTable)
+    .where(and(eq(memorizationProgressTable.childId, childId), eq(memorizationProgressTable.surahId, surahId)));
 
   const now = new Date();
   const { interval, easeFactor } = sm2(
@@ -593,6 +643,24 @@ router.post("/children/:childId/reviews", async (req, res) => {
       repetitionCount: 1,
       lastReviewed: now
     }).returning();
+  }
+
+  if (memProgressRow) {
+    const priority = getReviewPriorityFromQuality(qualityRating);
+    const nextStatus =
+      memProgressRow.status === "in_progress"
+        ? "in_progress"
+        : priority === "green"
+          ? "memorized"
+          : "needs_review";
+
+    await db.update(memorizationProgressTable).set({
+      status: nextStatus,
+      strength: Math.max(0, Math.min(5, qualityRating)),
+      lastPracticed: now,
+      nextReviewDate: nextDate,
+      updatedAt: now,
+    }).where(eq(memorizationProgressTable.id, memProgressRow.id));
   }
 
   const surah = SURAHS.find(s => s.id === surahId);

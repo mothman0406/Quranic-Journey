@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import { db } from "@workspace/db";
 import { childrenTable, memorizationProgressTable, reviewScheduleTable, learningSessionsTable, childDuasTable, dailyProgressTable } from "@workspace/db/schema";
-import { eq, desc, and, lte } from "drizzle-orm";
+import { eq, desc, and } from "drizzle-orm";
 import { SURAHS } from "../data/surahs.js";
 import { resolvePageTarget, resolveSurahScopedPageTarget, getPageForVerse } from "../data/quran-meta.js";
 import { STORIES } from "../data/stories.js";
@@ -20,6 +20,31 @@ function formatChild(c: typeof childrenTable.$inferSelect) {
 
 // Sorted by recommended learning order (Al-Fatihah first, then back from 114)
 const SURAHS_IN_ORDER = [...SURAHS].sort((a, b) => a.recommendedOrder - b.recommendedOrder);
+
+function isFullyDoneReviewSurah(
+  progress: typeof memorizationProgressTable.$inferSelect,
+): boolean {
+  const surah = SURAHS.find((s) => s.id === progress.surahId);
+  if (!surah) return false;
+
+  return (
+    (progress.status === "memorized" || progress.status === "needs_review") &&
+    progress.versesMemorized >= surah.verseCount
+  );
+}
+
+function getReviewPriorityRank(
+  progress: typeof memorizationProgressTable.$inferSelect | undefined,
+): number {
+  if (!progress) return 2;
+  const strength = progress.strength ?? 3;
+
+  if (progress.status === "needs_review" && strength <= 1) return 0;
+  if (progress.status === "needs_review") return 1;
+  if (strength <= 1) return 0;
+  if (strength <= 3) return 1;
+  return 2;
+}
 
 function getAgeGroup(age: number): "toddler" | "child" | "preteen" | "teen" {
   if (age <= 6) return "toddler";
@@ -294,10 +319,6 @@ router.get("/children/:childId/dashboard", async (req, res) => {
   const _d = new Date();
   const today = `${_d.getFullYear()}-${String(_d.getMonth()+1).padStart(2,'0')}-${String(_d.getDate()).padStart(2,'0')}`;
 
-  const dueReviews = await db.select().from(reviewScheduleTable).where(
-    and(eq(reviewScheduleTable.childId, childId), lte(reviewScheduleTable.dueDate, today))
-  );
-
   const recentSessionsRaw = await db.select().from(learningSessionsTable)
     .where(eq(learningSessionsTable.childId, childId))
     .orderBy(desc(learningSessionsTable.createdAt))
@@ -324,6 +345,25 @@ router.get("/children/:childId/dashboard", async (req, res) => {
   const randomDua = child.hideDuas ? null : DUAS[0];
 
   const memorizedCount = memorizedSurahIds.length;
+  const fullyDoneReviewableSurahIds = new Set(
+    memProgress.filter(isFullyDoneReviewSurah).map((m) => m.surahId)
+  );
+  const dueReviews = (await db.select().from(reviewScheduleTable).where(
+    eq(reviewScheduleTable.childId, childId)
+  ))
+    .filter((review) => fullyDoneReviewableSurahIds.has(review.surahId))
+    .sort((a, b) => {
+      const priorityDelta = getReviewPriorityRank(
+        memProgress.find((m) => m.surahId === a.surahId),
+      ) - getReviewPriorityRank(
+        memProgress.find((m) => m.surahId === b.surahId),
+      );
+      if (priorityDelta !== 0) return priorityDelta;
+      return (
+        (SURAHS.find((s) => s.id === a.surahId)?.recommendedOrder ?? Number.MAX_SAFE_INTEGER) -
+        (SURAHS.find((s) => s.id === b.surahId)?.recommendedOrder ?? Number.MAX_SAFE_INTEGER)
+      );
+    });
 
   // Surahs fully done (memorized or needs_review) — excluded from today's target
   const doneSurahIds = new Set(
