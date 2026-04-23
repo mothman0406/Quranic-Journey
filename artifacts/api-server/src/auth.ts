@@ -2,6 +2,14 @@ import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { db, authUserTable, authSessionTable, authAccountTable, authVerificationTable } from "@workspace/db";
 
+const DEV_TRUSTED_ORIGINS = [
+  "http://localhost:5173",
+  "http://127.0.0.1:5173",
+  "http://10.*:5173",
+  "http://192.168.*:5173",
+  ...Array.from({ length: 16 }, (_, index) => `http://172.${index + 16}.*:5173`),
+];
+
 if (!process.env.BETTER_AUTH_SECRET) {
   throw new Error("BETTER_AUTH_SECRET must be set in .env");
 }
@@ -25,10 +33,7 @@ export const auth = betterAuth({
   emailAndPassword: {
     enabled: true,
   },
-  trustedOrigins: [
-    "http://localhost:5173",
-    "http://10.0.0.223:5173",
-  ],
+  trustedOrigins: DEV_TRUSTED_ORIGINS,
 });
 
 export type Session = typeof auth.$Infer.Session;

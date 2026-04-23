@@ -63,7 +63,7 @@ export default defineConfig({
     host: "0.0.0.0",
     allowedHosts: true,
     proxy: {
-      "/api": "http://10.0.0.223:3099",
+      "/api": "http://localhost:3099",
     },
     fs: {
       strict: true,

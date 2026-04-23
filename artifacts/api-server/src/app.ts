@@ -8,6 +8,17 @@ import { requireAuth } from "./middlewares/requireAuth.js";
 import { logger } from "./lib/logger.js";
 
 const app: Express = express();
+const DEV_FRONTEND_ORIGIN_PATTERNS = [
+  /^http:\/\/localhost:5173$/,
+  /^http:\/\/127\.0\.0\.1:5173$/,
+  /^http:\/\/10(?:\.\d{1,3}){3}:5173$/,
+  /^http:\/\/192\.168(?:\.\d{1,3}){2}:5173$/,
+  /^http:\/\/172\.(1[6-9]|2\d|3[01])(?:\.\d{1,3}){2}:5173$/,
+];
+
+function isAllowedDevOrigin(origin: string): boolean {
+  return DEV_FRONTEND_ORIGIN_PATTERNS.some((pattern) => pattern.test(origin));
+}
 
 app.use(
   pinoHttp({
@@ -29,13 +40,17 @@ app.use(
   }),
 );
 
-// Allow requests from the local browser and LAN-loaded phone dev server.
+// Allow requests from localhost and typical private-LAN frontend dev hosts.
 app.use(
   cors({
-    origin: [
-      "http://localhost:5173",
-      "http://10.0.0.223:5173",
-    ],
+    origin(origin, callback) {
+      if (!origin || isAllowedDevOrigin(origin)) {
+        callback(null, true);
+        return;
+      }
+
+      callback(new Error(`Blocked by CORS: ${origin}`));
+    },
     credentials: true,
   }),
 );
