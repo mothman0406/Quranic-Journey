@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams, Link } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
@@ -11,6 +11,7 @@ import {
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ChildNav } from "@/components/child-nav";
@@ -385,6 +386,11 @@ export default function MemorizationPage() {
   const [expandedSurahId, setExpandedSurahId] = useState<number | null>(null);
   const [studyingSurahId, setStudyingSurahId] = useState<number | null>(null);
   const [studyingInitialAyah, setStudyingInitialAyah] = useState(0);
+  const [surahQuery, setSurahQuery] = useState("");
+  const [pendingJumpSurahId, setPendingJumpSurahId] = useState<number | null>(null);
+  const [highlightedSurahId, setHighlightedSurahId] = useState<number | null>(null);
+  const surahCardRefs = useRef<Record<number, HTMLDivElement | null>>({});
+  const highlightTimeoutRef = useRef<number | null>(null);
   const qc = useQueryClient();
 
   const { data: surahsData } = useQuery({
@@ -493,6 +499,52 @@ export default function MemorizationPage() {
 
   const memorizedCount = progress.filter((p) => p.status === "memorized").length;
   const totalVerses = progress.reduce((s, p) => s + p.versesMemorized, 0);
+  const normalizedSurahQuery = surahQuery.trim().toLowerCase();
+  const surahSearchResults = normalizedSurahQuery
+    ? progress
+        .map((item) => {
+          const surahMeta = surahs.find((s) => s.id === item.surahId);
+          if (!surahMeta) return null;
+          const matches =
+            item.surahName.toLowerCase().includes(normalizedSurahQuery) ||
+            surahMeta.number.toString().includes(normalizedSurahQuery) ||
+            surahMeta.nameArabic?.includes(surahQuery.trim());
+
+          return matches ? { item, surahMeta } : null;
+        })
+        .filter((result): result is { item: (typeof progress)[0]; surahMeta: (typeof surahs)[0] } => result !== null)
+        .slice(0, 6)
+    : [];
+
+  useEffect(() => {
+    if (pendingJumpSurahId === null) return;
+
+    const targetCard = surahCardRefs.current[pendingJumpSurahId];
+    if (!targetCard) return;
+
+    targetCard.scrollIntoView({ behavior: "smooth", block: "center" });
+    setHighlightedSurahId(pendingJumpSurahId);
+
+    if (highlightTimeoutRef.current !== null) {
+      window.clearTimeout(highlightTimeoutRef.current);
+    }
+
+    const targetSurahId = pendingJumpSurahId;
+    highlightTimeoutRef.current = window.setTimeout(() => {
+      setHighlightedSurahId((current) => (current === targetSurahId ? null : current));
+      highlightTimeoutRef.current = null;
+    }, 2000);
+
+    setPendingJumpSurahId(null);
+  }, [pendingJumpSurahId, filteredProgress]);
+
+  useEffect(() => {
+    return () => {
+      if (highlightTimeoutRef.current !== null) {
+        window.clearTimeout(highlightTimeoutRef.current);
+      }
+    };
+  }, []);
 
   function handleToggleAyah(item: (typeof progress)[0], ayah: number) {
     const surahMeta = surahs.find((s) => s.id === item.surahId);
@@ -508,6 +560,12 @@ export default function MemorizationPage() {
     if (!surahMeta) return;
     const allAyahs = Array.from({ length: item.totalVerses }, (_, i) => i + 1);
     toggleAyahMutation.mutate({ surahNumber: surahMeta.number, newAyahs: allAyahs });
+  }
+
+  function handleJumpToSurah(surahId: number) {
+    setFilter("all");
+    setSurahQuery("");
+    setPendingJumpSurahId(surahId);
   }
 
   return (
@@ -633,6 +691,55 @@ export default function MemorizationPage() {
         )}
 
         {/* Filter tabs */}
+        <Card className="border-border">
+          <CardContent className="p-3 space-y-3">
+            <div>
+              <p className="text-sm font-semibold text-foreground">Jump to Surah</p>
+              <p className="text-xs text-muted-foreground">
+                Search by surah name, number, or Arabic name.
+              </p>
+            </div>
+            <Input
+              value={surahQuery}
+              onChange={(event) => setSurahQuery(event.target.value)}
+              placeholder="Try 1, Al-Fatihah, or الفاتحة"
+              aria-label="Search for a surah to jump to"
+            />
+            {normalizedSurahQuery ? (
+              surahSearchResults.length > 0 ? (
+                <div className="space-y-2">
+                  {surahSearchResults.map(({ item, surahMeta }) => (
+                    <button
+                      key={item.surahId}
+                      type="button"
+                      onClick={() => handleJumpToSurah(item.surahId)}
+                      className="w-full rounded-xl border border-border bg-muted/20 px-3 py-2 text-left transition-colors hover:bg-muted/40"
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium text-foreground">
+                            {surahMeta.number}. {item.surahName}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            {item.totalVerses} ayahs
+                          </p>
+                        </div>
+                        <p className="arabic-text text-base text-primary shrink-0">
+                          {surahMeta.nameArabic}
+                        </p>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  No surahs matched that search.
+                </p>
+              )
+            ) : null}
+          </CardContent>
+        </Card>
+
         <div className="bg-white rounded-2xl border border-border p-1 flex gap-1 shadow-sm overflow-x-auto">
           {(["all", "today", "not_started", "in_progress", "memorized"] as const).map((f) => (
             <button
@@ -671,7 +778,16 @@ export default function MemorizationPage() {
               const barColor = getStatusColor(item.status, item.percentComplete);
 
               return (
-                <Card key={item.surahId} className="border-border overflow-hidden">
+                <Card
+                  key={item.surahId}
+                  ref={(node) => {
+                    surahCardRefs.current[item.surahId] = node;
+                  }}
+                  className={cn(
+                    "border-border overflow-hidden scroll-mt-24 transition-shadow",
+                    highlightedSurahId === item.surahId && "ring-2 ring-primary/40 ring-offset-2"
+                  )}
+                >
                   {/* Colored progress bar at top */}
                   <div className="h-1.5 w-full bg-muted">
                     <div
