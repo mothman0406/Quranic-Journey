@@ -311,40 +311,37 @@ router.post("/children", async (req, res) => {
       const surahData = SURAHS.find(s => s.id === setup.surahId);
       if (!surahData) continue;
 
-      const reviewInDays =
-        setup.level === "very_strong" ? 7 :
-        setup.level === "solid" ? 3 :
-        setup.level === "learning" ? 1 :
-        null;
-      const maxPartialAyah = Math.max(1, surahData.verseCount - 1);
+      const normalizedKnownAyahCount =
+        setup.knownAyahCount == null || !Number.isFinite(setup.knownAyahCount)
+          ? surahData.verseCount
+          : Math.max(1, Math.min(Math.floor(setup.knownAyahCount), surahData.verseCount));
       const versesMemorized =
-        setup.level === "just_started"
-          ? Math.max(
-              1,
-              Math.min(
-                Number.isFinite(setup.knownAyahCount) ? Math.floor(setup.knownAyahCount as number) : 1,
-                maxPartialAyah,
-              ),
-            )
-          : surahData.verseCount;
+        setup.level === "just_started" && normalizedKnownAyahCount >= surahData.verseCount
+          ? Math.max(1, surahData.verseCount - 1)
+          : normalizedKnownAyahCount;
+      const isFullSurah = versesMemorized >= surahData.verseCount;
+      const reviewInDays =
+        isFullSurah && setup.level !== "just_started"
+          ? setup.level === "very_strong" ? 7 :
+            setup.level === "solid" ? 3 :
+            1
+          : null;
       const strength =
         setup.level === "very_strong" ? 5 :
         setup.level === "solid" ? 4 :
         setup.level === "learning" ? 3 :
         1;
-      const status =
-        setup.level === "just_started"
-          ? "in_progress"
-          : "memorized";
+      const status = reviewInDays != null ? "memorized" : "in_progress";
 
       await db.insert(memorizationProgressTable).values({
         childId: child.id,
         surahId: setup.surahId,
         versesMemorized,
+        memorizedAyahs: JSON.stringify(Array.from({ length: versesMemorized }, (_, i) => i + 1)),
         status,
         lastPracticed: now,
         nextReviewDate: reviewInDays == null ? null : formatDate(addDays(now, reviewInDays)),
-        reviewCount: setup.level === "just_started" ? 0 : 1,
+        reviewCount: reviewInDays == null ? 0 : 1,
         strength
       });
 

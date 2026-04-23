@@ -128,7 +128,7 @@ export default function Home() {
         initialSurahSetups: form.initialSurahSetups.map((setup) => ({
           surahId: setup.surahId,
           level: setup.level,
-          knownAyahCount: setup.level === "just_started" ? setup.knownAyahCount : null,
+          knownAyahCount: setup.knownAyahCount,
         })),
         practiceMinutesPerDay: form.practiceMinutesPerDay,
         memorizePagePerDay: form.memorizePagePerDay,
@@ -222,18 +222,21 @@ export default function Home() {
 
   const canProceedStep1 = form.name.trim().length > 0 && form.age.length > 0 && parseInt(form.age) >= 3;
   const canProceedStep3 = form.initialSurahSetups.every((setup) => {
-    if (setup.level !== "just_started") return true;
     const surah = allSurahs.find((entry) => entry.id === setup.surahId);
     if (!surah) return false;
-    return Number.isInteger(setup.knownAyahCount) && (setup.knownAyahCount ?? 0) >= 1 && (setup.knownAyahCount ?? 0) < surah.verseCount;
+    const knownAyahCount = setup.knownAyahCount ?? surah.verseCount;
+    if (!Number.isInteger(knownAyahCount) || knownAyahCount < 1 || knownAyahCount > surah.verseCount) return false;
+    if (setup.level === "just_started" && knownAyahCount >= surah.verseCount) return false;
+    return true;
   });
 
   function toggleSurah(id: number) {
+    const surah = allSurahs.find((entry) => entry.id === id);
     setForm(f => ({
       ...f,
       initialSurahSetups: f.initialSurahSetups.some((setup) => setup.surahId === id)
         ? f.initialSurahSetups.filter((setup) => setup.surahId !== id)
-        : [...f.initialSurahSetups, { surahId: id, level: "solid", knownAyahCount: null }]
+        : [...f.initialSurahSetups, { surahId: id, level: "solid", knownAyahCount: surah?.verseCount ?? 1 }]
     }));
   }
 
@@ -252,12 +255,16 @@ export default function Home() {
         ...f.initialSurahSetups,
         ...inRange
           .filter((surahId) => !f.initialSurahSetups.some((setup) => setup.surahId === surahId))
-          .map((surahId) => ({ surahId, level: "solid" as const, knownAyahCount: null })),
+          .map((surahId) => {
+            const surah = allSurahs.find((entry) => entry.id === surahId);
+            return { surahId, level: "solid" as const, knownAyahCount: surah?.verseCount ?? 1 };
+          }),
       ]
     }));
   }
 
   function updateSurahLevel(surahId: number, level: InitialSurahLevel) {
+    const surah = allSurahs.find((entry) => entry.id === surahId);
     setForm((current) => ({
       ...current,
       initialSurahSetups: current.initialSurahSetups.map((setup) =>
@@ -265,7 +272,7 @@ export default function Home() {
           ? {
               ...setup,
               level,
-              knownAyahCount: level === "just_started" ? setup.knownAyahCount ?? 1 : null,
+              knownAyahCount: setup.knownAyahCount ?? surah?.verseCount ?? 1,
             }
           : setup,
       ),
@@ -273,13 +280,16 @@ export default function Home() {
   }
 
   function updateKnownAyahCount(surahId: number, nextValue: string) {
+    const surah = allSurahs.find((entry) => entry.id === surahId);
     setForm((current) => ({
       ...current,
       initialSurahSetups: current.initialSurahSetups.map((setup) =>
         setup.surahId === surahId
           ? {
               ...setup,
-              knownAyahCount: nextValue === "" ? null : Math.max(1, Math.floor(Number(nextValue))),
+              knownAyahCount: nextValue === ""
+                ? null
+                : Math.max(1, Math.min(Math.floor(Number(nextValue)), surah?.verseCount ?? Number.MAX_SAFE_INTEGER)),
             }
           : setup,
       ),
@@ -292,7 +302,7 @@ export default function Home() {
       initialSurahSetups: current.initialSurahSetups.map((setup) => ({
         ...setup,
         level,
-        knownAyahCount: level === "just_started" ? setup.knownAyahCount ?? 1 : null,
+        knownAyahCount: setup.knownAyahCount,
       })),
     }));
   }
@@ -743,7 +753,7 @@ export default function Home() {
           {step === 3 && form.initialSurahSetups.length > 0 && (
             <div className="space-y-4">
               <p className="text-sm text-muted-foreground">
-                Choose how well {form.name || "they"} know each surah. Green and orange will go into review. Just started will stay in memorization.
+                Choose the strength and memorized amount for each surah. Partial surahs stay in memorization until the full surah is completed.
               </p>
               <div className="space-y-2">
                 <p className="text-xs font-semibold text-primary">Quick Apply</p>
@@ -806,32 +816,40 @@ export default function Home() {
                       </SelectContent>
                     </Select>
 
-                    {setup.level === "just_started" && (
-                      <div className="space-y-1.5">
-                        <Label className="text-xs">Known through ayah</Label>
-                        <div className="flex items-center gap-2">
-                          <Input
-                            type="number"
-                            min={1}
-                            max={Math.max(1, surah.verseCount - 1)}
-                            value={setup.knownAyahCount ?? ""}
-                            onChange={(e) => updateKnownAyahCount(surah.id, e.target.value)}
-                            className="h-8 text-sm"
-                          />
-                          <span className="text-xs text-muted-foreground whitespace-nowrap">
-                            of {surah.verseCount}
-                          </span>
-                        </div>
-                        <p className="text-xs text-muted-foreground">
-                          Small safe version: this captures a contiguous start from ayah 1 through this ayah, so memorization can continue from the next ayah.
-                        </p>
-                        {(setup.knownAyahCount ?? 0) >= surah.verseCount && (
-                          <p className="text-xs text-destructive">
-                            Choose less than the full surah for Just Started. If they know the full surah, use Learning or one of the green levels instead.
-                          </p>
-                        )}
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">Known through ayah</Label>
+                      <div className="flex items-center gap-2">
+                        <Input
+                          type="number"
+                          min={1}
+                          max={surah.verseCount}
+                          value={setup.knownAyahCount ?? ""}
+                          onChange={(e) => updateKnownAyahCount(surah.id, e.target.value)}
+                          className="h-8 text-sm"
+                        />
+                        <span className="text-xs text-muted-foreground whitespace-nowrap">
+                          of {surah.verseCount}
+                        </span>
                       </div>
-                    )}
+                      <p className="text-xs text-muted-foreground">
+                        Default is the full surah. Lower it only if they know part of the surah so far.
+                      </p>
+                      {setup.level !== "just_started" && (setup.knownAyahCount ?? surah.verseCount) < surah.verseCount && (
+                        <p className="text-xs text-muted-foreground">
+                          This will seed the surah as in progress first, and it will move into review once the full surah is completed.
+                        </p>
+                      )}
+                      {setup.level === "just_started" && (
+                        <p className="text-xs text-muted-foreground">
+                          Just Started stays in memorization, so use a partial ayah count rather than the full surah.
+                        </p>
+                      )}
+                      {setup.level === "just_started" && (setup.knownAyahCount ?? surah.verseCount) >= surah.verseCount && (
+                        <p className="text-xs text-destructive">
+                          Lower this below the full surah for Just Started.
+                        </p>
+                      )}
+                    </div>
                   </div>
                 ))}
               </div>

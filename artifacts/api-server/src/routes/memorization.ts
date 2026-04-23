@@ -307,21 +307,21 @@ router.post("/children/:childId/memorization", async (req, res) => {
       reviewCount: 1,
       strength: Math.min(5, Math.max(1, strength))
     }).returning();
+  }
 
-    // Add to review schedule if memorized
-    if (newStatus === "memorized") {
-      const [existingReview] = await db.select().from(reviewScheduleTable)
-        .where(and(eq(reviewScheduleTable.childId, childId), eq(reviewScheduleTable.surahId, normalizedSurahId)));
-      if (!existingReview) {
-        await db.insert(reviewScheduleTable).values({
-          childId,
-          surahId: normalizedSurahId,
-          dueDate: formatDate(addDays(now, 1)),
-          interval: 1,
-          easeFactor: 2.5,
-          repetitionCount: 0
-        });
-      }
+  // Ensure newly completed surahs enter review even when they were seeded or started earlier.
+  if (newStatus === "memorized") {
+    const [existingReview] = await db.select().from(reviewScheduleTable)
+      .where(and(eq(reviewScheduleTable.childId, childId), eq(reviewScheduleTable.surahId, normalizedSurahId)));
+    if (!existingReview) {
+      await db.insert(reviewScheduleTable).values({
+        childId,
+        surahId: normalizedSurahId,
+        dueDate: nextReview,
+        interval: strength >= 4 ? 7 : strength >= 3 ? 3 : 1,
+        easeFactor: 2.5,
+        repetitionCount: 0
+      });
     }
   }
 
