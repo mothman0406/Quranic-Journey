@@ -11,6 +11,7 @@ import {
   findMatchingWorkItem,
   findPendingWorkItem,
   hasPendingIntraSurahWork,
+  hasStartedIntraSurahWorkflow,
 } from "../lib/memorization-workflow.js";
 
 const router: IRouter = Router();
@@ -27,22 +28,68 @@ function formatChild(c: typeof childrenTable.$inferSelect) {
 // Sorted by recommended learning order (Al-Fatihah first, then back from 114)
 const SURAHS_IN_ORDER = [...SURAHS].sort((a, b) => a.recommendedOrder - b.recommendedOrder);
 
+function isFullyMemorizedSurah(
+  surah: typeof SURAHS[0],
+  progress: typeof memorizationProgressTable.$inferSelect | undefined,
+): boolean {
+  if (!progress) return false;
+
+  return (
+    (progress.status === "memorized" || progress.status === "needs_review") &&
+    progress.versesMemorized >= surah.verseCount
+  );
+}
+
 function isMemorizationModuleDone(
   surah: typeof SURAHS[0],
   progress: typeof memorizationProgressTable.$inferSelect | undefined,
   pagesTarget: number,
   completedDailyRows: (typeof dailyProgressTable.$inferSelect)[],
 ): boolean {
-  if (!progress) return false;
-
-  const fullyMemorized =
-    (progress.status === "memorized" || progress.status === "needs_review") &&
-    progress.versesMemorized >= surah.verseCount;
-
-  if (!fullyMemorized) return false;
+  if (!isFullyMemorizedSurah(surah, progress)) return false;
 
   const workflow = buildSurahMemorizationWorkflow(surah, pagesTarget);
+  if (!hasStartedIntraSurahWorkflow(workflow, completedDailyRows)) {
+    return true;
+  }
+
   return !hasPendingIntraSurahWork(workflow, progress, surah.verseCount, completedDailyRows);
+}
+
+function getCanonicalActiveMemorizationSurah(
+  memProgress: (typeof memorizationProgressTable.$inferSelect)[],
+  pagesTarget: number,
+  completedDailyRows: (typeof dailyProgressTable.$inferSelect)[],
+): typeof SURAHS[0] | null {
+  const progressBySurahId = new Map(memProgress.map((progress) => [progress.surahId, progress]));
+  const firstNotFullyMemorizedIndex = SURAHS_IN_ORDER.findIndex(
+    (surah) => !isFullyMemorizedSurah(surah, progressBySurahId.get(surah.id)),
+  );
+
+  const previousSurah =
+    firstNotFullyMemorizedIndex === -1
+      ? (SURAHS_IN_ORDER[SURAHS_IN_ORDER.length - 1] ?? null)
+      : firstNotFullyMemorizedIndex > 0
+      ? SURAHS_IN_ORDER[firstNotFullyMemorizedIndex - 1]
+      : null;
+
+  if (previousSurah) {
+    const previousProgress = progressBySurahId.get(previousSurah.id);
+    const workflow = buildSurahMemorizationWorkflow(previousSurah, pagesTarget);
+
+    if (
+      isFullyMemorizedSurah(previousSurah, previousProgress) &&
+      previousProgress &&
+      hasStartedIntraSurahWorkflow(workflow, completedDailyRows) &&
+      hasPendingIntraSurahWork(workflow, previousProgress, previousSurah.verseCount, completedDailyRows)
+    ) {
+      return previousSurah;
+    }
+  }
+
+  return firstNotFullyMemorizedIndex === -1
+    ? null
+    : (SURAHS_IN_ORDER[firstNotFullyMemorizedIndex] ?? null);
 }
 
 function getReviewPriorityRank(
@@ -501,47 +548,18 @@ router.get("/children/:childId/dashboard", async (req, res) => {
   const storedGoals = child.goals ? JSON.parse(child.goals) : null;
   const activeGoals = storedGoals || autoGoals;
 
-  // Selection rule: Al-Fatihah first if not done; otherwise farthest in Mushaf
-  // (highest surah number) among all not-done surahs.
-  const fatihah = SURAHS.find(s => s.number === 1)!;
-  const fatiahDone = doneSurahIds.has(fatihah.id);
-
-  let memorizationSurahData: typeof SURAHS[0] | undefined;
-  let nextStartSurah = 1;
+  let memorizationSurahData =
+    getCanonicalActiveMemorizationSurah(memProgress, child.memorizePagePerDay, completedMemDailyRows) ??
+    undefined;
+  const memorizationSurahId = memorizationSurahData?.id;
+  let nextStartSurah = memorizationSurahData?.number ?? 1;
   let nextStartAyah = 1;
-  let inProgressSurah: typeof memProgress[0] | undefined;
+  let inProgressSurah = memorizationSurahId != null
+    ? memProgress.find((progress) => progress.surahId === memorizationSurahId && progress.status === "in_progress")
+    : undefined;
 
-  if (!fatiahDone) {
-    inProgressSurah = memProgress.find(m => m.surahId === fatihah.id && m.status === "in_progress");
-    memorizationSurahData = fatihah;
-    nextStartSurah = 1;
-    nextStartAyah = (inProgressSurah && inProgressSurah.versesMemorized < fatihah.verseCount)
-      ? inProgressSurah.versesMemorized + 1
-      : 1;
-  } else {
-    // Pool: active memorization surahs + nextSurahData (the immediate next not-started surah).
-    // Pick the farthest in the Mushaf (highest surah number).
-    const activeMemorizationIds = new Set(
-      memProgress
-        .filter((progress) => {
-          const surah = SURAHS.find((candidate) => candidate.id === progress.surahId);
-          if (!surah || doneSurahIds.has(surah.id)) return false;
-          return progress.status === "in_progress" || progress.versesMemorized > 0;
-        })
-        .map((progress) => progress.surahId),
-    );
-    const target = SURAHS
-      .filter(s => s.number !== 1 && (activeMemorizationIds.has(s.id) || s.id === nextSurahData?.id))
-      .sort((a, b) => b.number - a.number)[0];
-
-    if (target) {
-      inProgressSurah = memProgress.find(m => m.surahId === target.id && m.status === "in_progress");
-      memorizationSurahData = target;
-      nextStartSurah = target.number;
-      nextStartAyah = (inProgressSurah && inProgressSurah.versesMemorized < target.verseCount)
-        ? inProgressSurah.versesMemorized + 1
-        : 1;
-    }
+  if (memorizationSurahData && inProgressSurah && inProgressSurah.versesMemorized < memorizationSurahData.verseCount) {
+    nextStartAyah = inProgressSurah.versesMemorized + 1;
   }
 
   let memorizationWorkflow = memorizationSurahData

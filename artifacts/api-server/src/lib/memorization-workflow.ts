@@ -253,6 +253,15 @@ export function findMatchingWorkItem(
   );
 }
 
+export function hasStartedIntraSurahWorkflow(
+  workflow: SurahMemorizationWorkflow,
+  completedDailyRows: DailyProgressLike[],
+): boolean {
+  if (!workflow.enabled) return false;
+
+  return completedDailyRows.some((row) => findMatchingWorkItem(workflow, row) != null);
+}
+
 export function isWorkItemComplete(
   item: SurahMemorizationWorkItem,
   progress: ProgressLike | undefined,
