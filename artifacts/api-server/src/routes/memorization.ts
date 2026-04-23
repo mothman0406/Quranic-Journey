@@ -137,6 +137,32 @@ function compareByCanonicalReviewOrder<T extends { mem: typeof memorizationProgr
   return getCanonicalReviewOrder(a.mem.surahId) - getCanonicalReviewOrder(b.mem.surahId);
 }
 
+function prioritizeReviewableWithSchedule<
+  T extends {
+    mem: typeof memorizationProgressTable.$inferSelect;
+    schedule: typeof reviewScheduleTable.$inferSelect;
+  },
+>(items: T[]) {
+  const redSurahs = items
+    .filter((item) => getReviewPriorityFromMemProgress(item.mem) === "red")
+    .sort(compareByCanonicalReviewOrder);
+
+  const orangeSurahs = items
+    .filter((item) => getReviewPriorityFromMemProgress(item.mem) === "orange")
+    .sort(compareByCanonicalReviewOrder);
+
+  const greenSurahs = items
+    .filter((item) => getReviewPriorityFromMemProgress(item.mem) === "green")
+    .sort(compareByCanonicalReviewOrder);
+
+  return {
+    redSurahs,
+    orangeSurahs,
+    greenSurahs,
+    orderedQueue: [...redSurahs, ...orangeSurahs, ...greenSurahs],
+  };
+}
+
 function formatDate(date: Date): string {
   return date.toISOString().split("T")[0];
 }
@@ -447,19 +473,22 @@ router.get("/children/:childId/reviews", async (req, res) => {
     .map(m => ({ mem: m, schedule: scheduleRows.find(r => r.surahId === m.surahId) }))
     .filter((x): x is { mem: typeof memProgress[0]; schedule: typeof scheduleRows[0] } => !!x.schedule);
 
-  const redSurahs = reviewableWithSchedule
-    .filter(x => getReviewPriorityFromMemProgress(x.mem) === "red")
-    .sort(compareByCanonicalReviewOrder);
+  const dueReviewableWithSchedule = reviewableWithSchedule.filter(
+    ({ schedule }) => schedule.dueDate <= today,
+  );
+  const futureReviewableWithSchedule = reviewableWithSchedule.filter(
+    ({ schedule }) => schedule.dueDate > today,
+  );
 
-  const orangeSurahs = reviewableWithSchedule
-    .filter(x => getReviewPriorityFromMemProgress(x.mem) === "orange")
-    .sort(compareByCanonicalReviewOrder);
-
-  const greenSurahs = reviewableWithSchedule
-    .filter(x => getReviewPriorityFromMemProgress(x.mem) === "green")
-    .sort(compareByCanonicalReviewOrder);
-
-  const orderedQueue = [...redSurahs, ...orangeSurahs, ...greenSurahs];
+  const {
+    redSurahs,
+    orangeSurahs,
+    greenSurahs,
+    orderedQueue,
+  } = prioritizeReviewableWithSchedule(dueReviewableWithSchedule);
+  const { orderedQueue: futureQueue } = prioritizeReviewableWithSchedule(
+    futureReviewableWithSchedule,
+  );
 
   const withinBudget: typeof scheduleRows = [];
   const overBudget: typeof scheduleRows = [];
@@ -568,7 +597,16 @@ router.get("/children/:childId/reviews", async (req, res) => {
         false,
         mem ? getReviewPriorityFromMemProgress(mem) : "green",
       );
-    });
+    })
+    .concat(
+      futureQueue.map(({ schedule, mem }) =>
+        formatReview(
+          schedule,
+          false,
+          getReviewPriorityFromMemProgress(mem),
+        ),
+      ),
+    );
 
   // reviewedToday = only surahs reviewed today that belong to THIS budget session.
   // Simulate the same budget logic on (reviewed-today candidates + withinBudget) combined

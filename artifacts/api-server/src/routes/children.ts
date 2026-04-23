@@ -532,6 +532,7 @@ router.get("/children/:childId/dashboard", async (req, res) => {
     eq(reviewScheduleTable.childId, childId)
   ))
     .filter((review) => doneSurahIds.has(review.surahId))
+    .filter((review) => review.dueDate <= today)
     .sort((a, b) => {
       const priorityDelta = getReviewPriorityRank(
         memProgress.find((m) => m.surahId === a.surahId),
