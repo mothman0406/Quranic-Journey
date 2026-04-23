@@ -481,3 +481,124 @@ export function resolvePageTarget(
   const final = compareVerseRefs(mid, start) > 0 ? mid : (pageVerses[pageVerses.length - 1] ?? start);
   return { endSurah: final.surah, endAyah: final.ayah, actualPages: 0.5, snapReason: 'verse_split' };
 }
+
+export function resolveSurahScopedPageTarget(
+  startSurah: number,
+  startAyah: number,
+  pagesTarget: number
+): PageTargetResult {
+  const startPage = getPageForVerse(startSurah, startAyah);
+  const targetPage = startPage + pagesTarget;
+  const hardStopPage = startPage + pagesTarget * 1.05;
+  const lastAyah = SURAH_VERSE_COUNTS[startSurah - 1];
+
+  type Candidate = VerseRef & { reason: PageTargetResult['snapReason']; page: number };
+  const candidates: Candidate[] = [];
+  const start: VerseRef = { surah: startSurah, ayah: startAyah };
+  const endRef: VerseRef = { surah: startSurah, ayah: lastAyah };
+
+  if (compareVerseRefs(endRef, start) > 0) {
+    const endPage = getPageForVerse(startSurah, lastAyah);
+    if (endPage <= hardStopPage && endPage < targetPage) {
+      candidates.push({ ...endRef, reason: 'surah_end', page: endPage });
+    }
+  }
+
+  for (const juz of JUZ_STARTS) {
+    if (juz.surah !== startSurah || compareVerseRefs(juz, start) <= 0) continue;
+    const p = getPageForVerse(juz.surah, juz.ayah);
+    if (p > hardStopPage) break;
+    candidates.push({ ...juz, reason: 'juz', page: p });
+  }
+
+  for (const hq of HIZB_QUARTER_STARTS) {
+    if (hq.surah !== startSurah || compareVerseRefs(hq, start) <= 0) continue;
+    const p = getPageForVerse(hq.surah, hq.ayah);
+    if (p > hardStopPage) break;
+    candidates.push({ ...hq, reason: 'hizb_quarter', page: p });
+  }
+
+  const lastFullPage = Math.floor(targetPage) - 1;
+  for (let p = startPage; p <= Math.min(lastFullPage, 604); p++) {
+    let ref: VerseRef | null = null;
+    if (pageLastVerseCache.size > 0) {
+      ref = pageLastVerseCache.get(p) ?? null;
+    } else {
+      const nextIdx = p;
+      if (nextIdx < PAGE_TO_FIRST_VERSE.length) {
+        const nf = PAGE_TO_FIRST_VERSE[nextIdx];
+        let es = nf.surah;
+        let ea = nf.ayah - 1;
+        if (ea < 1) { es -= 1; ea = SURAH_VERSE_COUNTS[es - 1] ?? 1; }
+        ref = { surah: es, ayah: ea };
+      }
+    }
+    if (ref && ref.surah === startSurah && compareVerseRefs(ref, start) > 0) {
+      candidates.push({ ...ref, reason: 'page_end', page: p });
+    }
+  }
+
+  if (candidates.length > 0) {
+    const PRIORITY: Record<PageTargetResult['snapReason'], number> = {
+      surah_end: 0, juz: 1, hizb_quarter: 2, page_end: 3, verse_split: 4,
+    };
+    const startFrac = getFractionalPage(startSurah, startAyah);
+    const targetFrac = startFrac + pagesTarget;
+    candidates.sort((a, b) => {
+      const dp = PRIORITY[a.reason] - PRIORITY[b.reason];
+      if (dp !== 0) return dp;
+      const aFrac = getFractionalPage(a.surah, a.ayah, true);
+      const bFrac = getFractionalPage(b.surah, b.ayah, true);
+      return Math.abs(aFrac - targetFrac) - Math.abs(bFrac - targetFrac);
+    });
+    const best = candidates[0];
+    const bestFrac = getFractionalPage(best.surah, best.ayah, true);
+    return {
+      endSurah: best.surah,
+      endAyah: best.ayah,
+      actualPages: Math.max(0, bestFrac - startFrac),
+      snapReason: best.reason,
+    };
+  }
+
+  const pfv = versePageCache.size > 0
+    ? (() => {
+        let first: VerseRef | null = null;
+        for (const [key, page] of versePageCache) {
+          if (page === startPage) {
+            const [s, a] = key.split(":").map(Number);
+            if (!first || s < first.surah || (s === first.surah && a < first.ayah)) {
+              first = { surah: s, ayah: a };
+            }
+          }
+        }
+        return first ?? PAGE_TO_FIRST_VERSE[startPage - 1];
+      })()
+    : PAGE_TO_FIRST_VERSE[startPage - 1];
+
+  const pageVerses: VerseRef[] = [];
+  let cur: VerseRef = { surah: Math.max(pfv.surah, startSurah), ayah: pfv.surah === startSurah ? pfv.ayah : 1 };
+  const endOfPage: VerseRef = pageLastVerseCache.size > 0
+    ? (pageLastVerseCache.get(startPage) ?? endRef)
+    : startPage < 604
+      ? (() => {
+          const nf = PAGE_TO_FIRST_VERSE[startPage];
+          let es = nf.surah; let ea = nf.ayah - 1;
+          if (ea < 1) { es -= 1; ea = SURAH_VERSE_COUNTS[es - 1] ?? 1; }
+          return { surah: es, ayah: ea };
+        })()
+      : endRef;
+
+  for (let i = 0; i < 50; i++) {
+    if (cur.surah !== startSurah || compareVerseRefs(cur, endRef) > 0) break;
+    pageVerses.push({ ...cur });
+    if (compareVerseRefs(cur, endOfPage) >= 0) break;
+    const n = nextVerse(cur.surah, cur.ayah);
+    if (!n) break;
+    cur = n;
+  }
+
+  const mid = pageVerses[Math.floor(pageVerses.length / 2)] ?? endRef;
+  const final = compareVerseRefs(mid, start) > 0 ? mid : (pageVerses[pageVerses.length - 1] ?? endRef);
+  return { endSurah: startSurah, endAyah: final.ayah, actualPages: 0.5, snapReason: 'verse_split' };
+}

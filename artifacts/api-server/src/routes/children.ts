@@ -3,7 +3,7 @@ import { db } from "@workspace/db";
 import { childrenTable, memorizationProgressTable, reviewScheduleTable, learningSessionsTable, childDuasTable, dailyProgressTable } from "@workspace/db/schema";
 import { eq, desc, and, lte } from "drizzle-orm";
 import { SURAHS } from "../data/surahs.js";
-import { resolvePageTarget, getPageForVerse } from "../data/quran-meta.js";
+import { resolvePageTarget, resolveSurahScopedPageTarget, getPageForVerse } from "../data/quran-meta.js";
 import { STORIES } from "../data/stories.js";
 import { DUAS } from "../data/duas.js";
 
@@ -377,7 +377,7 @@ router.get("/children/:childId/dashboard", async (req, res) => {
   // 15-verse page → prefer 11 verses over 6).
   // Use getPageForVerse(s, lastAyah) — not SURAH_START_PAGES — because
   // SURAH_START_PAGES has stale placeholder values (604) for surahs 91-100.
-  if (memorizationSurahData) {
+  if (memorizationSurahData && !inProgressSurah) {
     const surahPage = getPageForVerse(nextStartSurah, memorizationSurahData.verseCount);
     const totalVersesOnPage = SURAHS.reduce(
       (acc, s) => (getPageForVerse(s.number, s.verseCount) === surahPage ? acc + s.verseCount : acc), 0
@@ -414,7 +414,9 @@ router.get("/children/:childId/dashboard", async (req, res) => {
   const currentSurahName = memorizationSurahData?.nameTransliteration ?? null;
 
   const memTarget = memorizationSurahData
-    ? resolvePageTarget(nextStartSurah, nextStartAyah, child.memorizePagePerDay)
+    ? (inProgressSurah
+        ? resolveSurahScopedPageTarget(nextStartSurah, nextStartAyah, child.memorizePagePerDay)
+        : resolvePageTarget(nextStartSurah, nextStartAyah, child.memorizePagePerDay))
     : null;
 
   let [todayProgress] = await db.select().from(dailyProgressTable)
@@ -561,20 +563,22 @@ router.get("/children/:childId/dashboard", async (req, res) => {
       reviewCompletedCount: todayProgress.reviewCompletedCount,
     },
     upNextMemorization: (() => {
-      const mem = todaysPlan.newMemorization;
-      if (!mem) return null;
-      // Simulate completing today's surahs to find tomorrow's next surah
-      const todayNums = new Set<number>([mem.surahNumber, mem.endSurahNumber]);
-      const todayIds = new Set(SURAHS.filter(s => todayNums.has(s.number)).map(s => s.id));
-      const afterToday = new Set([...doneSurahIds, ...todayIds]);
-      const nextUp = SURAHS_IN_ORDER.find(s => !afterToday.has(s.id));
+      const nextUp = SURAHS_IN_ORDER.find(s => !doneSurahIds.has(s.id));
       if (!nextUp) return null;
+
+      const nextUpProgress = memProgress.find(m => m.surahId === nextUp.id);
+      const ayahStart = nextUpProgress && nextUpProgress.status === "in_progress"
+        ? Math.min(nextUpProgress.versesMemorized + 1, nextUp.verseCount)
+        : 1;
+      const nextUpTarget = resolveSurahScopedPageTarget(nextUp.number, ayahStart, child.memorizePagePerDay);
+      const ayahEnd = Math.min(nextUpTarget.endAyah, nextUp.verseCount);
+
       return {
         surahName: nextUp.nameTransliteration,
         surahNumber: nextUp.number,
-        ayahStart: 1,
-        ayahEnd: nextUp.verseCount,
-        pageStart: getPageForVerse(nextUp.number, 1),
+        ayahStart,
+        ayahEnd,
+        pageStart: getPageForVerse(nextUp.number, ayahStart),
       };
     })(),
   });
