@@ -45,6 +45,29 @@ import { useSettings } from "@/hooks/use-settings";
 
 const QURAN_API = "https://api.quran.com/api/v4";
 
+type MemorizationWorkflowWorkType =
+  | "new_memorization"
+  | "cumulative_block"
+  | "cumulative_full"
+  | "final_surah_test";
+
+function isMemorizationWorkflowWorkType(
+  value: string | null,
+): value is MemorizationWorkflowWorkType {
+  return (
+    value === "new_memorization" ||
+    value === "cumulative_block" ||
+    value === "cumulative_full" ||
+    value === "final_surah_test"
+  );
+}
+
+function isReviewOnlyWorkflowWorkType(
+  value: MemorizationWorkflowWorkType | undefined,
+): boolean {
+  return value != null && value !== "new_memorization";
+}
+
 interface MushafThemeConfig {
   name: string;
   banner: string;
@@ -883,6 +906,7 @@ interface PlayerProps {
   onReciteTriggered?: () => void;
   onReciteComplete?: (score: number) => void;
   onBeforeOpenLeaveModal?: () => void;
+  isWorkflowReviewOnlySession?: boolean;
 }
 
 function MemorizationPlayer({
@@ -905,6 +929,7 @@ function MemorizationPlayer({
   onReciteTriggered,
   onReciteComplete,
   onBeforeOpenLeaveModal,
+  isWorkflowReviewOnlySession = false,
 }: PlayerProps) {
   const [, setLocation] = useLocation();
   const queryClient = useQueryClient();
@@ -2360,56 +2385,94 @@ function MemorizationPlayer({
       {showPauseModal && (
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 px-4 pb-6">
           <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-lg p-6 space-y-5">
-            <div>
-              <h2 className="text-base font-bold text-foreground">How far did you get?</h2>
-              <p className="text-sm text-muted-foreground mt-1">
-                Choose which ayah you finished so we can check the right range.
-              </p>
-            </div>
+            {isWorkflowReviewOnlySession ? (
+              <>
+                <div>
+                  <h2 className="text-base font-bold text-foreground">Finish this recitation?</h2>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Cumulative recitation is all-or-nothing. We will check the full assigned range.
+                  </p>
+                </div>
 
-            <div className="space-y-2">
-              <p className="text-sm text-foreground">
-                I completed ayahs <span className="font-semibold">{fromAyah}</span> to
-              </p>
-              <div className="flex items-center gap-3">
+                <div className="rounded-2xl border border-border bg-muted/30 px-4 py-3">
+                  <p className="text-sm text-foreground text-center">
+                    Assigned range: ayahs <span className="font-semibold">{fromAyah}</span>–<span className="font-semibold">{toAyah}</span>
+                  </p>
+                </div>
+
                 <button
-                  onClick={() => setPauseToAyah((n) => Math.max(fromAyah, n - 1))}
-                  className="w-11 h-11 rounded-full border border-border flex items-center justify-center text-lg font-bold text-muted-foreground hover:text-foreground hover:border-primary/40 transition-colors flex-shrink-0"
-                >
-                  −
-                </button>
-                <input
-                  type="number"
-                  min={fromAyah}
-                  max={toAyah}
-                  value={pauseToAyah}
-                  onChange={(e) => {
-                    const v = Math.max(fromAyah, Math.min(toAyah, parseInt(e.target.value) || fromAyah));
-                    setPauseToAyah(v);
+                  onClick={() => {
+                    setShowPauseModal(false);
+                    onPauseAndSave(toAyah);
                   }}
-                  className="flex-1 border border-border rounded-xl px-3 py-3 text-2xl text-center font-bold outline-none focus:border-primary"
-                />
-                <button
-                  onClick={() => setPauseToAyah((n) => Math.min(toAyah, n + 1))}
-                  className="w-11 h-11 rounded-full border border-border flex items-center justify-center text-lg font-bold text-muted-foreground hover:text-foreground hover:border-primary/40 transition-colors flex-shrink-0"
+                  className="w-full bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-semibold rounded-2xl py-4 text-base transition-colors"
                 >
-                  +
+                  Go to Recitation Check →
                 </button>
-              </div>
-              <p className="text-xs text-muted-foreground text-center">
-                Session range: ayahs {fromAyah}–{toAyah}
-              </p>
-            </div>
+                <button
+                  onClick={() => {
+                    setShowPauseModal(false);
+                    onBack();
+                  }}
+                  className="w-full border border-border text-foreground font-medium rounded-2xl py-3 text-sm hover:bg-muted/50 transition-colors"
+                >
+                  Leave session
+                </button>
+              </>
+            ) : (
+              <>
+                <div>
+                  <h2 className="text-base font-bold text-foreground">How far did you get?</h2>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Choose which ayah you finished so we can check the right range.
+                  </p>
+                </div>
 
-            <button
-              onClick={() => {
-                setShowPauseModal(false);
-                onPauseAndSave(pauseToAyah);
-              }}
-              className="w-full bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-semibold rounded-2xl py-4 text-base transition-colors"
-            >
-              Go to Recitation Check →
-            </button>
+                <div className="space-y-2">
+                  <p className="text-sm text-foreground">
+                    I completed ayahs <span className="font-semibold">{fromAyah}</span> to
+                  </p>
+                  <div className="flex items-center gap-3">
+                    <button
+                      onClick={() => setPauseToAyah((n) => Math.max(fromAyah, n - 1))}
+                      className="w-11 h-11 rounded-full border border-border flex items-center justify-center text-lg font-bold text-muted-foreground hover:text-foreground hover:border-primary/40 transition-colors flex-shrink-0"
+                    >
+                      −
+                    </button>
+                    <input
+                      type="number"
+                      min={fromAyah}
+                      max={toAyah}
+                      value={pauseToAyah}
+                      onChange={(e) => {
+                        const v = Math.max(fromAyah, Math.min(toAyah, parseInt(e.target.value) || fromAyah));
+                        setPauseToAyah(v);
+                      }}
+                      className="flex-1 border border-border rounded-xl px-3 py-3 text-2xl text-center font-bold outline-none focus:border-primary"
+                    />
+                    <button
+                      onClick={() => setPauseToAyah((n) => Math.min(toAyah, n + 1))}
+                      className="w-11 h-11 rounded-full border border-border flex items-center justify-center text-lg font-bold text-muted-foreground hover:text-foreground hover:border-primary/40 transition-colors flex-shrink-0"
+                    >
+                      +
+                    </button>
+                  </div>
+                  <p className="text-xs text-muted-foreground text-center">
+                    Session range: ayahs {fromAyah}–{toAyah}
+                  </p>
+                </div>
+
+                <button
+                  onClick={() => {
+                    setShowPauseModal(false);
+                    onPauseAndSave(pauseToAyah);
+                  }}
+                  className="w-full bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-semibold rounded-2xl py-4 text-base transition-colors"
+                >
+                  Go to Recitation Check →
+                </button>
+              </>
+            )}
             <button
               onClick={() => setShowPauseModal(false)}
               className="w-full text-sm text-muted-foreground hover:text-foreground py-2 transition-colors"
@@ -2425,9 +2488,13 @@ function MemorizationPlayer({
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 px-4 pb-6">
           <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-lg p-6 space-y-4">
             <div>
-              <h2 className="text-base font-bold text-foreground">Leave this session?</h2>
+              <h2 className="text-base font-bold text-foreground">
+                {isWorkflowReviewOnlySession ? "Leave this recitation session?" : "Leave this session?"}
+              </h2>
               <p className="text-sm text-muted-foreground mt-1">
-                Your progress won't be saved unless you save first.
+                {isWorkflowReviewOnlySession
+                  ? "This cumulative recitation only counts if you finish the full session."
+                  : "Your progress won't be saved unless you save first."}
               </p>
             </div>
             <button
@@ -2437,6 +2504,9 @@ function MemorizationPlayer({
                   leaveDestinationRef.current = null;
                   setShowLeaveModal(false);
                   setLocation(dest);
+                } else if (isWorkflowReviewOnlySession) {
+                  setShowLeaveModal(false);
+                  onBack();
                 } else {
                   setShowLeaveModal(false);
                   setShowPauseModal(true);
@@ -2444,23 +2514,25 @@ function MemorizationPlayer({
               }}
               className="w-full bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-semibold rounded-2xl py-4 text-base transition-colors"
             >
-              Save &amp; Leave
+              {isWorkflowReviewOnlySession ? "Leave session" : "Save & Leave"}
             </button>
-            <button
-              onClick={() => {
-                const dest = leaveDestinationRef.current;
-                leaveDestinationRef.current = null;
-                setShowLeaveModal(false);
-                if (dest) {
-                  setLocation(dest);
-                } else {
-                  onBack();
-                }
-              }}
-              className="w-full border border-border text-foreground font-medium rounded-2xl py-3 text-sm hover:bg-muted/50 transition-colors"
-            >
-              Leave without saving
-            </button>
+            {!isWorkflowReviewOnlySession && (
+              <button
+                onClick={() => {
+                  const dest = leaveDestinationRef.current;
+                  leaveDestinationRef.current = null;
+                  setShowLeaveModal(false);
+                  if (dest) {
+                    setLocation(dest);
+                  } else {
+                    onBack();
+                  }
+                }}
+                className="w-full border border-border text-foreground font-medium rounded-2xl py-3 text-sm hover:bg-muted/50 transition-colors"
+              >
+                Leave without saving
+              </button>
+            )}
             <button
               onClick={() => setShowLeaveModal(false)}
               className="w-full text-sm text-muted-foreground hover:text-foreground py-2 transition-colors"
@@ -2914,7 +2986,7 @@ function MemorizationPlayer({
               }}
             >
               <Flag size={14} />
-              Pause &amp; Save
+              {isWorkflowReviewOnlySession ? "Finish Recitation" : "Pause & Save"}
             </button>
 
             {/* View in Full Mushaf */}
@@ -2985,6 +3057,47 @@ export default function QuranMemorizePage() {
   const [toInput, setToInput] = useState(String(toAyah));
   useEffect(() => setFromInput(String(fromAyah)), [fromAyah]);
   useEffect(() => setToInput(String(toAyah)), [toAyah]);
+  const surahParam = useMemo(() => new URLSearchParams(search).get("surah"), [search]);
+  const workTypeParam = useMemo(() => {
+    const value = new URLSearchParams(search).get("workType");
+    return isMemorizationWorkflowWorkType(value) ? value : undefined;
+  }, [search]);
+
+  type WorkflowSessionInfo = {
+    surahNumber?: number;
+    ayahStart?: number;
+    ayahEnd?: number;
+    workType?: MemorizationWorkflowWorkType;
+  };
+  type DashboardTodayProgress = {
+    memStatus?: "not_started" | "in_progress" | "completed";
+    memTargetSurah?: number | null;
+    memTargetAyahStart?: number | null;
+    memTargetAyahEnd?: number | null;
+  };
+  const todayMem = dashboard?.todaysPlan?.newMemorization as WorkflowSessionInfo | undefined;
+  const upNextMem = (dashboard as { upNextMemorization?: WorkflowSessionInfo } | undefined)?.upNextMemorization;
+  const todayProgress = (dashboard as { todayProgress?: DashboardTodayProgress } | undefined)?.todayProgress;
+  const sessionSurahNumber = selectedChapter?.id ?? (surahParam ? parseInt(surahParam, 10) : undefined);
+  const matchedDashboardWorkType =
+    sessionSurahNumber != null &&
+    todayMem?.surahNumber === sessionSurahNumber &&
+    todayMem.ayahStart === fromAyah &&
+    todayMem.ayahEnd === toAyah
+      ? todayMem.workType
+      : sessionSurahNumber != null &&
+        upNextMem?.surahNumber === sessionSurahNumber &&
+        upNextMem.ayahStart === fromAyah &&
+        upNextMem.ayahEnd === toAyah
+      ? upNextMem.workType
+      : undefined;
+  const sessionWorkType = workTypeParam ?? matchedDashboardWorkType;
+  const isWorkflowReviewOnlySession = isReviewOnlyWorkflowWorkType(sessionWorkType);
+  const matchesTodayMemTarget =
+    sessionSurahNumber != null &&
+    todayProgress?.memTargetSurah === sessionSurahNumber &&
+    todayProgress.memTargetAyahStart === fromAyah &&
+    todayProgress.memTargetAyahEnd === toAyah;
 
   const dailyProgressMutation = useMutation({
     mutationFn: (body: { memStatus: string; memCompletedAyahEnd: number }) =>
@@ -3000,24 +3113,18 @@ export default function QuranMemorizePage() {
 
   const saveMutation = useMutation({
     mutationFn: async (qualityRating: number) => {
-      const todayMem = dashboard?.todaysPlan?.newMemorization as
-        | {
-            surahNumber?: number;
-            ayahStart?: number;
-            ayahEnd?: number;
-            workType?: "new_memorization" | "cumulative_block" | "cumulative_full" | "final_surah_test";
+      if (isWorkflowReviewOnlySession) {
+        if (matchesTodayMemTarget) {
+          const response = await fetch(`/api/children/${childId}/daily-progress`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ memStatus: "completed", memCompletedAyahEnd: toAyah }),
+          });
+          if (!response.ok) {
+            throw new Error("Failed to save cumulative memorization progress");
           }
-        | undefined;
-      const isTodayCumulativeSession =
-        todayMem?.surahNumber != null &&
-        selectedChapter?.id === todayMem.surahNumber &&
-        todayMem.workType != null &&
-        todayMem.workType !== "new_memorization" &&
-        todayMem.ayahStart === fromAyah &&
-        todayMem.ayahEnd === toAyah;
-
-      if (isTodayCumulativeSession) {
-        return { skippedMemorizationUpdate: true as const };
+        }
+        return { skippedMemorizationUpdate: true as const, savedTodayWorkflow: matchesTodayMemTarget };
       }
 
       const latestMemData = await qc.ensureQueryData({
@@ -3046,44 +3153,33 @@ export default function QuranMemorizePage() {
       });
       return updateMemorization(parseInt(childId), payload);
     },
-    onSuccess: (result) => {
+    onSuccess: async (result) => {
       console.log("[quran-memorize] Save succeeded, API returned:", result);
       console.log("[quran-memorize] Invalidating query key:", ["memorization", childId]);
-      qc.invalidateQueries({ queryKey: ["memorization", childId] });
-      qc.invalidateQueries({ queryKey: ["dashboard", childId] });
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ["memorization", childId] }),
+        qc.refetchQueries({ queryKey: ["dashboard", childId], exact: true }),
+      ]);
       setSaveSuccess(true);
-      const todayMem = dashboard?.todaysPlan?.newMemorization as
-        | {
-            surahNumber?: number;
-            ayahStart?: number;
-            ayahEnd?: number;
-            workType?: "new_memorization" | "cumulative_block" | "cumulative_full" | "final_surah_test";
-          }
-        | undefined;
-      const isTodayCumulativeSession =
-        todayMem?.surahNumber != null &&
-        selectedChapter?.id === todayMem.surahNumber &&
-        todayMem.workType != null &&
-        todayMem.workType !== "new_memorization" &&
-        todayMem.ayahStart === fromAyah &&
-        todayMem.ayahEnd === toAyah;
       const isTodayWholeSurahTest =
-        isTodayCumulativeSession &&
-        todayMem?.ayahStart === 1 &&
-        todayMem?.ayahEnd === selectedChapter?.verses_count;
+        isWorkflowReviewOnlySession &&
+        fromAyah === 1 &&
+        toAyah === selectedChapter?.verses_count;
       const isComplete = toAyah >= selectedChapter!.verses_count;
-      if (isTodayCumulativeSession) {
+      if (isWorkflowReviewOnlySession) {
         setCelebration({
           message: isTodayWholeSurahTest ? "Whole Surah Complete!" : "Cumulative Recitation Complete!",
           subMessage: isTodayWholeSurahTest
             ? "This surah is ready to move into the separate review cycle."
+            : (result as { savedTodayWorkflow?: boolean } | undefined)?.savedTodayWorkflow === false
+            ? "This recitation session finished, but it was not today's assigned memorization work."
             : "Today's memorization recitation work is complete.",
         });
       } else if (isComplete) {
         setCelebration({ message: "Surah Complete!", subMessage: "You've memorized the full surah!" });
       }
       // Update daily progress if user worked on today's target surah
-      if (todayMem?.surahNumber != null && selectedChapter?.id === todayMem.surahNumber) {
+      if (!isWorkflowReviewOnlySession && todayMem?.surahNumber != null && selectedChapter?.id === todayMem.surahNumber) {
         const memStatus = todayMem.ayahEnd != null && toAyah >= todayMem.ayahEnd ? "completed" : "in_progress";
         dailyProgressMutation.mutate({ memStatus, memCompletedAyahEnd: toAyah });
       }
@@ -3109,8 +3205,6 @@ export default function QuranMemorizePage() {
   const verses = versesData?.verses ?? [];
 
   const bookmark = useMemo(() => loadBookmark(childId), [childId]);
-
-  const surahParam = useMemo(() => new URLSearchParams(search).get("surah"), [search]);
 
   useEffect(() => {
     if (!surahParam || chapters.length === 0 || phase !== "pick") return;
@@ -3554,6 +3648,23 @@ export default function QuranMemorizePage() {
               `Start — Ayah ${fromAyah}${fromAyah !== toAyah ? ` to ${toAyah}` : ""}`
             )}
           </Button>
+          {isWorkflowReviewOnlySession && (
+            <Button
+              variant="outline"
+              className="w-full h-12 text-base rounded-2xl"
+              onClick={() => {
+                setShowReadyModal(false);
+                setCheckRating(null);
+                setSaveSuccess(false);
+                setReciteSource(false);
+                setCelebration(null);
+                setPhase("check");
+              }}
+              disabled={versesLoading}
+            >
+              Just Get Tested
+            </Button>
+          )}
         </div>
 
         <ChildNav childId={childId} />
@@ -3695,9 +3806,19 @@ export default function QuranMemorizePage() {
               <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-5 flex items-center gap-3">
                 <CheckCircle size={24} className="text-emerald-600 flex-shrink-0" />
                 <div>
-                  <p className="font-semibold text-emerald-800">Progress saved!</p>
+                  <p className="font-semibold text-emerald-800">
+                    {isWorkflowReviewOnlySession ? "Recitation saved!" : "Progress saved!"}
+                  </p>
                   <p className="text-sm text-emerald-600">
-                    <span dir="rtl" style={{ unicodeBidi: "embed" }}>{selectedChapter.name_simple}</span> ayahs {fromAyah}–{toAyah} marked as memorized.
+                    {isWorkflowReviewOnlySession ? (
+                      <>
+                        <span dir="rtl" style={{ unicodeBidi: "embed" }}>{selectedChapter.name_simple}</span> ayahs {fromAyah}–{toAyah} marked complete for recitation.
+                      </>
+                    ) : (
+                      <>
+                        <span dir="rtl" style={{ unicodeBidi: "embed" }}>{selectedChapter.name_simple}</span> ayahs {fromAyah}–{toAyah} marked as memorized.
+                      </>
+                    )}
                   </p>
                 </div>
               </div>
@@ -3790,6 +3911,7 @@ export default function QuranMemorizePage() {
         onReciteTriggered={() => setTriggerReciteMode(false)}
         onReciteComplete={handleReciteComplete}
         onBeforeOpenLeaveModal={() => setShowReadyModal(false)}
+        isWorkflowReviewOnlySession={isWorkflowReviewOnlySession}
       />
 
       {showReadyModal && (
