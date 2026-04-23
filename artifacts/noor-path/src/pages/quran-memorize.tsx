@@ -3114,15 +3114,20 @@ export default function QuranMemorizePage() {
   const saveMutation = useMutation({
     mutationFn: async (qualityRating: number) => {
       if (isWorkflowReviewOnlySession) {
-        if (matchesTodayMemTarget) {
-          const response = await fetch(`/api/children/${childId}/daily-progress`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ memStatus: "completed", memCompletedAyahEnd: toAyah }),
-          });
-          if (!response.ok) {
-            throw new Error("Failed to save cumulative memorization progress");
-          }
+        const response = await fetch(`/api/children/${childId}/daily-progress`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            memStatus: "completed",
+            memCompletedAyahEnd: toAyah,
+            memTargetSurah: sessionSurahNumber,
+            memTargetAyahStart: fromAyah,
+            memTargetAyahEnd: toAyah,
+            memTargetEndSurah: sessionSurahNumber,
+          }),
+        });
+        if (!response.ok) {
+          throw new Error("Failed to save cumulative memorization progress");
         }
         return { skippedMemorizationUpdate: true as const, savedTodayWorkflow: matchesTodayMemTarget };
       }

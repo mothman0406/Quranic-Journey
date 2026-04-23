@@ -481,7 +481,9 @@ router.get("/children/:childId/dashboard", async (req, res) => {
   if (child.parentId !== req.user.id) { res.status(403).json({ error: "Forbidden" }); return; }
 
   const memProgress = await db.select().from(memorizationProgressTable).where(eq(memorizationProgressTable.childId, childId));
-  const dailyProgressRows = await db.select().from(dailyProgressTable).where(eq(dailyProgressTable.childId, childId));
+  const dailyProgressRows = await db.select().from(dailyProgressTable)
+    .where(eq(dailyProgressTable.childId, childId))
+    .orderBy(desc(dailyProgressTable.id));
   const completedMemDailyRows = dailyProgressRows.filter((row) => row.memStatus === "completed");
   const _d = new Date();
   const today = `${_d.getFullYear()}-${String(_d.getMonth()+1).padStart(2,'0')}-${String(_d.getDate()).padStart(2,'0')}`;
@@ -683,6 +685,10 @@ router.get("/children/:childId/dashboard", async (req, res) => {
           activeWorkflowItem.scheduleIndex,
         )
       : null;
+  const upcomingWorkflowItem =
+    memorizationWorkflow?.enabled && todayProgress.memStatus === "completed"
+      ? scheduledWorkItem
+      : nextWorkflowItem;
 
   const currentSurahName = activeWorkflowItem?.surahName ?? memorizationSurahData?.nameTransliteration ?? null;
 
@@ -832,17 +838,17 @@ router.get("/children/:childId/dashboard", async (req, res) => {
       reviewCompletedCount: todayProgress.reviewCompletedCount,
     },
     upNextMemorization: (() => {
-      if (nextWorkflowItem) {
+      if (upcomingWorkflowItem) {
         return {
-          surahName: nextWorkflowItem.surahName,
-          surahNumber: nextWorkflowItem.surahNumber,
-          ayahStart: nextWorkflowItem.ayahStart,
-          ayahEnd: nextWorkflowItem.ayahEnd,
-          pageStart: nextWorkflowItem.pageStart,
-          pageEnd: nextWorkflowItem.pageEnd,
-          workType: nextWorkflowItem.workType,
-          workLabel: nextWorkflowItem.workLabel,
-          isReviewOnly: nextWorkflowItem.isReviewOnly,
+          surahName: upcomingWorkflowItem.surahName,
+          surahNumber: upcomingWorkflowItem.surahNumber,
+          ayahStart: upcomingWorkflowItem.ayahStart,
+          ayahEnd: upcomingWorkflowItem.ayahEnd,
+          pageStart: upcomingWorkflowItem.pageStart,
+          pageEnd: upcomingWorkflowItem.pageEnd,
+          workType: upcomingWorkflowItem.workType,
+          workLabel: upcomingWorkflowItem.workLabel,
+          isReviewOnly: upcomingWorkflowItem.isReviewOnly,
         };
       }
 
@@ -1017,9 +1023,30 @@ router.post("/children/:childId/daily-progress", async (req, res) => {
   if (!child) { res.status(404).json({ error: "Child not found" }); return; }
   const _d = new Date();
   const today = `${_d.getFullYear()}-${String(_d.getMonth()+1).padStart(2,'0')}-${String(_d.getDate()).padStart(2,'0')}`;
-  const { memStatus, memCompletedAyahEnd, reviewStatus, reviewCompletedCount, reviewTargetCount } = req.body;
-  let [row] = await db.select().from(dailyProgressTable)
-    .where(and(eq(dailyProgressTable.childId, childId), eq(dailyProgressTable.date, today)));
+  const {
+    memStatus,
+    memCompletedAyahEnd,
+    memTargetSurah,
+    memTargetAyahStart,
+    memTargetAyahEnd,
+    memTargetEndSurah,
+    reviewStatus,
+    reviewCompletedCount,
+    reviewTargetCount,
+  } = req.body;
+  const todayRows = await db.select().from(dailyProgressTable)
+    .where(and(eq(dailyProgressTable.childId, childId), eq(dailyProgressTable.date, today)))
+    .orderBy(desc(dailyProgressTable.id));
+  let row =
+    memTargetSurah != null
+      ? (todayRows.find((candidate) =>
+          candidate.memTargetSurah === memTargetSurah &&
+          candidate.memTargetAyahStart === (memTargetAyahStart ?? null) &&
+          candidate.memTargetAyahEnd === (memTargetAyahEnd ?? null) &&
+          (candidate.memTargetEndSurah ?? candidate.memTargetSurah) ===
+            (memTargetEndSurah ?? memTargetSurah)
+        ) ?? null)
+      : (todayRows[0] ?? null);
   const updates: Record<string, unknown> = { updatedAt: new Date() };
   // Never downgrade a completed status — the /memorization route sets it authoritatively
   if (memStatus && !(row?.memStatus === 'completed' && memStatus !== 'completed')) updates.memStatus = memStatus;
@@ -1030,6 +1057,20 @@ router.post("/children/:childId/daily-progress", async (req, res) => {
   if (reviewTargetCount != null) updates.reviewTargetCount = reviewTargetCount;
   if (row) {
     [row] = await db.update(dailyProgressTable).set(updates).where(eq(dailyProgressTable.id, row.id)).returning();
+  } else if (memTargetSurah != null || memStatus || reviewStatus) {
+    [row] = await db.insert(dailyProgressTable).values({
+      childId,
+      date: today,
+      memTargetSurah: memTargetSurah ?? null,
+      memTargetAyahStart: memTargetAyahStart ?? null,
+      memTargetAyahEnd: memTargetAyahEnd ?? null,
+      memTargetEndSurah: memTargetEndSurah ?? memTargetSurah ?? null,
+      memCompletedAyahEnd: memCompletedAyahEnd ?? null,
+      memStatus: memStatus ?? "not_started",
+      reviewTargetCount: reviewTargetCount ?? null,
+      reviewCompletedCount: reviewCompletedCount ?? 0,
+      reviewStatus: reviewStatus ?? "not_started",
+    }).returning();
   }
 
   if (row?.memStatus === "completed" && row.memTargetSurah) {

@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import { db } from "@workspace/db";
 import { childrenTable, memorizationProgressTable, reviewScheduleTable, dailyProgressTable } from "@workspace/db/schema";
-import { eq, and } from "drizzle-orm";
+import { eq, and, desc } from "drizzle-orm";
 import { SURAHS } from "../data/surahs.js";
 import { getPageForVerse } from "../data/quran-meta.js";
 import {
@@ -348,7 +348,8 @@ router.post("/children/:childId/memorization", async (req, res) => {
     const _dd = new Date();
     const todayStr = `${_dd.getFullYear()}-${String(_dd.getMonth()+1).padStart(2,'0')}-${String(_dd.getDate()).padStart(2,'0')}`;
     const [todayProg] = await db.select().from(dailyProgressTable)
-      .where(and(eq(dailyProgressTable.childId, childId), eq(dailyProgressTable.date, todayStr)));
+      .where(and(eq(dailyProgressTable.childId, childId), eq(dailyProgressTable.date, todayStr)))
+      .orderBy(desc(dailyProgressTable.id));
 
     if (todayProg) {
       if (todayProg.memStatus === 'not_started') {
