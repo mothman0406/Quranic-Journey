@@ -4,6 +4,7 @@ import { childrenTable, memorizationProgressTable, reviewScheduleTable, dailyPro
 import { eq, and, desc } from "drizzle-orm";
 import { SURAHS } from "../data/surahs.js";
 import { getPageForVerse } from "../data/quran-meta.js";
+import { addDaysToLocalDate, getRequestLocalDate, localDateStr } from "../lib/local-date.js";
 import {
   buildSurahMemorizationWorkflow,
   hasPendingIntraSurahWork,
@@ -137,12 +138,34 @@ function compareByCanonicalReviewOrder<T extends { mem: typeof memorizationProgr
   return getCanonicalReviewOrder(a.mem.surahId) - getCanonicalReviewOrder(b.mem.surahId);
 }
 
-function formatDate(date: Date): string {
-  return date.toISOString().split("T")[0];
+function prioritizeReviewableWithSchedule<
+  T extends {
+    mem: typeof memorizationProgressTable.$inferSelect;
+    schedule: typeof reviewScheduleTable.$inferSelect;
+  },
+>(items: T[]) {
+  const redSurahs = items
+    .filter((item) => getReviewPriorityFromMemProgress(item.mem) === "red")
+    .sort(compareByCanonicalReviewOrder);
+
+  const orangeSurahs = items
+    .filter((item) => getReviewPriorityFromMemProgress(item.mem) === "orange")
+    .sort(compareByCanonicalReviewOrder);
+
+  const greenSurahs = items
+    .filter((item) => getReviewPriorityFromMemProgress(item.mem) === "green")
+    .sort(compareByCanonicalReviewOrder);
+
+  return {
+    redSurahs,
+    orangeSurahs,
+    greenSurahs,
+    orderedQueue: [...redSurahs, ...orangeSurahs, ...greenSurahs],
+  };
 }
 
-function localDateStr(d: Date): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+function formatDate(date: Date): string {
+  return date.toISOString().split("T")[0];
 }
 
 function addDays(date: Date, days: number): Date {
@@ -408,9 +431,8 @@ router.get("/children/:childId/reviews", async (req, res) => {
     .from(childrenTable).where(eq(childrenTable.id, childId));
   const reviewBudget = child?.reviewPagesPerDay ?? 2.0;
 
-  // Step 1 — Local date (not UTC)
-  const d = new Date();
-  const today = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  // Step 1 — Client-local review date when provided, else server local date
+  const today = getRequestLocalDate(req);
 
   // Step 2 — (removed: was deleting unreviewed entries, but Step 4 would immediately recreate
   // them on every refetch, causing new surahs to appear mid-session)
@@ -447,19 +469,22 @@ router.get("/children/:childId/reviews", async (req, res) => {
     .map(m => ({ mem: m, schedule: scheduleRows.find(r => r.surahId === m.surahId) }))
     .filter((x): x is { mem: typeof memProgress[0]; schedule: typeof scheduleRows[0] } => !!x.schedule);
 
-  const redSurahs = reviewableWithSchedule
-    .filter(x => getReviewPriorityFromMemProgress(x.mem) === "red")
-    .sort(compareByCanonicalReviewOrder);
+  const dueReviewableWithSchedule = reviewableWithSchedule.filter(
+    ({ schedule }) => schedule.dueDate <= today,
+  );
+  const futureReviewableWithSchedule = reviewableWithSchedule.filter(
+    ({ schedule }) => schedule.dueDate > today,
+  );
 
-  const orangeSurahs = reviewableWithSchedule
-    .filter(x => getReviewPriorityFromMemProgress(x.mem) === "orange")
-    .sort(compareByCanonicalReviewOrder);
-
-  const greenSurahs = reviewableWithSchedule
-    .filter(x => getReviewPriorityFromMemProgress(x.mem) === "green")
-    .sort(compareByCanonicalReviewOrder);
-
-  const orderedQueue = [...redSurahs, ...orangeSurahs, ...greenSurahs];
+  const {
+    redSurahs,
+    orangeSurahs,
+    greenSurahs,
+    orderedQueue,
+  } = prioritizeReviewableWithSchedule(dueReviewableWithSchedule);
+  const { orderedQueue: futureQueue } = prioritizeReviewableWithSchedule(
+    futureReviewableWithSchedule,
+  );
 
   const withinBudget: typeof scheduleRows = [];
   const overBudget: typeof scheduleRows = [];
@@ -568,7 +593,16 @@ router.get("/children/:childId/reviews", async (req, res) => {
         false,
         mem ? getReviewPriorityFromMemProgress(mem) : "green",
       );
-    });
+    })
+    .concat(
+      futureQueue.map(({ schedule, mem }) =>
+        formatReview(
+          schedule,
+          false,
+          getReviewPriorityFromMemProgress(mem),
+        ),
+      ),
+    );
 
   // reviewedToday = only surahs reviewed today that belong to THIS budget session.
   // Simulate the same budget logic on (reviewed-today candidates + withinBudget) combined
@@ -633,13 +667,14 @@ router.post("/children/:childId/reviews", async (req, res) => {
     .where(and(eq(memorizationProgressTable.childId, childId), eq(memorizationProgressTable.surahId, surahId)));
 
   const now = new Date();
+  const today = getRequestLocalDate(req);
   const { interval, easeFactor } = sm2(
     review?.easeFactor || 2.5,
     review?.interval || 1,
     qualityRating
   );
 
-  const nextDate = localDateStr(new Date(now.getTime() + interval * 24 * 60 * 60 * 1000));
+  const nextDate = addDaysToLocalDate(today, interval);
 
   let updated;
   if (review) {

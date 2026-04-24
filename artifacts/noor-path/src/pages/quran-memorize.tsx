@@ -38,7 +38,7 @@ import {
   Check,
   BookOpen,
 } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, getLocalDateHeaderValue } from "@/lib/utils";
 import { useSettings } from "@/hooks/use-settings";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -3117,7 +3117,10 @@ export default function QuranMemorizePage() {
     mutationFn: (body: { memStatus: string; memCompletedAyahEnd: number }) =>
       fetch(`/api/children/${childId}/daily-progress`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "x-local-date": getLocalDateHeaderValue(),
+        },
         body: JSON.stringify(body),
       }),
     onSuccess: () => {
@@ -3130,7 +3133,10 @@ export default function QuranMemorizePage() {
       if (isWorkflowReviewOnlySession) {
         const response = await fetch(`/api/children/${childId}/daily-progress`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            "x-local-date": getLocalDateHeaderValue(),
+          },
           body: JSON.stringify({
             memStatus: "completed",
             memCompletedAyahEnd: toAyah,

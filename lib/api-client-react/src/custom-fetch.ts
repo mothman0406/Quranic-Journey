@@ -75,6 +75,12 @@ function resolveUrl(input: RequestInfo | URL): string {
   return input.url;
 }
 
+function getLocalDateHeaderValue(date = new Date()): string {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(
+    date.getDate(),
+  ).padStart(2, "0")}`;
+}
+
 function mergeHeaders(...sources: Array<HeadersInit | undefined>): Headers {
   const headers = new Headers();
 
@@ -344,6 +350,10 @@ export async function customFetch<T = unknown>(
 
   if (responseType === "json" && !headers.has("accept")) {
     headers.set("accept", DEFAULT_JSON_ACCEPT);
+  }
+
+  if (!headers.has("x-local-date")) {
+    headers.set("x-local-date", getLocalDateHeaderValue());
   }
 
   // Attach bearer token when an auth getter is configured and no

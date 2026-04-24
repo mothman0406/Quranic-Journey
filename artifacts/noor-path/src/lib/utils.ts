@@ -11,3 +11,9 @@ export function formatMinutes(mins: number): string {
   const m = mins % 60;
   return m > 0 ? `${h}h ${m}m` : `${h}h`;
 }
+
+export function getLocalDateHeaderValue(date = new Date()): string {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(
+    date.getDate(),
+  ).padStart(2, "0")}`;
+}

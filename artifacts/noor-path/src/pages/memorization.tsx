@@ -40,10 +40,43 @@ function getConsecutiveRange(ayahs: number[]): { start: number; end: number } | 
   return { start: sorted[0], end };
 }
 
-function getStatusColor(status: string, percent: number) {
-  if (status === "memorized") return "bg-emerald-500";
+type ReviewStrengthTone = "red" | "orange" | "green";
+
+function getReviewStrengthTone(
+  status: string,
+  strength: number | undefined,
+  isFullyMemorized: boolean,
+): ReviewStrengthTone | null {
+  if (!isFullyMemorized && status !== "needs_review") return null;
+
+  const normalizedStrength = strength ?? 3;
+
+  if (status === "needs_review" && normalizedStrength <= 1) return "red";
+  if (status === "needs_review") return "orange";
+  if (!isFullyMemorized) return null;
+  if (normalizedStrength <= 1) return "red";
+  if (normalizedStrength <= 3) return "orange";
+  return "green";
+}
+
+function getStatusColor(
+  status: string,
+  percent: number,
+  strength: number | undefined,
+  isFullyMemorized: boolean,
+) {
+  const reviewTone = getReviewStrengthTone(status, strength, isFullyMemorized);
+  if (reviewTone === "green") return "bg-emerald-500";
+  if (reviewTone === "orange") return "bg-amber-400";
+  if (reviewTone === "red") return "bg-red-500";
   if (status === "in_progress" || percent > 0) return "bg-amber-400";
   return "bg-muted";
+}
+
+function getReviewToneLabel(reviewTone: ReviewStrengthTone): string {
+  if (reviewTone === "red") return "Review red";
+  if (reviewTone === "orange") return "Review orange";
+  return "Review green";
 }
 
 // ─── SurahStudyView (inline ayah-by-ayah mode, replaces lesson.tsx) ──────────
@@ -810,7 +843,18 @@ export default function MemorizationPage() {
               const isExpanded = expandedSurahId === item.surahId;
               const memorizedAyahs: number[] = item.memorizedAyahs ?? [];
               const range = getConsecutiveRange(memorizedAyahs);
-              const barColor = getStatusColor(item.status, item.percentComplete);
+              const isFullyMemorized = item.versesMemorized >= item.totalVerses;
+              const reviewTone = getReviewStrengthTone(
+                item.status,
+                item.strength,
+                isFullyMemorized,
+              );
+              const barColor = getStatusColor(
+                item.status,
+                item.percentComplete,
+                item.strength,
+                isFullyMemorized,
+              );
 
               return (
                 <Card
@@ -845,8 +889,8 @@ export default function MemorizationPage() {
                       <div className="flex-1 min-w-0">
                         <p className="font-semibold text-sm text-foreground">{item.surahName}</p>
                         <p className="text-xs text-muted-foreground">
-                          {item.status === "memorized"
-                            ? `All ${item.totalVerses} ayahs ✓`
+                          {reviewTone
+                            ? `All ${item.totalVerses} ayahs · ${getReviewToneLabel(reviewTone)}`
                             : item.status === "in_progress" && range
                             ? `Ayahs ${range.start}–${range.end} done · ${item.totalVerses} total`
                             : `${item.totalVerses} ayahs`}
@@ -891,7 +935,7 @@ export default function MemorizationPage() {
                             </Button>
                           </Link>
                         </div>
-                        {item.status !== "memorized" && (
+                        {!isFullyMemorized && (
                           <Button
                             size="sm"
                             className="h-7 text-xs px-2 w-full mt-2"

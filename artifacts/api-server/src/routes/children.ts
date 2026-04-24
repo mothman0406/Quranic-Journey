@@ -6,6 +6,7 @@ import { SURAHS } from "../data/surahs.js";
 import { resolvePageTarget, resolveSurahScopedPageTarget, getPageForVerse } from "../data/quran-meta.js";
 import { STORIES } from "../data/stories.js";
 import { DUAS } from "../data/duas.js";
+import { getRequestLocalDate } from "../lib/local-date.js";
 import {
   buildSurahMemorizationWorkflow,
   findMatchingWorkItem,
@@ -485,8 +486,7 @@ router.get("/children/:childId/dashboard", async (req, res) => {
     .where(eq(dailyProgressTable.childId, childId))
     .orderBy(desc(dailyProgressTable.id));
   const completedMemDailyRows = dailyProgressRows.filter((row) => row.memStatus === "completed");
-  const _d = new Date();
-  const today = `${_d.getFullYear()}-${String(_d.getMonth()+1).padStart(2,'0')}-${String(_d.getDate()).padStart(2,'0')}`;
+  const today = getRequestLocalDate(req);
 
   const recentSessionsRaw = await db.select().from(learningSessionsTable)
     .where(eq(learningSessionsTable.childId, childId))
@@ -532,6 +532,7 @@ router.get("/children/:childId/dashboard", async (req, res) => {
     eq(reviewScheduleTable.childId, childId)
   ))
     .filter((review) => doneSurahIds.has(review.surahId))
+    .filter((review) => review.dueDate <= today)
     .sort((a, b) => {
       const priorityDelta = getReviewPriorityRank(
         memProgress.find((m) => m.surahId === a.surahId),
@@ -1021,8 +1022,7 @@ router.post("/children/:childId/daily-progress", async (req, res) => {
   if (!await ownsChild(req.user.id, childId)) { res.status(403).json({ error: "Forbidden" }); return; }
   const [child] = await db.select().from(childrenTable).where(eq(childrenTable.id, childId));
   if (!child) { res.status(404).json({ error: "Child not found" }); return; }
-  const _d = new Date();
-  const today = `${_d.getFullYear()}-${String(_d.getMonth()+1).padStart(2,'0')}-${String(_d.getDate()).padStart(2,'0')}`;
+  const today = getRequestLocalDate(req);
   const {
     memStatus,
     memCompletedAyahEnd,
