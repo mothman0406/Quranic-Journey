@@ -2,7 +2,6 @@ import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useParams, useSearch, useLocation } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { updateMemorization, listMemorization } from "@workspace/api-client-react";
-import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { VersePlayer } from "@/components/verse-player";
 import {
@@ -12,11 +11,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { ChildNav } from "@/components/child-nav";
 import { cn } from "@/lib/utils";
 import {
   ChevronLeft,
-  ChevronRight,
   Copy,
   BookOpen,
   Eye,
@@ -29,11 +26,19 @@ import {
   MicOff,
   Volume2,
 } from "lucide-react";
+import { BayaanMushafPageCard } from "@/components/mushaf/bayaan/BayaanMushafPageCard";
+import { BayaanSurahBanner } from "@/components/mushaf/bayaan/BayaanSurahBanner";
+import { useBayaanMushafFit } from "@/components/mushaf/bayaan/useBayaanMushafFit";
+import {
+  BAYAAN_PAGE_THEME,
+  TAJWEED_CSS,
+} from "@/components/mushaf/bayaan/bayaan-constants";
+import { getArabicSurahNamesForPage } from "@/components/mushaf/bayaan/bayaan-utils";
 
 const TOTAL_PAGES = 604;
 const QURAN_API = "https://api.quran.com/api/v4";
 
-const SKIP_CHARS = /^[\u06D6-\u06ED\u0600-\u0605\u061B\u061E\u061F\u06DD\u06DE\u06DF]+$/;
+const SKIP_CHARS = /^[ۖ-ۭ؀-؅؛؞؟۝۞۟]+$/;
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -124,16 +129,12 @@ async function fetchTranslation(verseKey: string): Promise<string> {
 function stripTashkeel(s: string): string {
   return (
     s
-      .replace(/\u0670/g, "ا")
-      .replace(/[\u0610-\u061A\u064B-\u065F\u06D6-\u06DC\u06DF-\u06E4\u06E7\u06E8\u06EA-\u06ED]/g, "")
+      .replace(/ٰ/g, "ا")
+      .replace(/[ؐ-ًؚ-ٟۖ-ۜ۟-۪ۤۧۨ-ۭ]/g, "")
       .replace(/[ـ]/g, "")
       .replace(/[أإآاٱ]/g, "ا")
       .trim() || s
   );
-}
-
-function pad(n: number, len: number) {
-  return String(n).padStart(len, "0");
 }
 
 function isBeforeVerseKey(a: string, b: string): boolean {
@@ -182,8 +183,8 @@ function buildLineGroups(
         text_uthmani: w.text_uthmani,
         char_type_name: w.char_type_name,
         line_number: w.line_number,
-        translation: typeof w.translation === 'object' && w.translation !== null
-          ? (w.translation as any).text ?? ""
+        translation: typeof w.translation === "object" && w.translation !== null
+          ? (w.translation as { text?: string }).text ?? ""
           : (w.translation as string | undefined),
       });
     }
@@ -231,13 +232,10 @@ function AyahSheet({
 
   return (
     <>
-      <div className="fixed inset-0 bg-black/40 z-40" onClick={onClose} />
-      <div className="fixed bottom-0 left-0 right-0 bg-white rounded-t-2xl z-50 shadow-2xl max-h-[72vh] overflow-y-auto">
+      <div className="fixed inset-0 bg-black/40 z-[70]" onClick={onClose} />
+      <div className="fixed bottom-0 left-0 right-0 bg-white rounded-t-2xl z-[80] shadow-2xl max-h-[72vh] overflow-y-auto">
         <div className="max-w-lg mx-auto p-5 pb-24">
-          {/* Drag handle */}
           <div className="w-10 h-1 bg-gray-200 rounded-full mx-auto mb-4" />
-
-          {/* Header */}
           <div className="flex items-start justify-between mb-4">
             <div>
               <p className="text-sm font-semibold text-gray-900">{ayah.verseKey}</p>
@@ -252,8 +250,6 @@ function AyahSheet({
               <X size={16} />
             </button>
           </div>
-
-          {/* Arabic text + timing-based playback */}
           <div className="bg-amber-50 rounded-xl p-4 mb-4 border border-amber-100">
             <VersePlayer
               arabic={ayah.text_uthmani}
@@ -262,8 +258,6 @@ function AyahSheet({
               size="md"
             />
           </div>
-
-          {/* Translation */}
           <div className="mb-4 min-h-[56px]">
             {translationLoading ? (
               <Skeleton className="h-14 rounded-xl" />
@@ -273,8 +267,6 @@ function AyahSheet({
               <p className="text-xs text-gray-400 italic">Translation unavailable</p>
             )}
           </div>
-
-          {/* Action buttons */}
           <div className="grid grid-cols-1 gap-2 mb-2">
             <button
               onClick={handleCopy}
@@ -286,9 +278,7 @@ function AyahSheet({
           </div>
           <button
             onClick={() =>
-              setLocation(
-                `/child/${childId}/quran-memorize?surah=${ayah.surahId}&mode=mushaf`
-              )
+              setLocation(`/child/${childId}/quran-memorize?surah=${ayah.surahId}&mode=mushaf`)
             }
             className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-emerald-600 text-white text-sm font-semibold active:bg-emerald-700"
           >
@@ -328,21 +318,26 @@ export default function MushafReaderPage() {
   const [isSelectMode, setIsSelectMode] = useState(false);
   const [selectedVerseKeys, setSelectedVerseKeys] = useState<Set<string>>(new Set());
   const [tappedAyah, setTappedAyah] = useState<AyahInfo | null>(null);
-  const [tappedWord, setTappedWord] = useState<{ key: string; text: string; position: number; surahId: number; verseNum: number; translation: string } | null>(null);
+  const [tappedWord, setTappedWord] = useState<{
+    key: string; text: string; position: number;
+    surahId: number; verseNum: number; translation: string;
+  } | null>(null);
   const [isRecitePickMode, setIsRecitePickMode] = useState(false);
   const [isReciting, setIsReciting] = useState(false);
   const [reciteStartVerseKey, setReciteStartVerseKey] = useState<string | null>(null);
   const [reciteUnlockedWords, setReciteUnlockedWords] = useState<Set<string>>(new Set());
+  const [showChrome, setShowChrome] = useState(true);
 
+  const touchStartX = useRef<number>(0);
+  const touchStartY = useRef<number>(0);
   const recognitionRef = useRef<any>(null);
   const recitePageWordsRef = useRef<ReciteWord[]>([]);
   const reciteWordPosRef = useRef(0);
-  const pageContentRef = useRef<HTMLDivElement>(null);
   const reciteUnlockedWordsRef = useRef<Set<string>>(new Set());
 
   reciteUnlockedWordsRef.current = reciteUnlockedWords;
 
-  // Reset reveals when page changes
+  // Reset interactive state when page changes
   useEffect(() => {
     setRevealedVerseKeys(new Set());
     setTappedAyah(null);
@@ -389,7 +384,6 @@ export default function MushafReaderPage() {
     [queryClient]
   );
 
-  // Chapters for surah jump
   const { data: chaptersData } = useQuery({
     queryKey: ["chapters"],
     queryFn: fetchAllChapters,
@@ -397,7 +391,6 @@ export default function MushafReaderPage() {
   });
   const chapters = chaptersData?.chapters ?? [];
 
-  // Memorization data for marking
   const { data: memData } = useQuery({
     queryKey: ["memorization", childId],
     queryFn: () => listMemorization(parseInt(childId, 10)),
@@ -441,31 +434,6 @@ export default function MushafReaderPage() {
   const verses = pageData?.verses ?? [];
   const lineGroups = useMemo(() => buildLineGroups(verses), [verses]);
 
-  useEffect(() => {
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        const el = pageContentRef.current;
-        if (!el) return;
-        // Available height = viewport minus all chrome (top bar ~90px, nav ~56px, card header ~44px, page number ~44px, nav buttons ~72px, padding ~24px)
-        const available = document.documentElement.clientHeight - 330;
-        if (available <= 0) return;
-        // Binary search for the largest font size where content fits
-        let lo = 0.55, hi = 1.1, best = 0.55;
-        for (let i = 0; i < 30; i++) {
-          const mid = (lo + hi) / 2;
-          el.style.fontSize = mid + "em";
-          if (el.scrollHeight <= available) {
-            best = mid;
-            lo = mid;
-          } else {
-            hi = mid;
-          }
-        }
-        el.style.fontSize = best + "em";
-      });
-    });
-  }, [lineGroups]);
-
   const surahsStartingOnPage = useMemo(() => {
     const s = new Set<number>();
     for (const v of verses) {
@@ -482,6 +450,35 @@ export default function MushafReaderPage() {
     const ch = chapters.find((c) => c.id === firstWord.surahId);
     return ch?.name_simple ?? `Surah ${firstWord.surahId}`;
   }, [lineGroups, chapters]);
+
+  // Bayaan fit hook
+  const primarySurahId = lineGroups?.[0]?.words[0]?.surahId ?? 1;
+  const primarySurahName = currentSurahName || "Al-Fatihah";
+  const pageSurahNames = verses.length > 0
+    ? getArabicSurahNamesForPage(verses, chapters)
+    : "";
+
+  const {
+    pageContentRefs,
+    pageMeasureRefs,
+    isMushafContentVisible,
+    getCachedScale,
+  } = useBayaanMushafFit({
+    surahNumber: primarySurahId,
+    surahName: primarySurahName,
+    mushafFitContentKey: String(currentPage),
+    pageNumbers: [currentPage],
+    isSinglePageLayout: true,
+  });
+
+  const pageContentRefCb = useCallback(
+    (node: HTMLDivElement | null) => { pageContentRefs.current[currentPage] = node; },
+    [currentPage, pageContentRefs],
+  );
+  const pageMeasureRefCb = useCallback(
+    (node: HTMLDivElement | null) => { pageMeasureRefs.current[currentPage] = node; },
+    [currentPage, pageMeasureRefs],
+  );
 
   const stopReciting = useCallback(() => {
     recognitionRef.current?.stop();
@@ -520,8 +517,7 @@ export default function MushafReaderPage() {
       reciteUnlockedWordsRef.current = emptySet;
       setIsReciting(true);
 
-      const SR =
-        (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+      const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
       if (!SR) {
         alert("Speech recognition not supported in this browser. Try Chrome.");
         setIsReciting(false);
@@ -615,7 +611,6 @@ export default function MushafReaderPage() {
         return;
       }
 
-      // In normal mode: word tap → show word tooltip, end marker tap → open AyahSheet
       if (lw.char_type_name === "end") {
         const pv = verses.find((v) => v.verse_key === lw.verse_key);
         setTappedAyah({
@@ -644,163 +639,304 @@ export default function MushafReaderPage() {
     [isReciting, isRecitePickMode, isSelectMode, isBlindMode, verses, startReciting, tappedWord]
   );
 
+  const isAnyModeActive = isSelectMode || isBlindMode || isReciting || isRecitePickMode;
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    touchStartX.current = e.touches[0].clientX;
+    touchStartY.current = e.touches[0].clientY;
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    const dx = e.changedTouches[0].clientX - touchStartX.current;
+    const dy = e.changedTouches[0].clientY - touchStartY.current;
+    if (Math.abs(dx) < 50) return;
+    if (Math.abs(dx) <= Math.abs(dy)) return;
+    if (dx > 0) {
+      if (currentPage < TOTAL_PAGES) goToPage(currentPage + 1);
+    } else {
+      if (currentPage > 1) goToPage(currentPage - 1);
+    }
+  };
+
+  // ─── Render ──────────────────────────────────────────────────────────────────
+
   return (
-    <div className="min-h-screen bg-[#fdf8f0] pb-4">
-      {/* ── Sticky top bar ── */}
-      <div className="sticky top-0 z-20 bg-white border-b border-amber-100 shadow-sm">
-        {/* Title row */}
-        <div className="max-w-2xl mx-auto px-4 pt-2.5 pb-1.5 flex items-center gap-2">
-          <button
-            onClick={() =>
-              window.history.length > 1
-                ? window.history.back()
-                : setLocation(`/child/${childId}/memorization`)
-            }
-            className="flex items-center gap-1 text-amber-700 text-sm shrink-0"
-          >
-            <ChevronLeft size={16} /> Back
-          </button>
-
-          <div className="flex-1 text-center min-w-0">
-            <p className="text-sm font-semibold text-amber-900 truncate">Full Quran</p>
-            <p className="text-xs text-amber-400 truncate">
-              {currentSurahName || "Loading…"} · p.{currentPage}
-            </p>
-          </div>
-
-          {/* Blind mode */}
-          <button
-            onClick={() => {
-              setIsBlindMode((b) => !b);
-              setRevealedVerseKeys(new Set());
-            }}
-            title={isBlindMode ? "Blind mode on" : "Blind mode off"}
-            className={cn(
-              "p-2 rounded-lg border text-xs transition-colors shrink-0",
-              isBlindMode
-                ? "border-violet-300 bg-violet-50 text-violet-700"
-                : "border-gray-200 text-gray-400 hover:text-gray-600"
-            )}
-          >
-            {isBlindMode ? <EyeOff size={15} /> : <Eye size={15} />}
-          </button>
-
-          {/* Select mode */}
-          <button
-            onClick={() => {
-              setIsSelectMode((s) => !s);
-              setSelectedVerseKeys(new Set());
-            }}
-            title={isSelectMode ? "Select mode on" : "Select mode off"}
-            className={cn(
-              "p-2 rounded-lg border text-xs transition-colors shrink-0",
-              isSelectMode
-                ? "border-emerald-300 bg-emerald-50 text-emerald-700"
-                : "border-gray-200 text-gray-400 hover:text-gray-600"
-            )}
-          >
-            {isSelectMode ? <CheckCircle size={15} /> : <Circle size={15} />}
-          </button>
-
-          {/* Recite mode */}
-          <button
-            onClick={() => {
-              if (isReciting) {
-                stopReciting();
-              } else {
-                setIsRecitePickMode((p) => !p);
-              }
-            }}
-            title={isReciting ? "Stop reciting" : isRecitePickMode ? "Cancel recite" : "Recite mode"}
-            className={cn(
-              "p-2 rounded-lg border text-xs transition-colors shrink-0",
-              isReciting || isRecitePickMode
-                ? "border-rose-300 bg-rose-50 text-rose-700"
-                : "border-gray-200 text-gray-400 hover:text-gray-600"
-            )}
-          >
-            {isReciting ? <MicOff size={15} /> : <Mic size={15} />}
-          </button>
-        </div>
-
-        {/* Nav controls row */}
-        <div className="max-w-2xl mx-auto px-4 pb-2 flex items-center gap-2">
-          <div className="flex-1 min-w-0">
-            {chapters.length > 0 ? (
-              <Select onValueChange={handleSurahJump}>
-                <SelectTrigger className="h-8 text-xs border-amber-200 bg-amber-50">
-                  <SelectValue placeholder="Jump to Surah…" />
-                </SelectTrigger>
-                <SelectContent className="max-h-64">
-                  {chapters.map((ch) => (
-                    <SelectItem key={ch.id} value={String(ch.id)} className="text-xs">
-                      {ch.id}. {ch.name_simple}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            ) : (
-              <Skeleton className="h-8 rounded-md" />
-            )}
-          </div>
-
-          <div className="flex items-center gap-1 border border-amber-200 rounded-md bg-amber-50 px-2 h-8 shrink-0">
-            <span className="text-xs text-amber-500">p.</span>
-            <input
-              type="number"
-              min={1}
-              max={TOTAL_PAGES}
-              value={jumpInput}
-              onChange={(e) => setJumpInput(e.target.value)}
-              onKeyDown={handlePageInput}
-              placeholder={String(currentPage)}
-              className="w-12 text-xs bg-transparent outline-none text-amber-900 placeholder:text-amber-300"
-            />
-          </div>
-        </div>
-      </div>
-
-      {/* ── Page content ── */}
-      <div className="max-w-2xl mx-auto px-3 sm:px-6 py-4">
+    <>
+      <style>{TAJWEED_CSS}</style>
+      <div
+        style={{
+          position: "fixed",
+          inset: 0,
+          zIndex: 60,
+          background: "#e0d5c2",
+          display: "flex",
+          flexDirection: "column",
+          overflow: "hidden",
+        }}
+      >
+        {/* ── Collapsible chrome bar ── */}
         <div
-          className="rounded-xl border border-amber-200 shadow-md overflow-hidden"
           style={{
-            background: "linear-gradient(to bottom, #fdf8f0, #faf3e8)",
-            boxShadow: "0 4px 24px rgba(139,90,43,0.08), inset 0 0 40px rgba(200,160,80,0.04)",
+            height: showChrome ? "56px" : "0px",
+            overflow: "hidden",
+            transition: "height 0.25s ease",
+            flexShrink: 0,
           }}
         >
-          {/* Top page label */}
-          <div className="text-center py-2.5 border-b border-amber-100/60">
-            <span className="text-xs text-amber-400 tracking-widest">
-              صفحة {currentPage}
-            </span>
-          </div>
-
-          {/* Mushaf text area */}
           <div
-            ref={pageContentRef}
-            dir="rtl"
-            lang="ar"
             style={{
-              fontFamily: '"KFGQPC Hafs", "Amiri Quran", serif',
-              fontSize: "clamp(15px, 2.3vw, 24px)",
-              lineHeight: 2.2,
-              padding: "20px 20px 12px",
-              color: "#1a1a1a",
+              height: "56px",
+              display: "flex",
+              flexDirection: "column",
+              background: "#cfc5ae",
+              borderBottom: `1px solid ${BAYAAN_PAGE_THEME.chromeBorder}`,
             }}
           >
+            {/* Row 1: Back + title + mode icons */}
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "6px",
+                padding: "4px 10px 0",
+                flex: 1,
+              }}
+            >
+              <button
+                onClick={() =>
+                  window.history.length > 1
+                    ? window.history.back()
+                    : setLocation(`/child/${childId}/memorization`)
+                }
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "2px",
+                  color: BAYAAN_PAGE_THEME.chromeMuted,
+                  fontSize: "13px",
+                  background: "none",
+                  border: "none",
+                  cursor: "pointer",
+                  flexShrink: 0,
+                  padding: "2px 4px",
+                }}
+              >
+                <ChevronLeft size={14} />
+                <span>Back</span>
+              </button>
+
+              <div
+                style={{
+                  flex: 1,
+                  textAlign: "center",
+                  minWidth: 0,
+                  overflow: "hidden",
+                }}
+              >
+                <p
+                  style={{
+                    fontSize: "12px",
+                    fontWeight: 600,
+                    color: BAYAAN_PAGE_THEME.screenText,
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
+                    lineHeight: 1.3,
+                    margin: 0,
+                  }}
+                >
+                  {currentSurahName || "Full Quran"}
+                </p>
+                <p
+                  style={{
+                    fontSize: "10px",
+                    color: BAYAAN_PAGE_THEME.chromeMuted,
+                    lineHeight: 1.2,
+                    margin: 0,
+                  }}
+                >
+                  p. {currentPage}
+                </p>
+              </div>
+
+              {/* Blind mode */}
+              <button
+                onClick={() => {
+                  setIsBlindMode((b) => !b);
+                  setRevealedVerseKeys(new Set());
+                }}
+                style={{
+                  padding: "4px",
+                  borderRadius: "6px",
+                  border: `1px solid ${isBlindMode ? "#a855f7" : BAYAAN_PAGE_THEME.chromeBorder}`,
+                  background: isBlindMode ? "#f3e8ff" : "transparent",
+                  color: isBlindMode ? "#7c3aed" : BAYAAN_PAGE_THEME.chromeMuted,
+                  cursor: "pointer",
+                  flexShrink: 0,
+                }}
+              >
+                {isBlindMode ? <EyeOff size={14} /> : <Eye size={14} />}
+              </button>
+
+              {/* Select mode */}
+              <button
+                onClick={() => {
+                  setIsSelectMode((s) => !s);
+                  setSelectedVerseKeys(new Set());
+                }}
+                style={{
+                  padding: "4px",
+                  borderRadius: "6px",
+                  border: `1px solid ${isSelectMode ? "#16a34a" : BAYAAN_PAGE_THEME.chromeBorder}`,
+                  background: isSelectMode ? "#dcfce7" : "transparent",
+                  color: isSelectMode ? "#16a34a" : BAYAAN_PAGE_THEME.chromeMuted,
+                  cursor: "pointer",
+                  flexShrink: 0,
+                }}
+              >
+                {isSelectMode ? <CheckCircle size={14} /> : <Circle size={14} />}
+              </button>
+
+              {/* Recite mode */}
+              <button
+                onClick={() => {
+                  if (isReciting) { stopReciting(); }
+                  else { setIsRecitePickMode((p) => !p); }
+                }}
+                style={{
+                  padding: "4px",
+                  borderRadius: "6px",
+                  border: `1px solid ${(isReciting || isRecitePickMode) ? "#e11d48" : BAYAAN_PAGE_THEME.chromeBorder}`,
+                  background: (isReciting || isRecitePickMode) ? "#fee2e2" : "transparent",
+                  color: (isReciting || isRecitePickMode) ? "#e11d48" : BAYAAN_PAGE_THEME.chromeMuted,
+                  cursor: "pointer",
+                  flexShrink: 0,
+                }}
+              >
+                {isReciting ? <MicOff size={14} /> : <Mic size={14} />}
+              </button>
+            </div>
+
+            {/* Row 2: Surah jump + page input */}
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "6px",
+                padding: "0 10px 4px",
+              }}
+            >
+              <div style={{ flex: 1, minWidth: 0 }}>
+                {chapters.length > 0 ? (
+                  <Select onValueChange={handleSurahJump}>
+                    <SelectTrigger
+                      className="h-6 text-[11px] min-w-0"
+                      style={{
+                        border: `1px solid ${BAYAAN_PAGE_THEME.chromeBorder}`,
+                        background: "rgba(255,253,248,0.65)",
+                        color: BAYAAN_PAGE_THEME.screenText,
+                      }}
+                    >
+                      <SelectValue placeholder="Jump to Surah…" />
+                    </SelectTrigger>
+                    <SelectContent className="max-h-64">
+                      {chapters.map((ch) => (
+                        <SelectItem key={ch.id} value={String(ch.id)} className="text-xs">
+                          {ch.id}. {ch.name_simple}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : null}
+              </div>
+
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "2px",
+                  border: `1px solid ${BAYAAN_PAGE_THEME.chromeBorder}`,
+                  borderRadius: "5px",
+                  padding: "0 6px",
+                  height: "24px",
+                  flexShrink: 0,
+                  background: "rgba(255,253,248,0.65)",
+                }}
+              >
+                <span style={{ fontSize: "9px", color: BAYAAN_PAGE_THEME.chromeMuted }}>p.</span>
+                <input
+                  type="number"
+                  min={1}
+                  max={TOTAL_PAGES}
+                  value={jumpInput}
+                  onChange={(e) => setJumpInput(e.target.value)}
+                  onKeyDown={handlePageInput}
+                  placeholder={String(currentPage)}
+                  style={{
+                    width: "34px",
+                    fontSize: "10px",
+                    background: "transparent",
+                    border: "none",
+                    outline: "none",
+                    color: BAYAAN_PAGE_THEME.screenText,
+                  }}
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* ── Page area ── */}
+        <div
+          style={{
+            flex: 1,
+            minHeight: 0,
+            position: "relative",
+            padding: "4px",
+          }}
+          onTouchStart={handleTouchStart}
+          onTouchEnd={handleTouchEnd}
+        >
+          <BayaanMushafPageCard
+            pageNumber={currentPage}
+            pageSurahNames={pageSurahNames}
+            isSinglePageLayout={true}
+            cachedScale={getCachedScale(currentPage)}
+            isContentVisible={isMushafContentVisible}
+            pageContentRef={pageContentRefCb}
+            pageMeasureRef={pageMeasureRefCb}
+          >
+            {/* Loading */}
             {isLoading && (
-              <div className="space-y-4 pt-4">
+              <div style={{ padding: "12px 0" }}>
                 {Array.from({ length: 15 }, (_, i) => (
-                  <Skeleton key={i} className="h-6 w-full rounded" />
+                  <div
+                    key={i}
+                    style={{
+                      height: "1.4em",
+                      marginBottom: "0.55em",
+                      background: BAYAAN_PAGE_THEME.pageBorder,
+                      opacity: 0.22,
+                      borderRadius: "3px",
+                    }}
+                  />
                 ))}
               </div>
             )}
 
+            {/* Error */}
             {isError && (
-              <p className="text-center text-amber-700 text-sm py-12">
-                Failed to load page. Please check your connection.
-              </p>
+              <div
+                style={{
+                  textAlign: "center",
+                  padding: "40px 12px",
+                  color: BAYAAN_PAGE_THEME.pageMuted,
+                  fontSize: "0.8em",
+                  direction: "ltr",
+                }}
+              >
+                Failed to load page. Check your connection.
+              </div>
             )}
 
             {/* ── Line-based rendering ── */}
@@ -809,7 +945,6 @@ export default function MushafReaderPage() {
               const seenSurahIds = new Set<number>();
 
               for (const { lineNum, words: lws } of lineGroups) {
-                // Inject surah headers before first appearance of a surah that starts on this page
                 const newSurahs: number[] = [];
                 for (const lw of lws) {
                   if (!seenSurahIds.has(lw.surahId)) {
@@ -821,55 +956,11 @@ export default function MushafReaderPage() {
                   if (!surahsStartingOnPage.has(sid)) continue;
                   const sc = chapters.find((c) => c.id === sid);
                   nodes.push(
-                    <div
+                    <BayaanSurahBanner
                       key={`hdr-${sid}`}
-                      style={{ textAlign: "center", margin: "10px 0 4px", direction: "rtl" }}
-                    >
-                      <div
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          gap: 12,
-                        }}
-                      >
-                        <span
-                          style={{
-                            flex: 1,
-                            height: 1,
-                            background: "#d4b98a",
-                            maxWidth: 60,
-                            display: "block",
-                          }}
-                        />
-                        <span
-                          style={{
-                            fontFamily: '"KFGQPC Hafs", "Amiri Quran", serif',
-                            fontSize: "0.9em",
-                            color: "#5a3e1b",
-                            fontWeight: 500,
-                          }}
-                        >
-                          {sc?.name_arabic ?? `سُورَة ${sid}`}
-                        </span>
-                        <span
-                          style={{
-                            flex: 1,
-                            height: 1,
-                            background: "#d4b98a",
-                            maxWidth: 60,
-                            display: "block",
-                          }}
-                        />
-                      </div>
-                      {sid !== 9 && (
-                        <div style={{ display: "flex", justifyContent: "center", margin: "4px 0 2px" }}>
-                          <span style={{ fontFamily: '"KFGQPC Hafs", "Amiri Quran", serif', fontSize: "1.1em", color: "#6b5830", direction: "rtl" }}>
-                            بِسْمِ ٱللَّهِ ٱلرَّحْمَٰنِ ٱلرَّحِيمِ
-                          </span>
-                        </div>
-                      )}
-                    </div>
+                      surahNumber={sid}
+                      surahName={sc?.name_simple ?? `Surah ${sid}`}
+                    />
                   );
                 }
 
@@ -912,8 +1003,8 @@ export default function MushafReaderPage() {
                               borderRadius: "50%",
                               border: isSelected
                                 ? "1.5px solid #16a34a"
-                                : "1.5px solid #b8974a",
-                              background: isSelected ? "#dcfce7" : "#fdf8ee",
+                                : `1.5px solid ${BAYAAN_PAGE_THEME.markerBorder}`,
+                              background: isSelected ? "#dcfce7" : BAYAAN_PAGE_THEME.markerSurface,
                               flexShrink: 0,
                               userSelect: "none",
                               direction: "ltr",
@@ -924,7 +1015,7 @@ export default function MushafReaderPage() {
                             <span
                               style={{
                                 fontSize: "0.58em",
-                                color: isSelected ? "#16a34a" : "#8a6020",
+                                color: isSelected ? "#16a34a" : BAYAAN_PAGE_THEME.markerText,
                                 fontFamily: "Georgia, serif",
                                 lineHeight: 1,
                               }}
@@ -936,8 +1027,7 @@ export default function MushafReaderPage() {
                       }
 
                       const isSelected = isSelectMode && selectedVerseKeys.has(lw.verse_key);
-                      const isBlurred =
-                        isBlindMode && !revealedVerseKeys.has(lw.verse_key);
+                      const isBlurred = isBlindMode && !revealedVerseKeys.has(lw.verse_key);
                       let wordFilter = isBlurred ? "blur(6px)" : "none";
                       let wordOpacity = 1;
                       if (isReciting && reciteStartVerseKey) {
@@ -985,8 +1075,7 @@ export default function MushafReaderPage() {
                   const parts = v.verse_key.split(":");
                   const sId = parseInt(parts[0], 10);
                   const vNum = parseInt(parts[1], 10);
-                  const isBlurred =
-                    isBlindMode && !revealedVerseKeys.has(v.verse_key);
+                  const isBlurred = isBlindMode && !revealedVerseKeys.has(v.verse_key);
                   const isSelected = isSelectMode && selectedVerseKeys.has(v.verse_key);
                   return (
                     <span
@@ -1015,154 +1104,248 @@ export default function MushafReaderPage() {
                 })}
               </div>
             )}
-          </div>
+          </BayaanMushafPageCard>
 
-          {/* Bottom page number */}
-          <div className="text-center py-3 border-t border-amber-100/60">
-            <span className="text-sm text-amber-600 font-medium tabular-nums">{currentPage}</span>
-          </div>
+          {/* Center tap — toggle chrome bar */}
+          {!isAnyModeActive && (
+            <div
+              onClick={() => setShowChrome((v) => !v)}
+              style={{
+                position: "absolute",
+                left: "22%", right: "22%",
+                top: 0, bottom: 0,
+                zIndex: 9,
+              }}
+            />
+          )}
         </div>
 
-        {/* ── RTL navigation: left = next page, right = prev page ── */}
-        <div className="flex items-center justify-between mt-5 gap-4">
-          <Button
-            variant="outline"
-            onClick={() => goToPage(currentPage + 1)}
-            disabled={currentPage >= TOTAL_PAGES || isReciting}
-            className="flex items-center gap-1 border-amber-300 text-amber-800 hover:bg-amber-50 bg-white"
+        {/* ── Mark as memorized floating button ── */}
+        {isSelectMode && selectedVerseKeys.size > 0 && (
+          <div
+            style={{
+              position: "fixed",
+              bottom: "16px", left: 0, right: 0,
+              display: "flex",
+              justifyContent: "center",
+              zIndex: 65,
+              padding: "0 16px",
+              pointerEvents: "none",
+            }}
           >
-            <ChevronLeft size={16} />
-            <span className="hidden sm:inline text-xs">Next</span>
-          </Button>
-
-          <div className="text-center">
-            <p className="text-sm font-medium text-amber-900 tabular-nums">
-              {currentPage}{" "}
-              <span className="text-amber-400 text-xs font-normal">/ {TOTAL_PAGES}</span>
-            </p>
-            <div className="mt-1.5 h-1 w-28 bg-amber-100 rounded-full overflow-hidden mx-auto">
-              <div
-                className="h-full bg-amber-400 rounded-full transition-all duration-300"
-                style={{ width: `${(currentPage / TOTAL_PAGES) * 100}%` }}
-              />
-            </div>
-          </div>
-
-          <Button
-            variant="outline"
-            onClick={() => goToPage(currentPage - 1)}
-            disabled={currentPage <= 1 || isReciting}
-            className="flex items-center gap-1 border-amber-300 text-amber-800 hover:bg-amber-50 bg-white"
-          >
-            <span className="hidden sm:inline text-xs">Prev</span>
-            <ChevronRight size={16} />
-          </Button>
-        </div>
-      </div>
-
-      {/* ── Floating "Mark as memorized" button ── */}
-      {isSelectMode && selectedVerseKeys.size > 0 && (
-        <div className="fixed bottom-20 left-0 right-0 flex justify-center z-30 px-4 pointer-events-none">
-          <button
-            onClick={() => markMutation.mutate()}
-            disabled={markMutation.isPending || !memData}
-            className="flex items-center gap-2 bg-emerald-600 text-white text-sm font-semibold px-6 py-3 rounded-full shadow-xl pointer-events-auto active:bg-emerald-700 disabled:opacity-70"
-          >
-            <Check size={15} />
-            {markMutation.isPending
-              ? "Saving…"
-              : `Mark ${selectedVerseKeys.size} ayah${selectedVerseKeys.size > 1 ? "s" : ""} as memorized`}
-          </button>
-        </div>
-      )}
-
-      {/* ── Recite pick mode banner ── */}
-      {isRecitePickMode && !isReciting && (
-        <div className="fixed bottom-20 left-0 right-0 z-30 flex justify-center px-4 pointer-events-none">
-          <div className="bg-white rounded-xl shadow-xl border border-rose-200 px-5 py-3 pointer-events-auto flex items-center gap-4">
-            <p className="text-sm font-medium text-gray-800">
-              Tap an ayah to start reciting from there
-            </p>
             <button
-              onClick={() => setIsRecitePickMode(false)}
-              className="text-sm text-rose-600 font-semibold shrink-0"
+              onClick={() => markMutation.mutate()}
+              disabled={markMutation.isPending || !memData}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "8px",
+                background: "#16a34a",
+                color: "white",
+                fontSize: "14px",
+                fontWeight: 600,
+                padding: "12px 24px",
+                borderRadius: "9999px",
+                boxShadow: "0 4px 20px rgba(0,0,0,0.2)",
+                pointerEvents: "auto",
+                border: "none",
+                cursor: "pointer",
+                opacity: (markMutation.isPending || !memData) ? 0.7 : 1,
+              }}
             >
-              Cancel
+              <Check size={15} />
+              {markMutation.isPending
+                ? "Saving…"
+                : `Mark ${selectedVerseKeys.size} ayah${selectedVerseKeys.size > 1 ? "s" : ""} as memorized`}
             </button>
           </div>
-        </div>
-      )}
+        )}
 
-      {/* ── Stop reciting button ── */}
-      {isReciting && (
-        <div className="fixed bottom-20 left-0 right-0 z-30 flex justify-center px-4 pointer-events-none">
-          <button
-            onClick={stopReciting}
-            className="flex items-center gap-2 bg-rose-600 text-white text-sm font-semibold px-6 py-3 rounded-full shadow-xl pointer-events-auto active:bg-rose-700"
-          >
-            <MicOff size={15} /> Stop Reciting
-          </button>
-        </div>
-      )}
-
-      {/* ── Ayah bottom sheet ── */}
-      {tappedAyah && (
-        <AyahSheet
-          key={tappedAyah.verseKey}
-          ayah={tappedAyah}
-          childId={childId}
-          onClose={() => setTappedAyah(null)}
-        />
-      )}
-
-      {/* ── Word translation tooltip ── */}
-      {tappedWord && (() => {
-        return (
+        {/* ── Recite pick mode banner ── */}
+        {isRecitePickMode && !isReciting && (
           <div
-            className="fixed bottom-20 left-0 right-0 z-40 flex justify-center px-4 pointer-events-none"
+            style={{
+              position: "fixed",
+              bottom: "16px", left: 0, right: 0,
+              zIndex: 65,
+              display: "flex",
+              justifyContent: "center",
+              padding: "0 16px",
+              pointerEvents: "none",
+            }}
+          >
+            <div
+              style={{
+                background: "white",
+                borderRadius: "12px",
+                boxShadow: "0 4px 20px rgba(0,0,0,0.15)",
+                border: "1px solid #fecaca",
+                padding: "12px 20px",
+                pointerEvents: "auto",
+                display: "flex",
+                alignItems: "center",
+                gap: "16px",
+              }}
+            >
+              <p style={{ fontSize: "14px", fontWeight: 500, color: "#111827", margin: 0 }}>
+                Tap an ayah to start reciting from there
+              </p>
+              <button
+                onClick={() => setIsRecitePickMode(false)}
+                style={{
+                  fontSize: "14px",
+                  color: "#e11d48",
+                  fontWeight: 600,
+                  background: "none",
+                  border: "none",
+                  cursor: "pointer",
+                  flexShrink: 0,
+                }}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* ── Stop reciting button ── */}
+        {isReciting && (
+          <div
+            style={{
+              position: "fixed",
+              bottom: "16px", left: 0, right: 0,
+              zIndex: 65,
+              display: "flex",
+              justifyContent: "center",
+              padding: "0 16px",
+              pointerEvents: "none",
+            }}
+          >
+            <button
+              onClick={stopReciting}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "8px",
+                background: "#dc2626",
+                color: "white",
+                fontSize: "14px",
+                fontWeight: 600,
+                padding: "12px 24px",
+                borderRadius: "9999px",
+                boxShadow: "0 4px 20px rgba(0,0,0,0.2)",
+                pointerEvents: "auto",
+                border: "none",
+                cursor: "pointer",
+              }}
+            >
+              <MicOff size={15} /> Stop Reciting
+            </button>
+          </div>
+        )}
+
+        {/* ── AyahSheet ── */}
+        {tappedAyah && (
+          <AyahSheet
+            key={tappedAyah.verseKey}
+            ayah={tappedAyah}
+            childId={childId}
+            onClose={() => setTappedAyah(null)}
+          />
+        )}
+
+        {/* ── Word translation tooltip ── */}
+        {tappedWord && (
+          <div
+            style={{
+              position: "fixed",
+              bottom: "16px", left: 0, right: 0,
+              zIndex: 65,
+              display: "flex",
+              justifyContent: "center",
+              padding: "0 16px",
+              pointerEvents: "none",
+            }}
             onClick={() => setTappedWord(null)}
           >
-            <div className="bg-white rounded-2xl shadow-xl border border-amber-200 px-4 py-3 pointer-events-auto max-w-xs w-full">
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between gap-2 mb-1">
-                    <p dir="rtl" className="text-xl text-amber-900" style={{ fontFamily: '"KFGQPC Hafs", "Amiri Quran", serif' }}>
+            <div
+              style={{
+                background: "white",
+                borderRadius: "16px",
+                boxShadow: "0 4px 24px rgba(0,0,0,0.15)",
+                border: `1px solid ${BAYAAN_PAGE_THEME.pageBorder}`,
+                padding: "12px 16px",
+                pointerEvents: "auto",
+                maxWidth: "320px",
+                width: "100%",
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "12px" }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px", marginBottom: "4px" }}>
+                    <p
+                      dir="rtl"
+                      style={{
+                        fontSize: "20px",
+                        color: "#92400e",
+                        fontFamily: '"KFGQPC Hafs", "Amiri Quran", serif',
+                        margin: 0,
+                      }}
+                    >
                       {tappedWord.text}
                     </p>
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
-                        const audio = new Audio(`https://audio.qurancdn.com/wbw/${String(tappedWord.surahId).padStart(3,'0')}_${String(tappedWord.verseNum).padStart(3,'0')}_${String(tappedWord.position).padStart(3,'0')}.mp3`);
+                        const audio = new Audio(
+                          `https://audio.qurancdn.com/wbw/${String(tappedWord.surahId).padStart(3, "0")}_${String(tappedWord.verseNum).padStart(3, "0")}_${String(tappedWord.position).padStart(3, "0")}.mp3`
+                        );
                         audio.play().catch(() => {});
                       }}
-                      className="flex-shrink-0 w-8 h-8 rounded-full bg-amber-100 hover:bg-amber-200 flex items-center justify-center text-amber-700"
+                      style={{
+                        flexShrink: 0,
+                        width: "32px",
+                        height: "32px",
+                        borderRadius: "50%",
+                        background: "#fef3c7",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        color: BAYAAN_PAGE_THEME.markerText,
+                        border: "none",
+                        cursor: "pointer",
+                      }}
                     >
                       <Volume2 size={14} />
                     </button>
                   </div>
                   {tappedWord.translation ? (
-                    <p className="text-sm text-gray-700 leading-snug">{tappedWord.translation}</p>
+                    <p style={{ fontSize: "14px", color: "#374151", lineHeight: 1.4, margin: 0 }}>
+                      {tappedWord.translation}
+                    </p>
                   ) : (
-                    <p className="text-xs text-gray-400 italic">No translation available</p>
+                    <p style={{ fontSize: "12px", color: "#9ca3af", fontStyle: "italic", margin: 0 }}>
+                      No translation available
+                    </p>
                   )}
-                  <p className="text-[10px] text-amber-400 mt-1">
+                  <p style={{ fontSize: "10px", color: BAYAAN_PAGE_THEME.chromeMuted, marginTop: "4px", marginBottom: 0 }}>
                     {tappedWord.surahId}:{tappedWord.verseNum} · word {tappedWord.position}
                   </p>
                 </div>
                 <button
                   onClick={() => setTappedWord(null)}
-                  className="text-gray-300 hover:text-gray-500 shrink-0 mt-0.5"
+                  style={{ color: "#d1d5db", background: "none", border: "none", cursor: "pointer", flexShrink: 0, marginTop: "2px" }}
                 >
                   <X size={14} />
                 </button>
               </div>
-              <p className="text-[10px] text-amber-300 mt-2 text-center">Tap verse number ○ to open full ayah</p>
+              <p style={{ fontSize: "10px", color: BAYAAN_PAGE_THEME.chromeMuted, marginTop: "8px", textAlign: "center", marginBottom: 0 }}>
+                Tap verse number ○ to open full ayah
+              </p>
             </div>
           </div>
-        );
-      })()}
-
-      <ChildNav childId={childId} />
-    </div>
+        )}
+      </div>
+    </>
   );
 }

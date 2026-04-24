@@ -1,11 +1,22 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { ChevronLeft, ChevronRight } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Skeleton } from "@/components/ui/skeleton";
-import { cn } from "@/lib/utils";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { BayaanMushafPageCard } from "@/components/mushaf/bayaan/BayaanMushafPageCard";
+import { BayaanSurahBanner } from "@/components/mushaf/bayaan/BayaanSurahBanner";
+import { useBayaanMushafFit } from "@/components/mushaf/bayaan/useBayaanMushafFit";
+import {
+  BAYAAN_PAGE_THEME,
+  TAJWEED_CSS,
+} from "@/components/mushaf/bayaan/bayaan-constants";
+import { getArabicSurahNamesForPage } from "@/components/mushaf/bayaan/bayaan-utils";
 
 const TOTAL_PAGES = 604;
 const QURAN_API = "https://api.quran.com/api/v4";
@@ -68,7 +79,9 @@ interface Juz {
 }
 
 async function fetchPage(page: number): Promise<PageData> {
-  const r = await fetch(`${QURAN_API}/verses/by_page/${page}?words=true&fields=text_uthmani&word_fields=text_uthmani,char_type_name,line_number,page_number`);
+  const r = await fetch(
+    `${QURAN_API}/verses/by_page/${page}?words=true&fields=text_uthmani&word_fields=text_uthmani,char_type_name,line_number,page_number`,
+  );
   if (!r.ok) throw new Error(`Failed to fetch page ${page}: ${r.status}`);
   return r.json();
 }
@@ -83,29 +96,6 @@ async function fetchJuzs(): Promise<{ juzs: Juz[] }> {
   const r = await fetch(`${QURAN_API}/juzs`);
   if (!r.ok) throw new Error(`Failed to fetch juzs: ${r.status}`);
   return r.json();
-}
-
-function SurahBanner({ chapterNumber, chapters }: { chapterNumber: number; chapters: Chapter[] }) {
-  const chapter = chapters.find(c => c.id === chapterNumber);
-  const showBismillah = chapter?.bismillah_pre && chapterNumber !== 1 && chapterNumber !== 9;
-
-  return (
-    <div className="mushaf-surah-banner">
-      <div className="mushaf-surah-banner-inner">
-        <span className="mushaf-surah-name-en">
-          {chapter?.name_simple || `Surah ${chapterNumber}`}
-        </span>
-        <span className="mushaf-surah-name-ar">
-          {chapter?.name_arabic || ""}
-        </span>
-      </div>
-      {showBismillah && (
-        <div className="mushaf-bismillah">
-          بِسۡمِ ٱللَّهِ ٱلرَّحۡمَٰنِ ٱلرَّحِيمِ
-        </div>
-      )}
-    </div>
-  );
 }
 
 function buildPageLines(verses: Verse[]): Map<number, LineWord[]> {
@@ -148,81 +138,6 @@ function getSurahForLine(lineNum: number, verses: Verse[]): number | null {
   return null;
 }
 
-interface MushafPageProps {
-  pageNumber: number;
-  chapters: Chapter[];
-}
-
-function MushafPage({ pageNumber, chapters }: MushafPageProps) {
-  const { data, isLoading, isError } = useQuery<PageData>({
-    queryKey: ["mushaf-page", pageNumber],
-    queryFn: () => fetchPage(pageNumber),
-    staleTime: 1000 * 60 * 60,
-  });
-
-  if (isLoading) {
-    return (
-      <div className="mushaf-lines-skeleton">
-        {Array.from({ length: 15 }, (_, i) => (
-          <Skeleton key={i} className="h-6 w-full rounded" />
-        ))}
-      </div>
-    );
-  }
-
-  if (isError || !data) {
-    return (
-      <div className="text-center py-10 text-amber-800 text-sm">
-        Failed to load page. Please check your connection and try again.
-      </div>
-    );
-  }
-
-  const verses = data.verses || [];
-  const pageLines = buildPageLines(verses);
-  const surahStartLines = getSurahStartLines(verses);
-  const sortedLineNums = Array.from(pageLines.keys()).sort((a, b) => a - b);
-  const totalLines = sortedLineNums.length;
-  const isDensePage = totalLines >= 10;
-  const lastLineNum = sortedLineNums[sortedLineNums.length - 1];
-
-  return (
-    <div className="mushaf-page-content">
-      {sortedLineNums.map((lineNum) => {
-        const words = pageLines.get(lineNum)!;
-        const surahNum = surahStartLines.has(lineNum) ? getSurahForLine(lineNum, verses) : null;
-        const wordCount = words.filter(w => w.type === "word").length;
-        const shouldJustify = isDensePage && wordCount >= 4 && lineNum !== lastLineNum;
-
-        return (
-          <div key={lineNum}>
-            {surahNum !== null && (
-              <SurahBanner chapterNumber={surahNum} chapters={chapters} />
-            )}
-            <div
-              className="mushaf-line"
-              data-line={lineNum}
-              data-justify={shouldJustify ? "true" : undefined}
-            >
-              {words.map((w) =>
-                w.type === "end" ? (
-                  <span key={w.id} className="mushaf-end-marker">
-                    {w.text}
-                  </span>
-                ) : (
-                  <span key={w.id} className="mushaf-word">
-                    {w.text}
-                  </span>
-                )
-              )}
-            </div>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
 const JUZ_START_PAGES: Record<number, number> = {
   1: 1,   2: 22,  3: 42,  4: 62,  5: 82,
   6: 102, 7: 121, 8: 142, 9: 162, 10: 182,
@@ -234,7 +149,7 @@ const JUZ_START_PAGES: Record<number, number> = {
 
 function buildJuzPageMap(juzs: Juz[], chapters: Chapter[]): Map<number, number> {
   const map = new Map<number, number>();
-  const chapterMap = new Map(chapters.map(c => [c.id, c]));
+  const chapterMap = new Map(chapters.map((c) => [c.id, c]));
   for (const juz of juzs) {
     const firstSurahStr = Object.keys(juz.verse_mapping)[0];
     if (!firstSurahStr) continue;
@@ -252,12 +167,119 @@ function buildJuzPageMap(juzs: Juz[], chapters: Chapter[]): Map<number, number> 
 }
 
 function getChapterFirstPage(chapterId: number, chapters: Chapter[]): number {
-  const ch = chapters.find(c => c.id === chapterId);
+  const ch = chapters.find((c) => c.id === chapterId);
   return ch ? ch.pages[0] : 1;
 }
 
-function getJuzFirstPage(juzNumber: number, juzPageMap: Map<number, number>): number {
+function getJuzFirstPage(
+  juzNumber: number,
+  juzPageMap: Map<number, number>,
+): number {
   return juzPageMap.get(juzNumber) ?? JUZ_START_PAGES[juzNumber] ?? 1;
+}
+
+function MushafPageContent({
+  pageNumber,
+  chapters,
+}: {
+  pageNumber: number;
+  chapters: Chapter[];
+}) {
+  const { data, isLoading, isError } = useQuery<PageData>({
+    queryKey: ["mushaf-page", pageNumber],
+    queryFn: () => fetchPage(pageNumber),
+    staleTime: 1000 * 60 * 60,
+  });
+
+  if (isLoading) {
+    return (
+      <div style={{ padding: "12px 0" }}>
+        {Array.from({ length: 15 }, (_, i) => (
+          <div
+            key={i}
+            style={{
+              height: "1.4em",
+              marginBottom: "0.55em",
+              background: BAYAAN_PAGE_THEME.pageBorder,
+              opacity: 0.22,
+              borderRadius: "3px",
+            }}
+          />
+        ))}
+      </div>
+    );
+  }
+
+  if (isError || !data) {
+    return (
+      <div
+        style={{
+          textAlign: "center",
+          padding: "40px 12px",
+          color: BAYAAN_PAGE_THEME.pageMuted,
+          fontSize: "0.8em",
+          direction: "ltr",
+        }}
+      >
+        Failed to load page. Check your connection.
+      </div>
+    );
+  }
+
+  const verses = data.verses || [];
+  const pageLines = buildPageLines(verses);
+  const surahStartLines = getSurahStartLines(verses);
+  const sortedLineNums = Array.from(pageLines.keys()).sort((a, b) => a - b);
+  const totalLines = sortedLineNums.length;
+  const isDensePage = totalLines >= 10;
+  const lastLineNum = sortedLineNums[sortedLineNums.length - 1];
+
+  return (
+    <>
+      {sortedLineNums.map((lineNum) => {
+        const words = pageLines.get(lineNum)!;
+        const surahNum = surahStartLines.has(lineNum)
+          ? getSurahForLine(lineNum, verses)
+          : null;
+        const wordCount = words.filter((w) => w.type === "word").length;
+        const shouldJustify =
+          isDensePage && wordCount >= 4 && lineNum !== lastLineNum;
+
+        return (
+          <div key={lineNum}>
+            {surahNum !== null && (
+              <BayaanSurahBanner
+                surahNumber={surahNum}
+                surahName={
+                  chapters.find((c) => c.id === surahNum)?.name_simple ??
+                  `Surah ${surahNum}`
+                }
+              />
+            )}
+            <div
+              dir="rtl"
+              style={{
+                display: "flex",
+                justifyContent: shouldJustify ? "space-between" : "center",
+                alignItems: "baseline",
+                flexWrap: "nowrap",
+              }}
+            >
+              {words.map((w) =>
+                w.type === "end" ? (
+                  <span key={w.id} style={{ color: BAYAAN_PAGE_THEME.markerText }}>
+                    {w.text}
+                  </span>
+                ) : (
+                  <span key={w.id}>{w.text}</span>
+                ),
+              )}
+            </div>
+          </div>
+        );
+      })}
+    </>
+  );
 }
 
 export default function MushafPage_() {
@@ -265,6 +287,7 @@ export default function MushafPage_() {
   const [currentPage, setCurrentPage] = useState(1);
   const [jumpInput, setJumpInput] = useState("");
   const [jumpMode, setJumpMode] = useState<"surah" | "juz">("surah");
+  const [showChrome, setShowChrome] = useState(true);
   const queryClient = useQueryClient();
 
   const { data: chaptersData } = useQuery({
@@ -279,25 +302,82 @@ export default function MushafPage_() {
     staleTime: Infinity,
   });
 
+  const { data: pageData } = useQuery<PageData>({
+    queryKey: ["mushaf-page", currentPage],
+    queryFn: () => fetchPage(currentPage),
+    staleTime: 1000 * 60 * 60,
+  });
+
   const chapters = chaptersData?.chapters || [];
   const rawJuzs = juzsData?.juzs || [];
   const juzs = Array.from(
-    rawJuzs.reduce((map: Map<number, Juz>, j: Juz) => {
-      if (!map.has(j.juz_number)) map.set(j.juz_number, j);
-      return map;
-    }, new Map<number, Juz>()).values()
+    rawJuzs
+      .reduce((map: Map<number, Juz>, j: Juz) => {
+        if (!map.has(j.juz_number)) map.set(j.juz_number, j);
+        return map;
+      }, new Map<number, Juz>())
+      .values(),
   ).sort((a: Juz, b: Juz) => a.juz_number - b.juz_number);
   const juzPageMap = buildJuzPageMap(juzs, chapters);
 
-  const prefetchNext = useCallback((page: number) => {
-    if (page < TOTAL_PAGES) {
-      queryClient.prefetchQuery({
-        queryKey: ["mushaf-page", page + 1],
-        queryFn: () => fetchPage(page + 1),
-        staleTime: 1000 * 60 * 60,
-      });
-    }
-  }, [queryClient]);
+  // Find the primary surah for the current page (used only for Bayaan font preloading)
+  const primaryChapter =
+    chapters.length > 0
+      ? [...chapters].reverse().find((ch) => ch.pages[0] <= currentPage) ??
+        chapters[0]
+      : null;
+  const primarySurahId = primaryChapter?.id ?? 1;
+  const primarySurahName = primaryChapter?.name_simple ?? "Al-Fatihah";
+
+  const pageSurahNames = pageData?.verses
+    ? getArabicSurahNamesForPage(pageData.verses, chapters)
+    : "";
+
+  // Auto-hide chrome bar 4s after mount
+  useEffect(() => {
+    const timer = setTimeout(() => setShowChrome(false), 4000);
+    return () => clearTimeout(timer);
+  }, []);
+
+  const {
+    pageContentRefs,
+    pageMeasureRefs,
+    isMushafContentVisible,
+    getCachedScale,
+  } = useBayaanMushafFit({
+    surahNumber: primarySurahId,
+    surahName: primarySurahName,
+    mushafFitContentKey: String(currentPage),
+    pageNumbers: [currentPage],
+    isSinglePageLayout: true,
+  });
+
+  const pageContentRef = useCallback(
+    (node: HTMLDivElement | null) => {
+      pageContentRefs.current[currentPage] = node;
+    },
+    [currentPage, pageContentRefs],
+  );
+
+  const pageMeasureRef = useCallback(
+    (node: HTMLDivElement | null) => {
+      pageMeasureRefs.current[currentPage] = node;
+    },
+    [currentPage, pageMeasureRefs],
+  );
+
+  const prefetchNext = useCallback(
+    (page: number) => {
+      if (page < TOTAL_PAGES) {
+        queryClient.prefetchQuery({
+          queryKey: ["mushaf-page", page + 1],
+          queryFn: () => fetchPage(page + 1),
+          staleTime: 1000 * 60 * 60,
+        });
+      }
+    },
+    [queryClient],
+  );
 
   const goToPage = (page: number) => {
     const clamped = Math.max(1, Math.min(TOTAL_PAGES, page));
@@ -308,13 +388,9 @@ export default function MushafPage_() {
   const handleJump = (value: string) => {
     if (!value) return;
     if (jumpMode === "surah") {
-      const id = parseInt(value);
-      const page = getChapterFirstPage(id, chapters);
-      goToPage(page);
+      goToPage(getChapterFirstPage(parseInt(value), chapters));
     } else {
-      const num = parseInt(value);
-      const page = getJuzFirstPage(num, juzPageMap);
-      goToPage(page);
+      goToPage(getJuzFirstPage(parseInt(value), juzPageMap));
     }
   };
 
@@ -328,164 +404,291 @@ export default function MushafPage_() {
     }
   };
 
+  // RTL Quran: left tap = next page (forward), right tap = previous page (back)
+  const handleLeftTap = () => {
+    if (currentPage < TOTAL_PAGES) goToPage(currentPage + 1);
+  };
+  const handleRightTap = () => {
+    if (currentPage > 1) goToPage(currentPage - 1);
+  };
+
   return (
-    <div className="min-h-screen bg-[#fdf8f0]">
-      {/* Header */}
-      <div className="pattern-bg text-white px-4 pt-8 pb-5">
-        <div className="max-w-2xl mx-auto">
-          <div className="flex items-center gap-3 mb-3">
-            <button onClick={() => setLocation("/")} className="flex items-center gap-1 text-emerald-200 text-sm">
-              <ChevronLeft size={16} /> Home
-            </button>
-          </div>
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-xl font-bold text-white">Read Quran</h1>
-              <p className="text-emerald-200 text-sm mt-0.5">Mushaf Reading Mode</p>
-            </div>
-            <div className="text-amber-200 text-right">
-              <p className="text-xs opacity-80">Page</p>
-              <p className="text-2xl font-bold leading-none">{currentPage}</p>
-              <p className="text-xs opacity-60">of {TOTAL_PAGES}</p>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Navigation controls */}
-      <div className="bg-white border-b border-amber-200 shadow-sm sticky top-0 z-10">
-        <div className="max-w-2xl mx-auto px-4 py-2 flex items-center gap-2 flex-wrap">
-          {/* Jump mode toggle */}
-          <div className="flex bg-amber-50 rounded-lg p-0.5 border border-amber-200">
-            <button
-              onClick={() => setJumpMode("surah")}
-              className={cn(
-                "text-xs px-2.5 py-1 rounded-md transition-colors font-medium",
-                jumpMode === "surah" ? "bg-white shadow-sm text-amber-900" : "text-amber-700"
-              )}
-            >
-              Surah
-            </button>
-            <button
-              onClick={() => setJumpMode("juz")}
-              className={cn(
-                "text-xs px-2.5 py-1 rounded-md transition-colors font-medium",
-                jumpMode === "juz" ? "bg-white shadow-sm text-amber-900" : "text-amber-700"
-              )}
-            >
-              Juz
-            </button>
-          </div>
-
-          {/* Jump dropdown */}
-          <div className="flex-1 min-w-0">
-            {jumpMode === "surah" && chapters.length > 0 ? (
-              <Select onValueChange={handleJump}>
-                <SelectTrigger className="h-8 text-xs border-amber-200 bg-amber-50 min-w-0">
-                  <SelectValue placeholder="Jump to Surah…" />
-                </SelectTrigger>
-                <SelectContent className="max-h-64">
-                  {chapters.map(ch => (
-                    <SelectItem key={ch.id} value={String(ch.id)} className="text-xs">
-                      {ch.id}. {ch.name_simple} — {ch.translated_name?.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            ) : jumpMode === "juz" && juzs.length > 0 ? (
-              <Select onValueChange={handleJump}>
-                <SelectTrigger className="h-8 text-xs border-amber-200 bg-amber-50 min-w-0">
-                  <SelectValue placeholder="Jump to Juz…" />
-                </SelectTrigger>
-                <SelectContent className="max-h-64">
-                  {juzs.map(juz => (
-                    <SelectItem key={juz.id} value={String(juz.juz_number)} className="text-xs">
-                      Juz {juz.juz_number}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            ) : (
-              <Skeleton className="h-8 rounded-md" />
-            )}
-          </div>
-
-          {/* Page number input */}
-          <div className="flex items-center gap-1 border border-amber-200 rounded-md bg-amber-50 px-2 h-8">
-            <span className="text-xs text-amber-700">p.</span>
-            <input
-              type="number"
-              min={1}
-              max={TOTAL_PAGES}
-              value={jumpInput}
-              onChange={e => setJumpInput(e.target.value)}
-              onKeyDown={handlePageInput}
-              placeholder={String(currentPage)}
-              className="w-12 text-xs bg-transparent outline-none text-amber-900 placeholder:text-amber-400"
-            />
-          </div>
-        </div>
-      </div>
-
-      {/* Page content */}
-      <div className="max-w-2xl mx-auto px-4 sm:px-8 py-6">
+    <>
+      <style>{TAJWEED_CSS}</style>
+      <div
+        style={{
+          position: "fixed",
+          inset: 0,
+          zIndex: 60,
+          background: "#e0d5c2",
+          display: "flex",
+          flexDirection: "column",
+          overflow: "hidden",
+        }}
+      >
+        {/* Collapsible chrome bar */}
         <div
-          className="mushaf-page bg-[#fdf8f0] rounded-xl shadow-md border border-amber-200 p-6 sm:p-10 min-h-[60vh]"
           style={{
-            backgroundImage: "linear-gradient(to bottom, #fdf8f0, #faf3e8)",
-            boxShadow: "0 4px 24px rgba(139,90,43,0.08), inset 0 0 40px rgba(200,160,80,0.04)",
+            height: showChrome ? "48px" : "0px",
+            overflow: "hidden",
+            transition: "height 0.25s ease",
+            flexShrink: 0,
           }}
         >
-          {/* Page number watermark */}
-          <div className="text-center mb-4">
-            <span className="text-xs text-amber-400 font-medium tracking-widest uppercase">
-              ﷽ Page {currentPage}
-            </span>
-          </div>
-
-          <MushafPage pageNumber={currentPage} chapters={chapters} />
-
-          {/* Bottom page number */}
-          <div className="text-center mt-6 pt-4 border-t border-amber-200">
-            <span className="text-xs text-amber-500 font-medium">{currentPage}</span>
-          </div>
-        </div>
-
-        {/* Navigation buttons — RTL: next page is to the left */}
-        <div className="flex items-center justify-between mt-6 gap-4">
-          <Button
-            variant="outline"
-            onClick={() => goToPage(currentPage + 1)}
-            disabled={currentPage >= TOTAL_PAGES}
-            className="flex items-center gap-2 border-amber-300 text-amber-800 hover:bg-amber-50 bg-white"
+          <div
+            style={{
+              height: "48px",
+              display: "flex",
+              alignItems: "center",
+              gap: "8px",
+              padding: "0 10px",
+              background: "#cfc5ae",
+              borderBottom: `1px solid ${BAYAAN_PAGE_THEME.chromeBorder}`,
+            }}
           >
-            <ChevronLeft size={16} />
-            <span className="hidden sm:inline">Next</span>
-          </Button>
+            {/* Back */}
+            <button
+              onClick={() => setLocation("/")}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "2px",
+                color: BAYAAN_PAGE_THEME.chromeMuted,
+                fontSize: "13px",
+                background: "none",
+                border: "none",
+                cursor: "pointer",
+                flexShrink: 0,
+                padding: "4px 6px",
+              }}
+            >
+              <ChevronLeft size={15} />
+              <span>Back</span>
+            </button>
 
-          <div className="text-center">
-            <p className="text-sm font-medium text-amber-900">
-              Page {currentPage} <span className="text-amber-500">of {TOTAL_PAGES}</span>
-            </p>
-            <div className="mt-1 h-1 w-32 bg-amber-100 rounded-full overflow-hidden">
-              <div
-                className="h-full bg-amber-400 rounded-full transition-all duration-300"
-                style={{ width: `${(currentPage / TOTAL_PAGES) * 100}%` }}
+            {/* Surah / Juz toggle */}
+            <div
+              style={{
+                display: "flex",
+                background: "rgba(0,0,0,0.1)",
+                borderRadius: "6px",
+                padding: "2px",
+                flexShrink: 0,
+              }}
+            >
+              {(["surah", "juz"] as const).map((mode) => (
+                <button
+                  key={mode}
+                  onClick={() => setJumpMode(mode)}
+                  style={{
+                    fontSize: "11px",
+                    padding: "3px 9px",
+                    borderRadius: "4px",
+                    background:
+                      jumpMode === mode
+                        ? BAYAAN_PAGE_THEME.markerSurface
+                        : "transparent",
+                    color: BAYAAN_PAGE_THEME.chromeMuted,
+                    border: "none",
+                    cursor: "pointer",
+                    fontWeight: jumpMode === mode ? 600 : 400,
+                  }}
+                >
+                  {mode === "surah" ? "Surah" : "Juz"}
+                </button>
+              ))}
+            </div>
+
+            {/* Jump dropdown */}
+            <div style={{ flex: 1, minWidth: 0 }}>
+              {jumpMode === "surah" && chapters.length > 0 ? (
+                <Select onValueChange={handleJump}>
+                  <SelectTrigger
+                    className="h-7 text-xs min-w-0"
+                    style={{
+                      border: `1px solid ${BAYAAN_PAGE_THEME.chromeBorder}`,
+                      background: "rgba(255,253,248,0.65)",
+                      color: BAYAAN_PAGE_THEME.screenText,
+                    }}
+                  >
+                    <SelectValue placeholder="Jump to Surah…" />
+                  </SelectTrigger>
+                  <SelectContent className="max-h-64">
+                    {chapters.map((ch) => (
+                      <SelectItem
+                        key={ch.id}
+                        value={String(ch.id)}
+                        className="text-xs"
+                      >
+                        {ch.id}. {ch.name_simple}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : jumpMode === "juz" && juzs.length > 0 ? (
+                <Select onValueChange={handleJump}>
+                  <SelectTrigger
+                    className="h-7 text-xs min-w-0"
+                    style={{
+                      border: `1px solid ${BAYAAN_PAGE_THEME.chromeBorder}`,
+                      background: "rgba(255,253,248,0.65)",
+                      color: BAYAAN_PAGE_THEME.screenText,
+                    }}
+                  >
+                    <SelectValue placeholder="Jump to Juz…" />
+                  </SelectTrigger>
+                  <SelectContent className="max-h-64">
+                    {juzs.map((juz) => (
+                      <SelectItem
+                        key={juz.id}
+                        value={String(juz.juz_number)}
+                        className="text-xs"
+                      >
+                        Juz {juz.juz_number}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : null}
+            </div>
+
+            {/* Page number input */}
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "2px",
+                border: `1px solid ${BAYAAN_PAGE_THEME.chromeBorder}`,
+                borderRadius: "6px",
+                padding: "0 8px",
+                height: "28px",
+                flexShrink: 0,
+                background: "rgba(255,253,248,0.65)",
+              }}
+            >
+              <span
+                style={{ fontSize: "10px", color: BAYAAN_PAGE_THEME.chromeMuted }}
+              >
+                p.
+              </span>
+              <input
+                type="number"
+                min={1}
+                max={TOTAL_PAGES}
+                value={jumpInput}
+                onChange={(e) => setJumpInput(e.target.value)}
+                onKeyDown={handlePageInput}
+                placeholder={String(currentPage)}
+                style={{
+                  width: "38px",
+                  fontSize: "11px",
+                  background: "transparent",
+                  border: "none",
+                  outline: "none",
+                  color: BAYAAN_PAGE_THEME.screenText,
+                }}
               />
             </div>
           </div>
+        </div>
 
-          <Button
-            variant="outline"
-            onClick={() => goToPage(currentPage - 1)}
-            disabled={currentPage <= 1}
-            className="flex items-center gap-2 border-amber-300 text-amber-800 hover:bg-amber-50 bg-white"
+        {/* Page area — fills remaining height */}
+        <div
+          style={{
+            flex: 1,
+            minHeight: 0,
+            position: "relative",
+            padding: "4px",
+          }}
+        >
+          <BayaanMushafPageCard
+            pageNumber={currentPage}
+            pageSurahNames={pageSurahNames}
+            isSinglePageLayout={true}
+            cachedScale={getCachedScale(currentPage)}
+            isContentVisible={isMushafContentVisible}
+            pageContentRef={pageContentRef}
+            pageMeasureRef={pageMeasureRef}
           >
-            <span className="hidden sm:inline">Previous</span>
-            <ChevronRight size={16} />
-          </Button>
+            <MushafPageContent pageNumber={currentPage} chapters={chapters} />
+          </BayaanMushafPageCard>
+
+          {/* Left tap zone → next page (RTL forward) */}
+          <div
+            onClick={handleLeftTap}
+            style={{
+              position: "absolute",
+              left: 0,
+              top: 0,
+              bottom: 0,
+              width: "22%",
+              zIndex: 10,
+              cursor: currentPage < TOTAL_PAGES ? "pointer" : "default",
+            }}
+          />
+
+          {/* Right tap zone → previous page (RTL back) */}
+          <div
+            onClick={handleRightTap}
+            style={{
+              position: "absolute",
+              right: 0,
+              top: 0,
+              bottom: 0,
+              width: "22%",
+              zIndex: 10,
+              cursor: currentPage > 1 ? "pointer" : "default",
+            }}
+          />
+
+          {/* Center tap → toggle chrome bar */}
+          <div
+            onClick={() => setShowChrome((v) => !v)}
+            style={{
+              position: "absolute",
+              left: "22%",
+              right: "22%",
+              top: 0,
+              bottom: 0,
+              zIndex: 9,
+            }}
+          />
+
+          {/* Subtle edge chevrons */}
+          {currentPage < TOTAL_PAGES && (
+            <div
+              style={{
+                position: "absolute",
+                left: "6px",
+                top: "50%",
+                transform: "translateY(-50%)",
+                zIndex: 11,
+                pointerEvents: "none",
+                color: BAYAAN_PAGE_THEME.chromeMuted,
+                opacity: 0.35,
+              }}
+            >
+              <ChevronLeft size={18} />
+            </div>
+          )}
+          {currentPage > 1 && (
+            <div
+              style={{
+                position: "absolute",
+                right: "6px",
+                top: "50%",
+                transform: "translateY(-50%)",
+                zIndex: 11,
+                pointerEvents: "none",
+                color: BAYAAN_PAGE_THEME.chromeMuted,
+                opacity: 0.35,
+              }}
+            >
+              <ChevronRight size={18} />
+            </div>
+          )}
         </div>
       </div>
-    </div>
+    </>
   );
 }
