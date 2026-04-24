@@ -37,7 +37,6 @@ import {
   SkipBack,
   SkipForward,
   Square,
-  Volume2,
   X,
 } from "lucide-react";
 import { BayaanMushafPageCard } from "@/components/mushaf/bayaan/BayaanMushafPageCard";
@@ -56,11 +55,11 @@ const SKIP_CHARS = /^[ۖ-ۭ؀-؅؛؞؟۝۞۟]+$/;
 const LS_PREFIX = "noorpath";
 
 const RECITERS = [
-  { id: 7,  name: "Mishary Rashid Al-Afasy" },
-  { id: 1,  name: "AbdulBaset Murattal" },
-  { id: 2,  name: "AbdulBaset Mujawwad" },
-  { id: 5,  name: "Mahmoud Khalil Al-Husary" },
-  { id: 3,  name: "Mohamed Siddiq Al-Minshawi" },
+  { folder: "Alafasy_128kbps",              name: "Mishary Rashid Al-Afasy" },
+  { folder: "Husary_128kbps",               name: "Mahmoud Khalil Al-Husary" },
+  { folder: "Sudais_192kbps",               name: "Abdul Rahman Al-Sudais" },
+  { folder: "Abdul_Basit_Murattal_192kbps", name: "Abdul Basit Abdul Samad" },
+  { folder: "Minshawi_Murattal_128kbps",    name: "Muhammad Siddiq Al-Minshawi" },
 ] as const;
 
 type HighlightColor = "yellow" | "green" | "blue" | "pink";
@@ -74,8 +73,8 @@ const HIGHLIGHT_COLORS: Record<HighlightColor, { bg: string; dot: string; label:
 
 const SPEED_OPTIONS = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2] as const;
 
-function audioUrl(reciterId: number, surahId: number, ayahNum: number): string {
-  return `https://verses.quran.com/${reciterId}/${String(surahId).padStart(3, "0")}/${String(ayahNum).padStart(3, "0")}.mp3`;
+function audioUrl(reciterFolder: string, surahId: number, ayahNum: number): string {
+  return `https://everyayah.com/data/${reciterFolder}/${String(surahId).padStart(3, "0")}${String(ayahNum).padStart(3, "0")}.mp3`;
 }
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
@@ -153,7 +152,7 @@ interface PlayerState {
   ayahNum: number;
   rangeStart: number;
   rangeEnd: number | null;
-  reciterId: number;
+  reciterFolder: string;
   rate: number;
   repeat: "1" | "3" | "5" | "loop";
   repeatCount: number;
@@ -162,7 +161,7 @@ interface PlayerState {
 }
 
 interface PlayerSettingsState {
-  reciterId: number;
+  reciterFolder: string;
   rate: number;
   repeat: "1" | "3" | "5" | "loop";
   rangeRepeat: "1" | "2" | "3" | "loop";
@@ -186,7 +185,7 @@ async function fetchAllChapters(): Promise<{ chapters: Chapter[] }> {
 
 async function fetchTranslation(verseKey: string): Promise<string> {
   const r = await fetch(`${QURAN_API}/verses/by_key/${verseKey}?translations=131`);
-  if (!r.ok) return "";
+  if (!r.ok) throw new Error(`Translation fetch failed: ${r.status}`);
   const data = await r.json();
   const raw: string = data.verse?.translations?.[0]?.text ?? "";
   return raw
@@ -449,10 +448,12 @@ function BayaanAyahSheet({
   const chapterInfo = chapters.find((c) => c.id === ayah.surahId);
   const surahName = chapterInfo?.name_simple ?? `Surah ${ayah.surahId}`;
 
-  const { data: translation } = useQuery({
+  const { data: translation, isLoading: translationLoading, isError: translationError } = useQuery({
     queryKey: ["translation", ayah.verseKey],
     queryFn: () => fetchTranslation(ayah.verseKey),
     staleTime: Infinity,
+    enabled: sheetView.type === "translation",
+    retry: 1,
   });
 
   const { data: tafseerText, isLoading: tafseerLoading } = useQuery({
@@ -656,31 +657,41 @@ function BayaanAyahSheet({
 
       case "translation":
         return (
-          <div style={{ paddingBottom: "24px" }}>
-            <SubPanelHeader title="Translation" onBack={() => onChangeView({ type: "main" })} />
-            <p style={{ textAlign: "center", padding: "6px 16px 0", color: "#6b7280", fontSize: "12px", margin: 0 }}>
-              {ayah.verseKey}
-            </p>
-            <div
-              dir="rtl"
-              style={{
-                padding: "12px 20px",
-                fontSize: "24px",
-                fontFamily: BAYAAN_MUSHAF_TEXT,
-                lineHeight: 2.1,
-                color: "white",
-                textAlign: "center",
-              }}
-            >
-              {ayah.text_uthmani}
+          <div style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0, overflow: "hidden" }}>
+            <div style={{ flexShrink: 0 }}>
+              <SubPanelHeader title="Translation" onBack={() => onChangeView({ type: "main" })} />
+              <p style={{ textAlign: "center", padding: "6px 16px 0", color: "#6b7280", fontSize: "12px", margin: 0 }}>
+                {ayah.verseKey}
+              </p>
+              <div
+                dir="rtl"
+                style={{
+                  padding: "12px 20px",
+                  fontSize: "24px",
+                  fontFamily: BAYAAN_MUSHAF_TEXT,
+                  lineHeight: 2.1,
+                  color: "white",
+                  textAlign: "center",
+                }}
+              >
+                {ayah.text_uthmani}
+              </div>
+              <p style={{ padding: "0 20px 4px", fontSize: "10px", color: "#6b7280", letterSpacing: "0.08em", textTransform: "uppercase", margin: 0 }}>
+                Saheeh International
+              </p>
             </div>
-            <p style={{ padding: "0 20px 4px", fontSize: "10px", color: "#6b7280", letterSpacing: "0.08em", textTransform: "uppercase", margin: 0 }}>
-              Saheeh International
-            </p>
-            <p style={{ padding: "4px 20px 20px", fontSize: "15px", color: "#d1d5db", lineHeight: 1.75, margin: 0 }}>
-              {translation ?? <span style={{ color: "#6b7280", fontStyle: "italic" }}>Loading…</span>}
-            </p>
-            <div style={{ display: "flex", gap: "8px", padding: "0 16px" }}>
+            <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "4px 20px 8px" }}>
+              {translationLoading ? (
+                <p style={{ fontSize: "15px", color: "#6b7280", fontStyle: "italic", lineHeight: 1.75, margin: 0 }}>Loading…</p>
+              ) : translationError ? (
+                <p style={{ fontSize: "15px", color: "#6b7280", fontStyle: "italic", lineHeight: 1.75, margin: 0 }}>Could not load translation</p>
+              ) : translation ? (
+                <p style={{ fontSize: "15px", color: "#d1d5db", lineHeight: 1.75, margin: 0 }}>{translation}</p>
+              ) : (
+                <p style={{ fontSize: "15px", color: "#6b7280", fontStyle: "italic", lineHeight: 1.75, margin: 0 }}>Loading…</p>
+              )}
+            </div>
+            <div style={{ flexShrink: 0, display: "flex", gap: "8px", padding: "10px 16px 16px", borderTop: "1px solid #1f1f1f" }}>
               <button disabled={currentVerseIdx <= 0} onClick={() => navTo(currentVerseIdx - 1)} style={navBtnStyle(currentVerseIdx <= 0)}>
                 <ChevronLeft size={16} /> Previous
               </button>
@@ -693,37 +704,39 @@ function BayaanAyahSheet({
 
       case "tafseer":
         return (
-          <div style={{ paddingBottom: "24px" }}>
-            <SubPanelHeader title="Tafseer" onBack={() => onChangeView({ type: "main" })} />
-            <p style={{ textAlign: "center", padding: "6px 16px 0", color: "#6b7280", fontSize: "12px", margin: 0 }}>
-              {ayah.verseKey}
-            </p>
-            <div
-              dir="rtl"
-              style={{
-                padding: "10px 20px",
-                fontSize: "20px",
-                fontFamily: BAYAAN_MUSHAF_TEXT,
-                lineHeight: 2,
-                color: "white",
-                textAlign: "center",
-              }}
-            >
-              {ayah.text_uthmani}
+          <div style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0, overflow: "hidden" }}>
+            <div style={{ flexShrink: 0 }}>
+              <SubPanelHeader title="Tafseer" onBack={() => onChangeView({ type: "main" })} />
+              <p style={{ textAlign: "center", padding: "6px 16px 0", color: "#6b7280", fontSize: "12px", margin: 0 }}>
+                {ayah.verseKey}
+              </p>
+              <div
+                dir="rtl"
+                style={{
+                  padding: "10px 20px",
+                  fontSize: "20px",
+                  fontFamily: BAYAAN_MUSHAF_TEXT,
+                  lineHeight: 2,
+                  color: "white",
+                  textAlign: "center",
+                }}
+              >
+                {ayah.text_uthmani}
+              </div>
+              <p style={{ padding: "0 20px 4px", fontSize: "10px", color: "#6b7280", letterSpacing: "0.08em", textTransform: "uppercase", margin: 0 }}>
+                Ibn Kathir (Abridged)
+              </p>
             </div>
-            <p style={{ padding: "0 20px 4px", fontSize: "10px", color: "#6b7280", letterSpacing: "0.08em", textTransform: "uppercase", margin: 0 }}>
-              Ibn Kathir (Abridged)
-            </p>
-            <p style={{ padding: "4px 20px 20px", fontSize: "14px", color: "#d1d5db", lineHeight: 1.8, margin: 0 }}>
+            <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "4px 20px 8px" }}>
               {tafseerLoading ? (
-                <span style={{ color: "#6b7280", fontStyle: "italic" }}>Loading…</span>
+                <p style={{ fontSize: "14px", color: "#6b7280", fontStyle: "italic", margin: 0 }}>Loading…</p>
               ) : tafseerText ? (
-                tafseerText
+                <p style={{ fontSize: "14px", color: "#d1d5db", lineHeight: 1.8, margin: 0 }}>{tafseerText}</p>
               ) : (
-                <span style={{ color: "#6b7280", fontStyle: "italic" }}>Tafseer unavailable</span>
+                <p style={{ fontSize: "14px", color: "#6b7280", fontStyle: "italic", margin: 0 }}>Tafseer unavailable</p>
               )}
-            </p>
-            <div style={{ display: "flex", gap: "8px", padding: "0 16px" }}>
+            </div>
+            <div style={{ flexShrink: 0, display: "flex", gap: "8px", padding: "10px 16px 16px", borderTop: "1px solid #1f1f1f" }}>
               <button disabled={currentVerseIdx <= 0} onClick={() => navTo(currentVerseIdx - 1)} style={navBtnStyle(currentVerseIdx <= 0)}>
                 <ChevronLeft size={16} /> Previous
               </button>
@@ -911,14 +924,21 @@ function BayaanAyahSheet({
           background: "#0d0d0d",
           borderRadius: "20px 20px 0 0",
           zIndex: 80,
-          maxHeight: "82vh",
-          overflowY: "auto",
           color: "white",
+          ...(sheetView.type === "tafseer" || sheetView.type === "translation"
+            ? { height: "82vh", overflow: "hidden", display: "flex", flexDirection: "column" as const }
+            : { maxHeight: "82vh", overflowY: "auto" as const }),
         }}
         onClick={(e) => e.stopPropagation()}
       >
-        <div style={{ width: "40px", height: "4px", background: "#333", borderRadius: "2px", margin: "12px auto 0" }} />
-        {renderContent()}
+        <div style={{ width: "40px", height: "4px", background: "#333", borderRadius: "2px", margin: "12px auto 0", flexShrink: 0 }} />
+        {sheetView.type === "tafseer" || sheetView.type === "translation" ? (
+          <div style={{ flex: 1, minHeight: 0, overflow: "hidden", display: "flex", flexDirection: "column" }}>
+            {renderContent()}
+          </div>
+        ) : (
+          renderContent()
+        )}
       </div>
     </>
   );
@@ -1021,7 +1041,7 @@ function PlaybackSettingsSheet({
     ? `${playerState.surahId}:${playerState.ayahNum}`
     : (verses[0]?.verse_key ?? "");
 
-  const [reciterId, setReciterId] = useState(playerSettings.reciterId);
+  const [reciterFolder, setReciterFolder] = useState(playerSettings.reciterFolder);
   const [rate, setRate] = useState(playerSettings.rate);
   const [repeat, setRepeat] = useState(playerSettings.repeat);
   const [rangeRepeat, setRangeRepeat] = useState(playerSettings.rangeRepeat);
@@ -1128,9 +1148,9 @@ function PlaybackSettingsSheet({
 
           <div style={{ marginBottom: "16px" }}>
             <span style={labelStyle}>Reciter</span>
-            <select value={reciterId} onChange={(e) => setReciterId(parseInt(e.target.value))} style={selectStyle}>
+            <select value={reciterFolder} onChange={(e) => setReciterFolder(e.target.value)} style={selectStyle}>
               {RECITERS.map((r) => (
-                <option key={r.id} value={r.id}>{r.name}</option>
+                <option key={r.folder} value={r.folder}>{r.name}</option>
               ))}
             </select>
           </div>
@@ -1171,7 +1191,7 @@ function PlaybackSettingsSheet({
           )}
 
           <button
-            onClick={() => onPlay(startVK, endVK || null, { reciterId, rate, repeat, rangeRepeat })}
+            onClick={() => onPlay(startVK, endVK || null, { reciterFolder, rate, repeat, rangeRepeat })}
             style={{
               width: "100%",
               padding: "14px",
@@ -1214,10 +1234,7 @@ export default function MushafReaderPage() {
   const [revealedVerseKeys, setRevealedVerseKeys] = useState<Set<string>>(new Set());
   const [isSelectMode, setIsSelectMode] = useState(false);
   const [selectedVerseKeys, setSelectedVerseKeys] = useState<Set<string>>(new Set());
-  const [tappedWord, setTappedWord] = useState<{
-    key: string; text: string; position: number;
-    surahId: number; verseNum: number; translation: string;
-  } | null>(null);
+
   const [isRecitePickMode, setIsRecitePickMode] = useState(false);
   const [isReciting, setIsReciting] = useState(false);
   const [reciteStartVerseKey, setReciteStartVerseKey] = useState<string | null>(null);
@@ -1236,7 +1253,7 @@ export default function MushafReaderPage() {
   // Player state
   const [playerState, setPlayerState] = useState<PlayerState | null>(null);
   const [playerSettings, setPlayerSettings] = useState<PlayerSettingsState>({
-    reciterId: 7,
+    reciterFolder: "Alafasy_128kbps",
     rate: 1,
     repeat: "1",
     rangeRepeat: "1",
@@ -1254,6 +1271,9 @@ export default function MushafReaderPage() {
   const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const longPressStartPosRef = useRef<{ x: number; y: number } | null>(null);
   const longPressFiredRef = useRef(false);
+  const versesRef = useRef<PageVerseData[]>([]);
+  const currentPageRef = useRef(1);
+  const goToPageRef = useRef<(page: number) => void>(() => {});
 
   // Keep playerStateRef in sync with playerState on every render
   playerStateRef.current = playerState;
@@ -1283,7 +1303,7 @@ export default function MushafReaderPage() {
       if (ps.rangeEnd !== null && nextAyah > ps.rangeEnd) {
         const maxRangeRepeat = ps.rangeRepeat === "loop" ? Infinity : parseInt(ps.rangeRepeat);
         if (ps.rangeRepeatCount < maxRangeRepeat - 1) {
-          const url = audioUrl(ps.reciterId, ps.surahId, ps.rangeStart);
+          const url = audioUrl(ps.reciterFolder, ps.surahId, ps.rangeStart);
           audio.src = url;
           audio.playbackRate = ps.rate;
           audio.play().catch(() => {});
@@ -1297,11 +1317,16 @@ export default function MushafReaderPage() {
       }
 
       // Advance to next ayah
-      const url = audioUrl(ps.reciterId, ps.surahId, nextAyah);
+      const url = audioUrl(ps.reciterFolder, ps.surahId, nextAyah);
       audio.src = url;
       audio.playbackRate = ps.rate;
       audio.play().catch(() => {});
       setPlayerState((p) => (p ? { ...p, ayahNum: nextAyah, repeatCount: 0, status: "playing" } : null));
+      // Flip page if the next ayah is not on the current page
+      const nextVK = `${ps.surahId}:${nextAyah}`;
+      if (!versesRef.current.some((v) => v.verse_key === nextVK)) {
+        goToPageRef.current(currentPageRef.current + 1);
+      }
     };
 
     return () => {
@@ -1313,7 +1338,6 @@ export default function MushafReaderPage() {
   // Reset interactive state when page changes — player intentionally excluded
   useEffect(() => {
     setRevealedVerseKeys(new Set());
-    setTappedWord(null);
     setSheetView(null);
     setSheetAyah(null);
     recognitionRef.current?.stop();
@@ -1406,6 +1430,8 @@ export default function MushafReaderPage() {
   });
 
   const verses = pageData?.verses ?? [];
+  versesRef.current = verses;
+  currentPageRef.current = currentPage;
   const lineGroups = useMemo(() => buildLineGroups(verses), [verses]);
 
   const surahsStartingOnPage = useMemo(() => {
@@ -1505,12 +1531,12 @@ export default function MushafReaderPage() {
       opts?: {
         repeat?: "1" | "3" | "5" | "loop";
         rangeEnd?: number | null;
-        reciterId?: number;
+        reciterFolder?: string;
         rate?: number;
         rangeRepeat?: "1" | "2" | "3" | "loop";
       }
     ) => {
-      const recId = opts?.reciterId ?? playerSettings.reciterId;
+      const recFolder = opts?.reciterFolder ?? playerSettings.reciterFolder;
       const rt = opts?.rate ?? playerSettings.rate;
       const rep = opts?.repeat ?? "1";
       const rangeEnd = opts?.rangeEnd ?? null;
@@ -1518,7 +1544,7 @@ export default function MushafReaderPage() {
 
       if (audioRef.current) {
         audioRef.current.pause();
-        audioRef.current.src = audioUrl(recId, ayah.surahId, ayah.verseNum);
+        audioRef.current.src = audioUrl(recFolder, ayah.surahId, ayah.verseNum);
         audioRef.current.playbackRate = rt;
         audioRef.current.play().catch(() => {});
       }
@@ -1528,30 +1554,29 @@ export default function MushafReaderPage() {
         ayahNum: ayah.verseNum,
         rangeStart: ayah.verseNum,
         rangeEnd,
-        reciterId: recId,
+        reciterFolder: recFolder,
         rate: rt,
         repeat: rep,
         repeatCount: 0,
         rangeRepeat: rangeRep,
         rangeRepeatCount: 0,
       });
-      setPlayerSettings((prev) => ({ ...prev, reciterId: recId, rate: rt, repeat: rep, rangeRepeat: rangeRep }));
+      setPlayerSettings((prev) => ({ ...prev, reciterFolder: recFolder, rate: rt, repeat: rep, rangeRepeat: rangeRep }));
     },
     [playerSettings]
   );
 
   const playerToggle = useCallback(() => {
-    if (!audioRef.current) return;
-    setPlayerState((prev) => {
-      if (!prev) return null;
-      if (prev.status === "playing") {
-        audioRef.current!.pause();
-        return { ...prev, status: "paused" };
-      } else {
-        audioRef.current!.play().catch(() => {});
-        return { ...prev, status: "playing" };
-      }
-    });
+    const audio = audioRef.current;
+    const ps = playerStateRef.current;
+    if (!audio || !ps) return;
+    if (ps.status === "playing") {
+      audio.pause();
+      setPlayerState((prev) => prev ? { ...prev, status: "paused" } : null);
+    } else {
+      audio.play().catch(() => {});
+      setPlayerState((prev) => prev ? { ...prev, status: "playing" } : null);
+    }
   }, []);
 
   const playerStop = useCallback(() => {
@@ -1563,29 +1588,29 @@ export default function MushafReaderPage() {
   }, []);
 
   const playerPrev = useCallback(() => {
-    setPlayerState((prev) => {
-      if (!prev) return null;
-      const prevAyah = Math.max(1, prev.ayahNum - 1);
-      if (audioRef.current) {
-        audioRef.current.src = audioUrl(prev.reciterId, prev.surahId, prevAyah);
-        audioRef.current.playbackRate = prev.rate;
-        audioRef.current.play().catch(() => {});
-      }
-      return { ...prev, ayahNum: prevAyah, repeatCount: 0, status: "playing" };
-    });
+    const audio = audioRef.current;
+    const ps = playerStateRef.current;
+    if (!audio || !ps) return;
+    const prevAyah = Math.max(1, ps.ayahNum - 1);
+    audio.src = audioUrl(ps.reciterFolder, ps.surahId, prevAyah);
+    audio.playbackRate = ps.rate;
+    audio.play().catch(() => {});
+    setPlayerState((prev) => prev ? { ...prev, ayahNum: prevAyah, repeatCount: 0, status: "playing" } : null);
   }, []);
 
   const playerNext = useCallback(() => {
-    setPlayerState((prev) => {
-      if (!prev) return null;
-      const nextAyah = prev.ayahNum + 1;
-      if (audioRef.current) {
-        audioRef.current.src = audioUrl(prev.reciterId, prev.surahId, nextAyah);
-        audioRef.current.playbackRate = prev.rate;
-        audioRef.current.play().catch(() => {});
-      }
-      return { ...prev, ayahNum: nextAyah, repeatCount: 0, status: "playing" };
-    });
+    const audio = audioRef.current;
+    const ps = playerStateRef.current;
+    if (!audio || !ps) return;
+    const nextAyah = ps.ayahNum + 1;
+    audio.src = audioUrl(ps.reciterFolder, ps.surahId, nextAyah);
+    audio.playbackRate = ps.rate;
+    audio.play().catch(() => {});
+    setPlayerState((prev) => prev ? { ...prev, ayahNum: nextAyah, repeatCount: 0, status: "playing" } : null);
+    const nextVK = `${ps.surahId}:${nextAyah}`;
+    if (!versesRef.current.some((v) => v.verse_key === nextVK)) {
+      goToPageRef.current(currentPageRef.current + 1);
+    }
   }, []);
 
   // ─── Recite helpers ───────────────────────────────────────────────────────
@@ -1677,6 +1702,7 @@ export default function MushafReaderPage() {
     setCurrentPage(clamped);
     prefetchNext(clamped);
   };
+  goToPageRef.current = goToPage;
 
   const handlePageInput = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter") {
@@ -1727,21 +1753,10 @@ export default function MushafReaderPage() {
           text_uthmani: pv?.text_uthmani ?? "",
         });
         setSheetView({ type: "main" });
-        setTappedWord(null);
-      } else {
-        const wordKey = `${lw.verse_key}:${lw.position}`;
-        if (tappedWord?.key === wordKey) { setTappedWord(null); return; }
-        setTappedWord({
-          key: wordKey,
-          text: lw.text_uthmani,
-          position: lw.position,
-          surahId: lw.surahId,
-          verseNum: lw.verseNum,
-          translation: lw.translation ?? "",
-        });
       }
+      // single tap on a regular word does nothing; long-press opens the sheet
     },
-    [isReciting, isRecitePickMode, isSelectMode, isBlindMode, verses, startReciting, tappedWord]
+    [isReciting, isRecitePickMode, isSelectMode, isBlindMode, verses, startReciting]
   );
 
   const isAnyModeActive = isSelectMode || isBlindMode || isReciting || isRecitePickMode;
@@ -2154,7 +2169,6 @@ export default function MushafReaderPage() {
                                 text_uthmani: pv?.text_uthmani ?? "",
                               });
                               setSheetView({ type: "main" });
-                              setTappedWord(null);
                             }, 500);
                           }}
                           onPointerMove={(e) => {
@@ -2390,92 +2404,6 @@ export default function MushafReaderPage() {
           </div>
         )}
 
-        {/* ── Word translation tooltip ── */}
-        {tappedWord && (
-          <div
-            style={{
-              position: "fixed",
-              bottom: playerState ? "76px" : "16px",
-              left: 0, right: 0,
-              zIndex: 65,
-              display: "flex",
-              justifyContent: "center",
-              padding: "0 16px",
-              pointerEvents: "none",
-              transition: "bottom 0.2s ease",
-            }}
-            onClick={() => setTappedWord(null)}
-          >
-            <div
-              style={{
-                background: "white",
-                borderRadius: "16px",
-                boxShadow: "0 4px 24px rgba(0,0,0,0.15)",
-                border: `1px solid ${BAYAAN_PAGE_THEME.pageBorder}`,
-                padding: "12px 16px",
-                pointerEvents: "auto",
-                maxWidth: "320px",
-                width: "100%",
-              }}
-            >
-              <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "12px" }}>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px", marginBottom: "4px" }}>
-                    <p dir="rtl" style={{ fontSize: "20px", color: "#92400e", fontFamily: '"KFGQPC Hafs", "Amiri Quran", serif', margin: 0 }}>
-                      {tappedWord.text}
-                    </p>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        const audio = new Audio(
-                          `https://audio.qurancdn.com/wbw/${String(tappedWord.surahId).padStart(3, "0")}_${String(tappedWord.verseNum).padStart(3, "0")}_${String(tappedWord.position).padStart(3, "0")}.mp3`
-                        );
-                        audio.play().catch(() => {});
-                      }}
-                      style={{
-                        flexShrink: 0,
-                        width: "32px",
-                        height: "32px",
-                        borderRadius: "50%",
-                        background: "#fef3c7",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        color: BAYAAN_PAGE_THEME.markerText,
-                        border: "none",
-                        cursor: "pointer",
-                      }}
-                    >
-                      <Volume2 size={14} />
-                    </button>
-                  </div>
-                  {tappedWord.translation ? (
-                    <p style={{ fontSize: "14px", color: "#374151", lineHeight: 1.4, margin: 0 }}>
-                      {tappedWord.translation}
-                    </p>
-                  ) : (
-                    <p style={{ fontSize: "12px", color: "#9ca3af", fontStyle: "italic", margin: 0 }}>
-                      No translation available
-                    </p>
-                  )}
-                  <p style={{ fontSize: "10px", color: BAYAAN_PAGE_THEME.chromeMuted, marginTop: "4px", marginBottom: 0 }}>
-                    {tappedWord.surahId}:{tappedWord.verseNum} · word {tappedWord.position}
-                  </p>
-                </div>
-                <button
-                  onClick={() => setTappedWord(null)}
-                  style={{ color: "#d1d5db", background: "none", border: "none", cursor: "pointer", flexShrink: 0, marginTop: "2px" }}
-                >
-                  <X size={14} />
-                </button>
-              </div>
-              <p style={{ fontSize: "10px", color: BAYAAN_PAGE_THEME.chromeMuted, marginTop: "8px", textAlign: "center", marginBottom: 0 }}>
-                Long-press any word to open full ayah menu
-              </p>
-            </div>
-          </div>
-        )}
-
         {/* ── BayaanAyahSheet ── */}
         {sheetAyah && sheetView && (
           <BayaanAyahSheet
@@ -2527,7 +2455,7 @@ export default function MushafReaderPage() {
               const pv = verses.find((v) => v.verse_key === startVK);
               playFromAyah(
                 { verseKey: startVK, surahId: startSurah, verseNum: startVerse, text_uthmani: pv?.text_uthmani ?? "" },
-                { repeat: settings.repeat, rangeEnd: endAyahNum, reciterId: settings.reciterId, rate: settings.rate, rangeRepeat: settings.rangeRepeat }
+                { repeat: settings.repeat, rangeEnd: endAyahNum, reciterFolder: settings.reciterFolder, rate: settings.rate, rangeRepeat: settings.rangeRepeat }
               );
               setShowSettingsSheet(false);
             }}
