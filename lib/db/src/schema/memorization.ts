@@ -31,10 +31,13 @@ export const reviewScheduleTable = pgTable("review_schedule", {
   childId: integer("child_id").notNull(),
   surahId: integer("surah_id").notNull(),
   dueDate: date("due_date").notNull(),
+  nextChunkAyahStart: integer("next_chunk_ayah_start"),
   interval: integer("interval").notNull().default(1),
   easeFactor: real("ease_factor").notNull().default(2.5),
   repetitionCount: integer("repetition_count").notNull().default(0),
   lastReviewed: timestamp("last_reviewed"),
+  lastReviewedChunkAyahStart: integer("last_reviewed_chunk_ayah_start"),
+  lastReviewedChunkAyahEnd: integer("last_reviewed_chunk_ayah_end"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 

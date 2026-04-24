@@ -1,4 +1,7 @@
-import { getPageForVerse, resolveSurahScopedPageTarget } from "../data/quran-meta.js";
+import {
+  getPageForVerse,
+  resolveStrictSurahScopedPageTarget,
+} from "../data/quran-meta.js";
 
 export type MemorizationWorkType =
   | "new_memorization"
@@ -118,24 +121,7 @@ export function buildSurahMemorizationWorkflow(
   surah: SurahLike,
   pagesTarget: number,
 ): SurahMemorizationWorkflow {
-  const safePagesTarget = Math.max(pagesTarget, 0.25);
-  const chunks: SurahMemorizationChunk[] = [];
-
-  let ayahStart = 1;
-  while (ayahStart <= surah.verseCount) {
-    const target = resolveSurahScopedPageTarget(surah.number, ayahStart, safePagesTarget);
-    const ayahEnd = Math.max(ayahStart, Math.min(target.endAyah, surah.verseCount));
-
-    chunks.push({
-      index: chunks.length,
-      ayahStart,
-      ayahEnd,
-      pageStart: getPageForVerse(surah.number, ayahStart),
-      pageEnd: getPageForVerse(surah.number, ayahEnd),
-    });
-
-    ayahStart = ayahEnd + 1;
-  }
+  const chunks = buildSurahPageChunks(surah, pagesTarget);
 
   const schedule: SurahMemorizationWorkItem[] = [];
   const pushWork = (
@@ -218,6 +204,39 @@ export function buildSurahMemorizationWorkflow(
   }
 
   return { enabled: false, chunks, schedule };
+}
+
+export function buildSurahPageChunks(
+  surah: SurahLike,
+  pagesTarget: number,
+): SurahMemorizationChunk[] {
+  const safePagesTarget = Math.max(pagesTarget, 0.25);
+  const chunks: SurahMemorizationChunk[] = [];
+
+  let ayahStart = 1;
+  while (ayahStart <= surah.verseCount) {
+    const target = resolveStrictSurahScopedPageTarget(
+      surah.number,
+      ayahStart,
+      safePagesTarget,
+    );
+    const ayahEnd = Math.max(
+      ayahStart,
+      Math.min(target.endAyah, surah.verseCount),
+    );
+
+    chunks.push({
+      index: chunks.length,
+      ayahStart,
+      ayahEnd,
+      pageStart: getPageForVerse(surah.number, ayahStart),
+      pageEnd: getPageForVerse(surah.number, ayahEnd),
+    });
+
+    ayahStart = ayahEnd + 1;
+  }
+
+  return chunks;
 }
 
 function matchesCompletedDailyRange(

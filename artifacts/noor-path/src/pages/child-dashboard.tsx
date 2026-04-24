@@ -12,6 +12,35 @@ import { Flame, Star, BookOpen, RefreshCw, ChevronLeft, Trophy, Heart, BookMarke
 export default function ChildDashboard() {
   const { childId } = useParams<{ childId: string }>();
 
+  const addDaysToLocalDate = (dateStr: string, days: number) => {
+    const [year, month, day] = dateStr.split("-").map(Number);
+    const next = new Date(year, month - 1, day);
+    next.setDate(next.getDate() + days);
+    return `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, "0")}-${String(
+      next.getDate(),
+    ).padStart(2, "0")}`;
+  };
+
+  const isStoredReviewSessionComplete = (
+    session:
+      | {
+          sessionDone?: boolean;
+          completedItemsData?: unknown[];
+          sessionTotal?: number;
+        }
+      | null
+      | undefined,
+  ) => {
+    if (!session) return false;
+    const completedCount = session.completedItemsData?.length ?? 0;
+    const sessionTotal = Number(session.sessionTotal ?? completedCount);
+    return (
+      completedCount > 0 &&
+      (session.sessionDone === true ||
+        (sessionTotal > 0 && completedCount >= sessionTotal))
+    );
+  };
+
   const getTodayLocal = () => {
     const d = new Date();
     return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
@@ -39,6 +68,26 @@ export default function ChildDashboard() {
   const reviewSessionDone = reviewSession?.sessionDone === true;
   const reviewSessionTotal = reviewSession?.sessionTotal as number | undefined;
   const reviewSessionCompleted = (reviewSession?.completedItemsData as any[] | undefined)?.length ?? 0;
+  const completedReviewDaysAhead = (() => {
+    const days: string[] = [];
+    let candidateDate = addDaysToLocalDate(todayLocal, 1);
+    for (let offset = 0; offset < 45; offset += 1) {
+      const session = (() => {
+        try {
+          const stored = localStorage.getItem(
+            `${legacySessionKey}-${candidateDate}`,
+          );
+          return stored ? JSON.parse(stored) : null;
+        } catch {
+          return null;
+        }
+      })();
+      if (!isStoredReviewSessionComplete(session)) break;
+      days.push(candidateDate);
+      candidateDate = addDaysToLocalDate(candidateDate, 1);
+    }
+    return days;
+  })();
 
   const { data, isLoading } = useQuery({
     queryKey: ["dashboard", childId],
@@ -95,6 +144,18 @@ export default function ChildDashboard() {
   const hasReviewWorkToday =
     reviewsDueToday > 0 ||
     reviewCompletedOnBackend;
+  const reviewCardSummary =
+    reviewSessionDone || reviewCompletedOnBackend
+      ? `Today's review completed${
+          completedReviewDaysAhead.length > 0
+            ? ` · ${completedReviewDaysAhead.length} more day${
+                completedReviewDaysAhead.length === 1 ? "" : "s"
+              } done ahead`
+            : ""
+        }`
+      : reviewCompletedToday > 0
+      ? `${reviewCompletedToday}/${Math.max(reviewTotalForToday, reviewCompletedToday)} surahs done`
+      : `${reviewsDueToday} surah${reviewsDueToday > 1 ? "s" : ""} to review today`;
   const todaysMem = todaysPlan.newMemorization as
     | {
         surahName: string;
@@ -180,15 +241,14 @@ export default function ChildDashboard() {
                     <div className="flex-1">
                       <p className="text-sm font-medium text-foreground">Review Session</p>
                       <div className="flex items-center gap-1.5 flex-wrap">
-                        {reviewSessionDone ? (
-                          <p className="text-xs text-muted-foreground">{reviewSessionTotal ?? reviewSessionCompleted}/{reviewSessionTotal ?? reviewSessionCompleted} surahs done</p>
-                        ) : reviewCompletedToday > 0 ? (
-                          <p className="text-xs text-muted-foreground">{reviewCompletedToday}/{Math.max(reviewTotalForToday, reviewCompletedToday)} surahs done</p>
-                        ) : (
-                          <p className="text-xs text-muted-foreground">{reviewsDueToday} surah{reviewsDueToday > 1 ? "s" : ""} to review today</p>
-                        )}
+                        <p className="text-xs text-muted-foreground">{reviewCardSummary}</p>
                         {todayProgress?.reviewStatus === "in_progress" && (
                           <span className="text-[10px] font-medium text-amber-600 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded-full">In Progress</span>
+                        )}
+                        {completedReviewDaysAhead.length > 0 && (
+                          <Badge variant="secondary" className="text-[10px] px-1.5 py-0.5">
+                            {completedReviewDaysAhead.length} day{completedReviewDaysAhead.length === 1 ? "" : "s"} ahead
+                          </Badge>
                         )}
                       </div>
                     </div>

@@ -3,11 +3,12 @@ import { db } from "@workspace/db";
 import { childrenTable, memorizationProgressTable, reviewScheduleTable, learningSessionsTable, childDuasTable, dailyProgressTable } from "@workspace/db/schema";
 import { eq, desc, and } from "drizzle-orm";
 import { SURAHS } from "../data/surahs.js";
-import { resolvePageTarget, resolveSurahScopedPageTarget, getPageForVerse } from "../data/quran-meta.js";
+import { resolvePageTarget, resolveStrictSurahScopedPageTarget, getPageForVerse } from "../data/quran-meta.js";
 import { STORIES } from "../data/stories.js";
 import { DUAS } from "../data/duas.js";
 import { getRequestLocalDate } from "../lib/local-date.js";
 import {
+  buildSurahPageChunks,
   buildSurahMemorizationWorkflow,
   findMatchingWorkItem,
   findPendingWorkItem,
@@ -35,10 +36,7 @@ function isFullyMemorizedSurah(
 ): boolean {
   if (!progress) return false;
 
-  return (
-    (progress.status === "memorized" || progress.status === "needs_review") &&
-    progress.versesMemorized >= surah.verseCount
-  );
+  return progress.versesMemorized >= surah.verseCount;
 }
 
 function isMemorizationModuleDone(
@@ -97,13 +95,92 @@ function getReviewPriorityRank(
   progress: typeof memorizationProgressTable.$inferSelect | undefined,
 ): number {
   if (!progress) return 2;
-  const strength = progress.strength ?? 3;
 
-  if (progress.status === "needs_review" && strength <= 1) return 0;
-  if (progress.status === "needs_review") return 1;
-  if (strength <= 1) return 0;
-  if (strength <= 3) return 1;
+  const surah = SURAHS.find((candidate) => candidate.id === progress.surahId);
+  let memorizedAyahs: number[] = [];
+  try {
+    const parsed = JSON.parse(progress.memorizedAyahs || "[]");
+    if (Array.isArray(parsed)) {
+      memorizedAyahs = Array.from(
+        new Set(
+          parsed
+            .map((value) => Number(value))
+            .filter((value) => Number.isInteger(value) && value > 0),
+        ),
+      ).sort((a, b) => a - b);
+    }
+  } catch {
+    memorizedAyahs = [];
+  }
+  if (memorizedAyahs.length === 0 && progress.versesMemorized > 0) {
+    memorizedAyahs = Array.from(
+      { length: progress.versesMemorized },
+      (_, index) => index + 1,
+    );
+  }
+
+  let ayahStrengths: Record<string, number> = {};
+  try {
+    const parsed = JSON.parse(progress.ayahStrengths || "{}");
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      ayahStrengths = Object.fromEntries(
+        Object.entries(parsed)
+          .map(([key, value]) => [
+            key,
+            Math.max(0, Math.min(5, Math.round(Number(value)))),
+          ])
+          .filter(([key]) => Number.isInteger(Number(key)) && Number(key) > 0),
+      );
+    }
+  } catch {
+    ayahStrengths = {};
+  }
+
+  const fallbackStrength = Math.max(0, Math.min(5, Math.round(progress.strength ?? 3)));
+  const hasRedAyah = memorizedAyahs.some(
+    (ayah) => (ayahStrengths[String(ayah)] ?? fallbackStrength) <= 1,
+  );
+  if (hasRedAyah) return 0;
+
+  const isFullyMemorized =
+    surah != null && memorizedAyahs.length >= surah.verseCount;
+  if (!isFullyMemorized) return 1;
+
+  const hasOrangeAyah = memorizedAyahs.some(
+    (ayah) => (ayahStrengths[String(ayah)] ?? fallbackStrength) <= 3,
+  );
+  if (hasOrangeAyah) return 1;
+
   return 2;
+}
+
+function isReviewContinuationForDashboard(
+  review: Pick<typeof reviewScheduleTable.$inferSelect, "nextChunkAyahStart">,
+): boolean {
+  return (review.nextChunkAyahStart ?? 1) > 1;
+}
+
+function getActiveReviewChunkForDashboard(
+  surah: typeof SURAHS[0],
+  nextChunkAyahStart: number | null | undefined,
+  pagesTarget: number,
+) {
+  const chunks = buildSurahPageChunks(surah, pagesTarget);
+  if (chunks.length === 0) {
+    return {
+      ayahStart: 1,
+      ayahEnd: surah.verseCount,
+      pageStart: getPageForVerse(surah.number, 1),
+      pageEnd: getPageForVerse(surah.number, surah.verseCount),
+    };
+  }
+
+  const preferredStart = nextChunkAyahStart ?? 1;
+  return (
+    chunks.find((chunk) => chunk.ayahStart === preferredStart) ??
+    chunks.find((chunk) => chunk.ayahStart >= preferredStart) ??
+    chunks[0]
+  );
 }
 
 function getAgeGroup(age: number): "toddler" | "child" | "preteen" | "teen" {
@@ -410,6 +487,7 @@ router.post("/children", async (req, res) => {
           childId: child.id,
           surahId: setup.surahId,
           dueDate: formatDate(addDays(now, reviewInDays)),
+          nextChunkAyahStart: 1,
           interval: reviewInDays,
           easeFactor: 2.5,
           repetitionCount: 0
@@ -528,23 +606,72 @@ router.get("/children/:childId/dashboard", async (req, res) => {
       )
       .map((surah) => surah.id),
   );
-  const dueReviews = (await db.select().from(reviewScheduleTable).where(
+  const reviewBudget = child.reviewPagesPerDay ?? 2;
+  const dueReviewCandidates = (await db.select().from(reviewScheduleTable).where(
     eq(reviewScheduleTable.childId, childId)
   ))
     .filter((review) => doneSurahIds.has(review.surahId))
     .filter((review) => review.dueDate <= today)
+    .map((review) => {
+      const surah = SURAHS.find((candidate) => candidate.id === review.surahId);
+      if (!surah) return null;
+
+      return {
+        review,
+        surah,
+        activeChunk: getActiveReviewChunkForDashboard(
+          surah,
+          review.nextChunkAyahStart,
+          reviewBudget,
+        ),
+      };
+    })
+    .filter((item): item is NonNullable<typeof item> => item != null)
     .sort((a, b) => {
       const priorityDelta = getReviewPriorityRank(
-        memProgress.find((m) => m.surahId === a.surahId),
+        memProgress.find((m) => m.surahId === a.review.surahId),
       ) - getReviewPriorityRank(
-        memProgress.find((m) => m.surahId === b.surahId),
+        memProgress.find((m) => m.surahId === b.review.surahId),
       );
       if (priorityDelta !== 0) return priorityDelta;
+      const continuationDelta =
+        Number(isReviewContinuationForDashboard(b.review)) -
+        Number(isReviewContinuationForDashboard(a.review));
+      if (continuationDelta !== 0) return continuationDelta;
       return (
-        (SURAHS.find((s) => s.id === a.surahId)?.recommendedOrder ?? Number.MAX_SAFE_INTEGER) -
-        (SURAHS.find((s) => s.id === b.surahId)?.recommendedOrder ?? Number.MAX_SAFE_INTEGER)
+        a.surah.recommendedOrder - b.surah.recommendedOrder
       );
     });
+  const dueReviewItems: typeof dueReviewCandidates = [];
+  const coveredReviewPages = new Set<number>();
+  let reviewQueueBlocked = false;
+
+  for (const item of dueReviewCandidates) {
+    if (reviewQueueBlocked) break;
+
+    const chunkPages = new Set<number>();
+    for (let page = item.activeChunk.pageStart; page <= item.activeChunk.pageEnd; page += 1) {
+      chunkPages.add(page);
+    }
+
+    const newPages = [...chunkPages].filter((page) => !coveredReviewPages.has(page));
+    const currentUnder = reviewBudget - coveredReviewPages.size;
+    const wouldBeOver = (coveredReviewPages.size + newPages.length) - reviewBudget;
+    const closerToInclude = newPages.length > 0 && wouldBeOver <= currentUnder;
+    const include =
+      coveredReviewPages.size < reviewBudget ||
+      newPages.length === 0 ||
+      closerToInclude;
+
+    if (!include) {
+      reviewQueueBlocked = true;
+      continue;
+    }
+
+    newPages.forEach((page) => coveredReviewPages.add(page));
+    dueReviewItems.push(item);
+  }
+  const dueReviews = dueReviewItems.map((item) => item.review);
 
   // Auto goals for dashboard teaser
   const autoGoals = generateAutoGoals(child, memorizedCount, child.practiceMinutesPerDay);
@@ -572,8 +699,8 @@ router.get("/children/:childId/dashboard", async (req, res) => {
   // Extend start backward on the same Mushaf page so the daily assignment
   // fills as close to memorizePagePerDay as possible (e.g. 0.75 pages on a
   // 15-verse page → prefer 11 verses over 6).
-  // Use getPageForVerse(s, lastAyah) — not SURAH_START_PAGES — because
-  // SURAH_START_PAGES has stale placeholder values (604) for surahs 91-100.
+  // Use getPageForVerse so this preview stays aligned with the same verse→page
+  // map the scheduler uses for chunking and daily assignment.
   if (memorizationSurahData && !inProgressSurah && !memorizationWorkflow?.enabled) {
     const surahPage = getPageForVerse(nextStartSurah, memorizationSurahData.verseCount);
     const totalVersesOnPage = SURAHS.reduce(
@@ -629,7 +756,7 @@ router.get("/children/:childId/dashboard", async (req, res) => {
     ? (memorizationWorkflow?.enabled
         ? null
         : inProgressSurah
-        ? resolveSurahScopedPageTarget(nextStartSurah, nextStartAyah, child.memorizePagePerDay)
+        ? resolveStrictSurahScopedPageTarget(nextStartSurah, nextStartAyah, child.memorizePagePerDay)
         : resolvePageTarget(nextStartSurah, nextStartAyah, child.memorizePagePerDay))
     : null;
 
@@ -787,9 +914,12 @@ router.get("/children/:childId/dashboard", async (req, res) => {
         estimatedMinutes: 10
       };
     })() : null,
-    reviewSessions: dueReviews.slice(0, 3).map(r => {
-      const surah = SURAHS.find(s => s.id === r.surahId);
-      return { surahName: surah?.nameTransliteration || "Unknown", surahNumber: surah?.number || 0, ayahCount: surah?.verseCount || 0 };
+    reviewSessions: dueReviewItems.slice(0, 3).map(({ surah, activeChunk }) => {
+      return {
+        surahName: surah.nameTransliteration,
+        surahNumber: surah.number,
+        ayahCount: activeChunk.ayahEnd - activeChunk.ayahStart + 1,
+      };
     }),
     story: randomStory ? { id: randomStory.id, title: randomStory.title } : null,
     dua: randomDua ? { id: randomDua.id, arabic: randomDua.arabic, transliteration: randomDua.transliteration, translation: randomDua.translation } : null,
@@ -862,7 +992,7 @@ router.get("/children/:childId/dashboard", async (req, res) => {
         const ayahStart = nextUpProgress && nextUpProgress.status === "in_progress"
           ? Math.min(nextUpProgress.versesMemorized + 1, nextSurahExcludingCurrent.verseCount)
           : 1;
-        const nextUpTarget = resolveSurahScopedPageTarget(nextSurahExcludingCurrent.number, ayahStart, child.memorizePagePerDay);
+        const nextUpTarget = resolveStrictSurahScopedPageTarget(nextSurahExcludingCurrent.number, ayahStart, child.memorizePagePerDay);
         const ayahEnd = Math.min(nextUpTarget.endAyah, nextSurahExcludingCurrent.verseCount);
 
         return {
@@ -871,6 +1001,7 @@ router.get("/children/:childId/dashboard", async (req, res) => {
           ayahStart,
           ayahEnd,
           pageStart: getPageForVerse(nextSurahExcludingCurrent.number, ayahStart),
+          pageEnd: getPageForVerse(nextSurahExcludingCurrent.number, ayahEnd),
           workType: "new_memorization",
           workLabel: "New Memorization",
           isReviewOnly: false,
@@ -884,7 +1015,7 @@ router.get("/children/:childId/dashboard", async (req, res) => {
       const ayahStart = nextUpProgress && nextUpProgress.status === "in_progress"
         ? Math.min(nextUpProgress.versesMemorized + 1, nextUp.verseCount)
         : 1;
-      const nextUpTarget = resolveSurahScopedPageTarget(nextUp.number, ayahStart, child.memorizePagePerDay);
+      const nextUpTarget = resolveStrictSurahScopedPageTarget(nextUp.number, ayahStart, child.memorizePagePerDay);
       const ayahEnd = Math.min(nextUpTarget.endAyah, nextUp.verseCount);
 
       return {
@@ -893,6 +1024,7 @@ router.get("/children/:childId/dashboard", async (req, res) => {
         ayahStart,
         ayahEnd,
         pageStart: getPageForVerse(nextUp.number, ayahStart),
+        pageEnd: getPageForVerse(nextUp.number, ayahEnd),
         workType: "new_memorization",
         workLabel: "New Memorization",
         isReviewOnly: false,
@@ -1099,6 +1231,7 @@ router.post("/children/:childId/daily-progress", async (req, res) => {
               childId,
               surahId: surah.id,
               dueDate: nextReview,
+              nextChunkAyahStart: 1,
               interval,
               easeFactor: 2.5,
               repetitionCount: 0,

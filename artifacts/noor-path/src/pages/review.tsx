@@ -84,6 +84,12 @@ type ReviewMushafItem = {
   surahNumber: number;
   surahName: string;
   reviewItemId: number;
+  ayahStart?: number;
+  ayahEnd?: number;
+  pageStart?: number;
+  pageEnd?: number;
+  chunkIndex?: number;
+  chunkCount?: number;
 };
 
 type ReviewSessionItem = {
@@ -91,6 +97,12 @@ type ReviewSessionItem = {
   surahId: number;
   surahNumber: number;
   surahName?: string | null;
+  ayahStart?: number;
+  ayahEnd?: number;
+  pageStart?: number;
+  pageEnd?: number;
+  chunkIndex?: number;
+  chunkCount?: number;
   dueDate?: string;
   isOverdue?: boolean;
 };
@@ -99,6 +111,19 @@ type CompletedReviewItem = {
   surahId: number;
   surahName?: string | null;
   surahNumber: number;
+  ayahStart?: number;
+  ayahEnd?: number;
+  pageStart?: number;
+  pageEnd?: number;
+  chunkIndex?: number;
+  chunkCount?: number;
+};
+
+type StoredReviewSession = {
+  date?: string;
+  sessionDone?: boolean;
+  completedItemsData?: CompletedReviewItem[];
+  sessionTotal?: number;
 };
 
 function mergeCompletedReviewItems(
@@ -120,8 +145,70 @@ function mergeCompletedReviewItems(
   return Array.from(merged.values()).sort((a, b) => a.surahNumber - b.surahNumber);
 }
 
+function isStoredReviewSessionComplete(
+  session: StoredReviewSession | null | undefined,
+) {
+  if (!session) return false;
+
+  const completedCount = session.completedItemsData?.length ?? 0;
+  const sessionTotal = Number(session.sessionTotal ?? completedCount);
+
+  return (
+    completedCount > 0 &&
+    (session.sessionDone === true ||
+      (sessionTotal > 0 && completedCount >= sessionTotal))
+  );
+}
+
+function parseLocalDate(dateStr: string) {
+  const [year, month, day] = dateStr.split("-").map(Number);
+  return new Date(year, month - 1, day);
+}
+
+function formatReviewDayLabel(dateStr: string, todayLocal: string) {
+  const dayMs = 24 * 60 * 60 * 1000;
+  const diffDays = Math.round(
+    (parseLocalDate(dateStr).getTime() - parseLocalDate(todayLocal).getTime()) /
+      dayMs,
+  );
+
+  if (diffDays === 0) return "Today";
+  if (diffDays === 1) return "Tomorrow";
+
+  return new Intl.DateTimeFormat(undefined, {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+  }).format(parseLocalDate(dateStr));
+}
+
 function sortReviewItemsForMushaf(items: ReviewSessionItem[]) {
   return [...items];
+}
+
+function formatReviewRange(item: {
+  ayahStart?: number;
+  ayahEnd?: number;
+  pageStart?: number;
+  pageEnd?: number;
+  chunkIndex?: number;
+  chunkCount?: number;
+}) {
+  const ayahStart = item.ayahStart ?? 1;
+  const ayahEnd = item.ayahEnd ?? ayahStart;
+  const pageStart = item.pageStart;
+  const pageEnd = item.pageEnd ?? pageStart;
+
+  if (pageStart != null && pageEnd != null && pageStart !== pageEnd) {
+    return `Pages ${pageStart}-${pageEnd} · Ayahs ${ayahStart}-${ayahEnd}`;
+  }
+  if (pageStart != null && pageEnd != null) {
+    return `Page ${pageStart} · Ayahs ${ayahStart}-${ayahEnd}`;
+  }
+  if (item.chunkCount && item.chunkCount > 1) {
+    return `Ayahs ${ayahStart}-${ayahEnd}`;
+  }
+  return null;
 }
 
 const REVIEW_PLAYER_DOCK_SPACE = 132;
@@ -158,6 +245,12 @@ function MushafReviewView({
   surahId,
   surahNumber,
   surahName,
+  ayahStart,
+  ayahEnd,
+  pageStart,
+  pageEnd,
+  chunkIndex,
+  chunkCount,
   queuePosition,
   queueTotal,
   canSkipSurah,
@@ -174,6 +267,12 @@ function MushafReviewView({
   surahId: number;
   surahNumber: number;
   surahName: string;
+  ayahStart?: number;
+  ayahEnd?: number;
+  pageStart?: number;
+  pageEnd?: number;
+  chunkIndex?: number;
+  chunkCount?: number;
   queuePosition?: number;
   queueTotal?: number;
   canSkipSurah?: boolean;
@@ -215,17 +314,33 @@ function MushafReviewView({
 
   const chapterVerses = chapterVersesData?.verses ?? [];
   const chapters = chaptersData?.chapters ?? [];
+  const minAyah = ayahStart ?? 1;
+  const maxAyah = ayahEnd ?? Number.MAX_SAFE_INTEGER;
+  const isAssignedVerse = (verseNumber: number) =>
+    verseNumber >= minAyah && verseNumber <= maxAyah;
+  const rangeLabel = formatReviewRange({
+    ayahStart,
+    ayahEnd,
+    pageStart,
+    pageEnd,
+    chunkIndex,
+    chunkCount,
+  });
+  const verses = useMemo(
+    () => chapterVerses.filter((verse) => isAssignedVerse(verse.verse_number)),
+    [chapterVerses, minAyah, maxAyah],
+  );
 
   const pageNumbers = useMemo(
     () =>
       Array.from(
         new Set(
-          chapterVerses
+          verses
             .map((v) => v.page_number)
             .filter((p): p is number => typeof p === "number"),
         ),
       ),
-    [chapterVerses],
+    [verses],
   );
 
   const { data: pageBundlesData, isLoading: pagesLoading } = useQuery({
@@ -241,7 +356,6 @@ function MushafReviewView({
     staleTime: Infinity,
   });
 
-  const verses = chapterVerses;
   const activeVerse = verses[activeVerseIndex] ?? null;
   const activeVerseNumber = activeVerse?.verse_number ?? 1;
   const activeVerseKey = activeVerse?.verse_key ?? `${surahNumber}:1`;
@@ -280,9 +394,9 @@ function MushafReviewView({
   const verseIndexByNumber = useMemo(
     () =>
       new Map<number, number>(
-        chapterVerses.map((verse, index) => [verse.verse_number, index]),
+        verses.map((verse, index) => [verse.verse_number, index]),
       ),
-    [chapterVerses],
+    [verses],
   );
 
   const pageBundles = useMemo(
@@ -452,7 +566,7 @@ function MushafReviewView({
     setShowTajweed(false);
     setShowSettingsPanel(false);
     setShowRatingSheet(false);
-  }, [surahId]);
+  }, [surahId, ayahStart, ayahEnd]);
 
   useEffect(() => {
     playbackRateRef.current = playbackRate;
@@ -561,6 +675,14 @@ function MushafReviewView({
                   {queueLabel}
                 </p>
               )}
+              {rangeLabel && (
+                <p
+                  className="mt-0.5 text-[11px]"
+                  style={{ color: BAYAAN_PAGE_THEME.chromeMuted }}
+                >
+                  {rangeLabel}
+                </p>
+              )}
             </div>
           </div>
 
@@ -617,8 +739,10 @@ function MushafReviewView({
               {pageBundles.map((bundle) => {
                 const cachedScale = getCachedScale(bundle.pageNumber);
                 const pageTargetVerses = bundle.verses.filter((verse) => {
-                  const [verseSurah] = verse.verse_key.split(":").map(Number);
-                  return verseSurah === surahNumber;
+                  const [verseSurah, verseAyah] = verse.verse_key
+                    .split(":")
+                    .map(Number);
+                  return verseSurah === surahNumber && isAssignedVerse(verseAyah);
                 });
                 const pageSurahNames = getArabicSurahNamesForPage(
                   bundle.verses,
@@ -730,15 +854,18 @@ function MushafReviewView({
                                   {lws.map((lw) => {
                                     const isTargetSurah =
                                       lw.surahId === surahNumber;
-                                    const isActiveAyah =
+                                    const isTargetVerse =
                                       isTargetSurah &&
+                                      isAssignedVerse(lw.verseNum);
+                                    const isActiveAyah =
+                                      isTargetVerse &&
                                       lw.verseNum === activeVerseNumber;
                                     const shouldBlur = blurDuringRecitation
-                                      ? isTargetSurah
+                                      ? isTargetVerse
                                         ? !isPlaying || !isActiveAyah
                                         : true
                                       : false;
-                                    const verseOpacity = isTargetSurah
+                                    const verseOpacity = isTargetVerse
                                       ? shouldBlur
                                         ? 0.38
                                         : isActiveAyah
@@ -751,7 +878,7 @@ function MushafReviewView({
                                       lw.verseNum,
                                     );
                                     const clickable =
-                                      isTargetSurah && clickIndex !== undefined;
+                                      isTargetVerse && clickIndex !== undefined;
 
                                     if (lw.char_type_name === "end") {
                                       return (
@@ -1280,8 +1407,6 @@ export default function ReviewPage() {
   };
   const todayLocal = getTodayLocal();
   const LEGACY_SESSION_KEY = `child-${childId}-review-session`;
-  const [activeLocalDate, setActiveLocalDate] = useState<string>(todayLocal);
-  const SESSION_KEY = `${LEGACY_SESSION_KEY}-${activeLocalDate}`;
 
   const loadSession = (sessionDate: string) => {
     try {
@@ -1306,7 +1431,25 @@ export default function ReviewPage() {
       return null;
     }
   };
-  const storedSession = loadSession(activeLocalDate);
+  const findNextOpenReviewDate = (startDate: string) => {
+    let candidate = startDate;
+
+    for (let offset = 0; offset < 45; offset += 1) {
+      const session = loadSession(candidate) as StoredReviewSession | null;
+      if (!isStoredReviewSessionComplete(session)) {
+        return candidate;
+      }
+      candidate = addDaysToLocalDate(candidate, 1);
+    }
+
+    return candidate;
+  };
+
+  const [activeLocalDate, setActiveLocalDate] = useState<string>(() =>
+    findNextOpenReviewDate(todayLocal),
+  );
+  const SESSION_KEY = `${LEGACY_SESSION_KEY}-${activeLocalDate}`;
+  const storedSession = loadSession(activeLocalDate) as StoredReviewSession | null;
 
   const [mushafItem, setMushafItem] = useState<ReviewMushafItem | null>(null);
   const [mushafBatch, setMushafBatch] = useState<ReviewMushafItem[]>([]);
@@ -1334,21 +1477,15 @@ export default function ReviewPage() {
   );
   const [sessionPlaybackRate, setSessionPlaybackRate] = useState(1);
   const [completedItemsData, setCompletedItemsData] = useState<
-    Array<{ surahId: number; surahName?: string | null; surahNumber: number }>
+    CompletedReviewItem[]
   >(storedSession?.completedItemsData ?? []);
   const sessionTotalRef = useRef<number>(storedSession?.sessionTotal ?? 0);
-  const dueTodayRef = useRef<
-    { surahId: number; surahName?: string | null; surahNumber: number }[]
-  >([]);
+  const dueTodayRef = useRef<ReviewSessionItem[]>([]);
   const qc = useQueryClient();
 
   const saveSession = (updates: {
     sessionDone?: boolean;
-    completedItemsData?: Array<{
-      surahId: number;
-      surahName?: string | null;
-      surahNumber: number;
-    }>;
+    completedItemsData?: CompletedReviewItem[];
     sessionTotal?: number;
   }) => {
     try {
@@ -1413,6 +1550,12 @@ export default function ReviewPage() {
         surahId: item.surahId,
         surahName: item.surahName,
         surahNumber: item.surahNumber,
+        ayahStart: item.ayahStart,
+        ayahEnd: item.ayahEnd,
+        pageStart: item.pageStart,
+        pageEnd: item.pageEnd,
+        chunkIndex: item.chunkIndex,
+        chunkCount: item.chunkCount,
       })),
     [data],
   );
@@ -1445,6 +1588,58 @@ export default function ReviewPage() {
     (displaySessionTotal > 0 &&
       dueToday.length === 0 &&
       displayCompletedCount >= displaySessionTotal);
+  const nextUpcomingDate = useMemo(() => {
+    return (
+      (data?.upcoming ?? []).find(
+        (item) =>
+          typeof item.dueDate === "string" && item.dueDate > activeLocalDate,
+      )?.dueDate ?? null
+    );
+  }, [activeLocalDate, data]);
+
+  const completedDaySections = (() => {
+    const sections: Array<{
+      date: string;
+      items: CompletedReviewItem[];
+      sessionTotal: number;
+    }> = [];
+    let candidateDate = todayLocal;
+
+    for (let offset = 0; offset < 45 && candidateDate < activeLocalDate; offset += 1) {
+      const session = loadSession(candidateDate) as StoredReviewSession | null;
+      const items = session?.completedItemsData ?? [];
+
+      if (isStoredReviewSessionComplete(session) && items.length > 0) {
+        sections.push({
+          date: candidateDate,
+          items,
+          sessionTotal: Number(session?.sessionTotal ?? items.length),
+        });
+      }
+
+      candidateDate = addDaysToLocalDate(candidateDate, 1);
+    }
+
+    return sections;
+  })();
+
+  const openNextReviewSet = () => {
+    const nextOpenStoredDate = findNextOpenReviewDate(
+      addDaysToLocalDate(activeLocalDate, 1),
+    );
+    const nextDate =
+      nextUpcomingDate && nextUpcomingDate > activeLocalDate
+        ? nextUpcomingDate
+        : nextOpenStoredDate;
+
+    setSessionDone(false);
+    setCompletedCount(0);
+    setCompletedSurahIds(new Set());
+    setCompletedItemsData([]);
+    setShowReviewCelebration(false);
+    sessionTotalRef.current = 0;
+    setActiveLocalDate(nextDate);
+  };
 
   useEffect(() => {
     const nextSession = loadSession(activeLocalDate);
@@ -1551,6 +1746,22 @@ export default function ReviewPage() {
     });
   }, [data, displayCompletedCount, displaySessionDone, displaySessionTotal]);
 
+  useEffect(() => {
+    if (activeLocalDate !== todayLocal || !data) return;
+    if (!displaySessionDone || displayCompletedItemsData.length === 0) return;
+
+    const nextDate = findNextOpenReviewDate(addDaysToLocalDate(todayLocal, 1));
+    if (nextDate !== activeLocalDate) {
+      setActiveLocalDate(nextDate);
+    }
+  }, [
+    activeLocalDate,
+    data,
+    displayCompletedItemsData.length,
+    displaySessionDone,
+    todayLocal,
+  ]);
+
   // Fetch current flashcard surah if in flashcard mode
   const flashcardItem =
     flashcardIndex !== null ? sessionSurahs[flashcardIndex] : null;
@@ -1629,6 +1840,12 @@ export default function ReviewPage() {
     surahNumber: item.surahNumber,
     surahName: item.surahName ?? "",
     reviewItemId: item.id,
+    ayahStart: item.ayahStart,
+    ayahEnd: item.ayahEnd,
+    pageStart: item.pageStart,
+    pageEnd: item.pageEnd,
+    chunkIndex: item.chunkIndex,
+    chunkCount: item.chunkCount,
   });
 
   const closeMushafView = () => {
@@ -1766,6 +1983,12 @@ export default function ReviewPage() {
                 surahId: completedItem.surahId,
                 surahName: completedItem.surahName,
                 surahNumber: completedItem.surahNumber,
+                ayahStart: completedItem.ayahStart,
+                ayahEnd: completedItem.ayahEnd,
+                pageStart: completedItem.pageStart,
+                pageEnd: completedItem.pageEnd,
+                chunkIndex: completedItem.chunkIndex,
+                chunkCount: completedItem.chunkCount,
               },
             ];
         setCompletedItemsData(newItemsData);
@@ -1814,6 +2037,12 @@ export default function ReviewPage() {
         surahId={currentMushafItem.surahId}
         surahNumber={currentMushafItem.surahNumber}
         surahName={currentMushafItem.surahName}
+        ayahStart={currentMushafItem.ayahStart}
+        ayahEnd={currentMushafItem.ayahEnd}
+        pageStart={currentMushafItem.pageStart}
+        pageEnd={currentMushafItem.pageEnd}
+        chunkIndex={currentMushafItem.chunkIndex}
+        chunkCount={currentMushafItem.chunkCount}
         queuePosition={currentMushafQueuePosition}
         queueTotal={currentMushafQueueTotal}
         canSkipSurah={!!currentMushafNextItem}
@@ -1833,7 +2062,12 @@ export default function ReviewPage() {
 
   // ── Flashcard view (single surah) ──
   if (flashcardIndex !== null && flashcardItem) {
-    const verses = flashcardSurahData?.verses ?? [];
+    const verses = (flashcardSurahData?.verses ?? []).filter((verse) => {
+      const minAyah = flashcardItem.ayahStart ?? 1;
+      const maxAyah = flashcardItem.ayahEnd ?? Number.MAX_SAFE_INTEGER;
+      return verse.number >= minAyah && verse.number <= maxAyah;
+    });
+    const flashcardRangeLabel = formatReviewRange(flashcardItem);
     return (
       <div className="min-h-screen bg-background pb-24">
         <div className="pattern-bg text-white px-4 pt-8 pb-12">
@@ -1887,6 +2121,11 @@ export default function ReviewPage() {
                     Surah {flashcardItem.surahNumber} · Due{" "}
                     {flashcardItem.dueDate}
                   </p>
+                  {flashcardRangeLabel && (
+                    <p className="mt-0.5 text-xs text-muted-foreground">
+                      {flashcardRangeLabel}
+                    </p>
+                  )}
                 </div>
                 <p className="arabic-text text-3xl text-primary">
                   {flashcardSurahData?.nameArabic}
@@ -1999,35 +2238,6 @@ export default function ReviewPage() {
     );
   }
 
-  // ── Genuinely no reviews today (not just all completed this session) ──
-  if (
-    !displaySessionDone &&
-    data !== undefined &&
-    sessionSurahs.length === 0 &&
-    displayCompletedItemsData.length === 0
-  ) {
-    return (
-      <div className="min-h-screen bg-background pb-24 flex flex-col items-center justify-center px-4">
-        <div className="text-center max-w-sm">
-          <div className="text-6xl mb-4">✅</div>
-          <h2 className="text-2xl font-bold text-foreground mb-2">
-            All Caught Up!
-          </h2>
-          <p className="text-muted-foreground mb-2">
-            No surahs due for review today. Keep memorizing!
-          </p>
-          <p className="text-xs text-muted-foreground mb-6">
-            Consistent review is the key to strong memorization.
-          </p>
-          <Link href={`/child/${childId}`}>
-            <Button className="w-full rounded-full">Back to Dashboard</Button>
-          </Link>
-        </div>
-        <ChildNav childId={childId} />
-      </div>
-    );
-  }
-
   // ── Default: surah card grid (also shown when sessionDone — completed rows stay visible) ──
   return (
     <>
@@ -2044,8 +2254,8 @@ export default function ReviewPage() {
                 <h1 className="text-xl font-bold">Review Session</h1>
                 <p className="text-emerald-200 text-sm mt-1">
                   {displayCompletedCount > 0 || displaySessionDone
-                    ? `${displayCompletedCount}/${displaySessionTotal} surahs done`
-                    : `${sessionSurahs.length} surah${sessionSurahs.length !== 1 ? "s" : ""} due today`}
+                    ? `${displayCompletedCount}/${displaySessionTotal} surahs done · ${formatReviewDayLabel(activeLocalDate, todayLocal)}`
+                    : `${sessionSurahs.length} surah${sessionSurahs.length !== 1 ? "s" : ""} due on ${formatReviewDayLabel(activeLocalDate, todayLocal)}`}
                 </p>
               </div>
               <div className="w-14 h-14 rounded-full bg-white/15 border border-white/20 flex items-center justify-center">
@@ -2056,19 +2266,113 @@ export default function ReviewPage() {
         </div>
 
         <div className="max-w-lg mx-auto px-4 -mt-6 space-y-3">
+          {completedDaySections.length > 0 && (
+            <Card className="border-border shadow-sm">
+              <CardContent className="p-4 space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <div>
+                    <p className="text-sm font-semibold text-foreground">
+                      Completed Review Days
+                    </p>
+                    <p className="text-[11px] text-muted-foreground">
+                      You are reviewing ahead. Your finished days are grouped here.
+                    </p>
+                  </div>
+                  <Badge variant="secondary" className="shrink-0">
+                    {completedDaySections.length} day
+                    {completedDaySections.length === 1 ? "" : "s"}
+                  </Badge>
+                </div>
+                <div className="space-y-2">
+                  {completedDaySections.map((section) => (
+                    <details
+                      key={section.date}
+                      className="rounded-2xl border border-emerald-200 bg-emerald-50/70"
+                    >
+                      <summary className="cursor-pointer list-none px-4 py-3">
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="text-sm font-semibold text-emerald-900">
+                              {formatReviewDayLabel(section.date, todayLocal)}
+                            </p>
+                            <p className="mt-0.5 text-[11px] text-emerald-800/80">
+                              {section.date}
+                            </p>
+                          </div>
+                          <span className="text-xs font-medium text-emerald-700">
+                            {section.items.length}/{section.sessionTotal} done
+                          </span>
+                        </div>
+                      </summary>
+                      <div className="border-t border-emerald-200 px-3 py-3 space-y-2">
+                        {section.items.map((item) => (
+                          <div
+                            key={`${section.date}-${item.surahId}`}
+                            className="flex items-center gap-3 rounded-xl border border-emerald-200 bg-white/70 px-3 py-2.5"
+                          >
+                            <CheckCircle
+                              size={16}
+                              className="text-emerald-500 flex-shrink-0"
+                            />
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium text-emerald-900">
+                                {item.surahName}
+                              </p>
+                              {formatReviewRange(item) && (
+                                <p className="text-[11px] text-emerald-800/80 mt-0.5">
+                                  {formatReviewRange(item)}
+                                </p>
+                              )}
+                            </div>
+                            <span className="text-xs font-medium text-emerald-700">
+                              Reviewed ✓
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </details>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
           {/* Due today cards */}
           {(() => {
             return (
               <>
+                {!displaySessionDone &&
+                  sessionSurahs.length === 0 &&
+                  displayCompletedItemsData.length === 0 && (
+                    <Card className="border-emerald-300 bg-emerald-50">
+                      <CardContent className="p-4 text-center">
+                        <p className="text-2xl mb-1">🎉</p>
+                        <p className="font-bold text-emerald-800">
+                          Review cycle complete for{" "}
+                          {formatReviewDayLabel(activeLocalDate, todayLocal)}
+                        </p>
+                        <p className="text-xs text-emerald-700 mt-1 mb-4">
+                          You finished everything due on this day. You can keep
+                          going and jump straight to the next review set.
+                        </p>
+                        <Button
+                          className="w-full rounded-full"
+                          onClick={openNextReviewSet}
+                        >
+                          Continue Reviewing →
+                        </Button>
+                      </CardContent>
+                    </Card>
+                  )}
                 {displaySessionDone && (
                   <Card className="border-emerald-300 bg-emerald-50">
                     <CardContent className="p-4 text-center">
                       <p className="text-2xl mb-1">🏆</p>
                       <p className="font-bold text-emerald-800">
-                        All done for today!
+                        All done for {formatReviewDayLabel(activeLocalDate, todayLocal)}!
                       </p>
                       <p className="text-xs text-emerald-700 mt-1">
-                        Great job! Come back tomorrow for your next review.
+                        Great job! You can keep going whenever you are ready.
                       </p>
                     </CardContent>
                   </Card>
@@ -2219,6 +2523,11 @@ export default function ReviewPage() {
                               <p className="text-xs text-muted-foreground mt-0.5">
                                 Surah {item.surahNumber} · Due {item.dueDate}
                               </p>
+                              {formatReviewRange(item) && (
+                                <p className="text-[11px] text-muted-foreground mt-0.5">
+                                  {formatReviewRange(item)}
+                                </p>
+                              )}
                             </div>
                             <div className="flex items-start gap-2">
                               {pendingItems.length > 1 && (
@@ -2295,9 +2604,16 @@ export default function ReviewPage() {
                       size={16}
                       className="text-emerald-500 flex-shrink-0"
                     />
-                    <p className="text-sm font-medium text-emerald-800 flex-1">
-                      {item.surahName}
-                    </p>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-emerald-800">
+                        {item.surahName}
+                      </p>
+                      {formatReviewRange(item) && (
+                        <p className="text-[11px] text-emerald-700/80 mt-0.5">
+                          {formatReviewRange(item)}
+                        </p>
+                      )}
+                    </div>
                     <span className="text-xs text-emerald-600 font-medium">
                       Reviewed ✓
                     </span>
@@ -2320,9 +2636,16 @@ export default function ReviewPage() {
                       key={item.id}
                       className="flex items-center justify-between text-xs"
                     >
-                      <span className="text-foreground font-medium">
-                        {item.surahName}
-                      </span>
+                      <div className="min-w-0">
+                        <span className="text-foreground font-medium">
+                          {item.surahName}
+                        </span>
+                        {formatReviewRange(item) && (
+                          <p className="text-[11px] text-muted-foreground mt-0.5">
+                            {formatReviewRange(item)}
+                          </p>
+                        )}
+                      </div>
                       <Badge variant="secondary">{item.dueDate}</Badge>
                     </div>
                   ))}
@@ -2335,19 +2658,9 @@ export default function ReviewPage() {
               <Button
                 className="w-full rounded-full"
                 variant="outline"
-                onClick={() => {
-                  setSessionDone(false);
-                  setCompletedCount(0);
-                  setCompletedSurahIds(new Set());
-                  setCompletedItemsData([]);
-                  setShowReviewCelebration(false);
-                  sessionTotalRef.current = 0;
-                  setActiveLocalDate((currentDate) =>
-                    addDaysToLocalDate(currentDate, 1),
-                  );
-                }}
+                onClick={openNextReviewSet}
               >
-                Next Day's Review →
+                Continue Reviewing →
               </Button>
               <Link href={`/child/${childId}`}>
                 <Button className="w-full rounded-full" variant="ghost">

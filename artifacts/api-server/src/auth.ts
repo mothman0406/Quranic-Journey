@@ -3,12 +3,13 @@ import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { db, authUserTable, authSessionTable, authAccountTable, authVerificationTable } from "@workspace/db";
 
 const DEV_TRUSTED_ORIGINS = [
+  process.env.DEV_FRONTEND_ORIGIN,
   "http://localhost:5173",
   "http://127.0.0.1:5173",
   "http://10.*:5173",
   "http://192.168.*:5173",
   ...Array.from({ length: 16 }, (_, index) => `http://172.${index + 16}.*:5173`),
-];
+].filter((origin): origin is string => !!origin);
 
 if (!process.env.BETTER_AUTH_SECRET) {
   throw new Error("BETTER_AUTH_SECRET must be set in .env");

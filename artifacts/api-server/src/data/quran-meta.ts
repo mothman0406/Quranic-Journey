@@ -35,23 +35,6 @@ export const SURAH_VERSE_COUNTS: number[] = [
 ];
 SURAH_VERSE_COUNTS.length = 114;
 
-// ─── Surah start pages (index 0 = Surah 1) ────────────────────────────────────
-export const SURAH_START_PAGES: number[] = [
-  1,2,50,77,106,128,151,177,187,208,
-  221,235,249,255,261,267,282,293,305,312,
-  322,332,342,350,359,367,377,385,396,404,
-  411,415,417,428,434,440,446,453,458,467,
-  477,483,489,496,499,502,507,511,515,518,
-  520,523,526,529,532,537,542,545,549,551,
-  553,556,558,560,562,564,566,568,570,572,
-  574,576,578,580,582,584,586,588,590,592,
-  594,596,597,598,599,600,601,602,603,604,
-  604,604,604,604,604,604,604,604,604,604,
-  // Surahs 101-114 (Juz 30 short surahs)
-  600,601,601,601,601,602,602,602,603,603,
-  603,604,604,604,
-];
-
 // ─── Page to first verse (604 pages, index 0 = page 1) ───────────────────────
 export const PAGE_TO_FIRST_VERSE: VerseRef[] = [
   {surah:1,ayah:1},{surah:2,ayah:1},{surah:2,ayah:6},{surah:2,ayah:17},{surah:2,ayah:25},
@@ -176,6 +159,20 @@ export const PAGE_TO_FIRST_VERSE: VerseRef[] = [
   {surah:85,ayah:1},{surah:87,ayah:1},{surah:88,ayah:1},{surah:89,ayah:1},{surah:89,ayah:23},
   {surah:92,ayah:1},{surah:95,ayah:1},{surah:99,ayah:1},{surah:112,ayah:1},
 ];
+
+// ─── Surah start pages (index 0 = Surah 1) ────────────────────────────────────
+// Derived from PAGE_TO_FIRST_VERSE so every static page lookup stays consistent
+// with the embedded Medina Mushaf page map.
+export const SURAH_START_PAGES: number[] = (() => {
+  const starts: number[] = [];
+
+  for (let surah = 1; surah <= 114; surah += 1) {
+    const pageIndex = PAGE_TO_FIRST_VERSE.findIndex((entry) => entry.surah === surah);
+    starts.push(pageIndex >= 0 ? pageIndex + 1 : starts[surah - 2] ?? 1);
+  }
+
+  return starts;
+})();
 
 // ─── Juz boundaries (30 juz, index 0 = Juz 1) ────────────────────────────────
 export const JUZ_STARTS: VerseRef[] = [
@@ -306,7 +303,7 @@ export function nextVerse(surah: number, ayah: number): VerseRef | null {
 export function getPageForVerse(surah: number, ayah: number): number {
   if (surah < 1 || surah > 114) return 1;
 
-  const surahStartPage = SURAH_START_PAGES[surah - 1];
+  const surahStartPage = SURAH_START_PAGES[surah - 1] ?? 1;
 
   if (versePageCache.size > 0) {
     for (let a = ayah; a >= 1; a--) {
@@ -601,4 +598,93 @@ export function resolveSurahScopedPageTarget(
   const mid = pageVerses[Math.floor(pageVerses.length / 2)] ?? endRef;
   const final = compareVerseRefs(mid, start) > 0 ? mid : (pageVerses[pageVerses.length - 1] ?? endRef);
   return { endSurah: startSurah, endAyah: final.ayah, actualPages: 0.5, snapReason: 'verse_split' };
+}
+
+export function resolveStrictSurahScopedPageTarget(
+  startSurah: number,
+  startAyah: number,
+  pagesTarget: number,
+): PageTargetResult {
+  const safePagesTarget = Math.max(pagesTarget, 0.25);
+  const start: VerseRef = { surah: startSurah, ayah: startAyah };
+  const lastAyah = SURAH_VERSE_COUNTS[startSurah - 1];
+  const surahEnd: VerseRef = { surah: startSurah, ayah: lastAyah };
+  const startFrac = getFractionalPage(startSurah, startAyah);
+  const targetFrac = startFrac + safePagesTarget;
+  const surahEndFrac = getFractionalPage(startSurah, lastAyah, true);
+
+  if (surahEndFrac <= targetFrac + 1e-9) {
+    return {
+      endSurah: startSurah,
+      endAyah: lastAyah,
+      actualPages: Math.max(0, surahEndFrac - startFrac),
+      snapReason: "surah_end",
+    };
+  }
+
+  const startPage = getPageForVerse(startSurah, startAyah);
+  let bestPageEnd: VerseRef | null = null;
+  let bestPageEndFrac = -Infinity;
+
+  for (let page = startPage; page <= 604; page += 1) {
+    let pageEnd: VerseRef | null = null;
+    if (pageLastVerseCache.size > 0) {
+      pageEnd = pageLastVerseCache.get(page) ?? null;
+    } else if (page < 604) {
+      const nextFirstVerse = PAGE_TO_FIRST_VERSE[page];
+      let endSurah = nextFirstVerse.surah;
+      let endAyah = nextFirstVerse.ayah - 1;
+      if (endAyah < 1) {
+        endSurah -= 1;
+        endAyah = SURAH_VERSE_COUNTS[endSurah - 1] ?? 1;
+      }
+      pageEnd = { surah: endSurah, ayah: endAyah };
+    } else {
+      pageEnd = { surah: 114, ayah: 6 };
+    }
+
+    if (!pageEnd || pageEnd.surah !== startSurah || compareVerseRefs(pageEnd, start) <= 0) {
+      if (pageEnd && pageEnd.surah > startSurah) break;
+      continue;
+    }
+
+    const endFrac = getFractionalPage(pageEnd.surah, pageEnd.ayah, true);
+    if (endFrac <= targetFrac + 1e-9 && endFrac > bestPageEndFrac) {
+      bestPageEnd = pageEnd;
+      bestPageEndFrac = endFrac;
+      continue;
+    }
+
+    if (endFrac > targetFrac) break;
+  }
+
+  if (bestPageEnd) {
+    return {
+      endSurah: bestPageEnd.surah,
+      endAyah: bestPageEnd.ayah,
+      actualPages: Math.max(0, bestPageEndFrac - startFrac),
+      snapReason: "page_end",
+    };
+  }
+
+  let bestVerse = start;
+  let bestVerseFrac = getFractionalPage(start.surah, start.ayah, true);
+  let current: VerseRef | null = start;
+
+  while (current && current.surah === startSurah) {
+    const endFrac = getFractionalPage(current.surah, current.ayah, true);
+    if (endFrac > targetFrac + 1e-9) break;
+    if (compareVerseRefs(current, start) >= 0) {
+      bestVerse = current;
+      bestVerseFrac = endFrac;
+    }
+    current = nextVerse(current.surah, current.ayah);
+  }
+
+  return {
+    endSurah: startSurah,
+    endAyah: bestVerse.ayah,
+    actualPages: Math.max(0, bestVerseFrac - startFrac),
+    snapReason: "verse_split",
+  };
 }
