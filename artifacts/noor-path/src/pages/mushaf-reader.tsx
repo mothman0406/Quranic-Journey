@@ -2,8 +2,6 @@ import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useParams, useSearch, useLocation } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { updateMemorization, listMemorization } from "@workspace/api-client-react";
-import { Skeleton } from "@/components/ui/skeleton";
-import { VersePlayer } from "@/components/verse-player";
 import {
   Select,
   SelectContent,
@@ -13,23 +11,40 @@ import {
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import {
-  ChevronLeft,
-  Copy,
+  AlignLeft,
+  Bookmark,
+  Book,
   BookOpen,
+  ChevronLeft,
+  ChevronRight,
+  Circle,
+  CheckCircle,
+  Check,
+  Copy,
+  ExternalLink,
   Eye,
   EyeOff,
-  CheckCircle,
-  Circle,
-  X,
-  Check,
+  FileText,
+  Globe,
+  Highlighter,
   Mic,
   MicOff,
+  Pause,
+  Play,
+  Repeat,
+  Settings,
+  Share2,
+  SkipBack,
+  SkipForward,
+  Square,
   Volume2,
+  X,
 } from "lucide-react";
 import { BayaanMushafPageCard } from "@/components/mushaf/bayaan/BayaanMushafPageCard";
 import { BayaanSurahBanner } from "@/components/mushaf/bayaan/BayaanSurahBanner";
 import { useBayaanMushafFit } from "@/components/mushaf/bayaan/useBayaanMushafFit";
 import {
+  BAYAAN_MUSHAF_TEXT,
   BAYAAN_PAGE_THEME,
   TAJWEED_CSS,
 } from "@/components/mushaf/bayaan/bayaan-constants";
@@ -37,8 +52,31 @@ import { getArabicSurahNamesForPage } from "@/components/mushaf/bayaan/bayaan-ut
 
 const TOTAL_PAGES = 604;
 const QURAN_API = "https://api.quran.com/api/v4";
-
 const SKIP_CHARS = /^[ۖ-ۭ؀-؅؛؞؟۝۞۟]+$/;
+const LS_PREFIX = "noorpath";
+
+const RECITERS = [
+  { id: 7,  name: "Mishary Rashid Al-Afasy" },
+  { id: 1,  name: "AbdulBaset Murattal" },
+  { id: 2,  name: "AbdulBaset Mujawwad" },
+  { id: 5,  name: "Mahmoud Khalil Al-Husary" },
+  { id: 3,  name: "Mohamed Siddiq Al-Minshawi" },
+] as const;
+
+type HighlightColor = "yellow" | "green" | "blue" | "pink";
+
+const HIGHLIGHT_COLORS: Record<HighlightColor, { bg: string; dot: string; label: string }> = {
+  yellow: { bg: "rgba(250,204,21,0.35)",  dot: "#f59e0b", label: "Yellow" },
+  green:  { bg: "rgba(34,197,94,0.35)",   dot: "#16a34a", label: "Green" },
+  blue:   { bg: "rgba(59,130,246,0.35)",  dot: "#2563eb", label: "Blue" },
+  pink:   { bg: "rgba(236,72,153,0.35)",  dot: "#db2777", label: "Pink" },
+};
+
+const SPEED_OPTIONS = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2] as const;
+
+function audioUrl(reciterId: number, surahId: number, ayahNum: number): string {
+  return `https://verses.quran.com/${reciterId}/${String(surahId).padStart(3, "0")}/${String(ayahNum).padStart(3, "0")}.mp3`;
+}
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -92,6 +130,44 @@ type ReciteWord = {
   text_uthmani: string;
 };
 
+interface WBWWord {
+  position: number;
+  text_uthmani: string;
+  char_type_name: string;
+  transliteration?: { text: string };
+  translation?: { text: string; language_name: string } | string;
+}
+
+type SheetView =
+  | { type: "main" }
+  | { type: "repeat" }
+  | { type: "translation" }
+  | { type: "tafseer" }
+  | { type: "wbw" }
+  | { type: "highlight" }
+  | { type: "note" };
+
+interface PlayerState {
+  status: "playing" | "paused";
+  surahId: number;
+  ayahNum: number;
+  rangeStart: number;
+  rangeEnd: number | null;
+  reciterId: number;
+  rate: number;
+  repeat: "1" | "3" | "5" | "loop";
+  repeatCount: number;
+  rangeRepeat: "1" | "2" | "3" | "loop";
+  rangeRepeatCount: number;
+}
+
+interface PlayerSettingsState {
+  reciterId: number;
+  rate: number;
+  repeat: "1" | "3" | "5" | "loop";
+  rangeRepeat: "1" | "2" | "3" | "loop";
+}
+
 // ─── Fetchers ──────────────────────────────────────────────────────────────────
 
 async function fetchVersesByPage(pageNumber: number): Promise<{ verses: PageVerseData[] }> {
@@ -124,13 +200,36 @@ async function fetchTranslation(verseKey: string): Promise<string> {
     .trim();
 }
 
+async function fetchTafseer(surah: number, ayah: number): Promise<string> {
+  const r = await fetch(`${QURAN_API}/tafsirs/169/by_ayah/${surah}:${ayah}`);
+  if (!r.ok) return "";
+  const data = await r.json();
+  const raw: string = data.tafsir?.text ?? "";
+  return raw
+    .replace(/<[^>]+>/g, "")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+async function fetchWBW(verseKey: string): Promise<WBWWord[]> {
+  const r = await fetch(
+    `${QURAN_API}/verses/by_key/${verseKey}?word_fields=text_uthmani,transliteration,translation`
+  );
+  if (!r.ok) return [];
+  const data = await r.json();
+  return (data.verse?.words ?? []).filter((w: WBWWord) => w.char_type_name !== "end");
+}
+
 // ─── Utilities ─────────────────────────────────────────────────────────────────
 
 function stripTashkeel(s: string): string {
   return (
     s
       .replace(/ٰ/g, "ا")
-      .replace(/[ؐ-ًؚ-ٟۖ-ۜ۟-۪ۤۧۨ-ۭ]/g, "")
+      .replace(/[ؐ-ًؚ-ٟۖ-ۜ۟-۪ۤۧۨ-ۭ]/g, "")
       .replace(/[ـ]/g, "")
       .replace(/[أإآاٱ]/g, "ا")
       .trim() || s
@@ -183,9 +282,10 @@ function buildLineGroups(
         text_uthmani: w.text_uthmani,
         char_type_name: w.char_type_name,
         line_number: w.line_number,
-        translation: typeof w.translation === "object" && w.translation !== null
-          ? (w.translation as { text?: string }).text ?? ""
-          : (w.translation as string | undefined),
+        translation:
+          typeof w.translation === "object" && w.translation !== null
+            ? (w.translation as { text?: string }).text ?? ""
+            : (w.translation as string | undefined),
       });
     }
   }
@@ -200,98 +300,895 @@ function buildLineGroups(
     .map(([lineNum, words]) => ({ lineNum, words }));
 }
 
-// ─── AyahSheet ─────────────────────────────────────────────────────────────────
+// ─── localStorage helpers ─────────────────────────────────────────────────────
 
-function AyahSheet({
+function loadAnnotations(type: "bm" | "hl" | "note"): Record<string, string> {
+  const result: Record<string, string> = {};
+  try {
+    const prefix = `${LS_PREFIX}:${type}:`;
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k?.startsWith(prefix)) {
+        const verseKey = k.slice(prefix.length);
+        const val = localStorage.getItem(k);
+        if (val !== null) result[verseKey] = val;
+      }
+    }
+  } catch {
+    /* ignore */
+  }
+  return result;
+}
+
+// ─── Sheet UI helpers ─────────────────────────────────────────────────────────
+
+const sheetBtnBase: React.CSSProperties = {
+  width: "100%",
+  display: "flex",
+  alignItems: "center",
+  gap: "14px",
+  padding: "14px 16px",
+  background: "none",
+  border: "none",
+  cursor: "pointer",
+  color: "white",
+  textAlign: "left",
+};
+
+const playerBtnBase: React.CSSProperties = {
+  background: "none",
+  border: "none",
+  cursor: "pointer",
+  color: "white",
+  padding: "6px",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+};
+
+function MenuRow({
+  icon,
+  label,
+  onClick,
+  chevron,
+  destructive,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  onClick: () => void;
+  chevron?: boolean;
+  destructive?: boolean;
+}) {
+  return (
+    <button onClick={onClick} style={sheetBtnBase}>
+      <span style={{ color: destructive ? "#f87171" : "#9ca3af", flexShrink: 0 }}>{icon}</span>
+      <span style={{ flex: 1, fontSize: "15px", color: destructive ? "#f87171" : "white" }}>
+        {label}
+      </span>
+      {chevron && <ChevronRight size={16} color="#4b5563" />}
+    </button>
+  );
+}
+
+function MenuDivider() {
+  return <div style={{ height: "1px", background: "#2a2a2a", margin: "0 16px" }} />;
+}
+
+function MenuGroup({ children }: { children: React.ReactNode }) {
+  return (
+    <div style={{ margin: "0 12px 10px", background: "#1a1a1a", borderRadius: "12px", overflow: "hidden" }}>
+      {children}
+    </div>
+  );
+}
+
+function SubPanelHeader({ title, onBack }: { title: string; onBack: () => void }) {
+  return (
+    <div style={{ display: "flex", alignItems: "center", padding: "16px 16px 0", gap: "8px" }}>
+      <button
+        onClick={onBack}
+        style={{ background: "none", border: "none", cursor: "pointer", color: "white", padding: "4px", display: "flex", alignItems: "center" }}
+      >
+        <ChevronLeft size={22} />
+      </button>
+      <span style={{ flex: 1, textAlign: "center", fontWeight: 600, fontSize: "15px", color: "white", marginRight: "30px" }}>
+        {title}
+      </span>
+    </div>
+  );
+}
+
+// ─── BayaanAyahSheet ──────────────────────────────────────────────────────────
+
+function BayaanAyahSheet({
   ayah,
-  childId,
+  sheetView,
+  onChangeView,
   onClose,
+  onNavigate,
+  onPlayFromHere,
+  onPlayRepeat,
+  verses,
+  childId,
+  chapters,
+  bookmarks,
+  highlights,
+  notes,
+  onToggleBookmark,
+  onSetHighlight,
+  onSaveNote,
 }: {
   ayah: AyahInfo;
-  childId: string;
+  sheetView: SheetView;
+  onChangeView: (v: SheetView) => void;
   onClose: () => void;
+  onNavigate: (newAyah: AyahInfo) => void;
+  onPlayFromHere: (ayah: AyahInfo) => void;
+  onPlayRepeat: (ayah: AyahInfo, repeat: "1" | "3" | "5" | "loop") => void;
+  verses: PageVerseData[];
+  childId: string;
+  chapters: Chapter[];
+  bookmarks: Record<string, string>;
+  highlights: Record<string, string>;
+  notes: Record<string, string>;
+  onToggleBookmark: (verseKey: string) => void;
+  onSetHighlight: (verseKey: string, color: HighlightColor | null) => void;
+  onSaveNote: (verseKey: string, text: string) => void;
 }) {
   const [, setLocation] = useLocation();
-  const [copied, setCopied] = useState(false);
+  const [noteText, setNoteText] = useState(notes[ayah.verseKey] ?? "");
 
-  const { data: translation, isLoading: translationLoading } = useQuery({
+  useEffect(() => {
+    setNoteText(notes[ayah.verseKey] ?? "");
+  }, [ayah.verseKey]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const isBookmarked = !!bookmarks[ayah.verseKey];
+  const currentHighlight = highlights[ayah.verseKey] as HighlightColor | undefined;
+  const hasNote = !!(notes[ayah.verseKey]?.trim());
+
+  const chapterInfo = chapters.find((c) => c.id === ayah.surahId);
+  const surahName = chapterInfo?.name_simple ?? `Surah ${ayah.surahId}`;
+
+  const { data: translation } = useQuery({
     queryKey: ["translation", ayah.verseKey],
     queryFn: () => fetchTranslation(ayah.verseKey),
     staleTime: Infinity,
   });
 
+  const { data: tafseerText, isLoading: tafseerLoading } = useQuery({
+    queryKey: ["tafseer", ayah.verseKey],
+    queryFn: () => fetchTafseer(ayah.surahId, ayah.verseNum),
+    staleTime: Infinity,
+    enabled: sheetView.type === "tafseer",
+  });
+
+  const { data: wbwWords, isLoading: wbwLoading } = useQuery({
+    queryKey: ["wbw", ayah.verseKey],
+    queryFn: () => fetchWBW(ayah.verseKey),
+    staleTime: Infinity,
+    enabled: sheetView.type === "wbw",
+  });
+
   const handleCopy = async () => {
     try {
-      await navigator.clipboard.writeText(ayah.text_uthmani);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
+      await navigator.clipboard.writeText(
+        `${ayah.text_uthmani}\n\n${translation ?? ""}\n\n— Quran ${ayah.verseKey}`
+      );
     } catch {
       /* ignore */
+    }
+    onClose();
+  };
+
+  const handleShare = async () => {
+    const text = `${ayah.text_uthmani}\n\n${translation ?? ""}\n\n— Quran ${ayah.verseKey}`;
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: `Quran ${ayah.verseKey}`, text });
+      } else {
+        await navigator.clipboard.writeText(text);
+      }
+    } catch {
+      /* ignore */
+    }
+    onClose();
+  };
+
+  const currentVerseIdx = verses.findIndex((v) => v.verse_key === ayah.verseKey);
+
+  const navTo = (idx: number) => {
+    if (idx < 0 || idx >= verses.length) return;
+    const v = verses[idx];
+    const [s, n] = v.verse_key.split(":").map(Number);
+    onNavigate({ verseKey: v.verse_key, surahId: s, verseNum: n, text_uthmani: v.text_uthmani ?? "" });
+  };
+
+  const navBtnStyle = (disabled: boolean): React.CSSProperties => ({
+    flex: 1,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: "6px",
+    padding: "10px",
+    background: "#1a1a1a",
+    border: "none",
+    borderRadius: "10px",
+    color: disabled ? "#4b5563" : "white",
+    cursor: disabled ? "default" : "pointer",
+    fontSize: "14px",
+  });
+
+  const renderContent = () => {
+    switch (sheetView.type) {
+      case "main":
+        return (
+          <div style={{ paddingBottom: "24px" }}>
+            <div style={{ padding: "12px 16px 8px", borderBottom: "1px solid #1f1f1f" }}>
+              <p style={{ fontWeight: 700, fontSize: "16px", color: "white", margin: 0 }}>{surahName}</p>
+              <p style={{ fontSize: "12px", color: "#6b7280", margin: "2px 0 0" }}>{ayah.verseKey}</p>
+            </div>
+            <div style={{ height: "10px" }} />
+
+            <MenuGroup>
+              <MenuRow
+                icon={<Play size={18} />}
+                label="Play from Here"
+                onClick={() => { onPlayFromHere(ayah); onClose(); }}
+              />
+              <MenuDivider />
+              <MenuRow
+                icon={<Repeat size={18} />}
+                label="Repeat"
+                onClick={() => onChangeView({ type: "repeat" })}
+                chevron
+              />
+            </MenuGroup>
+
+            <MenuGroup>
+              <MenuRow
+                icon={<Bookmark size={18} fill={isBookmarked ? "currentColor" : "none"} />}
+                label={isBookmarked ? "Remove Bookmark" : "Bookmark"}
+                onClick={() => onToggleBookmark(ayah.verseKey)}
+                destructive={isBookmarked}
+              />
+              <MenuDivider />
+              <MenuRow
+                icon={<Highlighter size={18} />}
+                label={currentHighlight ? "Change / Remove Highlight" : "Highlight"}
+                onClick={() => onChangeView({ type: "highlight" })}
+                chevron
+              />
+              <MenuDivider />
+              <MenuRow
+                icon={<FileText size={18} />}
+                label={hasNote ? "Edit Note" : "Add Note"}
+                onClick={() => onChangeView({ type: "note" })}
+                chevron
+              />
+            </MenuGroup>
+
+            <MenuGroup>
+              <MenuRow
+                icon={<Globe size={18} />}
+                label="Translation"
+                onClick={() => onChangeView({ type: "translation" })}
+                chevron
+              />
+              <MenuDivider />
+              <MenuRow
+                icon={<Book size={18} />}
+                label="Tafseer"
+                onClick={() => onChangeView({ type: "tafseer" })}
+                chevron
+              />
+              <MenuDivider />
+              <MenuRow
+                icon={<AlignLeft size={18} />}
+                label="Word by Word"
+                onClick={() => onChangeView({ type: "wbw" })}
+                chevron
+              />
+            </MenuGroup>
+
+            <MenuGroup>
+              <MenuRow icon={<Copy size={18} />} label="Copy" onClick={handleCopy} />
+              <MenuDivider />
+              <MenuRow icon={<Share2 size={18} />} label="Share" onClick={handleShare} />
+              <MenuDivider />
+              <MenuRow
+                icon={<BookOpen size={18} />}
+                label="Memorize from here"
+                onClick={() => {
+                  setLocation(`/child/${childId}/quran-memorize?surah=${ayah.surahId}&mode=mushaf`);
+                  onClose();
+                }}
+              />
+              <MenuDivider />
+              <MenuRow
+                icon={<ExternalLink size={18} />}
+                label="Open in Memorization Mushaf"
+                onClick={() => {
+                  setLocation(
+                    `/child/${childId}/quran-memorize?surah=${ayah.surahId}&fromAyah=${ayah.verseNum}&toAyah=${ayah.verseNum}&mode=mushaf`
+                  );
+                  onClose();
+                }}
+              />
+            </MenuGroup>
+          </div>
+        );
+
+      case "repeat":
+        return (
+          <div style={{ paddingBottom: "24px" }}>
+            <SubPanelHeader title="Repeat" onBack={() => onChangeView({ type: "main" })} />
+            <div style={{ padding: "20px 16px" }}>
+              <p style={{ color: "#9ca3af", fontSize: "13px", textAlign: "center", marginBottom: "16px" }}>
+                {ayah.verseKey} · Repeat this verse
+              </p>
+              {(["1", "3", "5", "loop"] as const).map((count) => (
+                <button
+                  key={count}
+                  onClick={() => { onPlayRepeat(ayah, count); onClose(); }}
+                  style={{
+                    width: "100%",
+                    marginBottom: "8px",
+                    padding: "14px 16px",
+                    background: "#1a1a1a",
+                    border: "none",
+                    borderRadius: "10px",
+                    color: "white",
+                    fontSize: "15px",
+                    cursor: "pointer",
+                    textAlign: "left",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "12px",
+                  }}
+                >
+                  <Repeat size={16} color="#9ca3af" />
+                  {count === "loop" ? "∞  Loop continuously" : `${count}×  ${count === "1" ? "Once" : `${count} times`}`}
+                </button>
+              ))}
+            </div>
+          </div>
+        );
+
+      case "translation":
+        return (
+          <div style={{ paddingBottom: "24px" }}>
+            <SubPanelHeader title="Translation" onBack={() => onChangeView({ type: "main" })} />
+            <p style={{ textAlign: "center", padding: "6px 16px 0", color: "#6b7280", fontSize: "12px", margin: 0 }}>
+              {ayah.verseKey}
+            </p>
+            <div
+              dir="rtl"
+              style={{
+                padding: "12px 20px",
+                fontSize: "24px",
+                fontFamily: BAYAAN_MUSHAF_TEXT,
+                lineHeight: 2.1,
+                color: "white",
+                textAlign: "center",
+              }}
+            >
+              {ayah.text_uthmani}
+            </div>
+            <p style={{ padding: "0 20px 4px", fontSize: "10px", color: "#6b7280", letterSpacing: "0.08em", textTransform: "uppercase", margin: 0 }}>
+              Saheeh International
+            </p>
+            <p style={{ padding: "4px 20px 20px", fontSize: "15px", color: "#d1d5db", lineHeight: 1.75, margin: 0 }}>
+              {translation ?? <span style={{ color: "#6b7280", fontStyle: "italic" }}>Loading…</span>}
+            </p>
+            <div style={{ display: "flex", gap: "8px", padding: "0 16px" }}>
+              <button disabled={currentVerseIdx <= 0} onClick={() => navTo(currentVerseIdx - 1)} style={navBtnStyle(currentVerseIdx <= 0)}>
+                <ChevronLeft size={16} /> Previous
+              </button>
+              <button disabled={currentVerseIdx >= verses.length - 1} onClick={() => navTo(currentVerseIdx + 1)} style={navBtnStyle(currentVerseIdx >= verses.length - 1)}>
+                Next <ChevronRight size={16} />
+              </button>
+            </div>
+          </div>
+        );
+
+      case "tafseer":
+        return (
+          <div style={{ paddingBottom: "24px" }}>
+            <SubPanelHeader title="Tafseer" onBack={() => onChangeView({ type: "main" })} />
+            <p style={{ textAlign: "center", padding: "6px 16px 0", color: "#6b7280", fontSize: "12px", margin: 0 }}>
+              {ayah.verseKey}
+            </p>
+            <div
+              dir="rtl"
+              style={{
+                padding: "10px 20px",
+                fontSize: "20px",
+                fontFamily: BAYAAN_MUSHAF_TEXT,
+                lineHeight: 2,
+                color: "white",
+                textAlign: "center",
+              }}
+            >
+              {ayah.text_uthmani}
+            </div>
+            <p style={{ padding: "0 20px 4px", fontSize: "10px", color: "#6b7280", letterSpacing: "0.08em", textTransform: "uppercase", margin: 0 }}>
+              Ibn Kathir (Abridged)
+            </p>
+            <p style={{ padding: "4px 20px 20px", fontSize: "14px", color: "#d1d5db", lineHeight: 1.8, margin: 0 }}>
+              {tafseerLoading ? (
+                <span style={{ color: "#6b7280", fontStyle: "italic" }}>Loading…</span>
+              ) : tafseerText ? (
+                tafseerText
+              ) : (
+                <span style={{ color: "#6b7280", fontStyle: "italic" }}>Tafseer unavailable</span>
+              )}
+            </p>
+            <div style={{ display: "flex", gap: "8px", padding: "0 16px" }}>
+              <button disabled={currentVerseIdx <= 0} onClick={() => navTo(currentVerseIdx - 1)} style={navBtnStyle(currentVerseIdx <= 0)}>
+                <ChevronLeft size={16} /> Previous
+              </button>
+              <button disabled={currentVerseIdx >= verses.length - 1} onClick={() => navTo(currentVerseIdx + 1)} style={navBtnStyle(currentVerseIdx >= verses.length - 1)}>
+                Next <ChevronRight size={16} />
+              </button>
+            </div>
+          </div>
+        );
+
+      case "wbw":
+        return (
+          <div style={{ paddingBottom: "24px" }}>
+            <SubPanelHeader title="Word by Word" onBack={() => onChangeView({ type: "main" })} />
+            <p style={{ textAlign: "center", padding: "6px 16px 8px", color: "#6b7280", fontSize: "12px", margin: 0 }}>
+              {ayah.verseKey}
+            </p>
+            {wbwLoading ? (
+              <div style={{ padding: "24px", textAlign: "center", color: "#6b7280" }}>Loading…</div>
+            ) : (
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(3, 1fr)",
+                  gap: "8px",
+                  padding: "8px 16px 16px",
+                  direction: "rtl",
+                }}
+              >
+                {(wbwWords ?? []).map((w) => (
+                  <div
+                    key={w.position}
+                    style={{ background: "#1a1a1a", borderRadius: "10px", padding: "10px 8px", textAlign: "center" }}
+                  >
+                    <div dir="rtl" style={{ fontSize: "20px", fontFamily: BAYAAN_MUSHAF_TEXT, lineHeight: 1.6, color: "white" }}>
+                      {w.text_uthmani}
+                    </div>
+                    <div style={{ fontSize: "10px", color: "#9ca3af", marginTop: "4px", direction: "ltr" }}>
+                      {typeof w.transliteration === "object" && w.transliteration ? w.transliteration.text : ""}
+                    </div>
+                    <div style={{ fontSize: "11px", color: "#d1d5db", marginTop: "2px", direction: "ltr" }}>
+                      {typeof w.translation === "object" && w.translation
+                        ? (w.translation as { text: string }).text
+                        : typeof w.translation === "string"
+                        ? w.translation
+                        : ""}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        );
+
+      case "highlight":
+        return (
+          <div style={{ paddingBottom: "24px" }}>
+            <SubPanelHeader title="Highlight" onBack={() => onChangeView({ type: "main" })} />
+            <div style={{ padding: "20px 16px" }}>
+              <div style={{ display: "flex", gap: "12px", justifyContent: "center", marginBottom: "20px" }}>
+                {(Object.entries(HIGHLIGHT_COLORS) as [HighlightColor, typeof HIGHLIGHT_COLORS[HighlightColor]][]).map(
+                  ([color, meta]) => (
+                    <button
+                      key={color}
+                      onClick={() => { onSetHighlight(ayah.verseKey, color); onChangeView({ type: "main" }); }}
+                      style={{
+                        width: "52px",
+                        height: "52px",
+                        borderRadius: "50%",
+                        background: meta.bg,
+                        border: currentHighlight === color ? `3px solid ${meta.dot}` : "3px solid transparent",
+                        cursor: "pointer",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                      }}
+                      title={meta.label}
+                    >
+                      <div style={{ width: "28px", height: "28px", borderRadius: "50%", background: meta.dot }} />
+                    </button>
+                  )
+                )}
+              </div>
+              {currentHighlight && (
+                <button
+                  onClick={() => { onSetHighlight(ayah.verseKey, null); onChangeView({ type: "main" }); }}
+                  style={{
+                    width: "100%",
+                    padding: "12px",
+                    background: "#1a1a1a",
+                    border: "1px solid #374151",
+                    borderRadius: "10px",
+                    color: "#f87171",
+                    fontSize: "14px",
+                    cursor: "pointer",
+                  }}
+                >
+                  Remove Highlight
+                </button>
+              )}
+            </div>
+          </div>
+        );
+
+      case "note":
+        return (
+          <div style={{ paddingBottom: "24px" }}>
+            <SubPanelHeader title={hasNote ? "Edit Note" : "Add Note"} onBack={() => onChangeView({ type: "main" })} />
+            <div style={{ padding: "16px" }}>
+              <p style={{ fontSize: "12px", color: "#6b7280", marginBottom: "8px", margin: "0 0 8px" }}>{ayah.verseKey}</p>
+              <textarea
+                value={noteText}
+                onChange={(e) => setNoteText(e.target.value)}
+                placeholder="Write your note here…"
+                autoFocus
+                rows={5}
+                style={{
+                  width: "100%",
+                  background: "#1a1a1a",
+                  border: "1px solid #2a2a2a",
+                  borderRadius: "10px",
+                  padding: "12px",
+                  color: "white",
+                  fontSize: "14px",
+                  resize: "vertical",
+                  outline: "none",
+                  boxSizing: "border-box",
+                }}
+              />
+              <div style={{ display: "flex", gap: "8px", marginTop: "12px" }}>
+                <button
+                  onClick={() => { onSaveNote(ayah.verseKey, noteText); onChangeView({ type: "main" }); }}
+                  style={{
+                    flex: 1,
+                    padding: "12px",
+                    background: "#2563eb",
+                    border: "none",
+                    borderRadius: "10px",
+                    color: "white",
+                    fontSize: "14px",
+                    fontWeight: 600,
+                    cursor: "pointer",
+                  }}
+                >
+                  Save Note
+                </button>
+                {hasNote && (
+                  <button
+                    onClick={() => { onSaveNote(ayah.verseKey, ""); onChangeView({ type: "main" }); }}
+                    style={{
+                      padding: "12px 16px",
+                      background: "#1a1a1a",
+                      border: "1px solid #374151",
+                      borderRadius: "10px",
+                      color: "#f87171",
+                      fontSize: "14px",
+                      cursor: "pointer",
+                    }}
+                  >
+                    Delete
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+
+      default:
+        return null;
     }
   };
 
   return (
     <>
-      <div className="fixed inset-0 bg-black/40 z-[70]" onClick={onClose} />
-      <div className="fixed bottom-0 left-0 right-0 bg-white rounded-t-2xl z-[80] shadow-2xl max-h-[72vh] overflow-y-auto">
-        <div className="max-w-lg mx-auto p-5 pb-24">
-          <div className="w-10 h-1 bg-gray-200 rounded-full mx-auto mb-4" />
-          <div className="flex items-start justify-between mb-4">
-            <div>
-              <p className="text-sm font-semibold text-gray-900">{ayah.verseKey}</p>
-              <p className="text-xs text-gray-400 mt-0.5">
-                Surah {ayah.surahId}, Verse {ayah.verseNum}
-              </p>
-            </div>
-            <button
-              onClick={onClose}
-              className="p-1.5 rounded-full hover:bg-gray-100 text-gray-400"
-            >
-              <X size={16} />
-            </button>
-          </div>
-          <div className="bg-amber-50 rounded-xl p-4 mb-4 border border-amber-100">
-            <VersePlayer
-              arabic={ayah.text_uthmani}
-              surahNumber={ayah.surahId}
-              verseNumber={ayah.verseNum}
-              size="md"
-            />
-          </div>
-          <div className="mb-4 min-h-[56px]">
-            {translationLoading ? (
-              <Skeleton className="h-14 rounded-xl" />
-            ) : translation ? (
-              <p className="text-sm text-gray-700 leading-relaxed">{translation}</p>
-            ) : (
-              <p className="text-xs text-gray-400 italic">Translation unavailable</p>
-            )}
-          </div>
-          <div className="grid grid-cols-1 gap-2 mb-2">
-            <button
-              onClick={handleCopy}
-              className="flex items-center justify-center gap-2 py-2.5 rounded-xl border border-amber-200 bg-amber-50 text-amber-700 text-sm font-medium active:bg-amber-100"
-            >
-              {copied ? <Check size={14} /> : <Copy size={14} />}
-              {copied ? "Copied!" : "Copy Verse"}
-            </button>
-          </div>
-          <button
-            onClick={() =>
-              setLocation(`/child/${childId}/quran-memorize?surah=${ayah.surahId}&mode=mushaf`)
-            }
-            className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-emerald-600 text-white text-sm font-semibold active:bg-emerald-700"
-          >
-            <BookOpen size={14} /> Memorize from here
+      <div
+        style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", zIndex: 70 }}
+        onClick={onClose}
+      />
+      <div
+        style={{
+          position: "fixed",
+          bottom: 0,
+          left: 0,
+          right: 0,
+          background: "#0d0d0d",
+          borderRadius: "20px 20px 0 0",
+          zIndex: 80,
+          maxHeight: "82vh",
+          overflowY: "auto",
+          color: "white",
+        }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div style={{ width: "40px", height: "4px", background: "#333", borderRadius: "2px", margin: "12px auto 0" }} />
+        {renderContent()}
+      </div>
+    </>
+  );
+}
+
+// ─── FloatingPlayerBar ────────────────────────────────────────────────────────
+
+function FloatingPlayerBar({
+  playerState,
+  onToggle,
+  onStop,
+  onPrev,
+  onNext,
+  onSettings,
+}: {
+  playerState: PlayerState;
+  onToggle: () => void;
+  onStop: () => void;
+  onPrev: () => void;
+  onNext: () => void;
+  onSettings: () => void;
+}) {
+  return (
+    <div
+      style={{
+        position: "fixed",
+        bottom: "16px",
+        left: 0,
+        right: 0,
+        display: "flex",
+        justifyContent: "center",
+        zIndex: 67,
+        padding: "0 16px",
+        pointerEvents: "none",
+      }}
+    >
+      <div
+        style={{
+          background: "#1a1a1a",
+          borderRadius: "9999px",
+          padding: "8px 16px",
+          display: "flex",
+          alignItems: "center",
+          gap: "2px",
+          boxShadow: "0 4px 24px rgba(0,0,0,0.5)",
+          pointerEvents: "auto",
+          color: "white",
+        }}
+      >
+        <span style={{ fontSize: "11px", color: "#9ca3af", marginRight: "6px", minWidth: "36px", textAlign: "center" }}>
+          {playerState.surahId}:{playerState.ayahNum}
+        </span>
+        <button onClick={onStop} style={playerBtnBase} title="Stop">
+          <Square size={14} fill="currentColor" />
+        </button>
+        <button onClick={onPrev} style={playerBtnBase} title="Previous">
+          <SkipBack size={16} />
+        </button>
+        <button
+          onClick={onToggle}
+          style={{
+            ...playerBtnBase,
+            background: "rgba(255,255,255,0.15)",
+            borderRadius: "50%",
+            width: "36px",
+            height: "36px",
+            margin: "0 2px",
+          }}
+          title={playerState.status === "playing" ? "Pause" : "Play"}
+        >
+          {playerState.status === "playing" ? <Pause size={16} /> : <Play size={16} />}
+        </button>
+        <button onClick={onNext} style={playerBtnBase} title="Next">
+          <SkipForward size={16} />
+        </button>
+        <button onClick={onSettings} style={playerBtnBase} title="Playback settings">
+          <Settings size={14} />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── PlaybackSettingsSheet ────────────────────────────────────────────────────
+
+function PlaybackSettingsSheet({
+  verses,
+  playerSettings,
+  playerState,
+  onPlay,
+  onClose,
+}: {
+  verses: PageVerseData[];
+  playerSettings: PlayerSettingsState;
+  playerState: PlayerState | null;
+  onPlay: (startVK: string, endVK: string | null, settings: PlayerSettingsState) => void;
+  onClose: () => void;
+}) {
+  const initStart = playerState
+    ? `${playerState.surahId}:${playerState.ayahNum}`
+    : (verses[0]?.verse_key ?? "");
+
+  const [reciterId, setReciterId] = useState(playerSettings.reciterId);
+  const [rate, setRate] = useState(playerSettings.rate);
+  const [repeat, setRepeat] = useState(playerSettings.repeat);
+  const [rangeRepeat, setRangeRepeat] = useState(playerSettings.rangeRepeat);
+  const [startVK, setStartVK] = useState(initStart);
+  const [endVK, setEndVK] = useState("");
+
+  const pillStyle = (active: boolean): React.CSSProperties => ({
+    padding: "6px 12px",
+    borderRadius: "9999px",
+    border: active ? "1px solid #3b82f6" : "1px solid #374151",
+    background: active ? "#1d4ed8" : "#1a1a1a",
+    color: active ? "white" : "#9ca3af",
+    cursor: "pointer",
+    fontSize: "13px",
+    fontWeight: active ? 600 : 400,
+  });
+
+  const blockBtnStyle = (active: boolean): React.CSSProperties => ({
+    flex: 1,
+    padding: "8px",
+    border: active ? "1px solid #3b82f6" : "1px solid #374151",
+    background: active ? "#1d4ed8" : "#1a1a1a",
+    borderRadius: "8px",
+    color: active ? "white" : "#9ca3af",
+    cursor: "pointer",
+    fontSize: "13px",
+    textAlign: "center",
+  });
+
+  const selectStyle: React.CSSProperties = {
+    width: "100%",
+    background: "#1a1a1a",
+    border: "1px solid #2a2a2a",
+    borderRadius: "8px",
+    padding: "10px",
+    color: "white",
+    fontSize: "14px",
+  };
+
+  const labelStyle: React.CSSProperties = {
+    fontSize: "11px",
+    color: "#9ca3af",
+    marginBottom: "8px",
+    textTransform: "uppercase",
+    letterSpacing: "0.06em",
+    display: "block",
+  };
+
+  return (
+    <>
+      <div
+        style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", zIndex: 82 }}
+        onClick={onClose}
+      />
+      <div
+        style={{
+          position: "fixed",
+          bottom: 0,
+          left: 0,
+          right: 0,
+          background: "#0d0d0d",
+          borderRadius: "20px 20px 0 0",
+          zIndex: 83,
+          maxHeight: "85vh",
+          overflowY: "auto",
+          color: "white",
+          paddingBottom: "24px",
+        }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div style={{ width: "40px", height: "4px", background: "#333", borderRadius: "2px", margin: "12px auto 0" }} />
+        <div style={{ display: "flex", alignItems: "center", padding: "16px 16px 0" }}>
+          <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", color: "white", padding: "4px", display: "flex" }}>
+            <ChevronLeft size={22} />
           </button>
+          <span style={{ flex: 1, textAlign: "center", fontWeight: 600, fontSize: "15px", marginRight: "30px" }}>
+            Playback Settings
+          </span>
+        </div>
+
+        <div style={{ padding: "16px" }}>
+          {verses.length > 0 && (
+            <div style={{ marginBottom: "16px" }}>
+              <span style={labelStyle}>Starting Verse</span>
+              <select value={startVK} onChange={(e) => setStartVK(e.target.value)} style={selectStyle}>
+                {verses.map((v) => (
+                  <option key={v.verse_key} value={v.verse_key}>{v.verse_key}</option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {verses.length > 0 && (
+            <div style={{ marginBottom: "16px" }}>
+              <span style={labelStyle}>Ending Verse (optional)</span>
+              <select value={endVK} onChange={(e) => setEndVK(e.target.value)} style={selectStyle}>
+                <option value="">— Play to surah end</option>
+                {verses.map((v) => (
+                  <option key={v.verse_key} value={v.verse_key}>{v.verse_key}</option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          <div style={{ marginBottom: "16px" }}>
+            <span style={labelStyle}>Reciter</span>
+            <select value={reciterId} onChange={(e) => setReciterId(parseInt(e.target.value))} style={selectStyle}>
+              {RECITERS.map((r) => (
+                <option key={r.id} value={r.id}>{r.name}</option>
+              ))}
+            </select>
+          </div>
+
+          <div style={{ marginBottom: "16px" }}>
+            <span style={labelStyle}>Playback Speed</span>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
+              {SPEED_OPTIONS.map((s) => (
+                <button key={s} onClick={() => setRate(s)} style={pillStyle(rate === s)}>
+                  {s}×
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div style={{ marginBottom: "16px" }}>
+            <span style={labelStyle}>Play each verse</span>
+            <div style={{ display: "flex", gap: "6px" }}>
+              {(["1", "3", "5", "loop"] as const).map((r) => (
+                <button key={r} onClick={() => setRepeat(r)} style={blockBtnStyle(repeat === r)}>
+                  {r === "loop" ? "∞" : `${r}×`}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {endVK && (
+            <div style={{ marginBottom: "16px" }}>
+              <span style={labelStyle}>Play the range</span>
+              <div style={{ display: "flex", gap: "6px" }}>
+                {(["1", "2", "3", "loop"] as const).map((r) => (
+                  <button key={r} onClick={() => setRangeRepeat(r)} style={blockBtnStyle(rangeRepeat === r)}>
+                    {r === "loop" ? "∞" : `${r}×`}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
           <button
-            onClick={() => {
-              setLocation(`/child/${childId}/quran-memorize?surah=${ayah.surahId}&fromAyah=${ayah.verseNum}&toAyah=${ayah.verseNum}&mode=mushaf`);
-              onClose();
+            onClick={() => onPlay(startVK, endVK || null, { reciterId, rate, repeat, rangeRepeat })}
+            style={{
+              width: "100%",
+              padding: "14px",
+              background: "#16a34a",
+              border: "none",
+              borderRadius: "12px",
+              color: "white",
+              fontSize: "16px",
+              fontWeight: 700,
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: "8px",
             }}
-            className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border border-amber-200 bg-amber-50 text-amber-800 text-sm font-semibold active:bg-amber-100 mt-2"
           >
-            📖 Open in Memorization Mushaf
+            <Play size={18} /> Play
           </button>
         </div>
       </div>
@@ -317,7 +1214,6 @@ export default function MushafReaderPage() {
   const [revealedVerseKeys, setRevealedVerseKeys] = useState<Set<string>>(new Set());
   const [isSelectMode, setIsSelectMode] = useState(false);
   const [selectedVerseKeys, setSelectedVerseKeys] = useState<Set<string>>(new Set());
-  const [tappedAyah, setTappedAyah] = useState<AyahInfo | null>(null);
   const [tappedWord, setTappedWord] = useState<{
     key: string; text: string; position: number;
     surahId: number; verseNum: number; translation: string;
@@ -328,20 +1224,98 @@ export default function MushafReaderPage() {
   const [reciteUnlockedWords, setReciteUnlockedWords] = useState<Set<string>>(new Set());
   const [showChrome, setShowChrome] = useState(true);
 
+  // Bayaan sheet state
+  const [sheetView, setSheetView] = useState<SheetView | null>(null);
+  const [sheetAyah, setSheetAyah] = useState<AyahInfo | null>(null);
+
+  // Annotation state (loaded from localStorage on mount)
+  const [bookmarks, setBookmarks] = useState<Record<string, string>>(() => loadAnnotations("bm"));
+  const [highlights, setHighlights] = useState<Record<string, string>>(() => loadAnnotations("hl"));
+  const [notes, setNotes] = useState<Record<string, string>>(() => loadAnnotations("note"));
+
+  // Player state
+  const [playerState, setPlayerState] = useState<PlayerState | null>(null);
+  const [playerSettings, setPlayerSettings] = useState<PlayerSettingsState>({
+    reciterId: 7,
+    rate: 1,
+    repeat: "1",
+    rangeRepeat: "1",
+  });
+  const [showSettingsSheet, setShowSettingsSheet] = useState(false);
+
   const touchStartX = useRef<number>(0);
   const touchStartY = useRef<number>(0);
   const recognitionRef = useRef<any>(null);
   const recitePageWordsRef = useRef<ReciteWord[]>([]);
   const reciteWordPosRef = useRef(0);
   const reciteUnlockedWordsRef = useRef<Set<string>>(new Set());
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const playerStateRef = useRef<PlayerState | null>(null);
+  const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const longPressStartPosRef = useRef<{ x: number; y: number } | null>(null);
+  const longPressFiredRef = useRef(false);
 
+  // Keep playerStateRef in sync with playerState on every render
+  playerStateRef.current = playerState;
   reciteUnlockedWordsRef.current = reciteUnlockedWords;
 
-  // Reset interactive state when page changes
+  // Audio element setup — once on mount
+  useEffect(() => {
+    const audio = new Audio();
+    audioRef.current = audio;
+
+    audio.onended = () => {
+      const ps = playerStateRef.current;
+      if (!ps) return;
+
+      // Per-verse repeat
+      const maxRepeat = ps.repeat === "loop" ? Infinity : parseInt(ps.repeat);
+      if (ps.repeatCount < maxRepeat - 1) {
+        audio.currentTime = 0;
+        audio.play().catch(() => {});
+        setPlayerState((p) => (p ? { ...p, repeatCount: p.repeatCount + 1 } : null));
+        return;
+      }
+
+      const nextAyah = ps.ayahNum + 1;
+
+      // Range end check
+      if (ps.rangeEnd !== null && nextAyah > ps.rangeEnd) {
+        const maxRangeRepeat = ps.rangeRepeat === "loop" ? Infinity : parseInt(ps.rangeRepeat);
+        if (ps.rangeRepeatCount < maxRangeRepeat - 1) {
+          const url = audioUrl(ps.reciterId, ps.surahId, ps.rangeStart);
+          audio.src = url;
+          audio.playbackRate = ps.rate;
+          audio.play().catch(() => {});
+          setPlayerState((p) =>
+            p ? { ...p, ayahNum: ps.rangeStart, repeatCount: 0, rangeRepeatCount: p.rangeRepeatCount + 1, status: "playing" } : null
+          );
+          return;
+        }
+        setPlayerState(null);
+        return;
+      }
+
+      // Advance to next ayah
+      const url = audioUrl(ps.reciterId, ps.surahId, nextAyah);
+      audio.src = url;
+      audio.playbackRate = ps.rate;
+      audio.play().catch(() => {});
+      setPlayerState((p) => (p ? { ...p, ayahNum: nextAyah, repeatCount: 0, status: "playing" } : null));
+    };
+
+    return () => {
+      audio.pause();
+      audioRef.current = null;
+    };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Reset interactive state when page changes — player intentionally excluded
   useEffect(() => {
     setRevealedVerseKeys(new Set());
-    setTappedAyah(null);
     setTappedWord(null);
+    setSheetView(null);
+    setSheetAyah(null);
     recognitionRef.current?.stop();
     recognitionRef.current = null;
     setIsReciting(false);
@@ -451,34 +1425,170 @@ export default function MushafReaderPage() {
     return ch?.name_simple ?? `Surah ${firstWord.surahId}`;
   }, [lineGroups, chapters]);
 
-  // Bayaan fit hook
   const primarySurahId = lineGroups?.[0]?.words[0]?.surahId ?? 1;
   const primarySurahName = currentSurahName || "Al-Fatihah";
-  const pageSurahNames = verses.length > 0
-    ? getArabicSurahNamesForPage(verses, chapters)
-    : "";
+  const pageSurahNames = verses.length > 0 ? getArabicSurahNamesForPage(verses, chapters) : "";
 
-  const {
-    pageContentRefs,
-    pageMeasureRefs,
-    isMushafContentVisible,
-    getCachedScale,
-  } = useBayaanMushafFit({
-    surahNumber: primarySurahId,
-    surahName: primarySurahName,
-    mushafFitContentKey: String(currentPage),
-    pageNumbers: [currentPage],
-    isSinglePageLayout: true,
-  });
+  const { pageContentRefs, pageMeasureRefs, isMushafContentVisible, getCachedScale } =
+    useBayaanMushafFit({
+      surahNumber: primarySurahId,
+      surahName: primarySurahName,
+      mushafFitContentKey: String(currentPage),
+      pageNumbers: [currentPage],
+      isSinglePageLayout: true,
+    });
 
   const pageContentRefCb = useCallback(
     (node: HTMLDivElement | null) => { pageContentRefs.current[currentPage] = node; },
-    [currentPage, pageContentRefs],
+    [currentPage, pageContentRefs]
   );
   const pageMeasureRefCb = useCallback(
     (node: HTMLDivElement | null) => { pageMeasureRefs.current[currentPage] = node; },
-    [currentPage, pageMeasureRefs],
+    [currentPage, pageMeasureRefs]
   );
+
+  // ─── Annotation handlers ──────────────────────────────────────────────────
+
+  const handleToggleBookmark = useCallback((verseKey: string) => {
+    try {
+      const [s, v] = verseKey.split(":").map(Number);
+      const key = `${LS_PREFIX}:bm:${s}:${v}`;
+      if (bookmarks[verseKey]) {
+        localStorage.removeItem(key);
+        setBookmarks((prev) => { const n = { ...prev }; delete n[verseKey]; return n; });
+      } else {
+        localStorage.setItem(key, "1");
+        setBookmarks((prev) => ({ ...prev, [verseKey]: "1" }));
+      }
+    } catch {
+      /* ignore */
+    }
+  }, [bookmarks]);
+
+  const handleSetHighlight = useCallback((verseKey: string, color: HighlightColor | null) => {
+    try {
+      const [s, v] = verseKey.split(":").map(Number);
+      const key = `${LS_PREFIX}:hl:${s}:${v}`;
+      if (!color) {
+        localStorage.removeItem(key);
+        setHighlights((prev) => { const n = { ...prev }; delete n[verseKey]; return n; });
+      } else {
+        localStorage.setItem(key, color);
+        setHighlights((prev) => ({ ...prev, [verseKey]: color }));
+      }
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  const handleSaveNote = useCallback((verseKey: string, text: string) => {
+    try {
+      const [s, v] = verseKey.split(":").map(Number);
+      const key = `${LS_PREFIX}:note:${s}:${v}`;
+      if (!text.trim()) {
+        localStorage.removeItem(key);
+        setNotes((prev) => { const n = { ...prev }; delete n[verseKey]; return n; });
+      } else {
+        localStorage.setItem(key, text);
+        setNotes((prev) => ({ ...prev, [verseKey]: text }));
+      }
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  // ─── Player handlers ──────────────────────────────────────────────────────
+
+  const playFromAyah = useCallback(
+    (
+      ayah: AyahInfo,
+      opts?: {
+        repeat?: "1" | "3" | "5" | "loop";
+        rangeEnd?: number | null;
+        reciterId?: number;
+        rate?: number;
+        rangeRepeat?: "1" | "2" | "3" | "loop";
+      }
+    ) => {
+      const recId = opts?.reciterId ?? playerSettings.reciterId;
+      const rt = opts?.rate ?? playerSettings.rate;
+      const rep = opts?.repeat ?? "1";
+      const rangeEnd = opts?.rangeEnd ?? null;
+      const rangeRep = opts?.rangeRepeat ?? "1";
+
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current.src = audioUrl(recId, ayah.surahId, ayah.verseNum);
+        audioRef.current.playbackRate = rt;
+        audioRef.current.play().catch(() => {});
+      }
+      setPlayerState({
+        status: "playing",
+        surahId: ayah.surahId,
+        ayahNum: ayah.verseNum,
+        rangeStart: ayah.verseNum,
+        rangeEnd,
+        reciterId: recId,
+        rate: rt,
+        repeat: rep,
+        repeatCount: 0,
+        rangeRepeat: rangeRep,
+        rangeRepeatCount: 0,
+      });
+      setPlayerSettings((prev) => ({ ...prev, reciterId: recId, rate: rt, repeat: rep, rangeRepeat: rangeRep }));
+    },
+    [playerSettings]
+  );
+
+  const playerToggle = useCallback(() => {
+    if (!audioRef.current) return;
+    setPlayerState((prev) => {
+      if (!prev) return null;
+      if (prev.status === "playing") {
+        audioRef.current!.pause();
+        return { ...prev, status: "paused" };
+      } else {
+        audioRef.current!.play().catch(() => {});
+        return { ...prev, status: "playing" };
+      }
+    });
+  }, []);
+
+  const playerStop = useCallback(() => {
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.src = "";
+    }
+    setPlayerState(null);
+  }, []);
+
+  const playerPrev = useCallback(() => {
+    setPlayerState((prev) => {
+      if (!prev) return null;
+      const prevAyah = Math.max(1, prev.ayahNum - 1);
+      if (audioRef.current) {
+        audioRef.current.src = audioUrl(prev.reciterId, prev.surahId, prevAyah);
+        audioRef.current.playbackRate = prev.rate;
+        audioRef.current.play().catch(() => {});
+      }
+      return { ...prev, ayahNum: prevAyah, repeatCount: 0, status: "playing" };
+    });
+  }, []);
+
+  const playerNext = useCallback(() => {
+    setPlayerState((prev) => {
+      if (!prev) return null;
+      const nextAyah = prev.ayahNum + 1;
+      if (audioRef.current) {
+        audioRef.current.src = audioUrl(prev.reciterId, prev.surahId, nextAyah);
+        audioRef.current.playbackRate = prev.rate;
+        audioRef.current.play().catch(() => {});
+      }
+      return { ...prev, ayahNum: nextAyah, repeatCount: 0, status: "playing" };
+    });
+  }, []);
+
+  // ─── Recite helpers ───────────────────────────────────────────────────────
 
   const stopReciting = useCallback(() => {
     recognitionRef.current?.stop();
@@ -560,6 +1670,8 @@ export default function MushafReaderPage() {
     [lineGroups]
   );
 
+  // ─── Navigation ───────────────────────────────────────────────────────────
+
   const goToPage = (page: number) => {
     const clamped = Math.max(1, Math.min(TOTAL_PAGES, page));
     setCurrentPage(clamped);
@@ -569,10 +1681,7 @@ export default function MushafReaderPage() {
   const handlePageInput = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter") {
       const val = parseInt(jumpInput, 10);
-      if (!isNaN(val)) {
-        goToPage(val);
-        setJumpInput("");
-      }
+      if (!isNaN(val)) { goToPage(val); setJumpInput(""); }
     }
   };
 
@@ -581,16 +1690,16 @@ export default function MushafReaderPage() {
     if (ch) goToPage(ch.pages[0]);
   };
 
+  // ─── Word interaction ─────────────────────────────────────────────────────
+
   const handleWordClick = useCallback(
     (lw: LineWord) => {
       if (isReciting) return;
-
       if (isRecitePickMode) {
         setIsRecitePickMode(false);
         startReciting(lw.verse_key);
         return;
       }
-
       if (isSelectMode) {
         setSelectedVerseKeys((prev) => {
           const next = new Set(prev);
@@ -600,7 +1709,6 @@ export default function MushafReaderPage() {
         });
         return;
       }
-
       if (isBlindMode) {
         setRevealedVerseKeys((prev) => {
           const next = new Set(prev);
@@ -610,22 +1718,19 @@ export default function MushafReaderPage() {
         });
         return;
       }
-
       if (lw.char_type_name === "end") {
         const pv = verses.find((v) => v.verse_key === lw.verse_key);
-        setTappedAyah({
+        setSheetAyah({
           verseKey: lw.verse_key,
           surahId: lw.surahId,
           verseNum: lw.verseNum,
           text_uthmani: pv?.text_uthmani ?? "",
         });
+        setSheetView({ type: "main" });
         setTappedWord(null);
       } else {
         const wordKey = `${lw.verse_key}:${lw.position}`;
-        if (tappedWord?.key === wordKey) {
-          setTappedWord(null);
-          return;
-        }
+        if (tappedWord?.key === wordKey) { setTappedWord(null); return; }
         setTappedWord({
           key: wordKey,
           text: lw.text_uthmani,
@@ -658,7 +1763,10 @@ export default function MushafReaderPage() {
     }
   };
 
-  // ─── Render ──────────────────────────────────────────────────────────────────
+  // ─── Render ──────────────────────────────────────────────────────────────
+
+  // Player active for highlight check
+  const playerIsPlaying = playerState?.status === "playing";
 
   return (
     <>
@@ -692,7 +1800,7 @@ export default function MushafReaderPage() {
               borderBottom: `1px solid ${BAYAAN_PAGE_THEME.chromeBorder}`,
             }}
           >
-            {/* Row 1: Back + title + mode icons */}
+            {/* Row 1 */}
             <div
               style={{
                 display: "flex",
@@ -725,46 +1833,17 @@ export default function MushafReaderPage() {
                 <span>Back</span>
               </button>
 
-              <div
-                style={{
-                  flex: 1,
-                  textAlign: "center",
-                  minWidth: 0,
-                  overflow: "hidden",
-                }}
-              >
-                <p
-                  style={{
-                    fontSize: "12px",
-                    fontWeight: 600,
-                    color: BAYAAN_PAGE_THEME.screenText,
-                    overflow: "hidden",
-                    textOverflow: "ellipsis",
-                    whiteSpace: "nowrap",
-                    lineHeight: 1.3,
-                    margin: 0,
-                  }}
-                >
+              <div style={{ flex: 1, textAlign: "center", minWidth: 0, overflow: "hidden" }}>
+                <p style={{ fontSize: "12px", fontWeight: 600, color: BAYAAN_PAGE_THEME.screenText, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", lineHeight: 1.3, margin: 0 }}>
                   {currentSurahName || "Full Quran"}
                 </p>
-                <p
-                  style={{
-                    fontSize: "10px",
-                    color: BAYAAN_PAGE_THEME.chromeMuted,
-                    lineHeight: 1.2,
-                    margin: 0,
-                  }}
-                >
+                <p style={{ fontSize: "10px", color: BAYAAN_PAGE_THEME.chromeMuted, lineHeight: 1.2, margin: 0 }}>
                   p. {currentPage}
                 </p>
               </div>
 
-              {/* Blind mode */}
               <button
-                onClick={() => {
-                  setIsBlindMode((b) => !b);
-                  setRevealedVerseKeys(new Set());
-                }}
+                onClick={() => { setIsBlindMode((b) => !b); setRevealedVerseKeys(new Set()); }}
                 style={{
                   padding: "4px",
                   borderRadius: "6px",
@@ -778,12 +1857,8 @@ export default function MushafReaderPage() {
                 {isBlindMode ? <EyeOff size={14} /> : <Eye size={14} />}
               </button>
 
-              {/* Select mode */}
               <button
-                onClick={() => {
-                  setIsSelectMode((s) => !s);
-                  setSelectedVerseKeys(new Set());
-                }}
+                onClick={() => { setIsSelectMode((s) => !s); setSelectedVerseKeys(new Set()); }}
                 style={{
                   padding: "4px",
                   borderRadius: "6px",
@@ -797,7 +1872,6 @@ export default function MushafReaderPage() {
                 {isSelectMode ? <CheckCircle size={14} /> : <Circle size={14} />}
               </button>
 
-              {/* Recite mode */}
               <button
                 onClick={() => {
                   if (isReciting) { stopReciting(); }
@@ -818,14 +1892,7 @@ export default function MushafReaderPage() {
             </div>
 
             {/* Row 2: Surah jump + page input */}
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "6px",
-                padding: "0 10px 4px",
-              }}
-            >
+            <div style={{ display: "flex", alignItems: "center", gap: "6px", padding: "0 10px 4px" }}>
               <div style={{ flex: 1, minWidth: 0 }}>
                 {chapters.length > 0 ? (
                   <Select onValueChange={handleSurahJump}>
@@ -888,12 +1955,7 @@ export default function MushafReaderPage() {
 
         {/* ── Page area ── */}
         <div
-          style={{
-            flex: 1,
-            minHeight: 0,
-            position: "relative",
-            padding: "4px",
-          }}
+          style={{ flex: 1, minHeight: 0, position: "relative", padding: "4px" }}
           onTouchStart={handleTouchStart}
           onTouchEnd={handleTouchEnd}
         >
@@ -906,7 +1968,6 @@ export default function MushafReaderPage() {
             pageContentRef={pageContentRefCb}
             pageMeasureRef={pageMeasureRefCb}
           >
-            {/* Loading */}
             {isLoading && (
               <div style={{ padding: "12px 0" }}>
                 {Array.from({ length: 15 }, (_, i) => (
@@ -924,7 +1985,6 @@ export default function MushafReaderPage() {
               </div>
             )}
 
-            {/* Error */}
             {isError && (
               <div
                 style={{
@@ -986,10 +2046,16 @@ export default function MushafReaderPage() {
                         const isSelected = isSelectMode && selectedVerseKeys.has(lw.verse_key);
                         let endOpacity = 1;
                         if (isReciting && reciteStartVerseKey) {
-                          if (isBeforeVerseKey(lw.verse_key, reciteStartVerseKey)) {
-                            endOpacity = 0.3;
-                          }
+                          if (isBeforeVerseKey(lw.verse_key, reciteStartVerseKey)) endOpacity = 0.3;
                         }
+                        const hasAnnotation =
+                          bookmarks[lw.verse_key] || highlights[lw.verse_key] || notes[lw.verse_key];
+                        const annotationDotColor = highlights[lw.verse_key]
+                          ? HIGHLIGHT_COLORS[highlights[lw.verse_key] as HighlightColor]?.dot ?? "#9ca3af"
+                          : bookmarks[lw.verse_key]
+                          ? "#f59e0b"
+                          : "#6b7280";
+
                         return (
                           <span
                             key={k}
@@ -1010,6 +2076,7 @@ export default function MushafReaderPage() {
                               direction: "ltr",
                               cursor: "pointer",
                               opacity: endOpacity,
+                              position: "relative",
                             }}
                           >
                             <span
@@ -1022,6 +2089,21 @@ export default function MushafReaderPage() {
                             >
                               {lw.verseNum}
                             </span>
+                            {hasAnnotation && (
+                              <span
+                                style={{
+                                  position: "absolute",
+                                  top: "-1px",
+                                  right: "-1px",
+                                  width: "6px",
+                                  height: "6px",
+                                  borderRadius: "50%",
+                                  background: annotationDotColor,
+                                  border: "1px solid #fffdf8",
+                                  pointerEvents: "none",
+                                }}
+                              />
+                            )}
                           </span>
                         );
                       }
@@ -1043,10 +2125,71 @@ export default function MushafReaderPage() {
                         }
                       }
 
+                      const isPlayingWord =
+                        !isAnyModeActive &&
+                        playerIsPlaying &&
+                        playerState?.surahId === lw.surahId &&
+                        playerState?.ayahNum === lw.verseNum;
+
+                      const wordHighlightBg =
+                        !isSelected && highlights[lw.verse_key]
+                          ? HIGHLIGHT_COLORS[highlights[lw.verse_key] as HighlightColor]?.bg ?? "transparent"
+                          : "transparent";
+
                       return (
                         <span
                           key={k}
-                          onClick={() => handleWordClick(lw)}
+                          onPointerDown={(e) => {
+                            if (isAnyModeActive) return;
+                            longPressStartPosRef.current = { x: e.clientX, y: e.clientY };
+                            longPressFiredRef.current = false;
+                            longPressTimerRef.current = setTimeout(() => {
+                              longPressFiredRef.current = true;
+                              longPressTimerRef.current = null;
+                              const pv = verses.find((v) => v.verse_key === lw.verse_key);
+                              setSheetAyah({
+                                verseKey: lw.verse_key,
+                                surahId: lw.surahId,
+                                verseNum: lw.verseNum,
+                                text_uthmani: pv?.text_uthmani ?? "",
+                              });
+                              setSheetView({ type: "main" });
+                              setTappedWord(null);
+                            }, 500);
+                          }}
+                          onPointerMove={(e) => {
+                            if (!longPressStartPosRef.current) return;
+                            const dx = e.clientX - longPressStartPosRef.current.x;
+                            const dy = e.clientY - longPressStartPosRef.current.y;
+                            if (Math.sqrt(dx * dx + dy * dy) > 10) {
+                              if (longPressTimerRef.current) {
+                                clearTimeout(longPressTimerRef.current);
+                                longPressTimerRef.current = null;
+                              }
+                              longPressStartPosRef.current = null;
+                            }
+                          }}
+                          onPointerUp={() => {
+                            if (longPressTimerRef.current) {
+                              clearTimeout(longPressTimerRef.current);
+                              longPressTimerRef.current = null;
+                            }
+                            longPressStartPosRef.current = null;
+                          }}
+                          onPointerLeave={() => {
+                            if (longPressTimerRef.current) {
+                              clearTimeout(longPressTimerRef.current);
+                              longPressTimerRef.current = null;
+                            }
+                            longPressStartPosRef.current = null;
+                          }}
+                          onClick={() => {
+                            if (longPressFiredRef.current) {
+                              longPressFiredRef.current = false;
+                              return;
+                            }
+                            handleWordClick(lw);
+                          }}
                           className={cn(
                             "inline-block rounded-sm cursor-pointer transition-all duration-150",
                             isSelected && "bg-emerald-100 text-emerald-900 ring-1 ring-emerald-300"
@@ -1056,6 +2199,11 @@ export default function MushafReaderPage() {
                             opacity: wordOpacity,
                             userSelect: "none",
                             padding: "0 0.04em",
+                            background: wordHighlightBg,
+                            borderRadius: "2px",
+                            boxShadow: isPlayingWord
+                              ? `0 0 0 1px ${BAYAAN_PAGE_THEME.markerBorder}`
+                              : "none",
                           }}
                         >
                           {lw.text_uthmani}
@@ -1096,7 +2244,13 @@ export default function MushafReaderPage() {
                         "inline cursor-pointer rounded transition-all",
                         isSelected && "bg-emerald-100"
                       )}
-                      style={{ filter: isBlurred ? "blur(6px)" : "none", userSelect: "none" }}
+                      style={{
+                        filter: isBlurred ? "blur(6px)" : "none",
+                        userSelect: "none",
+                        background: highlights[v.verse_key]
+                          ? HIGHLIGHT_COLORS[highlights[v.verse_key] as HighlightColor]?.bg ?? "transparent"
+                          : "transparent",
+                      }}
                     >
                       {v.text_uthmani}{" "}
                     </span>
@@ -1192,15 +2346,7 @@ export default function MushafReaderPage() {
               </p>
               <button
                 onClick={() => setIsRecitePickMode(false)}
-                style={{
-                  fontSize: "14px",
-                  color: "#e11d48",
-                  fontWeight: 600,
-                  background: "none",
-                  border: "none",
-                  cursor: "pointer",
-                  flexShrink: 0,
-                }}
+                style={{ fontSize: "14px", color: "#e11d48", fontWeight: 600, background: "none", border: "none", cursor: "pointer", flexShrink: 0 }}
               >
                 Cancel
               </button>
@@ -1244,27 +2390,19 @@ export default function MushafReaderPage() {
           </div>
         )}
 
-        {/* ── AyahSheet ── */}
-        {tappedAyah && (
-          <AyahSheet
-            key={tappedAyah.verseKey}
-            ayah={tappedAyah}
-            childId={childId}
-            onClose={() => setTappedAyah(null)}
-          />
-        )}
-
         {/* ── Word translation tooltip ── */}
         {tappedWord && (
           <div
             style={{
               position: "fixed",
-              bottom: "16px", left: 0, right: 0,
+              bottom: playerState ? "76px" : "16px",
+              left: 0, right: 0,
               zIndex: 65,
               display: "flex",
               justifyContent: "center",
               padding: "0 16px",
               pointerEvents: "none",
+              transition: "bottom 0.2s ease",
             }}
             onClick={() => setTappedWord(null)}
           >
@@ -1283,15 +2421,7 @@ export default function MushafReaderPage() {
               <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "12px" }}>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px", marginBottom: "4px" }}>
-                    <p
-                      dir="rtl"
-                      style={{
-                        fontSize: "20px",
-                        color: "#92400e",
-                        fontFamily: '"KFGQPC Hafs", "Amiri Quran", serif',
-                        margin: 0,
-                      }}
-                    >
+                    <p dir="rtl" style={{ fontSize: "20px", color: "#92400e", fontFamily: '"KFGQPC Hafs", "Amiri Quran", serif', margin: 0 }}>
                       {tappedWord.text}
                     </p>
                     <button
@@ -1340,10 +2470,69 @@ export default function MushafReaderPage() {
                 </button>
               </div>
               <p style={{ fontSize: "10px", color: BAYAAN_PAGE_THEME.chromeMuted, marginTop: "8px", textAlign: "center", marginBottom: 0 }}>
-                Tap verse number ○ to open full ayah
+                Long-press any word to open full ayah menu
               </p>
             </div>
           </div>
+        )}
+
+        {/* ── BayaanAyahSheet ── */}
+        {sheetAyah && sheetView && (
+          <BayaanAyahSheet
+            ayah={sheetAyah}
+            sheetView={sheetView}
+            onChangeView={setSheetView}
+            onClose={() => { setSheetView(null); setSheetAyah(null); }}
+            onNavigate={(newAyah) => setSheetAyah(newAyah)}
+            onPlayFromHere={playFromAyah}
+            onPlayRepeat={(ayah, repeat) => playFromAyah(ayah, { repeat })}
+            verses={verses}
+            childId={childId}
+            chapters={chapters}
+            bookmarks={bookmarks}
+            highlights={highlights}
+            notes={notes}
+            onToggleBookmark={handleToggleBookmark}
+            onSetHighlight={handleSetHighlight}
+            onSaveNote={handleSaveNote}
+          />
+        )}
+
+        {/* ── FloatingPlayerBar ── */}
+        {playerState && (
+          <FloatingPlayerBar
+            playerState={playerState}
+            onToggle={playerToggle}
+            onStop={playerStop}
+            onPrev={playerPrev}
+            onNext={playerNext}
+            onSettings={() => setShowSettingsSheet(true)}
+          />
+        )}
+
+        {/* ── PlaybackSettingsSheet ── */}
+        {showSettingsSheet && (
+          <PlaybackSettingsSheet
+            verses={verses}
+            playerSettings={playerSettings}
+            playerState={playerState}
+            onPlay={(startVK, endVK, settings) => {
+              const [startSurah, startVerse] = startVK.split(":").map(Number);
+              const endAyahNum = endVK
+                ? (() => {
+                    const [endSurah, endVerse] = endVK.split(":").map(Number);
+                    return endSurah === startSurah ? endVerse : null;
+                  })()
+                : null;
+              const pv = verses.find((v) => v.verse_key === startVK);
+              playFromAyah(
+                { verseKey: startVK, surahId: startSurah, verseNum: startVerse, text_uthmani: pv?.text_uthmani ?? "" },
+                { repeat: settings.repeat, rangeEnd: endAyahNum, reciterId: settings.reciterId, rate: settings.rate, rangeRepeat: settings.rangeRepeat }
+              );
+              setShowSettingsSheet(false);
+            }}
+            onClose={() => setShowSettingsSheet(false)}
+          />
         )}
       </div>
     </>
