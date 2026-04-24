@@ -95,6 +95,31 @@ type ReviewSessionItem = {
   isOverdue?: boolean;
 };
 
+type CompletedReviewItem = {
+  surahId: number;
+  surahName?: string | null;
+  surahNumber: number;
+};
+
+function mergeCompletedReviewItems(
+  localItems: CompletedReviewItem[],
+  backendItems: CompletedReviewItem[],
+): CompletedReviewItem[] {
+  const merged = new Map<number, CompletedReviewItem>();
+
+  for (const item of backendItems) {
+    merged.set(item.surahId, item);
+  }
+  for (const item of localItems) {
+    merged.set(item.surahId, {
+      ...merged.get(item.surahId),
+      ...item,
+    });
+  }
+
+  return Array.from(merged.values()).sort((a, b) => a.surahNumber - b.surahNumber);
+}
+
 function sortReviewItemsForMushaf(items: ReviewSessionItem[]) {
   return [...items];
 }
@@ -1379,6 +1404,47 @@ export default function ReviewPage() {
     staleTime: 30_000,
   });
   const todayProgress = (dashData as any)?.todayProgress;
+  const dueToday = data?.dueToday ?? [];
+  dueTodayRef.current = dueToday;
+  const backendReviewedToday = useMemo<CompletedReviewItem[]>(
+    () =>
+      (((data as { reviewedToday?: ReviewSessionItem[] } | undefined)?.reviewedToday ??
+        []) as ReviewSessionItem[]).map((item) => ({
+        surahId: item.surahId,
+        surahName: item.surahName,
+        surahNumber: item.surahNumber,
+      })),
+    [data],
+  );
+  const displayCompletedItemsData = useMemo(
+    () => mergeCompletedReviewItems(completedItemsData, backendReviewedToday),
+    [backendReviewedToday, completedItemsData],
+  );
+  const displayCompletedSurahIds = useMemo(
+    () => new Set(displayCompletedItemsData.map((item) => item.surahId)),
+    [displayCompletedItemsData],
+  );
+  const backendCompletedCount = Math.max(
+    todayProgress?.reviewCompletedCount ?? 0,
+    backendReviewedToday.length,
+    displayCompletedItemsData.length,
+  );
+  const backendSessionTotal = Math.max(
+    todayProgress?.reviewTargetCount ?? 0,
+    backendCompletedCount + dueToday.length,
+  );
+  const displayCompletedCount = Math.max(completedCount, backendCompletedCount);
+  const displaySessionTotal = Math.max(
+    sessionTotalRef.current,
+    backendSessionTotal,
+    displayCompletedCount,
+  );
+  const displaySessionDone =
+    sessionDone ||
+    todayProgress?.reviewStatus === "completed" ||
+    (displaySessionTotal > 0 &&
+      dueToday.length === 0 &&
+      displayCompletedCount >= displaySessionTotal);
 
   useEffect(() => {
     const nextSession = loadSession(activeLocalDate);
@@ -1398,16 +1464,62 @@ export default function ReviewPage() {
     sessionTotalRef.current = nextSession?.sessionTotal ?? 0;
   }, [activeLocalDate]);
 
-  const dueToday = data?.dueToday ?? [];
-  dueTodayRef.current = dueToday;
+  useEffect(() => {
+    if (!data) return;
+
+    const shouldRestoreItems =
+      displayCompletedItemsData.length > completedItemsData.length;
+    const shouldRestoreCount = displayCompletedCount > completedCount;
+    const shouldRestoreDone = displaySessionDone && !sessionDone;
+    const shouldRestoreTotal = displaySessionTotal > sessionTotalRef.current;
+
+    if (
+      !shouldRestoreItems &&
+      !shouldRestoreCount &&
+      !shouldRestoreDone &&
+      !shouldRestoreTotal
+    ) {
+      return;
+    }
+
+    if (shouldRestoreItems) {
+      setCompletedItemsData(displayCompletedItemsData);
+      setCompletedSurahIds(displayCompletedSurahIds);
+    }
+    if (shouldRestoreCount) {
+      setCompletedCount(displayCompletedCount);
+    }
+    if (shouldRestoreDone) {
+      setSessionDone(true);
+    }
+    if (shouldRestoreTotal) {
+      sessionTotalRef.current = displaySessionTotal;
+    }
+
+    saveSession({
+      completedItemsData: displayCompletedItemsData,
+      sessionDone: displaySessionDone,
+      sessionTotal: displaySessionTotal,
+    });
+  }, [
+    completedCount,
+    completedItemsData,
+    data,
+    displayCompletedCount,
+    displayCompletedItemsData,
+    displayCompletedSurahIds,
+    displaySessionDone,
+    displaySessionTotal,
+    sessionDone,
+  ]);
 
   if (data && sessionTotalRef.current === 0) {
-    sessionTotalRef.current = completedItemsData.length + dueToday.length;
+    sessionTotalRef.current = displaySessionTotal;
     saveSession({ sessionTotal: sessionTotalRef.current });
   }
   const sessionSurahs = useMemo<ReviewSessionItem[]>(
     () => [
-      ...completedItemsData.map((item, index) => ({
+      ...displayCompletedItemsData.map((item, index) => ({
         id: -(index + 1),
         surahId: item.surahId,
         surahNumber: item.surahNumber,
@@ -1415,27 +1527,29 @@ export default function ReviewPage() {
         dueDate: activeLocalDate,
         isOverdue: false,
       })),
-      ...dueToday.filter((item: ReviewSessionItem) => !completedSurahIds.has(item.surahId)),
+      ...dueToday.filter(
+        (item: ReviewSessionItem) => !displayCompletedSurahIds.has(item.surahId),
+      ),
     ],
-    [activeLocalDate, completedItemsData, completedSurahIds, dueToday],
+    [activeLocalDate, displayCompletedItemsData, displayCompletedSurahIds, dueToday],
   );
 
   useEffect(() => {
     if (!data) return;
-    const sessionTotal = sessionTotalRef.current;
+    const sessionTotal = displaySessionTotal;
     if (sessionTotal <= 0) return;
     const reviewStatus =
-      sessionDone || completedCount >= sessionTotal
+      displaySessionDone || displayCompletedCount >= sessionTotal
         ? "completed"
-        : completedCount > 0
+        : displayCompletedCount > 0
           ? "in_progress"
           : "not_started";
     syncReviewDailyProgress({
       reviewStatus,
-      reviewCompletedCount: completedCount,
+      reviewCompletedCount: displayCompletedCount,
       reviewTargetCount: sessionTotal,
     });
-  }, [data, completedCount, sessionDone]);
+  }, [data, displayCompletedCount, displaySessionDone, displaySessionTotal]);
 
   // Fetch current flashcard surah if in flashcard mode
   const flashcardItem =
@@ -1448,9 +1562,9 @@ export default function ReviewPage() {
   const pendingItems: ReviewSessionItem[] = useMemo(
     () =>
       sessionSurahs.filter(
-        (item: ReviewSessionItem) => !completedSurahIds.has(item.surahId),
+        (item: ReviewSessionItem) => !displayCompletedSurahIds.has(item.surahId),
       ),
-    [sessionSurahs, completedSurahIds],
+    [displayCompletedSurahIds, sessionSurahs],
   );
   const hasMushafBatchSelection = selectedMushafSurahIds.length > 0;
   const selectedMushafPendingIndices = useMemo(
@@ -1637,17 +1751,17 @@ export default function ReviewPage() {
         },
       ),
     onSuccess: (_, variables) => {
-      const shouldFollowLiveQueue = flashcardIndex === completedCount;
+      const shouldFollowLiveQueue = flashcardIndex === displayCompletedCount;
       const completedItem = dueTodayRef.current.find(
         (i) => i.surahId === variables.surahId,
       );
       if (completedItem) {
-        const newItemsData = completedItemsData.some(
+        const newItemsData = displayCompletedItemsData.some(
           (i) => i.surahId === completedItem.surahId,
         )
-          ? completedItemsData
+          ? displayCompletedItemsData
           : [
-              ...completedItemsData,
+              ...displayCompletedItemsData,
               {
                 surahId: completedItem.surahId,
                 surahName: completedItem.surahName,
@@ -1660,9 +1774,9 @@ export default function ReviewPage() {
       setCompletedSurahIds((prev) => new Set([...prev, variables.surahId]));
       qc.invalidateQueries({ queryKey: ["reviews", childId] });
       qc.invalidateQueries({ queryKey: ["memorization", childId] });
-      const newCount = completedCount + 1;
+      const newCount = displayCompletedCount + 1;
       setCompletedCount(newCount);
-      const sessionTotal = sessionTotalRef.current;
+      const sessionTotal = displaySessionTotal;
       // Advance or finish — use sessionTotal (stable) not dueToday.length (shrinks on refetch)
       if (flashcardIndex !== null) {
         setFlashcardRating(null);
@@ -1887,10 +2001,10 @@ export default function ReviewPage() {
 
   // ── Genuinely no reviews today (not just all completed this session) ──
   if (
-    !sessionDone &&
+    !displaySessionDone &&
     data !== undefined &&
     sessionSurahs.length === 0 &&
-    completedItemsData.length === 0
+    displayCompletedItemsData.length === 0
   ) {
     return (
       <div className="min-h-screen bg-background pb-24 flex flex-col items-center justify-center px-4">
@@ -1929,8 +2043,8 @@ export default function ReviewPage() {
               <div>
                 <h1 className="text-xl font-bold">Review Session</h1>
                 <p className="text-emerald-200 text-sm mt-1">
-                  {completedCount > 0 || sessionDone
-                    ? `${completedCount}/${sessionTotalRef.current} surahs done`
+                  {displayCompletedCount > 0 || displaySessionDone
+                    ? `${displayCompletedCount}/${displaySessionTotal} surahs done`
                     : `${sessionSurahs.length} surah${sessionSurahs.length !== 1 ? "s" : ""} due today`}
                 </p>
               </div>
@@ -1946,7 +2060,7 @@ export default function ReviewPage() {
           {(() => {
             return (
               <>
-                {sessionDone && (
+                {displaySessionDone && (
                   <Card className="border-emerald-300 bg-emerald-50">
                     <CardContent className="p-4 text-center">
                       <p className="text-2xl mb-1">🏆</p>
@@ -1959,7 +2073,7 @@ export default function ReviewPage() {
                     </CardContent>
                   </Card>
                 )}
-                {!sessionDone && pendingItems.length > 1 && (
+                {!displaySessionDone && pendingItems.length > 1 && (
                   <Card className="border-border/80 bg-card shadow-sm">
                     <CardContent className="space-y-3 p-4">
                       <div className="flex items-start justify-between gap-3">
@@ -2036,7 +2150,7 @@ export default function ReviewPage() {
                     </CardContent>
                   </Card>
                 )}
-                {!sessionDone &&
+                {!displaySessionDone &&
                   pendingItems.map((item: ReviewSessionItem, pendingIndex) => {
                     const sessionIndex = sessionSurahs.indexOf(item);
                     const isSelectedForBatch = selectedMushafSurahIds.includes(
@@ -2172,7 +2286,7 @@ export default function ReviewPage() {
                       </Card>
                     );
                   })}
-                {completedItemsData.map((item) => (
+                {displayCompletedItemsData.map((item) => (
                   <div
                     key={`done-${item.surahId}`}
                     className="flex items-center gap-3 px-4 py-2.5 rounded-xl bg-emerald-50 border border-emerald-200"
@@ -2194,7 +2308,7 @@ export default function ReviewPage() {
           })()}
 
           {/* Upcoming */}
-          {!sessionDone && (data?.upcoming ?? []).length > 0 && (
+          {!displaySessionDone && (data?.upcoming ?? []).length > 0 && (
             <Card className="border-border">
               <CardContent className="p-4">
                 <p className="text-sm font-semibold text-foreground mb-3">
@@ -2216,7 +2330,7 @@ export default function ReviewPage() {
               </CardContent>
             </Card>
           )}
-          {sessionDone && (
+          {displaySessionDone && (
             <div className="pb-2 space-y-2">
               <Button
                 className="w-full rounded-full"

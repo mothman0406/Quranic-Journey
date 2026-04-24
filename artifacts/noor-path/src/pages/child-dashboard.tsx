@@ -65,6 +65,9 @@ export default function ChildDashboard() {
   if (!data) return null;
   const { child, todaysPlan, memorizationStats, achievements, nextSurah } = data;
   const reviewsDueToday = reviewsData?.dueToday?.length ?? data.reviewsDueToday;
+  const backendReviewedToday =
+    ((reviewsData as { reviewedToday?: Array<{ surahId: number }> } | undefined)
+      ?.reviewedToday ?? []);
   type TodayProgress = {
     memStatus: "not_started" | "in_progress" | "completed";
     memTargetAyahStart: number | null;
@@ -75,16 +78,23 @@ export default function ChildDashboard() {
     reviewCompletedCount: number;
   };
   const todayProgress = (data as { todayProgress?: TodayProgress } | undefined)?.todayProgress;
-  const hasReviewWorkToday =
-    reviewsDueToday > 0 ||
-    todayProgress?.reviewStatus === "completed" ||
-    (todayProgress?.reviewCompletedCount ?? 0) > 0;
+  const reviewCompletedToday = Math.max(
+    reviewSessionCompleted,
+    todayProgress?.reviewCompletedCount ?? 0,
+    backendReviewedToday.length,
+  );
   const reviewTotalForToday =
     todayProgress?.reviewTargetCount != null
-      ? todayProgress.reviewTargetCount
-      : reviewsData !== undefined && todayProgress?.reviewCompletedCount != null
-      ? (reviewsData.dueToday?.length ?? 0) + todayProgress.reviewCompletedCount
-      : reviewsDueToday;
+      ? Math.max(todayProgress.reviewTargetCount, reviewCompletedToday)
+      : reviewsData !== undefined
+      ? reviewsDueToday + reviewCompletedToday
+      : Math.max(reviewsDueToday, reviewCompletedToday);
+  const reviewCompletedOnBackend =
+    todayProgress?.reviewStatus === "completed" ||
+    (reviewsDueToday === 0 && reviewCompletedToday > 0);
+  const hasReviewWorkToday =
+    reviewsDueToday > 0 ||
+    reviewCompletedOnBackend;
   const todaysMem = todaysPlan.newMemorization as
     | {
         surahName: string;
@@ -172,8 +182,8 @@ export default function ChildDashboard() {
                       <div className="flex items-center gap-1.5 flex-wrap">
                         {reviewSessionDone ? (
                           <p className="text-xs text-muted-foreground">{reviewSessionTotal ?? reviewSessionCompleted}/{reviewSessionTotal ?? reviewSessionCompleted} surahs done</p>
-                        ) : reviewsData !== undefined && todayProgress?.reviewCompletedCount != null && todayProgress.reviewCompletedCount > 0 ? (
-                          <p className="text-xs text-muted-foreground">{todayProgress.reviewCompletedCount}/{Math.max(reviewTotalForToday, todayProgress.reviewCompletedCount)} surahs done</p>
+                        ) : reviewCompletedToday > 0 ? (
+                          <p className="text-xs text-muted-foreground">{reviewCompletedToday}/{Math.max(reviewTotalForToday, reviewCompletedToday)} surahs done</p>
                         ) : (
                           <p className="text-xs text-muted-foreground">{reviewsDueToday} surah{reviewsDueToday > 1 ? "s" : ""} to review today</p>
                         )}
@@ -182,7 +192,7 @@ export default function ChildDashboard() {
                         )}
                       </div>
                     </div>
-                    {reviewSessionDone || todayProgress?.reviewStatus === "completed" ? (
+                    {reviewSessionDone || reviewCompletedOnBackend ? (
                       <span className="text-xs text-emerald-600 font-semibold">✓ Completed</span>
                     ) : (
                       <span className="text-xs text-amber-600 font-medium">Review →</span>

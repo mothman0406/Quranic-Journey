@@ -41,35 +41,73 @@ function getConsecutiveRange(ayahs: number[]): { start: number; end: number } | 
 }
 
 type ReviewStrengthTone = "red" | "orange" | "green";
+type AyahTone = ReviewStrengthTone | "white";
+type AyahStrengthMap = Record<number, number>;
+
+function clampStrength(value: number | undefined): number {
+  if (!Number.isFinite(value)) return 3;
+  return Math.max(0, Math.min(5, Math.round(value!)));
+}
+
+function getAyahStrengthMap(item: unknown): AyahStrengthMap {
+  if (!item || typeof item !== "object") return {};
+
+  const raw = (item as { ayahStrengths?: unknown }).ayahStrengths;
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
+
+  return Object.fromEntries(
+    Object.entries(raw)
+      .map(([key, value]) => [Number(key), clampStrength(Number(value))] as const)
+      .filter(([ayah]) => Number.isInteger(ayah) && ayah > 0),
+  );
+}
+
+function getAyahTone(
+  ayah: number,
+  memorizedSet: Set<number>,
+  ayahStrengths: AyahStrengthMap,
+  fallbackStrength: number | undefined,
+): AyahTone {
+  if (!memorizedSet.has(ayah)) return "white";
+
+  const strength = ayahStrengths[ayah] ?? clampStrength(fallbackStrength);
+  if (strength <= 1) return "red";
+  if (strength <= 3) return "orange";
+  return "green";
+}
 
 function getReviewStrengthTone(
-  status: string,
+  memorizedAyahs: number[],
+  totalVerses: number,
+  ayahStrengths: AyahStrengthMap,
   strength: number | undefined,
-  isFullyMemorized: boolean,
 ): ReviewStrengthTone | null {
-  if (!isFullyMemorized && status !== "needs_review") return null;
+  if (memorizedAyahs.length === 0) return null;
 
-  const normalizedStrength = strength ?? 3;
+  const memorizedSet = new Set(memorizedAyahs);
+  const hasRed = memorizedAyahs.some(
+    (ayah) => getAyahTone(ayah, memorizedSet, ayahStrengths, strength) === "red",
+  );
+  if (hasRed) return "red";
 
-  if (status === "needs_review" && normalizedStrength <= 1) return "red";
-  if (status === "needs_review") return "orange";
-  if (!isFullyMemorized) return null;
-  if (normalizedStrength <= 1) return "red";
-  if (normalizedStrength <= 3) return "orange";
+  const isFullyMemorized = memorizedAyahs.length >= totalVerses;
+  if (!isFullyMemorized) return "orange";
+
+  const hasOrange = memorizedAyahs.some(
+    (ayah) => getAyahTone(ayah, memorizedSet, ayahStrengths, strength) === "orange",
+  );
+  if (hasOrange) return "orange";
   return "green";
 }
 
 function getStatusColor(
-  status: string,
+  reviewTone: ReviewStrengthTone | null,
   percent: number,
-  strength: number | undefined,
-  isFullyMemorized: boolean,
 ) {
-  const reviewTone = getReviewStrengthTone(status, strength, isFullyMemorized);
   if (reviewTone === "green") return "bg-emerald-500";
   if (reviewTone === "orange") return "bg-amber-400";
   if (reviewTone === "red") return "bg-red-500";
-  if (status === "in_progress" || percent > 0) return "bg-amber-400";
+  if (percent > 0) return "bg-amber-400";
   return "bg-muted";
 }
 
@@ -120,11 +158,14 @@ function SurahStudyView({
       const newAyahs = Array.from(
         new Set([...currentAyahs, ...Array.from({ length: verseIndex + 1 }, (_, i) => i + 1)])
       ).sort((a, b) => a - b);
-      return updateMemorization(parseInt(childId), {
+      const ratedAyahs = Array.from({ length: verseIndex + 1 }, (_, i) => i + 1);
+      const payload: Parameters<typeof updateMemorization>[1] & { ratedAyahs: number[] } = {
         surahId: surah!.number,
         memorizedAyahs: newAyahs,
         qualityRating: rating || 3,
-      });
+        ratedAyahs,
+      };
+      return updateMemorization(parseInt(childId), payload);
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["memorization", childId] });
@@ -378,11 +419,15 @@ function SurahStudyView({
 function AyahCircles({
   totalVerses,
   memorizedAyahs,
+  ayahStrengths,
+  fallbackStrength,
   onToggle,
   isPending,
 }: {
   totalVerses: number;
   memorizedAyahs: number[];
+  ayahStrengths: AyahStrengthMap;
+  fallbackStrength?: number;
   onToggle: (ayah: number) => void;
   isPending: boolean;
 }) {
@@ -390,7 +435,7 @@ function AyahCircles({
   return (
     <div className="flex flex-wrap gap-1.5 mt-3">
       {Array.from({ length: totalVerses }, (_, i) => i + 1).map((n) => {
-        const done = memorizedSet.has(n);
+        const tone = getAyahTone(n, memorizedSet, ayahStrengths, fallbackStrength);
         return (
           <button
             key={n}
@@ -398,9 +443,13 @@ function AyahCircles({
             onClick={() => onToggle(n)}
             className={cn(
               "w-8 h-8 rounded-full text-xs font-bold transition-all border",
-              done
+              tone === "green"
                 ? "bg-emerald-500 text-white border-emerald-600"
-                : "bg-muted text-muted-foreground border-border hover:border-primary/40"
+                : tone === "orange"
+                  ? "bg-amber-400 text-white border-amber-500"
+                  : tone === "red"
+                    ? "bg-red-500 text-white border-red-600"
+                    : "bg-white text-muted-foreground border-border hover:border-primary/40"
             )}
           >
             {n}
@@ -842,18 +891,18 @@ export default function MemorizationPage() {
               const surahMeta = surahs.find((s) => s.id === item.surahId);
               const isExpanded = expandedSurahId === item.surahId;
               const memorizedAyahs: number[] = item.memorizedAyahs ?? [];
+              const ayahStrengths = getAyahStrengthMap(item);
               const range = getConsecutiveRange(memorizedAyahs);
               const isFullyMemorized = item.versesMemorized >= item.totalVerses;
               const reviewTone = getReviewStrengthTone(
-                item.status,
+                memorizedAyahs,
+                item.totalVerses,
+                ayahStrengths,
                 item.strength,
-                isFullyMemorized,
               );
               const barColor = getStatusColor(
-                item.status,
+                reviewTone,
                 item.percentComplete,
-                item.strength,
-                isFullyMemorized,
               );
 
               return (
@@ -890,7 +939,9 @@ export default function MemorizationPage() {
                         <p className="font-semibold text-sm text-foreground">{item.surahName}</p>
                         <p className="text-xs text-muted-foreground">
                           {reviewTone
-                            ? `All ${item.totalVerses} ayahs · ${getReviewToneLabel(reviewTone)}`
+                            ? isFullyMemorized
+                              ? `All ${item.totalVerses} ayahs · ${getReviewToneLabel(reviewTone)}`
+                              : `${memorizedAyahs.length}/${item.totalVerses} ayahs memorized · ${getReviewToneLabel(reviewTone)}`
                             : item.status === "in_progress" && range
                             ? `Ayahs ${range.start}–${range.end} done · ${item.totalVerses} total`
                             : `${item.totalVerses} ayahs`}
@@ -917,6 +968,8 @@ export default function MemorizationPage() {
                         <AyahCircles
                           totalVerses={item.totalVerses}
                           memorizedAyahs={memorizedAyahs}
+                          ayahStrengths={ayahStrengths}
+                          fallbackStrength={item.strength}
                           onToggle={(ayah) => handleToggleAyah(item, ayah)}
                           isPending={toggleAyahMutation.isPending}
                         />

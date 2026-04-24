@@ -88,6 +88,116 @@ async function fetchVersesFromApi(surahNumber: number): Promise<{ number: number
 const router: IRouter = Router();
 
 type ReviewPriority = "red" | "orange" | "green";
+type AyahStrengthMap = Record<string, number>;
+
+function clampAyahStrength(value: number | undefined): number {
+  if (!Number.isFinite(value)) return 3;
+  return Math.max(0, Math.min(5, Math.round(value!)));
+}
+
+function parseAyahNumbers(raw: string | null | undefined): number[] {
+  if (!raw) return [];
+
+  try {
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return Array.from(
+      new Set(
+        parsed
+          .map((value) => Number(value))
+          .filter((value) => Number.isInteger(value) && value > 0),
+      ),
+    ).sort((a, b) => a - b);
+  } catch {
+    return [];
+  }
+}
+
+function buildNormalizedMemorizedAyahs(
+  rawAyahs: string | null | undefined,
+  versesMemorized: number,
+): number[] {
+  const parsedAyahs = parseAyahNumbers(rawAyahs);
+  if (parsedAyahs.length > 0) return parsedAyahs;
+  if (versesMemorized <= 0) return [];
+  return Array.from({ length: versesMemorized }, (_, i) => i + 1);
+}
+
+function parseAyahStrengths(raw: string | null | undefined): AyahStrengthMap {
+  if (!raw) return {};
+
+  try {
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
+    return Object.fromEntries(
+      Object.entries(parsed)
+        .map(([key, value]) => [Number(key), clampAyahStrength(Number(value))] as const)
+        .filter(([ayah]) => Number.isInteger(ayah) && ayah > 0)
+        .map(([ayah, value]) => [String(ayah), value]),
+    );
+  } catch {
+    return {};
+  }
+}
+
+function normalizeAyahStrengths(
+  memorizedAyahs: number[],
+  rawStrengths: string | null | undefined,
+  fallbackStrength: number,
+): AyahStrengthMap {
+  const parsed = parseAyahStrengths(rawStrengths);
+  const next: AyahStrengthMap = {};
+
+  for (const ayah of memorizedAyahs) {
+    next[String(ayah)] = parsed[String(ayah)] ?? clampAyahStrength(fallbackStrength);
+  }
+
+  return next;
+}
+
+function mergeAyahStrengths(params: {
+  memorizedAyahs: number[];
+  existingStrengths: AyahStrengthMap;
+  fallbackStrength: number;
+  ratedAyahs?: number[];
+  qualityRating?: number;
+  previousMemorizedAyahs?: number[];
+}): AyahStrengthMap {
+  const {
+    memorizedAyahs,
+    existingStrengths,
+    fallbackStrength,
+    ratedAyahs = [],
+    qualityRating,
+    previousMemorizedAyahs = [],
+  } = params;
+  const next = normalizeAyahStrengths(
+    memorizedAyahs,
+    JSON.stringify(existingStrengths),
+    fallbackStrength,
+  );
+  const previousSet = new Set(previousMemorizedAyahs);
+  const newAyahs = memorizedAyahs.filter((ayah) => !previousSet.has(ayah));
+
+  if (qualityRating !== undefined && ratedAyahs.length > 0) {
+    const strength = clampAyahStrength(qualityRating);
+    for (const ayah of ratedAyahs) {
+      if (memorizedAyahs.includes(ayah)) {
+        next[String(ayah)] = strength;
+      }
+    }
+  } else if (newAyahs.length > 0) {
+    const strength =
+      qualityRating !== undefined
+        ? clampAyahStrength(qualityRating)
+        : clampAyahStrength(fallbackStrength);
+    for (const ayah of newAyahs) {
+      next[String(ayah)] = strength;
+    }
+  }
+
+  return next;
+}
 
 function getCanonicalReviewOrder(surahId: number): number {
   return SURAHS.find((s) => s.id === surahId)?.recommendedOrder ?? Number.MAX_SAFE_INTEGER;
@@ -237,13 +347,15 @@ router.get("/children/:childId/memorization", async (req, res) => {
   const result = SURAHS.sort((a, b) => a.recommendedOrder - b.recommendedOrder).map(surah => {
     const existing = progress.find(p => p.surahId === surah.id);
     if (existing) console.log("[memorization GET] joined surah", surah.id, "(number", surah.number, ") →", existing.status);
-    const parsedAyahs: number[] = (() => { try { return JSON.parse(existing?.memorizedAyahs || "[]"); } catch { return []; } })();
-    const normalizedAyahs =
-      parsedAyahs.length > 0
-        ? parsedAyahs
-        : (existing?.versesMemorized || 0) > 0
-        ? Array.from({ length: existing!.versesMemorized }, (_, i) => i + 1)
-        : [];
+    const normalizedAyahs = buildNormalizedMemorizedAyahs(
+      existing?.memorizedAyahs,
+      existing?.versesMemorized || 0,
+    );
+    const ayahStrengths = normalizeAyahStrengths(
+      normalizedAyahs,
+      existing?.ayahStrengths,
+      existing?.strength || 3,
+    );
     return {
       id: existing?.id || 0,
       childId,
@@ -258,7 +370,8 @@ router.get("/children/:childId/memorization", async (req, res) => {
       lastPracticed: existing?.lastPracticed?.toISOString() || null,
       nextReviewDate: existing?.nextReviewDate || null,
       reviewCount: existing?.reviewCount || 0,
-      strength: existing?.strength || 1
+      strength: existing?.strength || 1,
+      ayahStrengths,
     };
   });
 
@@ -268,7 +381,14 @@ router.get("/children/:childId/memorization", async (req, res) => {
 router.post("/children/:childId/memorization", async (req, res) => {
   const childId = parseInt(req.params.childId);
   if (!await ownsChild(req.user.id, childId)) { res.status(403).json({ error: "Forbidden" }); return; }
-  const { surahId, versesMemorized, memorizedAyahs: memorizedAyahsInput, status, qualityRating } = req.body;
+  const {
+    surahId,
+    versesMemorized,
+    memorizedAyahs: memorizedAyahsInput,
+    ratedAyahs: ratedAyahsInput,
+    status,
+    qualityRating,
+  } = req.body;
 
   console.log("[memorization POST] received body:", { surahId, versesMemorized, status, qualityRating, childId });
 
@@ -292,12 +412,21 @@ router.post("/children/:childId/memorization", async (req, res) => {
   let newMemoizedAyahs: number[];
   let newVersesMemorized: number;
   if (Array.isArray(memorizedAyahsInput)) {
-    newMemoizedAyahs = memorizedAyahsInput;
-    newVersesMemorized = memorizedAyahsInput.length;
+    newMemoizedAyahs = Array.from(
+      new Set(
+        memorizedAyahsInput
+          .map((value: unknown) => Number(value))
+          .filter((value: number) => Number.isInteger(value) && value > 0 && value <= surah.verseCount),
+      ),
+    ).sort((a, b) => a - b);
+    newVersesMemorized = newMemoizedAyahs.length;
   } else {
     newVersesMemorized = versesMemorized !== undefined ? versesMemorized : (existing?.versesMemorized || 0);
     // Reconstruct ayahs array as consecutive range if coming from legacy path
-    const existingAyahs: number[] = (() => { try { return JSON.parse(existing?.memorizedAyahs || "[]"); } catch { return []; } })();
+    const existingAyahs = buildNormalizedMemorizedAyahs(
+      existing?.memorizedAyahs,
+      existing?.versesMemorized || 0,
+    );
     if (existingAyahs.length > 0) {
       newMemoizedAyahs = existingAyahs;
     } else if (newVersesMemorized > 0) {
@@ -308,14 +437,37 @@ router.post("/children/:childId/memorization", async (req, res) => {
   }
 
   const newStatus = status || (newVersesMemorized >= surah.verseCount ? "memorized" : newVersesMemorized > 0 ? "in_progress" : "not_started");
-  const strength = qualityRating || existing?.strength || 1;
+  const strength = qualityRating ?? existing?.strength ?? 1;
   const nextReview = formatDate(addDays(now, strength >= 4 ? 7 : strength >= 3 ? 3 : 1));
+  const previousMemorizedAyahs = buildNormalizedMemorizedAyahs(
+    existing?.memorizedAyahs,
+    existing?.versesMemorized || 0,
+  );
+  const existingAyahStrengths = parseAyahStrengths(existing?.ayahStrengths);
+  const ratedAyahs = Array.isArray(ratedAyahsInput)
+    ? Array.from(
+        new Set(
+          ratedAyahsInput
+            .map((value: unknown) => Number(value))
+            .filter((value: number) => Number.isInteger(value) && value > 0 && value <= surah.verseCount),
+        ),
+      ).sort((a, b) => a - b)
+    : [];
+  const ayahStrengths = mergeAyahStrengths({
+    memorizedAyahs: newMemoizedAyahs,
+    existingStrengths: existingAyahStrengths,
+    fallbackStrength: existing?.strength ?? 3,
+    ratedAyahs,
+    qualityRating: qualityRating !== undefined ? Number(qualityRating) : undefined,
+    previousMemorizedAyahs,
+  });
 
   let record;
   if (existing) {
     [record] = await db.update(memorizationProgressTable).set({
       versesMemorized: newVersesMemorized,
       memorizedAyahs: JSON.stringify(newMemoizedAyahs),
+      ayahStrengths: JSON.stringify(ayahStrengths),
       status: newStatus as "not_started" | "in_progress" | "memorized" | "needs_review",
       lastPracticed: now,
       nextReviewDate: nextReview,
@@ -329,6 +481,7 @@ router.post("/children/:childId/memorization", async (req, res) => {
       surahId: normalizedSurahId,
       versesMemorized: newVersesMemorized,
       memorizedAyahs: JSON.stringify(newMemoizedAyahs),
+      ayahStrengths: JSON.stringify(ayahStrengths),
       status: newStatus as "not_started" | "in_progress" | "memorized" | "needs_review",
       lastPracticed: now,
       nextReviewDate: nextReview,
@@ -705,10 +858,23 @@ router.post("/children/:childId/reviews", async (req, res) => {
         : priority === "green"
           ? "memorized"
           : "needs_review";
+    const memorizedAyahs = buildNormalizedMemorizedAyahs(
+      memProgressRow.memorizedAyahs,
+      memProgressRow.versesMemorized,
+    );
+    const ayahStrengths = mergeAyahStrengths({
+      memorizedAyahs,
+      existingStrengths: parseAyahStrengths(memProgressRow.ayahStrengths),
+      fallbackStrength: memProgressRow.strength ?? 3,
+      ratedAyahs: memorizedAyahs,
+      qualityRating,
+      previousMemorizedAyahs: memorizedAyahs,
+    });
 
     await db.update(memorizationProgressTable).set({
       status: nextStatus,
       strength: Math.max(0, Math.min(5, qualityRating)),
+      ayahStrengths: JSON.stringify(ayahStrengths),
       lastPracticed: now,
       nextReviewDate: nextDate,
       updatedAt: now,

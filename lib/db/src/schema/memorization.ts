@@ -17,6 +17,7 @@ export const memorizationProgressTable = pgTable("memorization_progress", {
   status: memorizationStatusEnum("status").notNull().default("not_started"),
   versesMemorized: integer("verses_memorized").notNull().default(0),
   memorizedAyahs: text("memorized_ayahs").notNull().default("[]"),
+  ayahStrengths: text("ayah_strengths").notNull().default("{}"),
   reviewCount: integer("review_count").notNull().default(0),
   strength: integer("strength").notNull().default(1),
   lastPracticed: timestamp("last_practiced"),

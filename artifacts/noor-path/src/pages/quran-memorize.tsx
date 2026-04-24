@@ -3130,41 +3130,71 @@ export default function QuranMemorizePage() {
 
   const saveMutation = useMutation({
     mutationFn: async (qualityRating: number) => {
-      if (isWorkflowReviewOnlySession) {
-        const response = await fetch(`/api/children/${childId}/daily-progress`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "x-local-date": getLocalDateHeaderValue(),
-          },
-          body: JSON.stringify({
-            memStatus: "completed",
-            memCompletedAyahEnd: toAyah,
-            memTargetSurah: sessionSurahNumber,
-            memTargetAyahStart: fromAyah,
-            memTargetAyahEnd: toAyah,
-            memTargetEndSurah: sessionSurahNumber,
-          }),
-        });
-        if (!response.ok) {
-          throw new Error("Failed to save cumulative memorization progress");
-        }
-        return { skippedMemorizationUpdate: true as const, savedTodayWorkflow: matchesTodayMemTarget };
-      }
-
       const latestMemData = await qc.ensureQueryData({
         queryKey: ["memorization", childId],
         queryFn: () => listMemorization(parseInt(childId)),
       });
-      const existingMemorizedAyahs =
-        latestMemData?.progress?.find((p) => p.surahNumber === selectedChapter!.id)?.memorizedAyahs ?? [];
-      const currentSessionAyahs = Array.from({ length: toAyah - fromAyah + 1 }, (_, i) => fromAyah + i);
-      const memorizedAyahs = Array.from(new Set([...existingMemorizedAyahs, ...currentSessionAyahs])).sort((a, b) => a - b);
+      const existingProgress =
+        latestMemData?.progress?.find((p) => p.surahNumber === selectedChapter!.id) ??
+        null;
+      const existingMemorizedAyahs = existingProgress?.memorizedAyahs ?? [];
+      const currentSessionAyahs = Array.from(
+        { length: toAyah - fromAyah + 1 },
+        (_, i) => fromAyah + i,
+      );
+      const memorizedAyahs = Array.from(
+        new Set([...existingMemorizedAyahs, ...currentSessionAyahs]),
+      ).sort((a, b) => a - b);
+
+      if (isWorkflowReviewOnlySession) {
+        const memorizationPayload: Parameters<typeof updateMemorization>[1] & {
+          ratedAyahs: number[];
+        } = {
+          surahId: selectedChapter!.id,
+          memorizedAyahs,
+          qualityRating,
+          ratedAyahs: currentSessionAyahs,
+          status:
+            existingProgress?.status ??
+            (memorizedAyahs.length >= selectedChapter!.verses_count
+              ? "memorized"
+              : "in_progress"),
+        };
+        const [memorizationResponse, dailyProgressResponse] = await Promise.all([
+          updateMemorization(parseInt(childId), memorizationPayload),
+          fetch(`/api/children/${childId}/daily-progress`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "x-local-date": getLocalDateHeaderValue(),
+            },
+            body: JSON.stringify({
+              memStatus: "completed",
+              memCompletedAyahEnd: toAyah,
+              memTargetSurah: sessionSurahNumber,
+              memTargetAyahStart: fromAyah,
+              memTargetAyahEnd: toAyah,
+              memTargetEndSurah: sessionSurahNumber,
+            }),
+          }),
+        ]);
+        if (!dailyProgressResponse.ok) {
+          throw new Error("Failed to save cumulative memorization progress");
+        }
+        return {
+          ...memorizationResponse,
+          savedTodayWorkflow: matchesTodayMemTarget,
+        };
+      }
+
       const isComplete = toAyah >= selectedChapter!.verses_count;
-      const payload = {
+      const payload: Parameters<typeof updateMemorization>[1] & {
+        ratedAyahs: number[];
+      } = {
         surahId: selectedChapter!.id,
         memorizedAyahs,
         qualityRating,
+        ratedAyahs: currentSessionAyahs,
         status: (isComplete ? "memorized" : "in_progress") as "memorized" | "in_progress",
       };
       console.log("[quran-memorize] Saving memorization:", {
