@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import { db } from "@workspace/db";
 import { childrenTable, memorizationProgressTable, reviewScheduleTable, learningSessionsTable, childDuasTable, dailyProgressTable } from "@workspace/db/schema";
-import { eq, desc, and } from "drizzle-orm";
+import { eq, desc, and, sql } from "drizzle-orm";
 import { SURAHS } from "../data/surahs.js";
 import { resolvePageTarget, resolveStrictSurahScopedPageTarget, getPageForVerse } from "../data/quran-meta.js";
 import { STORIES } from "../data/stories.js";
@@ -1287,26 +1287,26 @@ router.post("/children/:childId/reading-progress", async (req, res) => {
   }
 
   const targetPages = row.readingTargetPages ?? (child.readPagesPerDay > 0 ? child.readPagesPerDay : null);
-  const prevPage = row.readingLastPage;
-  const delta = prevPage != null ? Math.max(0, currentPage - prevPage) : 0;
-  const newCompleted = (row.readingCompletedPages ?? 0) + delta;
 
-  let newStatus: string;
-  if (targetPages && newCompleted >= targetPages) {
-    newStatus = "completed";
-  } else if (newCompleted > 0) {
-    newStatus = "in_progress";
-  } else {
-    newStatus = row.readingStatus;
-  }
-
+  // Atomic update — GREATEST ensures readingLastPage always moves forward even if POSTs arrive out of order
   [row] = await db.update(dailyProgressTable).set({
     readingTargetPages: targetPages,
-    readingLastPage: currentPage,
-    readingCompletedPages: newCompleted,
-    readingStatus: newStatus,
+    readingLastPage: sql`GREATEST(COALESCE(${dailyProgressTable.readingLastPage}, ${currentPage}), ${currentPage})`,
+    readingCompletedPages: sql`${dailyProgressTable.readingCompletedPages} + GREATEST(0, ${currentPage} - COALESCE(${dailyProgressTable.readingLastPage}, ${currentPage}))`,
     updatedAt: new Date(),
   }).where(eq(dailyProgressTable.id, row.id)).returning();
+
+  // Compute status from the atomically-updated returned values
+  const finalCompleted = row.readingCompletedPages ?? 0;
+  const newStatus: string = targetPages && finalCompleted >= targetPages ? "completed"
+    : finalCompleted > 0 ? "in_progress"
+    : row.readingStatus;
+  if (newStatus !== row.readingStatus) {
+    [row] = await db.update(dailyProgressTable)
+      .set({ readingStatus: newStatus, updatedAt: new Date() })
+      .where(eq(dailyProgressTable.id, row.id))
+      .returning();
+  }
 
   res.json({ readingStatus: row.readingStatus, readingCompletedPages: row.readingCompletedPages, readingLastPage: row.readingLastPage });
 });

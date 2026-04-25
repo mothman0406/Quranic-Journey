@@ -1279,8 +1279,7 @@ export default function MushafReaderPage() {
   const versesRef = useRef<PageVerseData[]>([]);
   const currentPageRef = useRef(1);
   const goToPageRef = useRef<(page: number) => void>(() => {});
-  const readingReportTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const pendingReadingReportRef = useRef<{ childId: string; page: number } | null>(null);
+  const readingGoalEnabledRef = useRef(false);
 
   // Keep playerStateRef in sync with playerState on every render
   playerStateRef.current = playerState;
@@ -1356,38 +1355,39 @@ export default function MushafReaderPage() {
     reciteWordPosRef.current = 0;
   }, [currentPage]);
 
-  // Report page turns to backend for reading-goal tracking (1s debounce)
+  // Snapshot isEnabled at mount so we don't depend on a cache that may go stale while reading
   useEffect(() => {
     const cached = queryClient.getQueryData<{ readingGoal?: { isEnabled?: boolean } }>(["dashboard", childId]);
-    if (!cached?.readingGoal?.isEnabled) return;
-    pendingReadingReportRef.current = { childId, page: currentPage };
-    if (readingReportTimerRef.current) clearTimeout(readingReportTimerRef.current);
-    readingReportTimerRef.current = setTimeout(() => {
-      pendingReadingReportRef.current = null;
-      fetch(`/api/children/${childId}/reading-progress`, {
+    readingGoalEnabledRef.current = cached?.readingGoal?.isEnabled ?? false;
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Keep URL in sync — if the component ever remounts it reads the correct page, not the stale mount-time URL
+  useEffect(() => {
+    window.history.replaceState(null, "", `?page=${currentPage}`);
+  }, [currentPage]);
+
+  // Report every page turn — sendBeacon survives tab close/back-navigation; keepalive fetch as fallback
+  useEffect(() => {
+    if (!readingGoalEnabledRef.current) return;
+    const url = `/api/children/${childId}/reading-progress`;
+    const body = JSON.stringify({ currentPage });
+    const blob = new Blob([body], { type: "application/json" });
+    if (navigator.sendBeacon) {
+      navigator.sendBeacon(url, blob);
+    } else {
+      fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ currentPage }),
+        body,
+        keepalive: true,
       }).catch(() => {});
-    }, 1000);
-    return () => {
-      if (readingReportTimerRef.current) clearTimeout(readingReportTimerRef.current);
-    };
-  }, [currentPage, childId]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Flush any pending page report on unmount so last position is always saved
-  useEffect(() => {
-    return () => {
-      const pending = pendingReadingReportRef.current;
-      if (pending) {
-        fetch(`/api/children/${pending.childId}/reading-progress`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ currentPage: pending.page }),
-        }).catch(() => {});
-      }
-    };
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+    }
+    // Optimistically update cache so dashboard shows the correct resume page before POST resolves
+    queryClient.setQueryData(["dashboard", childId], (old: any) => {
+      if (!old?.readingGoal) return old;
+      return { ...old, readingGoal: { ...old.readingGoal, lastPage: currentPage } };
+    });
+  }, [currentPage, childId, queryClient]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Cleanup recognition on unmount
   useEffect(() => {
@@ -1811,10 +1811,11 @@ export default function MushafReaderPage() {
     const dy = e.changedTouches[0].clientY - touchStartY.current;
     if (Math.abs(dx) < 50) return;
     if (Math.abs(dx) <= Math.abs(dy)) return;
+    const page = currentPageRef.current;
     if (dx > 0) {
-      if (currentPage < TOTAL_PAGES) goToPage(currentPage + 1);
+      if (page < TOTAL_PAGES) goToPageRef.current(page + 1);
     } else {
-      if (currentPage > 1) goToPage(currentPage - 1);
+      if (page > 1) goToPageRef.current(page - 1);
     }
   };
 
