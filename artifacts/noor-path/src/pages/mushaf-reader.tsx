@@ -1226,8 +1226,13 @@ export default function MushafReaderPage() {
 
   const [currentPage, setCurrentPage] = useState(() => {
     const params = new URLSearchParams(rawSearch.startsWith("?") ? rawSearch.slice(1) : rawSearch);
-    const p = parseInt(params.get("page") ?? "1", 10);
-    return isNaN(p) ? 1 : Math.max(1, Math.min(TOTAL_PAGES, p));
+    const urlPage = parseInt(params.get("page") ?? "0", 10);
+    if (urlPage >= 1) return Math.max(1, Math.min(TOTAL_PAGES, urlPage));
+    // Secondary fallback: resume from cached dashboard readingGoal.lastPage
+    const cached = queryClient.getQueryData<{ readingGoal?: { lastPage?: number | null } }>(["dashboard", childId]);
+    const lastPage = cached?.readingGoal?.lastPage;
+    if (lastPage && lastPage >= 1) return Math.max(1, Math.min(TOTAL_PAGES, lastPage));
+    return 1;
   });
   const [jumpInput, setJumpInput] = useState("");
   const [isBlindMode, setIsBlindMode] = useState(false);
@@ -1274,6 +1279,8 @@ export default function MushafReaderPage() {
   const versesRef = useRef<PageVerseData[]>([]);
   const currentPageRef = useRef(1);
   const goToPageRef = useRef<(page: number) => void>(() => {});
+  const readingReportTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingReadingReportRef = useRef<{ childId: string; page: number } | null>(null);
 
   // Keep playerStateRef in sync with playerState on every render
   playerStateRef.current = playerState;
@@ -1348,6 +1355,39 @@ export default function MushafReaderPage() {
     setReciteUnlockedWords(new Set());
     reciteWordPosRef.current = 0;
   }, [currentPage]);
+
+  // Report page turns to backend for reading-goal tracking (1s debounce)
+  useEffect(() => {
+    const cached = queryClient.getQueryData<{ readingGoal?: { isEnabled?: boolean } }>(["dashboard", childId]);
+    if (!cached?.readingGoal?.isEnabled) return;
+    pendingReadingReportRef.current = { childId, page: currentPage };
+    if (readingReportTimerRef.current) clearTimeout(readingReportTimerRef.current);
+    readingReportTimerRef.current = setTimeout(() => {
+      pendingReadingReportRef.current = null;
+      fetch(`/api/children/${childId}/reading-progress`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ currentPage }),
+      }).catch(() => {});
+    }, 1000);
+    return () => {
+      if (readingReportTimerRef.current) clearTimeout(readingReportTimerRef.current);
+    };
+  }, [currentPage, childId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Flush any pending page report on unmount so last position is always saved
+  useEffect(() => {
+    return () => {
+      const pending = pendingReadingReportRef.current;
+      if (pending) {
+        fetch(`/api/children/${pending.childId}/reading-progress`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ currentPage: pending.page }),
+        }).catch(() => {});
+      }
+    };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Cleanup recognition on unmount
   useEffect(() => {

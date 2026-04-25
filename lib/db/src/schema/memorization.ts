@@ -65,6 +65,10 @@ export const dailyProgressTable = pgTable("daily_progress", {
   reviewTargetCount: integer("review_target_count"),
   reviewCompletedCount: integer("review_completed_count").notNull().default(0),
   reviewStatus: text("review_status").notNull().default("not_started"),
+  readingTargetPages: real("reading_target_pages"),
+  readingCompletedPages: real("reading_completed_pages").notNull().default(0.0),
+  readingLastPage: integer("reading_last_page"),
+  readingStatus: text("reading_status").notNull().default("not_started"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });

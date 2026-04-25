@@ -344,11 +344,22 @@ const REVIEW_OPTIONS = [
   { value: 20.0, label: "20 pages" },
 ];
 
+const READING_OPTIONS = [
+  { value: 0,   label: "Off" },
+  { value: 0.5, label: "½ page" },
+  { value: 1.0, label: "1 page" },
+  { value: 2.0, label: "2 pages" },
+  { value: 3.0, label: "3 pages" },
+  { value: 4.0, label: "4 pages" },
+  { value: 5.0, label: "5 pages" },
+];
+
 function DailyGoalsSection({ childId }: { childId: string }) {
   const qc = useQueryClient();
-  const [saved, setSaved] = useState<"memorize" | "review" | null>(null);
+  const [saved, setSaved] = useState<"memorize" | "review" | "reading" | null>(null);
   const [memorizeValue, setMemorizeValue] = useState<number | null>(null);
   const [reviewValue, setReviewValue] = useState<number | null>(null);
+  const [readingValue, setReadingValue] = useState<number | null>(null);
   const [showMemorizeCustom, setShowMemorizeCustom] = useState(false);
   const [memorizeCustomInput, setMemorizeCustomInput] = useState("");
 
@@ -356,12 +367,12 @@ function DailyGoalsSection({ childId }: { childId: string }) {
     queryKey: ["child", childId],
     queryFn: async () => {
       const res = await fetch(`/api/children/${childId}`);
-      return res.json() as Promise<{ memorizePagePerDay: number; reviewPagesPerDay: number }>;
+      return res.json() as Promise<{ memorizePagePerDay: number; reviewPagesPerDay: number; readPagesPerDay: number }>;
     },
   });
 
   const mutation = useMutation({
-    mutationFn: async (updates: { memorizePagePerDay?: number; reviewPagesPerDay?: number }) => {
+    mutationFn: async (updates: { memorizePagePerDay?: number; reviewPagesPerDay?: number; readPagesPerDay?: number }) => {
       const res = await fetch(`/api/children/${childId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -372,7 +383,10 @@ function DailyGoalsSection({ childId }: { childId: string }) {
     onSuccess: (_, vars) => {
       qc.invalidateQueries({ queryKey: ["dashboard", childId] });
       qc.invalidateQueries({ queryKey: ["reviews", childId] });
-      const key: "memorize" | "review" = "memorizePagePerDay" in vars ? "memorize" : "review";
+      qc.invalidateQueries({ queryKey: ["child", childId] });
+      const key: "memorize" | "review" | "reading" =
+        "memorizePagePerDay" in vars ? "memorize" :
+        "readPagesPerDay" in vars ? "reading" : "review";
       setSaved(key);
       setTimeout(() => setSaved(null), 2000);
     },
@@ -380,6 +394,7 @@ function DailyGoalsSection({ childId }: { childId: string }) {
 
   const activeMemorize = memorizeValue ?? child?.memorizePagePerDay;
   const activeReview = reviewValue ?? child?.reviewPagesPerDay;
+  const activeReading = readingValue ?? child?.readPagesPerDay ?? 0;
 
   return (
     <SectionCard title="Daily Goals">
@@ -490,6 +505,39 @@ function DailyGoalsSection({ childId }: { childId: string }) {
                 activeReview === o.value
                   ? "border-primary bg-primary/5 text-primary"
                   : "border-border text-muted-foreground hover:border-primary/40"
+              )}
+            >
+              {o.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <Divider />
+
+      <div>
+        <div className="flex items-center justify-between mb-2">
+          <div>
+            <p className="text-sm font-semibold text-foreground">Daily Reading Goal</p>
+            <p className="text-xs text-muted-foreground mt-0.5">Pages to read per day (Off = disabled)</p>
+          </div>
+          {saved === "reading" && (
+            <span className="text-xs text-emerald-600 font-medium">Saved ✓</span>
+          )}
+        </div>
+        <div className="flex gap-2 flex-wrap">
+          {READING_OPTIONS.map((o) => (
+            <button
+              key={o.value}
+              onClick={() => {
+                setReadingValue(o.value);
+                mutation.mutate({ readPagesPerDay: o.value });
+              }}
+              className={cn(
+                "rounded-xl border px-3 py-2 text-sm font-medium transition-all",
+                activeReading === o.value
+                  ? "border-teal-600 bg-teal-50 text-teal-700"
+                  : "border-border text-muted-foreground hover:border-teal-300"
               )}
             >
               {o.label}

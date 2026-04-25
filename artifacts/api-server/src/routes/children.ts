@@ -520,6 +520,7 @@ router.put("/children/:childId", async (req, res) => {
   if (req.body.practiceMinutesPerDay) updates.practiceMinutesPerDay = req.body.practiceMinutesPerDay;
   if (req.body.memorizePagePerDay != null) updates.memorizePagePerDay = req.body.memorizePagePerDay;
   if (req.body.reviewPagesPerDay != null) updates.reviewPagesPerDay = req.body.reviewPagesPerDay;
+  if (req.body.readPagesPerDay != null) updates.readPagesPerDay = req.body.readPagesPerDay;
   if (req.body.hideStories !== undefined) updates.hideStories = req.body.hideStories ? 1 : 0;
   if (req.body.hideDuas !== undefined) updates.hideDuas = req.body.hideDuas ? 1 : 0;
   const [child] = await db.update(childrenTable).set(updates).where(eq(childrenTable.id, childId)).returning();
@@ -968,6 +969,13 @@ router.get("/children/:childId/dashboard", async (req, res) => {
       reviewTargetCount: todayProgress.reviewTargetCount,
       reviewCompletedCount: todayProgress.reviewCompletedCount,
     },
+    readingGoal: {
+      targetPages: child.readPagesPerDay,
+      completedPages: todayProgress.readingCompletedPages,
+      lastPage: todayProgress.readingLastPage,
+      status: todayProgress.readingStatus,
+      isEnabled: child.readPagesPerDay > 0,
+    },
     upNextMemorization: (() => {
       if (upcomingWorkflowItem) {
         return {
@@ -1243,6 +1251,64 @@ router.post("/children/:childId/daily-progress", async (req, res) => {
   }
 
   res.json(row);
+});
+
+router.post("/children/:childId/reading-progress", async (req, res) => {
+  const childId = parseInt(req.params.childId);
+  if (!await ownsChild(req.user.id, childId)) { res.status(403).json({ error: "Forbidden" }); return; }
+  const [child] = await db.select().from(childrenTable).where(eq(childrenTable.id, childId));
+  if (!child) { res.status(404).json({ error: "Child not found" }); return; }
+
+  const currentPage = Number(req.body.currentPage);
+  if (!Number.isInteger(currentPage) || currentPage < 1 || currentPage > 604) {
+    res.status(400).json({ error: "Invalid currentPage" }); return;
+  }
+
+  const today = getRequestLocalDate(req);
+  const todayRows = await db.select().from(dailyProgressTable)
+    .where(and(eq(dailyProgressTable.childId, childId), eq(dailyProgressTable.date, today)))
+    .orderBy(desc(dailyProgressTable.id));
+
+  let row = todayRows[0] ?? null;
+
+  if (!row) {
+    [row] = await db.insert(dailyProgressTable).values({
+      childId,
+      date: today,
+      memStatus: "not_started",
+      reviewStatus: "not_started",
+      readingTargetPages: child.readPagesPerDay > 0 ? child.readPagesPerDay : null,
+      readingLastPage: currentPage,
+      readingCompletedPages: 0,
+      readingStatus: "not_started",
+    }).returning();
+    res.json({ readingStatus: row.readingStatus, readingCompletedPages: row.readingCompletedPages, readingLastPage: row.readingLastPage });
+    return;
+  }
+
+  const targetPages = row.readingTargetPages ?? (child.readPagesPerDay > 0 ? child.readPagesPerDay : null);
+  const prevPage = row.readingLastPage;
+  const delta = prevPage != null ? Math.max(0, currentPage - prevPage) : 0;
+  const newCompleted = (row.readingCompletedPages ?? 0) + delta;
+
+  let newStatus: string;
+  if (targetPages && newCompleted >= targetPages) {
+    newStatus = "completed";
+  } else if (newCompleted > 0) {
+    newStatus = "in_progress";
+  } else {
+    newStatus = row.readingStatus;
+  }
+
+  [row] = await db.update(dailyProgressTable).set({
+    readingTargetPages: targetPages,
+    readingLastPage: currentPage,
+    readingCompletedPages: newCompleted,
+    readingStatus: newStatus,
+    updatedAt: new Date(),
+  }).where(eq(dailyProgressTable.id, row.id)).returning();
+
+  res.json({ readingStatus: row.readingStatus, readingCompletedPages: row.readingCompletedPages, readingLastPage: row.readingLastPage });
 });
 
 router.get("/children/:childId/weekly-progress", async (req, res) => {

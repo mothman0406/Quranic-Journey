@@ -126,7 +126,15 @@ export default function ChildDashboard() {
     reviewTargetCount: number | null;
     reviewCompletedCount: number;
   };
+  type ReadingGoal = {
+    targetPages: number;
+    completedPages: number;
+    lastPage: number | null;
+    status: "not_started" | "in_progress" | "completed";
+    isEnabled: boolean;
+  };
   const todayProgress = (data as { todayProgress?: TodayProgress } | undefined)?.todayProgress;
+  const readingGoal = (data as { readingGoal?: ReadingGoal } | undefined)?.readingGoal;
   const reviewCompletedToday = Math.max(
     reviewSessionCompleted,
     todayProgress?.reviewCompletedCount ?? 0,
@@ -256,6 +264,28 @@ export default function ChildDashboard() {
                       <span className="text-xs text-emerald-600 font-semibold">✓ Completed</span>
                     ) : (
                       <span className="text-xs text-amber-600 font-medium">Review →</span>
+                    )}
+                  </div>
+                </Link>
+              )}
+              {readingGoal?.isEnabled && (
+                <Link href={`/child/${childId}/mushaf-reader?page=${readingGoal.lastPage ?? 1}`}>
+                  <div className="flex items-center gap-3 p-3 rounded-xl bg-teal-50 border border-teal-200 hover:bg-teal-100 transition-colors cursor-pointer">
+                    <div className="w-9 h-9 rounded-xl bg-teal-100 flex items-center justify-center"><BookOpen size={16} className="text-teal-600" /></div>
+                    <div className="flex-1">
+                      <p className="text-sm font-medium text-foreground">Daily Reading</p>
+                      <p className="text-xs text-muted-foreground">
+                        {readingGoal.status === "completed"
+                          ? "Today's reading complete ✓"
+                          : readingGoal.status === "in_progress"
+                          ? `${readingGoal.completedPages}/${readingGoal.targetPages} pages read`
+                          : `Read ${readingGoal.targetPages} page${readingGoal.targetPages === 1 ? "" : "s"} today`}
+                      </p>
+                    </div>
+                    {readingGoal.status === "completed" ? (
+                      <span className="text-xs text-emerald-600 font-semibold">✓ Completed</span>
+                    ) : (
+                      <span className="text-xs text-teal-600 font-medium">Read →</span>
                     )}
                   </div>
                 </Link>

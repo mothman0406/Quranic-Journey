@@ -27,6 +27,7 @@ export const childrenTable = pgTable("children", {
   hideDuas: integer("hide_duas").notNull().default(0),
   memorizePagePerDay: real("memorize_page_per_day").notNull().default(1.0),
   reviewPagesPerDay: real("review_pages_per_day").notNull().default(2.0),
+  readPagesPerDay: real("read_pages_per_day").notNull().default(0.0),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
