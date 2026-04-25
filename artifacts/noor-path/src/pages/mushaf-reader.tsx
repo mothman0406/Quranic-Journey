@@ -60,7 +60,21 @@ const RECITERS = [
   { folder: "Sudais_192kbps",               name: "Abdul Rahman Al-Sudais" },
   { folder: "Abdul_Basit_Murattal_192kbps", name: "Abdul Basit Abdul Samad" },
   { folder: "Minshawi_Murattal_128kbps",    name: "Muhammad Siddiq Al-Minshawi" },
+  { folder: "Ghamadi_40kbps",               name: "Saad Al-Ghamdi" },
+  { folder: "MaherAlMuaiqly128kbps",        name: "Maher Al-Muaiqly" },
+  { folder: "Hani_Rifai_192kbps",           name: "Hani Ar-Rifai" },
+  { folder: "Shuraim_128kbps",              name: "Saud Ash-Shuraim" },
+  { folder: "Ali_Jaber_64kbps",             name: "Ali Jaber" },
 ] as const;
+
+const JUZ_PAGES: Record<number, number> = {
+   1:   1,  2:  22,  3:  42,  4:  62,  5:  82,
+   6: 102,  7: 121,  8: 142,  9: 162, 10: 182,
+  11: 201, 12: 222, 13: 242, 14: 262, 15: 282,
+  16: 302, 17: 322, 18: 342, 19: 362, 20: 382,
+  21: 402, 22: 422, 23: 442, 24: 462, 25: 482,
+  26: 502, 27: 522, 28: 542, 29: 562, 30: 582,
+};
 
 type HighlightColor = "yellow" | "green" | "blue" | "pink";
 
@@ -183,11 +197,7 @@ async function fetchAllChapters(): Promise<{ chapters: Chapter[] }> {
   return r.json();
 }
 
-async function fetchTranslation(verseKey: string): Promise<string> {
-  const r = await fetch(`${QURAN_API}/verses/by_key/${verseKey}?translations=131`);
-  if (!r.ok) throw new Error(`Translation fetch failed: ${r.status}`);
-  const data = await r.json();
-  const raw: string = data.verse?.translations?.[0]?.text ?? "";
+function cleanTranslationHtml(raw: string): string {
   return raw
     .replace(/<sup[^>]*>.*?<\/sup>/gi, "")
     .replace(/<[^>]+>/g, "")
@@ -197,6 +207,25 @@ async function fetchTranslation(verseKey: string): Promise<string> {
     .replace(/&#\d+;/g, "")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+async function fetchTranslation(verseKey: string): Promise<string> {
+  // Primary endpoint
+  try {
+    const r = await fetch(`${QURAN_API}/verses/by_key/${verseKey}?translations=131`);
+    if (r.ok) {
+      const data = await r.json();
+      const text = cleanTranslationHtml(data.verse?.translations?.[0]?.text ?? "");
+      if (text) return text;
+    }
+  } catch {}
+  // Fallback endpoint
+  const r2 = await fetch(`${QURAN_API}/quran/translations/131?verse_key=${verseKey}`);
+  if (!r2.ok) throw new Error(`Translation unavailable (${r2.status})`);
+  const data2 = await r2.json();
+  const text2 = cleanTranslationHtml(data2.translations?.[0]?.text ?? "");
+  if (!text2) throw new Error("Translation unavailable");
+  return text2;
 }
 
 async function fetchTafseer(surah: number, ayah: number): Promise<string> {
@@ -435,10 +464,13 @@ function BayaanAyahSheet({
   onSaveNote: (verseKey: string, text: string) => void;
 }) {
   const [, setLocation] = useLocation();
+  const queryClient = useQueryClient();
   const [noteText, setNoteText] = useState(notes[ayah.verseKey] ?? "");
+  const [tafseerExpanded, setTafseerExpanded] = useState(false);
 
   useEffect(() => {
     setNoteText(notes[ayah.verseKey] ?? "");
+    setTafseerExpanded(false);
   }, [ayah.verseKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const isBookmarked = !!bookmarks[ayah.verseKey];
@@ -684,7 +716,25 @@ function BayaanAyahSheet({
               {translationLoading ? (
                 <p style={{ fontSize: "15px", color: "#6b7280", fontStyle: "italic", lineHeight: 1.75, margin: 0 }}>Loading…</p>
               ) : translationError ? (
-                <p style={{ fontSize: "15px", color: "#6b7280", fontStyle: "italic", lineHeight: 1.75, margin: 0 }}>Could not load translation</p>
+                <div>
+                  <p style={{ fontSize: "15px", color: "#6b7280", fontStyle: "italic", lineHeight: 1.75, margin: "0 0 12px" }}>
+                    Could not load translation.
+                  </p>
+                  <button
+                    onClick={() => queryClient.invalidateQueries({ queryKey: ["translation", ayah.verseKey] })}
+                    style={{
+                      padding: "8px 16px",
+                      background: "#1a1a1a",
+                      border: "1px solid #374151",
+                      borderRadius: "8px",
+                      color: "#9ca3af",
+                      fontSize: "13px",
+                      cursor: "pointer",
+                    }}
+                  >
+                    Retry
+                  </button>
+                </div>
               ) : translation ? (
                 <p style={{ fontSize: "15px", color: "#d1d5db", lineHeight: 1.75, margin: 0 }}>{translation}</p>
               ) : (
@@ -731,7 +781,47 @@ function BayaanAyahSheet({
               {tafseerLoading ? (
                 <p style={{ fontSize: "14px", color: "#6b7280", fontStyle: "italic", margin: 0 }}>Loading…</p>
               ) : tafseerText ? (
-                <p style={{ fontSize: "14px", color: "#d1d5db", lineHeight: 1.8, margin: 0 }}>{tafseerText}</p>
+                (() => {
+                  const PREVIEW = 150;
+                  const isLong = tafseerText.length > PREVIEW;
+                  return (
+                    <div>
+                      <div style={{ position: "relative" }}>
+                        <p style={{ fontSize: "14px", color: "#d1d5db", lineHeight: 1.8, margin: 0 }}>
+                          {tafseerExpanded || !isLong ? tafseerText : tafseerText.slice(0, PREVIEW) + "…"}
+                        </p>
+                        {isLong && !tafseerExpanded && (
+                          <div
+                            style={{
+                              position: "absolute",
+                              bottom: 0, left: 0, right: 0,
+                              height: "48px",
+                              background: "linear-gradient(transparent, #0d0d0d)",
+                              pointerEvents: "none",
+                            }}
+                          />
+                        )}
+                      </div>
+                      {isLong && (
+                        <button
+                          onClick={() => setTafseerExpanded((e) => !e)}
+                          style={{
+                            marginTop: "10px",
+                            padding: "6px 14px",
+                            background: "none",
+                            border: "1px solid #374151",
+                            borderRadius: "6px",
+                            color: "#60a5fa",
+                            fontSize: "13px",
+                            cursor: "pointer",
+                          }}
+                        >
+                          {tafseerExpanded ? "Show less" : "Read more"}
+                        </button>
+                      )}
+                    </div>
+                  );
+                })()
               ) : (
                 <p style={{ fontSize: "14px", color: "#6b7280", fontStyle: "italic", margin: 0 }}>Tafseer unavailable</p>
               )}
@@ -1235,6 +1325,9 @@ export default function MushafReaderPage() {
     return 1;
   });
   const [jumpInput, setJumpInput] = useState("");
+  const [surahJumpValue, setSurahJumpValue] = useState("");
+  const [juzJumpValue, setJuzJumpValue] = useState("");
+  const [jumpTab, setJumpTab] = useState<"surah" | "juz">("surah");
   const [isBlindMode, setIsBlindMode] = useState(false);
   const [revealedVerseKeys, setRevealedVerseKeys] = useState<Set<string>>(new Set());
   const [isSelectMode, setIsSelectMode] = useState(false);
@@ -1257,11 +1350,10 @@ export default function MushafReaderPage() {
 
   // Player state
   const [playerState, setPlayerState] = useState<PlayerState | null>(null);
-  const [playerSettings, setPlayerSettings] = useState<PlayerSettingsState>({
-    reciterFolder: "Alafasy_128kbps",
-    rate: 1,
-    repeat: "1",
-    rangeRepeat: "1",
+  const [playerSettings, setPlayerSettings] = useState<PlayerSettingsState>(() => {
+    let reciterFolder = "Alafasy_128kbps";
+    try { reciterFolder = localStorage.getItem(`${LS_PREFIX}:reciter`) ?? "Alafasy_128kbps"; } catch {}
+    return { reciterFolder, rate: 1, repeat: "1", rangeRepeat: "1" };
   });
   const [showSettingsSheet, setShowSettingsSheet] = useState(false);
 
@@ -1272,6 +1364,7 @@ export default function MushafReaderPage() {
   const reciteWordPosRef = useRef(0);
   const reciteUnlockedWordsRef = useRef<Set<string>>(new Set());
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const preloadRef = useRef<HTMLAudioElement | null>(null);
   const playerStateRef = useRef<PlayerState | null>(null);
   const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const longPressStartPosRef = useRef<{ x: number; y: number } | null>(null);
@@ -1288,7 +1381,12 @@ export default function MushafReaderPage() {
   // Audio element setup — once on mount
   useEffect(() => {
     const audio = new Audio();
+    audio.preload = "auto";
     audioRef.current = audio;
+
+    const preload = new Audio();
+    preload.preload = "auto";
+    preloadRef.current = preload;
 
     audio.onended = () => {
       const ps = playerStateRef.current;
@@ -1316,6 +1414,11 @@ export default function MushafReaderPage() {
           setPlayerState((p) =>
             p ? { ...p, ayahNum: ps.rangeStart, repeatCount: 0, rangeRepeatCount: p.rangeRepeatCount + 1, status: "playing" } : null
           );
+          // Preload start+1 for next range iteration
+          if (preloadRef.current) {
+            preloadRef.current.src = audioUrl(ps.reciterFolder, ps.surahId, ps.rangeStart + 1);
+            preloadRef.current.load();
+          }
           return;
         }
         setPlayerState(null);
@@ -1328,6 +1431,11 @@ export default function MushafReaderPage() {
       audio.playbackRate = ps.rate;
       audio.play().catch(() => {});
       setPlayerState((p) => (p ? { ...p, ayahNum: nextAyah, repeatCount: 0, status: "playing" } : null));
+      // Preload N+2 now that N+1 is playing
+      if (preloadRef.current) {
+        preloadRef.current.src = audioUrl(ps.reciterFolder, ps.surahId, nextAyah + 1);
+        preloadRef.current.load();
+      }
       // Flip page if the next ayah is not on the current page
       const nextVK = `${ps.surahId}:${nextAyah}`;
       if (!versesRef.current.some((v) => v.verse_key === nextVK)) {
@@ -1338,6 +1446,8 @@ export default function MushafReaderPage() {
     return () => {
       audio.pause();
       audioRef.current = null;
+      preload.pause();
+      preloadRef.current = null;
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -1588,6 +1698,13 @@ export default function MushafReaderPage() {
         audioRef.current.playbackRate = rt;
         audioRef.current.play().catch(() => {});
       }
+      // Preload next ayah while current plays
+      if (preloadRef.current) {
+        preloadRef.current.src = audioUrl(recFolder, ayah.surahId, ayah.verseNum + 1);
+        preloadRef.current.load();
+      }
+      // Persist reciter selection
+      try { localStorage.setItem(`${LS_PREFIX}:reciter`, recFolder); } catch {}
       setPlayerState({
         status: "playing",
         surahId: ayah.surahId,
@@ -1635,6 +1752,10 @@ export default function MushafReaderPage() {
     audio.src = audioUrl(ps.reciterFolder, ps.surahId, prevAyah);
     audio.playbackRate = ps.rate;
     audio.play().catch(() => {});
+    if (preloadRef.current) {
+      preloadRef.current.src = audioUrl(ps.reciterFolder, ps.surahId, prevAyah + 1);
+      preloadRef.current.load();
+    }
     setPlayerState((prev) => prev ? { ...prev, ayahNum: prevAyah, repeatCount: 0, status: "playing" } : null);
   }, []);
 
@@ -1646,6 +1767,10 @@ export default function MushafReaderPage() {
     audio.src = audioUrl(ps.reciterFolder, ps.surahId, nextAyah);
     audio.playbackRate = ps.rate;
     audio.play().catch(() => {});
+    if (preloadRef.current) {
+      preloadRef.current.src = audioUrl(ps.reciterFolder, ps.surahId, nextAyah + 1);
+      preloadRef.current.load();
+    }
     setPlayerState((prev) => prev ? { ...prev, ayahNum: nextAyah, repeatCount: 0, status: "playing" } : null);
     const nextVK = `${ps.surahId}:${nextAyah}`;
     if (!versesRef.current.some((v) => v.verse_key === nextVK)) {
@@ -1754,6 +1879,13 @@ export default function MushafReaderPage() {
   const handleSurahJump = (value: string) => {
     const ch = chapters.find((c) => c.id === parseInt(value, 10));
     if (ch) goToPage(ch.pages[0]);
+    setSurahJumpValue("");
+  };
+
+  const handleJuzJump = (value: string) => {
+    const page = JUZ_PAGES[parseInt(value, 10)];
+    if (page) goToPage(page);
+    setJuzJumpValue("");
   };
 
   // ─── Word interaction ─────────────────────────────────────────────────────
@@ -1947,30 +2079,105 @@ export default function MushafReaderPage() {
               </button>
             </div>
 
-            {/* Row 2: Surah jump + page input */}
+            {/* Row 2: Jump nav (Surah / Juz tabs) + page input */}
             <div style={{ display: "flex", alignItems: "center", gap: "6px", padding: "0 10px 4px" }}>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                {chapters.length > 0 ? (
-                  <Select onValueChange={handleSurahJump}>
-                    <SelectTrigger
-                      className="h-6 text-[11px] min-w-0"
+              <div style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: "4px" }}>
+                {/* S / J tab toggle */}
+                <div
+                  style={{
+                    display: "flex",
+                    flexShrink: 0,
+                    borderRadius: "4px",
+                    overflow: "hidden",
+                    border: `1px solid ${BAYAAN_PAGE_THEME.chromeBorder}`,
+                  }}
+                >
+                  {(["surah", "juz"] as const).map((tab) => (
+                    <button
+                      key={tab}
+                      onClick={() => setJumpTab(tab)}
                       style={{
-                        border: `1px solid ${BAYAAN_PAGE_THEME.chromeBorder}`,
-                        background: "rgba(255,253,248,0.65)",
-                        color: BAYAAN_PAGE_THEME.screenText,
+                        padding: "1px 6px",
+                        fontSize: "9px",
+                        fontWeight: jumpTab === tab ? 700 : 400,
+                        lineHeight: "16px",
+                        background: jumpTab === tab ? BAYAAN_PAGE_THEME.screenText : "rgba(255,253,248,0.65)",
+                        color: jumpTab === tab ? "white" : BAYAAN_PAGE_THEME.chromeMuted,
+                        border: "none",
+                        cursor: "pointer",
                       }}
                     >
-                      <SelectValue placeholder="Jump to Surah…" />
-                    </SelectTrigger>
-                    <SelectContent className="max-h-64">
-                      {chapters.map((ch) => (
-                        <SelectItem key={ch.id} value={String(ch.id)} className="text-xs">
-                          {ch.id}. {ch.name_simple}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                ) : null}
+                      {tab === "surah" ? "S" : "J"}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Surah Select */}
+                {jumpTab === "surah" && chapters.length > 0 && (
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <Select value={surahJumpValue} onValueChange={handleSurahJump}>
+                      <SelectTrigger
+                        className="h-6 text-[11px] min-w-0"
+                        style={{
+                          border: `1px solid ${BAYAAN_PAGE_THEME.chromeBorder}`,
+                          background: "rgba(255,253,248,0.65)",
+                          color: BAYAAN_PAGE_THEME.screenText,
+                        }}
+                      >
+                        <SelectValue placeholder="Jump to Surah…" />
+                      </SelectTrigger>
+                      <SelectContent className="max-h-64">
+                        {chapters.map((ch) => {
+                          const isActive = ch.pages[0] <= currentPage && ch.pages[1] >= currentPage;
+                          return (
+                            <SelectItem
+                              key={ch.id}
+                              value={String(ch.id)}
+                              className={cn("text-xs", isActive && "font-semibold")}
+                            >
+                              {ch.id}. {ch.name_simple}
+                            </SelectItem>
+                          );
+                        })}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+
+                {/* Juz Select */}
+                {jumpTab === "juz" && (
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <Select value={juzJumpValue} onValueChange={handleJuzJump}>
+                      <SelectTrigger
+                        className="h-6 text-[11px] min-w-0"
+                        style={{
+                          border: `1px solid ${BAYAAN_PAGE_THEME.chromeBorder}`,
+                          background: "rgba(255,253,248,0.65)",
+                          color: BAYAAN_PAGE_THEME.screenText,
+                        }}
+                      >
+                        <SelectValue placeholder="Jump to Juz…" />
+                      </SelectTrigger>
+                      <SelectContent className="max-h-64">
+                        {Object.entries(JUZ_PAGES).map(([juz]) => {
+                          const juzNum = parseInt(juz, 10);
+                          const startPage = JUZ_PAGES[juzNum];
+                          const endPage = (JUZ_PAGES[juzNum + 1] ?? TOTAL_PAGES + 1) - 1;
+                          const isActive = currentPage >= startPage && currentPage <= endPage;
+                          return (
+                            <SelectItem
+                              key={juz}
+                              value={juz}
+                              className={cn("text-xs", isActive && "font-semibold")}
+                            >
+                              Juz {juz}
+                            </SelectItem>
+                          );
+                        })}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
               </div>
 
               <div
