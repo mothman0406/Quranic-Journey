@@ -43,8 +43,10 @@ import { BayaanMushafPageCard } from "@/components/mushaf/bayaan/BayaanMushafPag
 import { BayaanSurahBanner } from "@/components/mushaf/bayaan/BayaanSurahBanner";
 import { useBayaanMushafFit } from "@/components/mushaf/bayaan/useBayaanMushafFit";
 import {
+  BAYAAN_MUSHAF_HEADER,
   BAYAAN_MUSHAF_TEXT,
   BAYAAN_PAGE_THEME,
+  BAYAAN_QCF_SURAH_CODEPOINTS,
   TAJWEED_CSS,
 } from "@/components/mushaf/bayaan/bayaan-constants";
 import { getArabicSurahNamesForPage } from "@/components/mushaf/bayaan/bayaan-utils";
@@ -75,6 +77,25 @@ const JUZ_PAGES: Record<number, number> = {
   21: 402, 22: 422, 23: 442, 24: 462, 25: 482,
   26: 502, 27: 522, 28: 542, 29: 562, 30: 582,
 };
+
+// Standard Egyptian (Hafs) revelation order — index = revelation rank − 1, value = surah number
+const REVELATION_ORDER: readonly number[] = [
+   96,  68,  73,  74,   1, 111,  81,  87,  // 1–8
+   92,  89,  93,  94, 103, 100, 108, 102,  // 9–16
+  107, 109, 105, 113, 114, 112,  53,  80,  // 17–24
+   97,  91,  85,  95, 106, 101,  75, 104,  // 25–32
+   77,  50,  90,  86,  54,  38,   7,  72,  // 33–40
+   36,  25,  35,  19,  20,  56,  26,  27,  // 41–48
+   28,  17,  10,  11,  12,  15,   6,  37,  // 49–56
+   31,  34,  39,  40,  41,  42,  43,  44,  // 57–64
+   45,  46,  51,  88,  18,  16,  71,  14,  // 65–72
+   21,  23,  32,  52,  67,  69,  70,  78,  // 73–80
+   79,  82,  84,  30,  29,  83,   2,   8,  // 81–88
+    3,  33,  60,   4,  99,  57,  47,  13,  // 89–96
+   55,  76,  65,  98,  59,  24,  22,  63,  // 97–104
+   58,  49,  66,  64,  61,  62,  48,   5,  // 105–112
+    9, 110,                                 // 113–114
+] as const;
 
 type HighlightColor = "yellow" | "green" | "blue" | "pink";
 
@@ -126,6 +147,7 @@ interface Chapter {
   translated_name: { name: string };
   bismillah_pre: boolean;
   pages: [number, number];
+  revelation_place?: string;
 }
 
 interface AyahInfo {
@@ -212,7 +234,7 @@ function cleanTranslationHtml(raw: string): string {
 async function fetchTranslation(verseKey: string): Promise<string> {
   // Primary endpoint
   try {
-    const r = await fetch(`${QURAN_API}/verses/by_key/${verseKey}?translations=131`);
+    const r = await fetch(`${QURAN_API}/verses/by_key/${verseKey}?translations=20`);
     if (r.ok) {
       const data = await r.json();
       const text = cleanTranslationHtml(data.verse?.translations?.[0]?.text ?? "");
@@ -220,7 +242,7 @@ async function fetchTranslation(verseKey: string): Promise<string> {
     }
   } catch {}
   // Fallback endpoint
-  const r2 = await fetch(`${QURAN_API}/quran/translations/131?verse_key=${verseKey}`);
+  const r2 = await fetch(`${QURAN_API}/quran/translations/20?verse_key=${verseKey}`);
   if (!r2.ok) throw new Error(`Translation unavailable (${r2.status})`);
   const data2 = await r2.json();
   const text2 = cleanTranslationHtml(data2.translations?.[0]?.text ?? "");
@@ -346,6 +368,34 @@ function loadAnnotations(type: "bm" | "hl" | "note"): Record<string, string> {
     /* ignore */
   }
   return result;
+}
+
+// ─── Recent-reads helpers ────────────────────────────────────────────────────
+
+type RecentRead = { surahId: number; page: number; name: string; timestamp: number };
+
+function loadRecentReads(): RecentRead[] {
+  try {
+    const raw = localStorage.getItem("noorpath:recent-reads");
+    if (!raw) return [];
+    return JSON.parse(raw) as RecentRead[];
+  } catch { return []; }
+}
+
+function saveRecentRead(surahId: number, page: number, name: string): void {
+  try {
+    const prev = loadRecentReads().filter((r) => r.surahId !== surahId);
+    const next = [{ surahId, page, name, timestamp: Date.now() }, ...prev].slice(0, 5);
+    localStorage.setItem("noorpath:recent-reads", JSON.stringify(next));
+  } catch {}
+}
+
+function surahToJuz(chapter: Chapter): number {
+  const startPage = chapter.pages[0];
+  for (let j = 30; j >= 1; j--) {
+    if (startPage >= JUZ_PAGES[j]) return j;
+  }
+  return 1;
 }
 
 // ─── Sheet UI helpers ─────────────────────────────────────────────────────────
@@ -1308,6 +1358,262 @@ function PlaybackSettingsSheet({
 
 // ─── Main page ─────────────────────────────────────────────────────────────────
 
+// ─── SurahSearchPanel ────────────────────────────────────────────────────────
+
+function SurahSearchPanel({
+  chapters,
+  bookmarks,
+  goToPage,
+  onClose,
+  currentPage,
+}: {
+  chapters: Chapter[];
+  bookmarks: Record<string, string>;
+  goToPage: (page: number) => void;
+  onClose: () => void;
+  currentPage: number;
+}) {
+  const [query, setQuery] = useState("");
+  const [sortMode, setSortMode] = useState<"asc" | "desc" | "rev">("asc");
+  const [recentReads] = useState<RecentRead[]>(() => loadRecentReads());
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => { inputRef.current?.focus(); }, []);
+
+  const q = query.trim().toLowerCase();
+  const isNumeric = /^\d+$/.test(q);
+  const numericVal = isNumeric ? parseInt(q, 10) : NaN;
+
+  const showJumpPage = isNumeric && numericVal >= 1 && numericVal <= TOTAL_PAGES;
+  const showJumpJuz  = isNumeric && q.length <= 2 && numericVal >= 1 && numericVal <= 30;
+
+  const filteredChapters = useMemo(() => {
+    if (!q) return chapters;
+    return chapters.filter((ch) => {
+      if (String(ch.id) === q) return true;
+      if (ch.name_simple.toLowerCase().includes(q)) return true;
+      if (ch.translated_name.name.toLowerCase().includes(q)) return true;
+      if (isNumeric && numericVal >= ch.pages[0] && numericVal <= ch.pages[1]) return true;
+      if (isNumeric && surahToJuz(ch) === numericVal) return true;
+      return false;
+    });
+  }, [q, chapters, isNumeric, numericVal]);
+
+  const sortedChapters = useMemo(() => {
+    if (sortMode === "asc")  return [...filteredChapters].sort((a, b) => a.id - b.id);
+    if (sortMode === "desc") return [...filteredChapters].sort((a, b) => b.id - a.id);
+    // rev: sort by standard revelation order
+    const rank = (id: number) => { const i = REVELATION_ORDER.indexOf(id as typeof REVELATION_ORDER[number]); return i === -1 ? 999 : i; };
+    return [...filteredChapters].sort((a, b) => rank(a.id) - rank(b.id));
+  }, [filteredChapters, sortMode]);
+
+  const groupedByJuz = useMemo(() => {
+    if (sortMode === "rev") return null;
+    const groups = new Map<number, Chapter[]>();
+    for (const ch of sortedChapters) {
+      const juz = surahToJuz(ch);
+      if (!groups.has(juz)) groups.set(juz, []);
+      groups.get(juz)!.push(ch);
+    }
+    return [...groups.entries()].sort(([a], [b]) => sortMode === "desc" ? b - a : a - b);
+  }, [sortedChapters, sortMode]);
+
+  const bookmarkEntries = Object.keys(bookmarks);
+
+  const navigate = (page: number) => { goToPage(page); onClose(); };
+
+  const SurahRow = ({ ch }: { ch: Chapter }) => {
+    const active = ch.pages[0] <= currentPage && ch.pages[1] >= currentPage;
+    return (
+      <button
+        onClick={() => navigate(ch.pages[0])}
+        style={{
+          width: "100%",
+          display: "flex",
+          alignItems: "center",
+          gap: "12px",
+          padding: "10px 16px",
+          background: active ? "rgba(255,255,255,0.06)" : "none",
+          border: "none",
+          borderBottom: "1px solid rgba(255,255,255,0.05)",
+          cursor: "pointer",
+          textAlign: "left",
+        }}
+      >
+        <span
+          style={{
+            fontFamily: BAYAAN_MUSHAF_HEADER,
+            fontSize: "26px",
+            lineHeight: 1,
+            color: "#c9b96a",
+            flexShrink: 0,
+            width: "32px",
+            textAlign: "center",
+          }}
+        >
+          {String.fromCodePoint(BAYAAN_QCF_SURAH_CODEPOINTS[ch.id - 1])}
+        </span>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
+            <span style={{ fontSize: "14px", fontWeight: active ? 700 : 500, color: "white", lineHeight: 1.3 }}>
+              {ch.id}. {ch.name_simple}
+            </span>
+            {ch.revelation_place && (
+              <span
+                style={{
+                  fontSize: "9px",
+                  padding: "1px 5px",
+                  borderRadius: "3px",
+                  background: ch.revelation_place === "madinah" ? "rgba(34,197,94,0.2)" : "rgba(251,191,36,0.2)",
+                  color: ch.revelation_place === "madinah" ? "#4ade80" : "#fbbf24",
+                  fontWeight: 500,
+                  lineHeight: "14px",
+                  flexShrink: 0,
+                }}
+              >
+                {ch.revelation_place === "madinah" ? "Madinah" : "Makkah"}
+              </span>
+            )}
+          </div>
+          <span style={{ fontSize: "11px", color: "#9ca3af" }}>{ch.translated_name.name}</span>
+        </div>
+        <span style={{ fontSize: "10px", color: "#4b5563", flexShrink: 0 }}>p.{ch.pages[0]}</span>
+      </button>
+    );
+  };
+
+  return (
+    <div
+      style={{ position: "fixed", inset: 0, zIndex: 90, background: "#111", display: "flex", flexDirection: "column", color: "white" }}
+      onClick={(e) => e.stopPropagation()}
+    >
+      {/* Header */}
+      <div style={{ display: "flex", alignItems: "center", gap: "10px", padding: "12px 16px", borderBottom: "1px solid #222", flexShrink: 0 }}>
+        <button
+          onClick={onClose}
+          style={{ background: "none", border: "none", cursor: "pointer", color: "white", padding: "4px", display: "flex", alignItems: "center", flexShrink: 0 }}
+        >
+          <ChevronLeft size={22} />
+        </button>
+        <input
+          ref={inputRef}
+          type="search"
+          placeholder="Search surahs, pages, or juz…"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          style={{ flex: 1, background: "#1a1a1a", border: "1px solid #333", borderRadius: "8px", padding: "8px 12px", color: "white", fontSize: "14px", outline: "none" }}
+        />
+      </div>
+
+      {/* Body */}
+      <div style={{ flex: 1, overflowY: "auto" }}>
+
+        {/* Recent Reads */}
+        {recentReads.length > 0 && !q && (
+          <div style={{ padding: "14px 16px 0" }}>
+            <p style={{ fontSize: "10px", fontWeight: 700, color: "#6b7280", letterSpacing: "0.08em", textTransform: "uppercase", margin: "0 0 8px" }}>Recent Reads</p>
+            <div style={{ display: "flex", gap: "8px", overflowX: "auto", paddingBottom: "12px" }}>
+              {recentReads.map((r) => (
+                <button
+                  key={r.surahId}
+                  onClick={() => navigate(r.page)}
+                  style={{ flexShrink: 0, background: "#1a1a1a", border: "1px solid #333", borderRadius: "8px", padding: "8px 12px", cursor: "pointer", textAlign: "left" }}
+                >
+                  <p style={{ fontSize: "12px", fontWeight: 600, color: "white", margin: 0, lineHeight: 1.3, whiteSpace: "nowrap" }}>{r.name}</p>
+                  <p style={{ fontSize: "10px", color: "#6b7280", margin: "2px 0 0", lineHeight: 1 }}>Page {r.page}</p>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Bookmarks */}
+        {bookmarkEntries.length > 0 && !q && (
+          <div style={{ padding: "4px 16px 0" }}>
+            <p style={{ fontSize: "10px", fontWeight: 700, color: "#6b7280", letterSpacing: "0.08em", textTransform: "uppercase", margin: "0 0 8px" }}>Bookmarks</p>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", paddingBottom: "12px" }}>
+              {bookmarkEntries.map((vk) => {
+                const surahId = parseInt(vk.split(":")[0], 10);
+                const ch = chapters.find((c) => c.id === surahId);
+                return (
+                  <button
+                    key={vk}
+                    onClick={() => { if (ch) navigate(ch.pages[0]); }}
+                    style={{ background: "#1a1a1a", border: "1px solid #2d4a7a", borderRadius: "6px", padding: "4px 10px", cursor: "pointer", fontSize: "12px", color: "#93c5fd" }}
+                  >
+                    {ch?.name_simple ?? `Surah ${surahId}`} {vk}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Sort toggle */}
+        <div style={{ display: "flex", gap: "6px", padding: "8px 16px 10px" }}>
+          {(["asc", "desc", "rev"] as const).map((mode) => (
+            <button
+              key={mode}
+              onClick={() => setSortMode(mode)}
+              style={{
+                padding: "4px 12px", borderRadius: "6px", fontSize: "11px", fontWeight: 600,
+                border: sortMode === mode ? "1px solid #c9b96a" : "1px solid #333",
+                background: sortMode === mode ? "rgba(201,185,106,0.15)" : "transparent",
+                color: sortMode === mode ? "#c9b96a" : "#6b7280",
+                cursor: "pointer",
+              }}
+            >
+              {mode === "asc" ? "Asc" : mode === "desc" ? "Desc" : "Rev"}
+            </button>
+          ))}
+        </div>
+
+        {/* Jump shortcuts */}
+        {q && (showJumpPage || showJumpJuz) && (
+          <div style={{ padding: "0 16px 4px" }}>
+            {showJumpPage && (
+              <button
+                onClick={() => navigate(numericVal)}
+                style={{ width: "100%", display: "flex", alignItems: "center", gap: "10px", padding: "10px 0", background: "none", border: "none", borderBottom: "1px solid #222", cursor: "pointer", color: "#93c5fd", fontSize: "13px" }}
+              >
+                <BookOpen size={14} /> Jump to page {numericVal}
+              </button>
+            )}
+            {showJumpJuz && (
+              <button
+                onClick={() => navigate(JUZ_PAGES[numericVal])}
+                style={{ width: "100%", display: "flex", alignItems: "center", gap: "10px", padding: "10px 0", background: "none", border: "none", borderBottom: "1px solid #222", cursor: "pointer", color: "#93c5fd", fontSize: "13px" }}
+              >
+                <Book size={14} /> Jump to Juz {numericVal}
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* Surah list */}
+        {sortMode !== "rev" && groupedByJuz ? (
+          groupedByJuz.map(([juz, chs]) => (
+            <div key={juz}>
+              <div style={{ padding: "8px 16px 4px", fontSize: "10px", fontWeight: 700, color: "#6b7280", letterSpacing: "0.08em", textTransform: "uppercase", borderBottom: "1px solid #1a1a1a" }}>
+                Juz {juz}
+              </div>
+              {chs.map((ch) => <SurahRow key={ch.id} ch={ch} />)}
+            </div>
+          ))
+        ) : (
+          sortedChapters.map((ch) => <SurahRow key={ch.id} ch={ch} />)
+        )}
+
+        {filteredChapters.length === 0 && q && (
+          <p style={{ textAlign: "center", color: "#4b5563", fontSize: "13px", padding: "24px" }}>No surahs match "{query}"</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── MushafReaderPage ──────────────────────────────────────────────────────────
+
 export default function MushafReaderPage() {
   const { childId } = useParams<{ childId: string }>();
   const rawSearch = useSearch();
@@ -1325,9 +1631,9 @@ export default function MushafReaderPage() {
     return 1;
   });
   const [jumpInput, setJumpInput] = useState("");
-  const [surahJumpValue, setSurahJumpValue] = useState("");
   const [juzJumpValue, setJuzJumpValue] = useState("");
   const [jumpTab, setJumpTab] = useState<"surah" | "juz">("surah");
+  const [showSurahSearch, setShowSurahSearch] = useState(false);
   const [isBlindMode, setIsBlindMode] = useState(false);
   const [revealedVerseKeys, setRevealedVerseKeys] = useState<Set<string>>(new Set());
   const [isSelectMode, setIsSelectMode] = useState(false);
@@ -1538,6 +1844,13 @@ export default function MushafReaderPage() {
     staleTime: Infinity,
   });
   const chapters = chaptersData?.chapters ?? [];
+
+  // Update recent-reads on every page change
+  useEffect(() => {
+    if (!chapters.length) return;
+    const surah = chapters.find((c) => c.pages[0] <= currentPage && c.pages[1] >= currentPage);
+    if (surah) saveRecentRead(surah.id, currentPage, surah.name_simple);
+  }, [currentPage, chapters]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const { data: memData } = useQuery({
     queryKey: ["memorization", childId],
@@ -1876,12 +2189,6 @@ export default function MushafReaderPage() {
     }
   };
 
-  const handleSurahJump = (value: string) => {
-    const ch = chapters.find((c) => c.id === parseInt(value, 10));
-    if (ch) goToPage(ch.pages[0]);
-    setSurahJumpValue("");
-  };
-
   const handleJuzJump = (value: string) => {
     const page = JUZ_PAGES[parseInt(value, 10)];
     if (page) goToPage(page);
@@ -2021,14 +2328,17 @@ export default function MushafReaderPage() {
                 <span>Back</span>
               </button>
 
-              <div style={{ flex: 1, textAlign: "center", minWidth: 0, overflow: "hidden" }}>
+              <button
+                onClick={() => setShowSurahSearch(true)}
+                style={{ flex: 1, textAlign: "center", minWidth: 0, overflow: "hidden", background: "none", border: "none", cursor: "pointer", padding: "2px 4px" }}
+              >
                 <p style={{ fontSize: "12px", fontWeight: 600, color: BAYAAN_PAGE_THEME.screenText, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", lineHeight: 1.3, margin: 0 }}>
                   {currentSurahName || "Full Quran"}
                 </p>
                 <p style={{ fontSize: "10px", color: BAYAAN_PAGE_THEME.chromeMuted, lineHeight: 1.2, margin: 0 }}>
                   p. {currentPage}
                 </p>
-              </div>
+              </button>
 
               <button
                 onClick={() => { setIsBlindMode((b) => !b); setRevealedVerseKeys(new Set()); }}
@@ -2082,7 +2392,7 @@ export default function MushafReaderPage() {
             {/* Row 2: Jump nav (Surah / Juz tabs) + page input */}
             <div style={{ display: "flex", alignItems: "center", gap: "6px", padding: "0 10px 4px" }}>
               <div style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: "4px" }}>
-                {/* S / J tab toggle */}
+                {/* S opens full search panel; J toggles Juz select */}
                 <div
                   style={{
                     display: "flex",
@@ -2092,57 +2402,37 @@ export default function MushafReaderPage() {
                     border: `1px solid ${BAYAAN_PAGE_THEME.chromeBorder}`,
                   }}
                 >
-                  {(["surah", "juz"] as const).map((tab) => (
-                    <button
-                      key={tab}
-                      onClick={() => setJumpTab(tab)}
-                      style={{
-                        padding: "1px 6px",
-                        fontSize: "9px",
-                        fontWeight: jumpTab === tab ? 700 : 400,
-                        lineHeight: "16px",
-                        background: jumpTab === tab ? BAYAAN_PAGE_THEME.screenText : "rgba(255,253,248,0.65)",
-                        color: jumpTab === tab ? "white" : BAYAAN_PAGE_THEME.chromeMuted,
-                        border: "none",
-                        cursor: "pointer",
-                      }}
-                    >
-                      {tab === "surah" ? "S" : "J"}
-                    </button>
-                  ))}
+                  <button
+                    onClick={() => setShowSurahSearch(true)}
+                    style={{
+                      padding: "1px 6px",
+                      fontSize: "9px",
+                      fontWeight: 400,
+                      lineHeight: "16px",
+                      background: "rgba(255,253,248,0.65)",
+                      color: BAYAAN_PAGE_THEME.chromeMuted,
+                      border: "none",
+                      cursor: "pointer",
+                    }}
+                  >
+                    S
+                  </button>
+                  <button
+                    onClick={() => setJumpTab((t) => t === "juz" ? "surah" : "juz")}
+                    style={{
+                      padding: "1px 6px",
+                      fontSize: "9px",
+                      fontWeight: jumpTab === "juz" ? 700 : 400,
+                      lineHeight: "16px",
+                      background: jumpTab === "juz" ? BAYAAN_PAGE_THEME.screenText : "rgba(255,253,248,0.65)",
+                      color: jumpTab === "juz" ? "white" : BAYAAN_PAGE_THEME.chromeMuted,
+                      border: "none",
+                      cursor: "pointer",
+                    }}
+                  >
+                    J
+                  </button>
                 </div>
-
-                {/* Surah Select */}
-                {jumpTab === "surah" && chapters.length > 0 && (
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <Select value={surahJumpValue} onValueChange={handleSurahJump}>
-                      <SelectTrigger
-                        className="h-6 text-[11px] min-w-0"
-                        style={{
-                          border: `1px solid ${BAYAAN_PAGE_THEME.chromeBorder}`,
-                          background: "rgba(255,253,248,0.65)",
-                          color: BAYAAN_PAGE_THEME.screenText,
-                        }}
-                      >
-                        <SelectValue placeholder="Jump to Surah…" />
-                      </SelectTrigger>
-                      <SelectContent className="max-h-64">
-                        {chapters.map((ch) => {
-                          const isActive = ch.pages[0] <= currentPage && ch.pages[1] >= currentPage;
-                          return (
-                            <SelectItem
-                              key={ch.id}
-                              value={String(ch.id)}
-                              className={cn("text-xs", isActive && "font-semibold")}
-                            >
-                              {ch.id}. {ch.name_simple}
-                            </SelectItem>
-                          );
-                        })}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                )}
 
                 {/* Juz Select */}
                 {jumpTab === "juz" && (
@@ -2650,6 +2940,17 @@ export default function MushafReaderPage() {
               <MicOff size={15} /> Stop Reciting
             </button>
           </div>
+        )}
+
+        {/* ── SurahSearchPanel ── */}
+        {showSurahSearch && (
+          <SurahSearchPanel
+            chapters={chapters}
+            bookmarks={bookmarks}
+            goToPage={goToPage}
+            onClose={() => setShowSurahSearch(false)}
+            currentPage={currentPage}
+          />
         )}
 
         {/* ── BayaanAyahSheet ── */}
