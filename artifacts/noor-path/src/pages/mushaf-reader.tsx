@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef, type ReactNode } from "react";
 import { useParams, useSearch, useLocation } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { updateMemorization, listMemorization } from "@workspace/api-client-react";
@@ -1606,6 +1606,99 @@ function SurahSearchPanel({
   );
 }
 
+// ─── Static page renderer for adjacent swipe slots ───────────────────────────
+
+function renderStaticPageContent(
+  verses: PageVerseData[],
+  lineGroups: ReturnType<typeof buildLineGroups>,
+  chapters: Chapter[],
+): ReactNode {
+  if (!lineGroups) {
+    if (!verses.length) return null;
+    return (
+      <div dir="rtl" style={{ textAlign: "justify", textAlignLast: "right" }}>
+        {verses.map((v) => (
+          <span key={v.verse_key} style={{ userSelect: "none" }}>
+            {v.text_uthmani}{" "}
+          </span>
+        ))}
+      </div>
+    );
+  }
+  const surahsOnPage = new Set<number>();
+  for (const v of verses) {
+    const parts = v.verse_key.split(":");
+    if (parseInt(parts[1], 10) === 1) surahsOnPage.add(parseInt(parts[0], 10));
+  }
+  const seenSurahIds = new Set<number>();
+  const nodes: React.ReactNode[] = [];
+  for (const { lineNum, words: lws } of lineGroups) {
+    const newSurahs: number[] = [];
+    for (const lw of lws) {
+      if (!seenSurahIds.has(lw.surahId)) {
+        seenSurahIds.add(lw.surahId);
+        if (surahsOnPage.has(lw.surahId)) newSurahs.push(lw.surahId);
+      }
+    }
+    for (const sid of newSurahs) {
+      const sc = chapters.find((c) => c.id === sid);
+      nodes.push(
+        <BayaanSurahBanner key={`hdr-${sid}`} surahNumber={sid} surahName={sc?.name_simple ?? `Surah ${sid}`} />,
+      );
+    }
+    nodes.push(
+      <div
+        key={`ln-${lineNum}`}
+        style={{
+          display: "flex",
+          direction: "rtl",
+          justifyContent: "center",
+          alignItems: "center",
+          flexWrap: "nowrap",
+          lineHeight: 2.2,
+          padding: "0 4px",
+          width: "100%",
+          gap: "0.3em",
+        }}
+      >
+        {lws.map((lw) => {
+          const k = `${lw.verse_key}:${lw.position}`;
+          if (lw.char_type_name === "end") {
+            return (
+              <span
+                key={k}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  width: "1.9em",
+                  height: "1.9em",
+                  borderRadius: "50%",
+                  border: `1.5px solid ${BAYAAN_PAGE_THEME.markerBorder}`,
+                  background: BAYAAN_PAGE_THEME.markerSurface,
+                  flexShrink: 0,
+                  userSelect: "none",
+                  direction: "ltr",
+                }}
+              >
+                <span style={{ fontSize: "0.58em", color: BAYAAN_PAGE_THEME.markerText, fontFamily: "Georgia, serif", lineHeight: 1 }}>
+                  {lw.verseNum}
+                </span>
+              </span>
+            );
+          }
+          return (
+            <span key={k} style={{ userSelect: "none", padding: "0 0.04em" }}>
+              {lw.text_uthmani}
+            </span>
+          );
+        })}
+      </div>,
+    );
+  }
+  return nodes;
+}
+
 // ─── MushafReaderPage ──────────────────────────────────────────────────────────
 
 export default function MushafReaderPage() {
@@ -1670,6 +1763,12 @@ export default function MushafReaderPage() {
   const currentPageRef = useRef(1);
   const goToPageRef = useRef<(page: number) => void>(() => {});
   const readingGoalEnabledRef = useRef(false);
+
+  // Swipe animation
+  const [swipeDelta, setSwipeDelta] = useState(0);
+  const [swipeTransition, setSwipeTransition] = useState<string>("none");
+  const swipeDirectionRef = useRef<"next" | "prev" | "cancel" | null>(null);
+  const pageContainerRef = useRef<HTMLDivElement>(null);
 
   // Keep playerStateRef in sync with playerState on every render
   playerStateRef.current = playerState;
@@ -1801,11 +1900,40 @@ export default function MushafReaderPage() {
     return () => { recognitionRef.current?.stop(); };
   }, []);
 
+  // Non-passive touchmove so we can call preventDefault and block iOS pull-to-refresh / scroll
+  useEffect(() => {
+    const el = pageContainerRef.current;
+    if (!el) return;
+    const onMove = (e: TouchEvent) => {
+      const dx = e.touches[0].clientX - touchStartX.current;
+      const dy = e.touches[0].clientY - touchStartY.current;
+      if (Math.abs(dy) > Math.abs(dx)) return; // vertical — let browser scroll
+      e.preventDefault();
+      setSwipeDelta(dx);
+    };
+    el.addEventListener("touchmove", onMove, { passive: false });
+    return () => el.removeEventListener("touchmove", onMove);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Page data
   const { data: pageData, isLoading, isError } = useQuery({
     queryKey: ["mushaf-reader-page", currentPage],
     queryFn: () => fetchVersesByPage(currentPage),
     staleTime: 1000 * 60 * 60,
+  });
+
+  // Adjacent page data — already prefetched, reads from cache synchronously
+  const { data: prevPageData } = useQuery({
+    queryKey: ["mushaf-reader-page", currentPage - 1],
+    queryFn: () => fetchVersesByPage(currentPage - 1),
+    staleTime: 1000 * 60 * 60,
+    enabled: currentPage > 1,
+  });
+  const { data: nextPageData } = useQuery({
+    queryKey: ["mushaf-reader-page", currentPage + 1],
+    queryFn: () => fetchVersesByPage(currentPage + 1),
+    staleTime: 1000 * 60 * 60,
+    enabled: currentPage < TOTAL_PAGES,
   });
 
   // Prefetch adjacent pages
@@ -1896,6 +2024,19 @@ export default function MushafReaderPage() {
     }
     return s;
   }, [verses]);
+
+  const prevVerses = prevPageData?.verses ?? [];
+  const nextVerses = nextPageData?.verses ?? [];
+  const prevLineGroups = useMemo(() => buildLineGroups(prevVerses), [prevVerses]);
+  const nextLineGroups = useMemo(() => buildLineGroups(nextVerses), [nextVerses]);
+  const prevPageSurahNames = useMemo(
+    () => (prevVerses.length > 0 ? getArabicSurahNamesForPage(prevVerses, chapters) : ""),
+    [prevVerses, chapters],
+  );
+  const nextPageSurahNames = useMemo(
+    () => (nextVerses.length > 0 ? getArabicSurahNamesForPage(nextVerses, chapters) : ""),
+    [nextVerses, chapters],
+  );
 
   const currentSurahName = useMemo(() => {
     if (!lineGroups?.length) return "";
@@ -2226,19 +2367,57 @@ export default function MushafReaderPage() {
   const handleTouchStart = (e: React.TouchEvent) => {
     touchStartX.current = e.touches[0].clientX;
     touchStartY.current = e.touches[0].clientY;
+    // Cut any in-progress transition and snap strip back to center
+    setSwipeTransition("none");
+    setSwipeDelta(0);
   };
 
   const handleTouchEnd = (e: React.TouchEvent) => {
     const dx = e.changedTouches[0].clientX - touchStartX.current;
     const dy = e.changedTouches[0].clientY - touchStartY.current;
-    if (Math.abs(dx) < 50) return;
-    if (Math.abs(dx) <= Math.abs(dy)) return;
-    const page = currentPageRef.current;
-    if (dx > 0) {
-      if (page < TOTAL_PAGES) goToPageRef.current(page + 1);
-    } else {
-      if (page > 1) goToPageRef.current(page - 1);
+    const W = pageContainerRef.current?.offsetWidth ?? window.innerWidth;
+
+    if (Math.abs(dx) <= Math.abs(dy)) {
+      // Mostly vertical — snap back without animation
+      setSwipeDelta(0);
+      return;
     }
+
+    const page = currentPageRef.current;
+    if (Math.abs(dx) >= 50) {
+      if (dx > 0 && page < TOTAL_PAGES) {
+        swipeDirectionRef.current = "next";
+        setSwipeTransition("transform 280ms ease-out");
+        setSwipeDelta(W);
+      } else if (dx < 0 && page > 1) {
+        swipeDirectionRef.current = "prev";
+        setSwipeTransition("transform 280ms ease-out");
+        setSwipeDelta(-W);
+      } else {
+        // At boundary — snap back
+        swipeDirectionRef.current = "cancel";
+        setSwipeTransition("transform 280ms ease-out");
+        setSwipeDelta(0);
+      }
+    } else {
+      // Below threshold — snap back
+      swipeDirectionRef.current = "cancel";
+      setSwipeTransition("transform 280ms ease-out");
+      setSwipeDelta(0);
+    }
+  };
+
+  const handleTransitionEnd = () => {
+    const dir = swipeDirectionRef.current;
+    if (dir === null || dir === "cancel") return;
+    swipeDirectionRef.current = null;
+    // RAF ensures goToPage + transform reset land on the same paint frame, preventing a flash
+    requestAnimationFrame(() => {
+      if (dir === "next") goToPageRef.current(currentPageRef.current + 1);
+      else if (dir === "prev") goToPageRef.current(currentPageRef.current - 1);
+      setSwipeTransition("none");
+      setSwipeDelta(0);
+    });
   };
 
   // ─── Render ──────────────────────────────────────────────────────────────
@@ -2388,19 +2567,51 @@ export default function MushafReaderPage() {
 
         {/* ── Page area ── */}
         <div
-          style={{ flex: 1, minHeight: 0, position: "relative", padding: "4px" }}
+          ref={pageContainerRef}
+          style={{ flex: 1, minHeight: 0, overflow: "hidden" }}
           onTouchStart={handleTouchStart}
           onTouchEnd={handleTouchEnd}
         >
-          <BayaanMushafPageCard
-            pageNumber={currentPage}
-            pageSurahNames={pageSurahNames}
-            isSinglePageLayout={true}
-            cachedScale={getCachedScale(currentPage)}
-            isContentVisible={isMushafContentVisible}
-            pageContentRef={pageContentRefCb}
-            pageMeasureRef={pageMeasureRefCb}
+          {/* Three-page strip: [NEXT | CURRENT | PREV] — swipe right reveals NEXT, swipe left reveals PREV */}
+          <div
+            style={{
+              display: "flex",
+              width: "300%",
+              height: "100%",
+              transform: `translateX(calc(-33.3333% + ${swipeDelta}px))`,
+              transition: swipeTransition,
+              willChange: "transform",
+            }}
+            onTransitionEnd={handleTransitionEnd}
           >
+            {/* NEXT slot (left in strip — swiping right reveals it) */}
+            <div style={{ flex: "0 0 calc(100% / 3)", height: "100%", padding: "4px" }}>
+              {currentPage < TOTAL_PAGES ? (
+                <BayaanMushafPageCard
+                  pageNumber={currentPage + 1}
+                  pageSurahNames={nextPageSurahNames}
+                  isSinglePageLayout={true}
+                  cachedScale={getCachedScale(currentPage)}
+                  isContentVisible={true}
+                >
+                  {renderStaticPageContent(nextVerses, nextLineGroups, chapters)}
+                </BayaanMushafPageCard>
+              ) : (
+                <div style={{ height: "100%", background: "#e0d5c2" }} />
+              )}
+            </div>
+
+            {/* CURRENT slot (center) */}
+            <div style={{ flex: "0 0 calc(100% / 3)", height: "100%", padding: "4px", position: "relative" }}>
+              <BayaanMushafPageCard
+                pageNumber={currentPage}
+                pageSurahNames={pageSurahNames}
+                isSinglePageLayout={true}
+                cachedScale={getCachedScale(currentPage)}
+                isContentVisible={isMushafContentVisible}
+                pageContentRef={pageContentRefCb}
+                pageMeasureRef={pageMeasureRefCb}
+              >
             {isLoading && (
               <div style={{ padding: "12px 0" }}>
                 {Array.from({ length: 15 }, (_, i) => (
@@ -2692,18 +2903,37 @@ export default function MushafReaderPage() {
             )}
           </BayaanMushafPageCard>
 
-          {/* Center tap — toggle chrome bar */}
-          {!isAnyModeActive && (
-            <div
-              onClick={() => setShowChrome((v) => !v)}
-              style={{
-                position: "absolute",
-                left: "22%", right: "22%",
-                top: 0, bottom: 0,
-                zIndex: 9,
-              }}
-            />
-          )}
+              {/* Center tap — toggle chrome bar */}
+              {!isAnyModeActive && (
+                <div
+                  onClick={() => setShowChrome((v) => !v)}
+                  style={{
+                    position: "absolute",
+                    left: "22%", right: "22%",
+                    top: 0, bottom: 0,
+                    zIndex: 9,
+                  }}
+                />
+              )}
+            </div>
+
+            {/* PREV slot (right in strip — swiping left reveals it) */}
+            <div style={{ flex: "0 0 calc(100% / 3)", height: "100%", padding: "4px" }}>
+              {currentPage > 1 ? (
+                <BayaanMushafPageCard
+                  pageNumber={currentPage - 1}
+                  pageSurahNames={prevPageSurahNames}
+                  isSinglePageLayout={true}
+                  cachedScale={getCachedScale(currentPage)}
+                  isContentVisible={true}
+                >
+                  {renderStaticPageContent(prevVerses, prevLineGroups, chapters)}
+                </BayaanMushafPageCard>
+              ) : (
+                <div style={{ height: "100%", background: "#e0d5c2" }} />
+              )}
+            </div>
+          </div>
         </div>
 
         {/* ── Mark as memorized floating button ── */}
