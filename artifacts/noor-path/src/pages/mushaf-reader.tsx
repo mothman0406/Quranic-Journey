@@ -2,19 +2,13 @@ import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useParams, useSearch, useLocation } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { updateMemorization, listMemorization } from "@workspace/api-client-react";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import {
   AlignLeft,
   Bookmark,
   Book,
   BookOpen,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   Circle,
@@ -1630,9 +1624,6 @@ export default function MushafReaderPage() {
     if (lastPage && lastPage >= 1) return Math.max(1, Math.min(TOTAL_PAGES, lastPage));
     return 1;
   });
-  const [jumpInput, setJumpInput] = useState("");
-  const [juzJumpValue, setJuzJumpValue] = useState("");
-  const [jumpTab, setJumpTab] = useState<"surah" | "juz">("surah");
   const [showSurahSearch, setShowSurahSearch] = useState(false);
   const [isBlindMode, setIsBlindMode] = useState(false);
   const [revealedVerseKeys, setRevealedVerseKeys] = useState<Set<string>>(new Set());
@@ -1918,6 +1909,11 @@ export default function MushafReaderPage() {
   const primarySurahName = currentSurahName || "Al-Fatihah";
   const pageSurahNames = verses.length > 0 ? getArabicSurahNamesForPage(verses, chapters) : "";
 
+  const currentJuz = useMemo(() => {
+    for (let j = 30; j >= 1; j--) if (currentPage >= JUZ_PAGES[j]) return j;
+    return 1;
+  }, [currentPage]);
+
   const { pageContentRefs, pageMeasureRefs, isMushafContentVisible, getCachedScale } =
     useBayaanMushafFit({
       surahNumber: primarySurahId,
@@ -2182,19 +2178,6 @@ export default function MushafReaderPage() {
   };
   goToPageRef.current = goToPage;
 
-  const handlePageInput = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === "Enter") {
-      const val = parseInt(jumpInput, 10);
-      if (!isNaN(val)) { goToPage(val); setJumpInput(""); }
-    }
-  };
-
-  const handleJuzJump = (value: string) => {
-    const page = JUZ_PAGES[parseInt(value, 10)];
-    if (page) goToPage(page);
-    setJuzJumpValue("");
-  };
-
   // ─── Word interaction ─────────────────────────────────────────────────────
 
   const handleWordClick = useCallback(
@@ -2280,7 +2263,7 @@ export default function MushafReaderPage() {
         {/* ── Collapsible chrome bar ── */}
         <div
           style={{
-            height: showChrome ? "56px" : "0px",
+            height: showChrome ? "48px" : "0px",
             overflow: "hidden",
             transition: "height 0.25s ease",
             flexShrink: 0,
@@ -2288,68 +2271,81 @@ export default function MushafReaderPage() {
         >
           <div
             style={{
-              height: "56px",
+              height: "48px",
               display: "flex",
-              flexDirection: "column",
+              alignItems: "center",
+              gap: "8px",
+              padding: "0 10px",
               background: "#cfc5ae",
               borderBottom: `1px solid ${BAYAAN_PAGE_THEME.chromeBorder}`,
             }}
           >
-            {/* Row 1 */}
-            <div
+            {/* Back */}
+            <button
+              onClick={() =>
+                window.history.length > 1
+                  ? window.history.back()
+                  : setLocation(`/child/${childId}/memorization`)
+              }
               style={{
                 display: "flex",
                 alignItems: "center",
-                gap: "6px",
-                padding: "4px 10px 0",
-                flex: 1,
+                gap: "2px",
+                color: BAYAAN_PAGE_THEME.chromeMuted,
+                fontSize: "13px",
+                background: "none",
+                border: "none",
+                cursor: "pointer",
+                flexShrink: 0,
+                padding: "4px 2px",
               }}
             >
-              <button
-                onClick={() =>
-                  window.history.length > 1
-                    ? window.history.back()
-                    : setLocation(`/child/${childId}/memorization`)
-                }
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "2px",
-                  color: BAYAAN_PAGE_THEME.chromeMuted,
-                  fontSize: "13px",
-                  background: "none",
-                  border: "none",
-                  cursor: "pointer",
-                  flexShrink: 0,
-                  padding: "2px 4px",
-                }}
-              >
-                <ChevronLeft size={14} />
-                <span>Back</span>
-              </button>
+              <ChevronLeft size={16} />
+              <span>Back</span>
+            </button>
 
-              <button
-                onClick={() => setShowSurahSearch(true)}
-                style={{ flex: 1, textAlign: "center", minWidth: 0, overflow: "hidden", background: "none", border: "none", cursor: "pointer", padding: "2px 4px" }}
-              >
-                <p style={{ fontSize: "12px", fontWeight: 600, color: BAYAAN_PAGE_THEME.screenText, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", lineHeight: 1.3, margin: 0 }}>
+            {/* Surah island — pill button */}
+            <button
+              onClick={() => setShowSurahSearch(true)}
+              style={{
+                flex: 1,
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                justifyContent: "center",
+                background: "rgba(28,25,18,0.07)",
+                border: `1px solid rgba(28,25,18,0.12)`,
+                borderRadius: "9999px",
+                padding: "5px 16px",
+                cursor: "pointer",
+                minWidth: 0,
+                overflow: "hidden",
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: "3px", maxWidth: "100%" }}>
+                <span style={{ fontSize: "13px", fontWeight: 600, color: BAYAAN_PAGE_THEME.screenText, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", lineHeight: 1.3 }}>
                   {currentSurahName || "Full Quran"}
-                </p>
-                <p style={{ fontSize: "10px", color: BAYAAN_PAGE_THEME.chromeMuted, lineHeight: 1.2, margin: 0 }}>
-                  p. {currentPage}
-                </p>
-              </button>
+                </span>
+                <ChevronDown size={11} color={BAYAAN_PAGE_THEME.chromeMuted} style={{ flexShrink: 0 }} />
+              </div>
+              <span style={{ fontSize: "10px", color: BAYAAN_PAGE_THEME.chromeMuted, lineHeight: 1.2, whiteSpace: "nowrap" }}>
+                Page {currentPage} · Juz {currentJuz} · Hafs
+              </span>
+            </button>
 
+            {/* Right icons */}
+            <div style={{ display: "flex", alignItems: "center", gap: "4px", flexShrink: 0 }}>
               <button
                 onClick={() => { setIsBlindMode((b) => !b); setRevealedVerseKeys(new Set()); }}
                 style={{
-                  padding: "4px",
+                  padding: "5px",
                   borderRadius: "6px",
                   border: `1px solid ${isBlindMode ? "#a855f7" : BAYAAN_PAGE_THEME.chromeBorder}`,
                   background: isBlindMode ? "#f3e8ff" : "transparent",
                   color: isBlindMode ? "#7c3aed" : BAYAAN_PAGE_THEME.chromeMuted,
                   cursor: "pointer",
-                  flexShrink: 0,
+                  display: "flex",
+                  alignItems: "center",
                 }}
               >
                 {isBlindMode ? <EyeOff size={14} /> : <Eye size={14} />}
@@ -2358,150 +2354,34 @@ export default function MushafReaderPage() {
               <button
                 onClick={() => { setIsSelectMode((s) => !s); setSelectedVerseKeys(new Set()); }}
                 style={{
-                  padding: "4px",
+                  padding: "5px",
                   borderRadius: "6px",
                   border: `1px solid ${isSelectMode ? "#16a34a" : BAYAAN_PAGE_THEME.chromeBorder}`,
                   background: isSelectMode ? "#dcfce7" : "transparent",
                   color: isSelectMode ? "#16a34a" : BAYAAN_PAGE_THEME.chromeMuted,
                   cursor: "pointer",
-                  flexShrink: 0,
+                  display: "flex",
+                  alignItems: "center",
                 }}
               >
                 {isSelectMode ? <CheckCircle size={14} /> : <Circle size={14} />}
               </button>
 
               <button
-                onClick={() => {
-                  if (isReciting) { stopReciting(); }
-                  else { setIsRecitePickMode((p) => !p); }
-                }}
+                onClick={() => { if (isReciting) stopReciting(); else setIsRecitePickMode((p) => !p); }}
                 style={{
-                  padding: "4px",
+                  padding: "5px",
                   borderRadius: "6px",
                   border: `1px solid ${(isReciting || isRecitePickMode) ? "#e11d48" : BAYAAN_PAGE_THEME.chromeBorder}`,
                   background: (isReciting || isRecitePickMode) ? "#fee2e2" : "transparent",
                   color: (isReciting || isRecitePickMode) ? "#e11d48" : BAYAAN_PAGE_THEME.chromeMuted,
                   cursor: "pointer",
-                  flexShrink: 0,
+                  display: "flex",
+                  alignItems: "center",
                 }}
               >
                 {isReciting ? <MicOff size={14} /> : <Mic size={14} />}
               </button>
-            </div>
-
-            {/* Row 2: Jump nav (Surah / Juz tabs) + page input */}
-            <div style={{ display: "flex", alignItems: "center", gap: "6px", padding: "0 10px 4px" }}>
-              <div style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: "4px" }}>
-                {/* S opens full search panel; J toggles Juz select */}
-                <div
-                  style={{
-                    display: "flex",
-                    flexShrink: 0,
-                    borderRadius: "4px",
-                    overflow: "hidden",
-                    border: `1px solid ${BAYAAN_PAGE_THEME.chromeBorder}`,
-                  }}
-                >
-                  <button
-                    onClick={() => setShowSurahSearch(true)}
-                    style={{
-                      padding: "1px 6px",
-                      fontSize: "9px",
-                      fontWeight: 400,
-                      lineHeight: "16px",
-                      background: "rgba(255,253,248,0.65)",
-                      color: BAYAAN_PAGE_THEME.chromeMuted,
-                      border: "none",
-                      cursor: "pointer",
-                    }}
-                  >
-                    S
-                  </button>
-                  <button
-                    onClick={() => setJumpTab((t) => t === "juz" ? "surah" : "juz")}
-                    style={{
-                      padding: "1px 6px",
-                      fontSize: "9px",
-                      fontWeight: jumpTab === "juz" ? 700 : 400,
-                      lineHeight: "16px",
-                      background: jumpTab === "juz" ? BAYAAN_PAGE_THEME.screenText : "rgba(255,253,248,0.65)",
-                      color: jumpTab === "juz" ? "white" : BAYAAN_PAGE_THEME.chromeMuted,
-                      border: "none",
-                      cursor: "pointer",
-                    }}
-                  >
-                    J
-                  </button>
-                </div>
-
-                {/* Juz Select */}
-                {jumpTab === "juz" && (
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <Select value={juzJumpValue} onValueChange={handleJuzJump}>
-                      <SelectTrigger
-                        className="h-6 text-[11px] min-w-0"
-                        style={{
-                          border: `1px solid ${BAYAAN_PAGE_THEME.chromeBorder}`,
-                          background: "rgba(255,253,248,0.65)",
-                          color: BAYAAN_PAGE_THEME.screenText,
-                        }}
-                      >
-                        <SelectValue placeholder="Jump to Juz…" />
-                      </SelectTrigger>
-                      <SelectContent className="max-h-64">
-                        {Object.entries(JUZ_PAGES).map(([juz]) => {
-                          const juzNum = parseInt(juz, 10);
-                          const startPage = JUZ_PAGES[juzNum];
-                          const endPage = (JUZ_PAGES[juzNum + 1] ?? TOTAL_PAGES + 1) - 1;
-                          const isActive = currentPage >= startPage && currentPage <= endPage;
-                          return (
-                            <SelectItem
-                              key={juz}
-                              value={juz}
-                              className={cn("text-xs", isActive && "font-semibold")}
-                            >
-                              Juz {juz}
-                            </SelectItem>
-                          );
-                        })}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                )}
-              </div>
-
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "2px",
-                  border: `1px solid ${BAYAAN_PAGE_THEME.chromeBorder}`,
-                  borderRadius: "5px",
-                  padding: "0 6px",
-                  height: "24px",
-                  flexShrink: 0,
-                  background: "rgba(255,253,248,0.65)",
-                }}
-              >
-                <span style={{ fontSize: "9px", color: BAYAAN_PAGE_THEME.chromeMuted }}>p.</span>
-                <input
-                  type="number"
-                  min={1}
-                  max={TOTAL_PAGES}
-                  value={jumpInput}
-                  onChange={(e) => setJumpInput(e.target.value)}
-                  onKeyDown={handlePageInput}
-                  placeholder={String(currentPage)}
-                  style={{
-                    width: "34px",
-                    fontSize: "10px",
-                    background: "transparent",
-                    border: "none",
-                    outline: "none",
-                    color: BAYAAN_PAGE_THEME.screenText,
-                  }}
-                />
-              </div>
             </div>
           </div>
         </div>
