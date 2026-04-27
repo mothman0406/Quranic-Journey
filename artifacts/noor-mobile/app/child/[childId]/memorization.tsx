@@ -16,7 +16,7 @@ import {
   useSpeechRecognitionEvent,
 } from "expo-speech-recognition";
 import { ayahAudioUrl } from "@/src/lib/audio";
-import { matchesExpectedWord } from "@/src/lib/recite";
+import { stripTashkeel, wordMatches, stripAlPrefix, tokenize, SKIP_CHARS } from "@/src/lib/recite";
 import {
   fetchDashboard,
   fetchQdcChapterTimings,
@@ -125,6 +125,9 @@ export default function MemorizationScreen() {
   const reciteExpectedIdxRef = useRef(0);
   const displayWordsMapRef = useRef<Map<number, ApiWord[]>>(new Map());
   const surahNumberRef = useRef<number | null>(null);
+  const matchedWordCountRef = useRef(0);
+  const lastMatchedWordRef = useRef("");
+  const lastMatchTimeRef = useRef(0);
 
   // Keep callback-visible refs in sync with state
   useEffect(() => { viewModeRef.current = viewMode; }, [viewMode]);
@@ -291,6 +294,8 @@ export default function MemorizationScreen() {
     setHighlightedWord(-1);
     setHighlightedPage(null);
     setReciteExpectedIdx(0);
+    matchedWordCountRef.current = 0;
+    lastMatchedWordRef.current = "";
     positionRef.current = 0;
     durationRef.current = 0;
 
@@ -469,7 +474,12 @@ export default function MemorizationScreen() {
       Alert.alert("Recite mode is on", "Turn off Recite mode to play Husary.");
       return;
     }
-    if (isPlaying) {
+    // Block re-entry while audio is loading. Without this, rapid taps during
+    // the createAsync window all fall through to playVerse or to the resume
+    // branch and spawn concurrent playback.
+    if (isLoadingRef.current) return;
+
+    if (isPlayingRef.current) {
       if (advanceTimeoutRef.current) {
         clearTimeout(advanceTimeoutRef.current);
         advanceTimeoutRef.current = null;
@@ -479,9 +489,11 @@ export default function MemorizationScreen() {
       isPlayingRef.current = false;
       setIsPlaying(false);
     } else if (soundRef.current) {
-      await soundRef.current.playAsync();
+      // Resume an existing-but-paused sound. Check ref first to avoid race.
+      if (isPlayingRef.current) return; // double-check after await boundary
       isPlayingRef.current = true;
       setIsPlaying(true);
+      await soundRef.current.playAsync();
       startRAF();
     } else {
       currentRepeatRef.current = 1;
@@ -587,23 +599,92 @@ export default function MemorizationScreen() {
 
   useSpeechRecognitionEvent("result", (event) => {
     if (!reciteModeRef.current) return;
-    const transcript = event.results?.[0]?.transcript ?? "";
+
+    // Debounce: ignore rapid-fire interim events right after a successful match.
+    if (Date.now() - lastMatchTimeRef.current < 300) return;
+
+    const result = event.results?.[0];
+    if (!result) return;
+    const transcript = result.transcript ?? "";
     if (!transcript) return;
+    const isFinal = !!event.isFinal;
+
+    console.log("[recite] transcript:", transcript, "| final:", isFinal);
+
+    const heardNormFull = stripTashkeel(transcript);
+    const heardTokens = tokenize(heardNormFull);
+    console.log("[recite] tokens:", heardTokens);
 
     const verseWords = displayWordsMapRef.current.get(currentVerseRef.current);
     if (!verseWords) return;
-    const expectedIdx = reciteExpectedIdxRef.current;
-    const expectedWord = verseWords[expectedIdx]?.text_uthmani;
-    if (!expectedWord) return;
 
-    if (matchesExpectedWord(transcript, expectedWord)) {
-      const nextIdx = expectedIdx + 1;
-      if (nextIdx >= verseWords.length) {
+    let expectedIdx = reciteExpectedIdxRef.current;
+    let advanced = false;
+    let searchFrom = matchedWordCountRef.current;
+
+    // Walk forward through expected words, advancing as long as we keep finding
+    // matches in the heard tokens. This handles iOS's growing partial transcript
+    // — every result event includes everything heard so far in this utterance.
+    while (expectedIdx < verseWords.length) {
+      const expectedRaw = verseWords[expectedIdx]?.text_uthmani ?? "";
+      if (!expectedRaw || SKIP_CHARS.test(expectedRaw)) {
+        expectedIdx++;
+        continue;
+      }
+
+      const expectedNorm = stripTashkeel(expectedRaw);
+      if (!expectedNorm) {
+        expectedIdx++;
+        continue;
+      }
+      // Try with and without ال prefix
+      const expectedTry = stripAlPrefix(expectedNorm);
+      const expectedFinal = expectedTry.length >= 2 ? expectedTry : expectedNorm;
+
+      // Skip Uthmani words that strip to ≤2 chars of only ه/ا — ligature artifacts
+      // speech recognition will never produce.
+      if (expectedFinal.length <= 2 && /^[هاا]+$/.test(expectedFinal)) {
+        expectedIdx++;
+        continue;
+      }
+
+      // Scan the heard transcript from searchFrom onward for any token matching expected
+      let foundAt = -1;
+      for (let i = searchFrom; i < heardTokens.length; i++) {
+        const heardRaw = heardTokens[i];
+        if (!heardRaw) continue;
+        const heardTry = stripAlPrefix(heardRaw);
+        const heardFinal = heardTry.length >= 2 ? heardTry : heardRaw;
+        console.log("[recite] scan:", heardFinal, "vs expected:", expectedFinal);
+        if (wordMatches(heardFinal, expectedFinal, lastMatchedWordRef.current)) {
+          foundAt = i;
+          break;
+        }
+      }
+
+      if (foundAt === -1) break; // no more expected matches in this transcript
+
+      advanced = true;
+      lastMatchTimeRef.current = Date.now();
+      const matchedRaw = heardTokens[foundAt];
+      if (!matchedRaw) break;
+      const matchedTry = stripAlPrefix(matchedRaw);
+      lastMatchedWordRef.current = matchedTry.length >= 2 ? matchedTry : matchedRaw;
+      matchedWordCountRef.current = foundAt + 1;
+      searchFrom = foundAt + 1;
+
+      expectedIdx++;
+    }
+
+    if (advanced) {
+      console.log("[recite] advanced to expectedIdx:", expectedIdx);
+
+      if (expectedIdx >= verseWords.length) {
         if (
           ayahEndRef.current !== null &&
           currentVerseRef.current < ayahEndRef.current
         ) {
-          setReciteExpectedIdx(0);
+          // Move to next verse — the [currentVerse] effect resets the recite state.
           setCurrentVerse((v) => v + 1);
         } else {
           setReciteListening(false);
@@ -611,15 +692,21 @@ export default function MemorizationScreen() {
           Alert.alert("MashaAllah!", "You recited the whole range.");
         }
       } else {
-        setReciteExpectedIdx(nextIdx);
-        setHighlightedWord(nextIdx);
+        setReciteExpectedIdx(expectedIdx);
+        setHighlightedWord(expectedIdx);
         if (surahNumberRef.current !== null) {
           setHighlightedPage({
             verseKey: `${surahNumberRef.current}:${currentVerseRef.current}`,
-            position: nextIdx + 1,
+            position: expectedIdx + 1,
           });
         }
       }
+    }
+
+    // Final result closes this utterance — reset search position so the
+    // next utterance starts fresh from token 0.
+    if (isFinal) {
+      matchedWordCountRef.current = 0;
     }
   });
 
@@ -988,6 +1075,8 @@ export default function MemorizationScreen() {
               // Fully release the audio session so expo-speech-recognition can claim the mic.
               // pauseAsync alone leaves iOS holding the session for expo-av, blocking mic access.
               await stopAudioCompletely();
+              matchedWordCountRef.current = 0;
+              lastMatchedWordRef.current = "";
               setReciteExpectedIdx(0);
               setHighlightedWord(0);
               if (surahNumberRef.current !== null) {
