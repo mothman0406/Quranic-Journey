@@ -38,6 +38,13 @@
             "backgroundColor": "#000000"
           }
         }
+      ],
+      [
+        "expo-speech-recognition",
+        {
+          "microphonePermission": "Allow NoorPath to use the microphone to listen as you recite Quran.",
+          "speechRecognitionPermission": "Allow NoorPath to recognize your recitation so it can follow along word by word."
+        }
       ]
     ],
     "experiments": {

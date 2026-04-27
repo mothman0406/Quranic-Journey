@@ -11,7 +11,12 @@ import {
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Audio } from "expo-av";
+import {
+  ExpoSpeechRecognitionModule,
+  useSpeechRecognitionEvent,
+} from "expo-speech-recognition";
 import { ayahAudioUrl } from "@/src/lib/audio";
+import { matchesExpectedWord } from "@/src/lib/recite";
 import {
   fetchDashboard,
   fetchQdcChapterTimings,
@@ -81,6 +86,12 @@ export default function MemorizationScreen() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [revealedVerses, setRevealedVerses] = useState<Set<string>>(new Set());
 
+  // Recite mode
+  const [reciteMode, setReciteMode] = useState(false);
+  const [reciteListening, setReciteListening] = useState(false);
+  const [reciteError, setReciteError] = useState<string | null>(null);
+  const [reciteExpectedIdx, setReciteExpectedIdx] = useState(0);
+
   // Audio + RAF refs
   const soundRef = useRef<Audio.Sound | null>(null);
   const rafIdRef = useRef<number>(0);
@@ -108,9 +119,19 @@ export default function MemorizationScreen() {
   const lineLayoutMap = useRef<Map<string, number>>(new Map());
   const pageCardLayoutMap = useRef<Map<number, number>>(new Map());
 
+  // Recite refs (callbacks read these; state isn't visible inside listeners)
+  const reciteModeRef = useRef(false);
+  const reciteExpectedIdxRef = useRef(0);
+  const displayWordsMapRef = useRef<Map<number, ApiWord[]>>(new Map());
+  const surahNumberRef = useRef<number | null>(null);
+
   // Keep callback-visible refs in sync with state
   useEffect(() => { viewModeRef.current = viewMode; }, [viewMode]);
   useEffect(() => { currentVerseRef.current = currentVerse; }, [currentVerse]);
+  useEffect(() => { reciteModeRef.current = reciteMode; }, [reciteMode]);
+  useEffect(() => { reciteExpectedIdxRef.current = reciteExpectedIdx; }, [reciteExpectedIdx]);
+  useEffect(() => { displayWordsMapRef.current = displayWordsMap; }, [displayWordsMap]);
+  useEffect(() => { surahNumberRef.current = surahNumber; }, [surahNumber]);
 
   // Clear reveals on context switches so old peeks don't bleed through
   useEffect(() => { setRevealedVerses(new Set()); }, [viewMode]);
@@ -270,6 +291,7 @@ export default function MemorizationScreen() {
     cancelAnimationFrame(rafIdRef.current);
     setHighlightedWord(-1);
     setHighlightedPage(null);
+    setReciteExpectedIdx(0);
     positionRef.current = 0;
     durationRef.current = 0;
 
@@ -340,6 +362,7 @@ export default function MemorizationScreen() {
   // ── Audio helpers ────────────────────────────────────────────────────────────
 
   async function playVerse(verseNum: number) {
+    if (reciteModeRef.current) return;
     if (!surahNumber) return;
     if (soundRef.current) {
       await soundRef.current.unloadAsync();
@@ -414,6 +437,10 @@ export default function MemorizationScreen() {
   }
 
   async function handlePlayPause() {
+    if (reciteMode) {
+      Alert.alert("Recite mode is on", "Turn off Recite mode to play Husary.");
+      return;
+    }
     if (isPlaying) {
       if (advanceTimeoutRef.current) {
         clearTimeout(advanceTimeoutRef.current);
@@ -505,6 +532,94 @@ export default function MemorizationScreen() {
       setSubmitting(false);
     }
   }
+
+  // ── Recite mode ──────────────────────────────────────────────────────────────
+
+  async function startRecognition() {
+    const { granted } = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
+    if (!granted) {
+      setReciteError("Microphone or speech recognition permission denied.");
+      setReciteMode(false);
+      Alert.alert(
+        "Permission needed",
+        "NoorPath needs microphone and speech recognition access. Enable them in Settings.",
+      );
+      return;
+    }
+    ExpoSpeechRecognitionModule.start({
+      lang: "ar-SA",
+      interimResults: true,
+      continuous: true,
+      requiresOnDeviceRecognition: false,
+      maxAlternatives: 1,
+    });
+    setReciteListening(true);
+    setReciteError(null);
+  }
+
+  useSpeechRecognitionEvent("result", (event) => {
+    if (!reciteModeRef.current) return;
+    const transcript = event.results?.[0]?.transcript ?? "";
+    if (!transcript) return;
+
+    const verseWords = displayWordsMapRef.current.get(currentVerseRef.current);
+    if (!verseWords) return;
+    const expectedIdx = reciteExpectedIdxRef.current;
+    const expectedWord = verseWords[expectedIdx]?.text_uthmani;
+    if (!expectedWord) return;
+
+    if (matchesExpectedWord(transcript, expectedWord)) {
+      const nextIdx = expectedIdx + 1;
+      if (nextIdx >= verseWords.length) {
+        if (
+          ayahEndRef.current !== null &&
+          currentVerseRef.current < ayahEndRef.current
+        ) {
+          setReciteExpectedIdx(0);
+          setCurrentVerse((v) => v + 1);
+        } else {
+          setReciteListening(false);
+          ExpoSpeechRecognitionModule.stop();
+          Alert.alert("MashaAllah!", "You recited the whole range.");
+        }
+      } else {
+        setReciteExpectedIdx(nextIdx);
+        setHighlightedWord(nextIdx);
+        if (surahNumberRef.current !== null) {
+          setHighlightedPage({
+            verseKey: `${surahNumberRef.current}:${currentVerseRef.current}`,
+            position: nextIdx + 1,
+          });
+        }
+      }
+    }
+  });
+
+  useSpeechRecognitionEvent("error", (event) => {
+    if (!reciteModeRef.current) return;
+    setReciteError(event.error ?? "Recognition error");
+    setReciteListening(false);
+  });
+
+  useSpeechRecognitionEvent("end", () => {
+    if (reciteModeRef.current) {
+      startRecognition();
+    } else {
+      setReciteListening(false);
+    }
+  });
+
+  useEffect(() => {
+    if (reciteMode) {
+      startRecognition();
+    } else {
+      ExpoSpeechRecognitionModule.stop();
+      setReciteListening(false);
+    }
+    return () => {
+      ExpoSpeechRecognitionModule.stop();
+    };
+  }, [reciteMode]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function toggleVerseReveal(verseKey: string) {
     setRevealedVerses((prev) => {
@@ -739,7 +854,7 @@ export default function MemorizationScreen() {
           <Text style={styles.back}>← Back</Text>
         </Pressable>
         <Text style={styles.headerTitle}>
-          Verse {verseIndex} of {totalVerses}
+          {reciteMode ? "Recite " : ""}Verse {verseIndex} of {totalVerses}
         </Text>
         <Pressable
           style={styles.headerButton}
@@ -833,11 +948,34 @@ export default function MemorizationScreen() {
             </Text>
           </Pressable>
           <Pressable
-            style={[styles.modeButton, styles.modeButtonDisabled]}
-            disabled
+            style={[
+              styles.modeButton,
+              reciteMode && styles.modeButtonActive,
+            ]}
+            onPress={async () => {
+              if (reciteMode) {
+                setReciteMode(false);
+                return;
+              }
+              if (isPlayingRef.current) {
+                await soundRef.current?.pauseAsync();
+                isPlayingRef.current = false;
+                setIsPlaying(false);
+                cancelAnimationFrame(rafIdRef.current);
+              }
+              setReciteExpectedIdx(0);
+              setHighlightedWord(0);
+              if (surahNumberRef.current !== null) {
+                setHighlightedPage({
+                  verseKey: `${surahNumberRef.current}:${currentVerse}`,
+                  position: 1,
+                });
+              }
+              setReciteMode(true);
+            }}
           >
-            <Text style={[styles.modeButtonText, styles.modeButtonTextDisabled]}>
-              🎤 Recite (soon)
+            <Text style={[styles.modeButtonText, reciteMode && styles.modeButtonTextActive]}>
+              {reciteMode ? (reciteListening ? "🎤 Listening…" : "🎤 Recite ON") : "🎤 Recite"}
             </Text>
           </Pressable>
         </View>
@@ -877,6 +1015,11 @@ export default function MemorizationScreen() {
           )}
         </Pressable>
       </View>
+
+      {/* Recite error */}
+      {reciteError && (
+        <Text style={styles.errorText}>{reciteError}</Text>
+      )}
 
       {/* Settings bottom sheet */}
       <Modal
@@ -1193,11 +1336,6 @@ const styles = StyleSheet.create({
     backgroundColor: "#2563eb",
     borderColor: "#2563eb",
   },
-  modeButtonDisabled: {
-    backgroundColor: "#f3f4f6",
-    borderColor: "#e5e7eb",
-    opacity: 0.6,
-  },
   modeButtonText: {
     fontSize: 14,
     fontWeight: "600",
@@ -1205,9 +1343,6 @@ const styles = StyleSheet.create({
   },
   modeButtonTextActive: {
     color: "#ffffff",
-  },
-  modeButtonTextDisabled: {
-    color: "#9ca3af",
   },
   controls: {
     flexDirection: "row",

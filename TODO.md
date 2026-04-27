@@ -188,9 +188,26 @@ adds parchment page chrome ported from noor-path bayaan palette.
 - ✅ Settings gear in header opens bottom sheet
 - ✅ Recite mode disabled placeholder button (wired in Slice 4)
 
-#### Phase 2D-Recite (Slice 4) — pending
+#### Phase 2D-Recite (Slice 4) — ✅ DONE (commit TBD — see git log)
 
-- [ ] Recite-to-NoorPath mode using `/api/transcribe` (Hugging Face Whisper)
+On-device speech recognition via expo-speech-recognition. Word-by-word advance,
+fuzzy Arabic matching, continuous listening with iOS 1-min auto-restart, mic
+conflict guard with Husary playback.
+
+NOTE: Expo Go does NOT include the speech-recognition native module.
+Hardware testing requires `eas build --profile development --platform ios`.
+
+- ✅ expo-speech-recognition installed; iOS Info.plist configured via config plugin
+  (NSMicrophoneUsageDescription + NSSpeechRecognitionUsageDescription)
+- ✅ src/lib/recite.ts: Arabic diacritic normalization + fuzzy match predicate
+  (Levenshtein with length-scaled tolerance: 0 for ≤3 chars, 1 for ≤5, 2 otherwise)
+- ✅ Continuous listening while in recite mode; auto-restart on iOS 1-minute limit
+- ✅ Word-by-word advance: expected word N → match → highlight N+1; end of verse
+  advances to next; end of range shows "MashaAllah!" alert
+- ✅ Recite mode pauses Husary and blocks Play while active (iOS audio conflict)
+- ✅ Permission requested on first entry; denied → alert + mode off
+- ✅ Header title shows "Recite Verse X of Y" while active
+- ✅ Recognition errors displayed below controls island
 
 #### Phase 2D-Polish (Slice 5) — pending
 
