@@ -8,8 +8,19 @@ const FEATURE_CARDS = [
 ] as const;
 
 export default function ChildDashboard() {
-  const { name } = useLocalSearchParams<{ childId: string; name: string }>();
+  const { childId, name } = useLocalSearchParams<{ childId: string; name: string }>();
   const router = useRouter();
+
+  function handleCardPress(key: string) {
+    if (key === "reading") {
+      router.push({
+        pathname: "/child/[childId]/mushaf",
+        params: { childId, name: name ?? "" },
+      });
+    } else {
+      Alert.alert("Coming in Phase 2");
+    }
+  }
 
   return (
     <View style={styles.container}>
@@ -26,7 +37,7 @@ export default function ChildDashboard() {
           <Pressable
             key={card.key}
             style={styles.card}
-            onPress={() => Alert.alert("Coming in Phase 2")}
+            onPress={() => handleCardPress(card.key)}
           >
             <Text style={styles.cardLabel}>{card.label}</Text>
             <Text style={styles.cardArrow}>›</Text>
