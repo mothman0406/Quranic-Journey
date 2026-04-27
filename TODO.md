@@ -1,6 +1,6 @@
 # NoorPath / Quranic Journey — Status & Next Steps
 
-_Last updated: April 27, 2026 (after rendering architecture decision v2)_
+_Last updated: April 27, 2026 (after Phase 1 complete)_
 
 ---
 
@@ -35,28 +35,39 @@ _Last updated: April 27, 2026 (after rendering architecture decision v2)_
 
 ---
 
-## 🔜 NEXT — Phase 1: Foundation + Auth
+## ✅ DONE — Phase 1A: Mobile app skeleton + auth
 
-### Phase 1A — Monorepo setup + auth (1-2 sessions)
+Commits: `1c881c1`, `bc6115c`
 
-- [ ] Create `artifacts/noor-mobile/` in the monorepo
-- [ ] Initialize Expo (managed) + TypeScript + Expo Router
-- [ ] Stack:
-  - Expo Router for navigation
-  - TanStack Query (already used in web)
-  - Zustand for client state
-  - Better Auth client (already used in web)
-  - `react-native-mmkv` for persistent local storage
-  - `expo-font` for QCF fonts (only needed in memorization screen, but loaded globally)
-  - `expo-av` for audio playback
-  - `expo-image` for fast page-image rendering with caching
-- [ ] Wire up workspace package imports (`lib/api-spec`, `lib/api-zod`)
-- [ ] Sign-in screen (email/password) hitting Railway URL
-- [ ] Add Expo dev URL to backend's `PROD_TRUSTED_ORIGINS` Railway env var
-- [ ] Child profile selector screen
-- [ ] Empty Dashboard skeleton (cards: memorization, review, reading)
+- ✅ `artifacts/noor-mobile/` created (Expo SDK 54, Expo Router 6, RN 0.81.5)
+- ✅ Renamed to `@workspace/noor-mobile` (matches monorepo convention)
+- ✅ Migrated to pnpm-only (deleted `package-lock.json`, regenerated `pnpm-lock.yaml`)
+- ✅ Better Auth client wired up via `@better-auth/expo` + `expo-secure-store`
+- ✅ Sign-in screen working end-to-end against Railway backend
+- ✅ Sign-out works
+- ✅ Session persisted in iOS Keychain via SecureStore
+- ✅ Light mode forced (`userInterfaceStyle: "light"` in app.json — explicit colors throughout)
 
-### Phase 1B — Easy ports (1-2 sessions)
+---
+
+## ✅ DONE — Phase 1B: Child profile selector + dashboard skeleton
+
+Commits: `ba10fc9`, `de6a2ae`
+
+- ✅ Boilerplate Expo Router template content cleaned up (no more Explore tab, modal, themed components)
+- ✅ Collapsed `(tabs)` group — no bottom tabs in skeleton phase
+- ✅ `src/lib/api.ts` — typed `apiFetch<T>` helper using native `fetch`
+- ✅ Session cookie attached to API requests via `authClient.getCookie()` (Better Auth Expo pattern — `credentials: "omit"` + manual `Cookie` header, since RN has no `document.cookie`)
+- ✅ Child profile selector at `app/index.tsx` — fetches GET `/api/children`, renders cards with avatar emoji + name + age group
+- ✅ Dashboard skeleton at `app/child/[childId].tsx` — three placeholder cards (Memorization, Review, Reading), back button works
+- ✅ All 8 children load correctly on iPhone
+- ✅ Typecheck clean
+
+---
+
+## 🔜 NEXT — Phase 1C (optional cleanup): Easy ports
+
+Low-priority, mostly forms and lists. Can be skipped to jump straight to Phase 2.
 
 - [ ] Settings screen
 - [ ] Du'aas list screen
@@ -70,11 +81,11 @@ _Last updated: April 27, 2026 (after rendering architecture decision v2)_
 ### Phase 2A — Page image foundation (shared by Full Mushaf + Review)
 
 - [ ] Source 604 PNGs of Madinah 15-line Mushaf
-  - First check Quran.com's image API: `https://api.quran.com/api/v4/quran/image-by-page/N` or similar — they may host them at a known URL
+  - First check Quran.com's image API (likely the easiest path)
   - Fallback: download from King Fahd Complex
   - Decide resolution: target ~80-100 MB total at retina, may downscale
 - [ ] Source ayah bounding-box data
-  - Quran.com v4 endpoint: `/quran/verses/by_page/{page}` returns each verse's `text_uthmani` plus position metadata for the standard 15-line layout
+  - Quran.com v4 endpoint: `/quran/verses/by_page/{page}` returns each verse's position metadata for the standard 15-line layout
   - Or pre-generated JSON file if there's a public dataset (cleaner to ship as one file)
   - Total size: ~500 KB JSON for all 6,236 verses
 - [ ] Decide bundling strategy:
@@ -104,7 +115,8 @@ _Last updated: April 27, 2026 (after rendering architecture decision v2)_
 This is the only screen that needs custom text rendering:
 - [ ] Use existing `fetchVersesFromApi` data (word-level array from Quran.com v4)
 - [ ] Render each word as separate `<Text>` with `onPress`, in QCF font
-- [ ] Audio playback (everyayah.com URLs)
+- [ ] Load QCF fonts via `expo-font` (`digital-khatt.otf`, `quran-common.ttf`, `surah-name-qcf.ttf` — already in `noor-path/public/fonts/bayaan/`)
+- [ ] Audio playback (everyayah.com URLs, install `expo-av`)
 - [ ] Track current word index in component state during audio playback
 - [ ] Apply highlight style to currently-playing word
 - [ ] Tap a word to jump audio to that word
@@ -124,16 +136,16 @@ This is the only screen that needs custom text rendering:
 - [ ] Bug fixes from beta feedback
 - [ ] App Store submission
 
-**Estimated total: 5-8 weeks** (down from 6-10 — eliminating one renderer saves real time)
+**Estimated remaining: 4-7 weeks** (Phase 1 complete, ~25% of total work done)
 
 ---
 
 ## 🟡 Backlog
 
 - Update `noor-path/src/lib/auth-client.ts` to support env-switchable baseURL
-- Add Expo dev URL to `PROD_TRUSTED_ORIGINS` and `PROD_ALLOWED_ORIGINS` when RN dev needs LAN access
+- Add Expo dev URL to `PROD_TRUSTED_ORIGINS` and `PROD_ALLOWED_ORIGINS` when RN dev needs LAN access (only if needed; cookie-on-Railway works fine in production mode as proven today)
 - Retire `feature/main-working-branch` once `main` becomes permanent working branch
-- Delete `~/Desktop/skia-quran-test/` once Phase 1 is set up
+- Delete `~/Desktop/skia-quran-test/` (no longer needed; Phase 1 confirmed page-image strategy works without further Skia experiments)
 
 ---
 
@@ -154,6 +166,13 @@ This is the only screen that needs custom text rendering:
 - `babel-preset-expo` auto-configures the Reanimated plugin when both packages are installed; manual plugin entry can cause errors on Expo SDK 54+.
 - Expo Go bundles Skia/Reanimated/Worklets for testing; production needs EAS Build (full Xcode required).
 
+### From Phase 1 mobile app setup
+- React Native has no `document.cookie`. `credentials: "include"` in `fetch` does nothing. Better Auth Expo pattern: `authClient.getCookie()` returns the cookie string from SecureStore, which must be manually added as `Cookie` header. With manual `Cookie` header, set `credentials: "omit"` (not "include") to avoid conflicts.
+- `npx expo install` in a pnpm monorepo will run `pnpm add` at the workspace root, which can corrupt nested `node_modules` if there's also an `npm install` `package-lock.json` present. Fix: commit fully to pnpm — delete `package-lock.json`, delete `noor-mobile/node_modules`, run `pnpm install` from the repo root.
+- `@better-auth/expo@1.6.9` requires `expo-network` as a peer dependency. Not installed automatically by `npx expo install @better-auth/expo`. Must add separately.
+- pnpm's `node_modules/.pnpm/` content-addressed store works fine with Metro/Expo without `node-linker=hoisted`. Don't preemptively add hoisting workarounds.
+- App-wide light mode: set `"userInterfaceStyle": "light"` in `app.json` AND use explicit colors in StyleSheet (don't rely on `useColorScheme` defaults). Belt-and-suspenders.
+
 ---
 
 ## 🔐 Environment / URLs reference
@@ -169,4 +188,4 @@ This is the only screen that needs custom text rendering:
 | Branches | `main` (deploy), `feature/main-working-branch` |
 | Apple Developer | Approved Apr 26 |
 | Railway project | `humble-laughter` / `production` env |
-| Skia test project | `~/Desktop/skia-quran-test/` (delete after Phase 1) |
+| Mobile app HEAD | `de6a2ae` (Phase 1 complete) |
