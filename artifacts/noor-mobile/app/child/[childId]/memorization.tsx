@@ -443,7 +443,7 @@ export default function MemorizationScreen() {
           // because segment 1 starts at frac=0 and extends through the leading silence.
           // Without this shift, the highlight runs ~300ms behind audio because everyayah
           // files have leading silence before recitation begins.
-          const LEAD_MS = 300;
+          const LEAD_MS = 500;
           const wordCount = displayWordsMapRef.current.get(currentVerseRef.current)?.length ?? 0;
           if (wordCount > 0) {
             const shiftedPos = pos + LEAD_MS;
