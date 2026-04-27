@@ -99,6 +99,7 @@ export default function MemorizationScreen() {
   const durationRef = useRef(0);
   const segsRef = useRef<Segment[]>([]);
   const autoPlayRef = useRef(false);
+  const isLoadingRef = useRef(false);
 
   // Refs readable inside async callbacks and RAF ticks (avoid stale closures)
   const viewModeRef = useRef<"ayah" | "page">(viewMode);
@@ -275,11 +276,9 @@ export default function MemorizationScreen() {
   // Cleanup on unmount
   useEffect(() => {
     return () => {
-      cancelAnimationFrame(rafIdRef.current);
-      soundRef.current?.unloadAsync();
-      if (advanceTimeoutRef.current) clearTimeout(advanceTimeoutRef.current);
+      void stopAudioCompletely();
     };
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Cleanup + optional auto-play on verse change
   useEffect(() => {
@@ -361,64 +360,93 @@ export default function MemorizationScreen() {
 
   // ── Audio helpers ────────────────────────────────────────────────────────────
 
+  async function stopAudioCompletely() {
+    cancelAnimationFrame(rafIdRef.current);
+    if (advanceTimeoutRef.current) {
+      clearTimeout(advanceTimeoutRef.current);
+      advanceTimeoutRef.current = null;
+    }
+    if (soundRef.current) {
+      try {
+        await soundRef.current.unloadAsync();
+      } catch {
+        // ignore — already unloaded or in bad state
+      }
+      soundRef.current = null;
+    }
+    isPlayingRef.current = false;
+    setIsPlaying(false);
+    setHighlightedWord(-1);
+    setHighlightedPage(null);
+    positionRef.current = 0;
+    durationRef.current = 0;
+    isLoadingRef.current = false;
+  }
+
   async function playVerse(verseNum: number) {
     if (reciteModeRef.current) return;
     if (!surahNumber) return;
-    if (soundRef.current) {
-      await soundRef.current.unloadAsync();
-      soundRef.current = null;
-    }
-    const url = ayahAudioUrl(surahNumber, verseNum);
-    const { sound } = await Audio.Sound.createAsync(
-      { uri: url },
-      { shouldPlay: true },
-      (status) => {
-        if (!status.isLoaded) return;
-        positionRef.current = status.positionMillis;
-        if (status.durationMillis) durationRef.current = status.durationMillis;
-        if (status.didJustFinish) {
-          // Repeat logic: replay this verse without unloading if repeat count not reached
-          if (currentRepeatRef.current < repeatCountRef.current) {
-            currentRepeatRef.current += 1;
-            soundRef.current
-              ?.setPositionAsync(0)
-              .then(() => soundRef.current?.playAsync())
-              .catch(() => {});
-            return;
-          }
-          // All repeats done for this verse
-          currentRepeatRef.current = 1;
-          cancelAnimationFrame(rafIdRef.current);
-          isPlayingRef.current = false;
-          setIsPlaying(false);
-          setHighlightedWord(-1);
-          setHighlightedPage(null);
-          // Page mode: auto-advance to next verse in scope (gated by autoplayThroughRange)
-          const shouldAutoAdvance =
-            viewModeRef.current === "page" &&
-            autoplayThroughRangeRef.current &&
-            ayahEndRef.current !== null &&
-            currentVerseRef.current < ayahEndRef.current;
-          if (shouldAutoAdvance) {
-            const delay = autoAdvanceDelayRef.current;
-            if (delay > 0) {
-              advanceTimeoutRef.current = setTimeout(() => {
-                advanceTimeoutRef.current = null;
+    if (isLoadingRef.current) return;
+    isLoadingRef.current = true;
+    try {
+      if (soundRef.current) {
+        await soundRef.current.unloadAsync();
+        soundRef.current = null;
+      }
+      const url = ayahAudioUrl(surahNumber, verseNum);
+      const { sound } = await Audio.Sound.createAsync(
+        { uri: url },
+        { shouldPlay: true },
+        (status) => {
+          if (!status.isLoaded) return;
+          positionRef.current = status.positionMillis;
+          if (status.durationMillis) durationRef.current = status.durationMillis;
+          if (status.didJustFinish) {
+            // Repeat logic: replay this verse without unloading if repeat count not reached
+            if (currentRepeatRef.current < repeatCountRef.current) {
+              currentRepeatRef.current += 1;
+              soundRef.current
+                ?.setPositionAsync(0)
+                .then(() => soundRef.current?.playAsync())
+                .catch(() => {});
+              return;
+            }
+            // All repeats done for this verse
+            currentRepeatRef.current = 1;
+            cancelAnimationFrame(rafIdRef.current);
+            isPlayingRef.current = false;
+            setIsPlaying(false);
+            setHighlightedWord(-1);
+            setHighlightedPage(null);
+            // Page mode: auto-advance to next verse in scope (gated by autoplayThroughRange)
+            const shouldAutoAdvance =
+              viewModeRef.current === "page" &&
+              autoplayThroughRangeRef.current &&
+              ayahEndRef.current !== null &&
+              currentVerseRef.current < ayahEndRef.current;
+            if (shouldAutoAdvance) {
+              const delay = autoAdvanceDelayRef.current;
+              if (delay > 0) {
+                advanceTimeoutRef.current = setTimeout(() => {
+                  advanceTimeoutRef.current = null;
+                  autoPlayRef.current = true;
+                  setCurrentVerse((v) => v + 1);
+                }, delay);
+              } else {
                 autoPlayRef.current = true;
                 setCurrentVerse((v) => v + 1);
-              }, delay);
-            } else {
-              autoPlayRef.current = true;
-              setCurrentVerse((v) => v + 1);
+              }
             }
           }
-        }
-      },
-    );
-    soundRef.current = sound;
-    isPlayingRef.current = true;
-    setIsPlaying(true);
-    startRAF();
+        },
+      );
+      soundRef.current = sound;
+      isPlayingRef.current = true;
+      setIsPlaying(true);
+      startRAF();
+    } finally {
+      isLoadingRef.current = false;
+    }
   }
 
   async function seekToWordPosition(position: number) {
@@ -957,12 +985,9 @@ export default function MemorizationScreen() {
                 setReciteMode(false);
                 return;
               }
-              if (isPlayingRef.current) {
-                await soundRef.current?.pauseAsync();
-                isPlayingRef.current = false;
-                setIsPlaying(false);
-                cancelAnimationFrame(rafIdRef.current);
-              }
+              // Fully release the audio session so expo-speech-recognition can claim the mic.
+              // pauseAsync alone leaves iOS holding the session for expo-av, blocking mic access.
+              await stopAudioCompletely();
               setReciteExpectedIdx(0);
               setHighlightedWord(0);
               if (surahNumberRef.current !== null) {
