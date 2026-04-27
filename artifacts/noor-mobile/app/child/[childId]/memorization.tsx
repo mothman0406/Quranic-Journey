@@ -270,7 +270,6 @@ export default function MemorizationScreen() {
     cancelAnimationFrame(rafIdRef.current);
     setHighlightedWord(-1);
     setHighlightedPage(null);
-    setRevealedVerses(new Set());
     positionRef.current = 0;
     durationRef.current = 0;
 
