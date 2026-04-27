@@ -188,7 +188,7 @@ adds parchment page chrome ported from noor-path bayaan palette.
 - ✅ Settings gear in header opens bottom sheet
 - ✅ Recite mode disabled placeholder button (wired in Slice 4)
 
-#### Phase 2D-Recite (Slice 4) — ✅ DONE (commit TBD — see git log)
+#### Phase 2D-Recite (Slice 4) — ✅ DONE (commit 1f6557e)
 
 On-device speech recognition via expo-speech-recognition. Word-by-word advance,
 fuzzy Arabic matching, continuous listening with iOS 1-min auto-restart, mic
