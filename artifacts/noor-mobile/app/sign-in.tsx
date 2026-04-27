@@ -40,6 +40,7 @@ export default function SignInScreen() {
       <TextInput
         style={styles.input}
         placeholder="Email"
+        placeholderTextColor="#999"
         autoCapitalize="none"
         keyboardType="email-address"
         value={email}
@@ -48,6 +49,7 @@ export default function SignInScreen() {
       <TextInput
         style={styles.input}
         placeholder="Password"
+        placeholderTextColor="#999"
         secureTextEntry
         value={password}
         onChangeText={setPassword}
@@ -74,22 +76,26 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     padding: 24,
     gap: 12,
+    backgroundColor: "#ffffff",
   },
   title: {
     fontSize: 28,
     fontWeight: "bold",
     textAlign: "center",
     marginBottom: 16,
+    color: "#111111",
   },
   input: {
     borderWidth: 1,
-    borderColor: "#ccc",
+    borderColor: "#cccccc",
     borderRadius: 8,
     padding: 12,
     fontSize: 16,
+    color: "#111111",
+    backgroundColor: "#ffffff",
   },
   error: {
-    color: "#c00",
+    color: "#cc0000",
     fontSize: 14,
   },
   button: {
@@ -103,7 +109,7 @@ const styles = StyleSheet.create({
     opacity: 0.6,
   },
   buttonText: {
-    color: "#fff",
+    color: "#ffffff",
     fontSize: 16,
     fontWeight: "600",
   },

@@ -33,10 +33,12 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     gap: 20,
+    backgroundColor: "#ffffff",
   },
   greeting: {
     fontSize: 24,
     fontWeight: "600",
+    color: "#111111",
   },
   button: {
     backgroundColor: "#dc2626",
@@ -45,7 +47,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
   },
   buttonText: {
-    color: "#fff",
+    color: "#ffffff",
     fontSize: 16,
     fontWeight: "600",
   },
