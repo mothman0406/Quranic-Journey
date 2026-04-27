@@ -80,6 +80,10 @@ Low-priority, mostly forms and lists. Can be skipped to jump straight to Phase 2
 
 ### Phase 2A — Page image foundation (shared by Full Mushaf + Review)
 
+**Status: research complete. Streaming from GitHub raw URLs validated on
+iPhone (commit pending — skia-quran-test reference impl in
+~/Desktop/skia-quran-test/App.tsx).**
+
 - [ ] Source 604 PNGs of Madinah 15-line Mushaf
   - First check Quran.com's image API (likely the easiest path)
   - Fallback: download from King Fahd Complex
@@ -186,6 +190,22 @@ This is the only screen that needs custom text rendering:
   for Full Mushaf + Review. Memorization screen uses RN <Text> + Bayaan QCF
   fonts (which DO use real Unicode and DO shape correctly) for word-level
   interactivity.
+
+### From page-image streaming test (2026-04-27)
+- Streaming Mushaf pages from `raw.githubusercontent.com/GovarJabbar/Quran-PNG`
+  works perfectly on iOS via `<Image>` + `<FlatList>`. No bundling needed.
+- URL pattern: `https://raw.githubusercontent.com/GovarJabbar/Quran-PNG/master/{NNN}.png`
+  where NNN is zero-padded page number (001-604).
+- Source repo is the static output of `quran/quran.com-images` — same code
+  Quran.com uses for their site. Public domain Madinah Mushaf imagery.
+- Page aspect ratio ~1.45:1 (taller than wide, matching physical Mushaf).
+- For RTL Mushaf navigation (swipe left = next page), use FlatList with
+  `inverted` prop set to true. Pages 1-N data, automatic RTL math.
+- For programmatic page jumps, use FlatList ref + scrollToIndex({index: page-1}).
+- First-load latency for an uncached page is ~500ms-1s. Subsequent views of
+  the same page are instant (RN's <Image> caches automatically).
+- For Phase 2 production: keep streaming, no need to bundle. Add a small
+  in-app message on first launch explaining "first browse needs internet".
 
 ---
 
