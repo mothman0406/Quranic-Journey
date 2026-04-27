@@ -139,20 +139,33 @@ Single-verse focused memorization screen with Husary word-by-word audio sync.
 - ✅ `app/child/[childId]/memorization.tsx` — single-verse view, Amiri font, QDC word-by-word highlight via requestAnimationFrame, tap-to-seek, Prev/Next with auto-play, Mark Complete
 - ✅ Dashboard Memorization card navigates to this screen
 
-#### Phase 2D-Mushaf-Render (Slice 2a) — ✅ DONE (commit TBD — see git log)
+#### Phase 2D-Mushaf-Render (Slice 2a) — ✅ DONE (commit 1dae113)
 
 Full Mushaf static view mode added to memorization screen.
 
 - ✅ `fetchVersesByPage` + `ApiPageVerse` type added to `src/lib/quran.ts`
 - ✅ View mode toggle ("Ayah by Ayah" / "Full Mushaf") in memorization screen header
 - ✅ Page fetch via `verses/by_page` on toggle, cached in `pageWordsMap`
-- ✅ All words on page rendered in Amiri, grouped by `line_number`, `row-reverse` per line
-- ✅ Out-of-scope verses dimmed (`#9ca3af`); in-scope rendered at full `#111111`
-- ✅ Audio behavior unchanged (single-verse play, Prev/Next, Mark Complete)
 - ✅ Multi-page support (stacked when `pageStart !== pageEnd`)
-- Slice 2b: page-level word highlight + auto-scroll — pending
+- ✅ Audio behavior unchanged (single-verse play, Prev/Next, Mark Complete)
 
-#### Phase 2D-Mushaf (Slice 2b) — pending
+#### Phase 2D-Mushaf-Polish (Slice 2a-fix) — ✅ DONE (commit TBD — see git log)
+
+Visual repair of the Full Mushaf view. Fixes broken line layout from 1dae113;
+adds parchment page chrome ported from noor-path bayaan palette.
+
+- ✅ `src/lib/mushaf-theme.ts`: MUSHAF_PAGE_THEME palette + JUZ_START_PAGES + getJuzForPage
+- ✅ `src/lib/quran.ts`: ApiChapter type + fetchAllChapters() with module-level cache
+- ✅ Line layout: flexWrap "wrap" (was "nowrap") — canonical line may wrap to 2 visual lines on phone; accepted
+- ✅ Font: fontSize 20 / lineHeight 38 (was 22/44); end markers at 16
+- ✅ Parchment page card: backgroundColor pageText, borderColor pageBorder, borderRadius 16, overflow hidden
+- ✅ Page header bar: surah names (Amiri, left) + "JUZ N" (tracked, right)
+- ✅ Surah banners: injected at surah transitions, horizontal rule with Arabic name centered
+- ✅ Page footer: centered page number, letterSpacing 3
+- ✅ Dimming: pageMuted (#b0a184) for out-of-scope words (was #9ca3af)
+- ✅ Word Pressable wrappers in place (no-op onPress; wired in Slice 2b)
+
+#### Phase 2D-Mushaf-Sync (Slice 2b) — pending
 
 - [ ] Word-by-word audio highlight extended across full Mushaf page
 - [ ] Auto-scroll to keep active word visible

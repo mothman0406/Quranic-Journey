@@ -20,9 +20,12 @@ import {
 import {
   fetchSurahVerses,
   fetchVersesByPage,
+  fetchAllChapters,
   type ApiWord,
   type ApiPageVerse,
+  type ApiChapter,
 } from "@/src/lib/quran";
+import { MUSHAF_PAGE_THEME as T, getJuzForPage } from "@/src/lib/mushaf-theme";
 
 const HUSARY_QDC_ID = 6;
 
@@ -58,6 +61,7 @@ export default function MemorizationScreen() {
   const [segmentsMap, setSegmentsMap] = useState<Map<string, Segment[]>>(new Map());
   const [viewMode, setViewMode] = useState<"ayah" | "page">("ayah");
   const [pageWordsMap, setPageWordsMap] = useState<Map<number, ApiPageVerse[]>>(new Map());
+  const [chaptersMap, setChaptersMap] = useState<Map<number, ApiChapter>>(new Map());
 
   const [isPlaying, setIsPlaying] = useState(false);
   const [highlightedWord, setHighlightedWord] = useState(-1);
@@ -72,6 +76,19 @@ export default function MemorizationScreen() {
   const segsRef = useRef<Segment[]>([]);
   // Whether prev/next navigation should auto-play the new verse
   const autoPlayRef = useRef(false);
+
+  // Load chapter metadata once for surah name lookups (header + banners)
+  useEffect(() => {
+    fetchAllChapters()
+      .then((chapters) => {
+        const map = new Map<number, ApiChapter>();
+        for (const ch of chapters) map.set(ch.id, ch);
+        setChaptersMap(map);
+      })
+      .catch(() => {
+        // fail silently — header and banners show empty names until loaded
+      });
+  }, []);
 
   // Step 1: if no params, fetch dashboard to get today's memorization target
   useEffect(() => {
@@ -325,10 +342,11 @@ export default function MemorizationScreen() {
 
   function renderMushafPage(pageNum: number) {
     const verses = pageWordsMap.get(pageNum);
+
     if (!verses) {
       return (
-        <View key={pageNum} style={[styles.pageCard, styles.centered]}>
-          <ActivityIndicator color="#2563eb" />
+        <View key={pageNum} style={[styles.pageCard, styles.centered, { minHeight: 200 }]}>
+          <ActivityIndicator color={T.pageMuted} />
         </View>
       );
     }
@@ -342,41 +360,135 @@ export default function MemorizationScreen() {
         lineMap.get(ln)!.push({ word, verseKey: verse.verse_key });
       }
     }
+
+    // Determine where surah banners should be injected.
+    // A banner is inserted before the first line of each new surah on the page.
+    // When a surah transition happens mid-line, the banner still appears before
+    // that line — accepted compromise for mobile wrap-aware rendering.
+    let prevSurah: number | null = null;
+    const bannerBeforeLine = new Map<number, number>(); // lineNum → surahNumber
+    for (const verse of verses) {
+      if (!verse.words.length) continue;
+      const ci = verse.verse_key.indexOf(":");
+      const vSurah = Number(verse.verse_key.slice(0, ci));
+      const vVerse = Number(verse.verse_key.slice(ci + 1));
+      const firstWord = verse.words[0];
+      if (!firstWord) continue;
+      if (prevSurah === null && vVerse === 1) {
+        // Page starts at beginning of a surah → show its banner
+        bannerBeforeLine.set(firstWord.line_number, vSurah);
+      } else if (prevSurah !== null && vSurah !== prevSurah) {
+        // Surah transition → inject banner before this surah's first line
+        bannerBeforeLine.set(firstWord.line_number, vSurah);
+      }
+      prevSurah = vSurah;
+    }
+
+    // Build surah names string for the page header bar
+    const uniqueSurahs: number[] = [];
+    for (const verse of verses) {
+      const ci = verse.verse_key.indexOf(":");
+      const vSurah = Number(verse.verse_key.slice(0, ci));
+      if (!uniqueSurahs.includes(vSurah)) uniqueSurahs.push(vSurah);
+    }
+    const surahNamesStr = uniqueSurahs
+      .map((s) => chaptersMap.get(s)?.name_arabic ?? "")
+      .filter(Boolean)
+      .join(" · ");
+
+    const juz = getJuzForPage(pageNum);
     const lineNums = [...lineMap.keys()].sort((a, b) => a - b);
 
     return (
       <View key={pageNum} style={styles.pageCard}>
-        {lineNums.map((lineNum) => {
-          const lineItems = lineMap.get(lineNum)!;
-          return (
-            <View key={lineNum} style={styles.mushafLine}>
-              {lineItems.map((item, idx) => {
-                const colonIdx = item.verseKey.indexOf(":");
-                const vSurah = Number(item.verseKey.slice(0, colonIdx));
-                const vVerse = Number(item.verseKey.slice(colonIdx + 1));
-                const inScope =
-                  surahNumber !== null &&
-                  ayahStart !== null &&
-                  ayahEnd !== null &&
-                  vSurah === surahNumber &&
-                  vVerse >= ayahStart &&
-                  vVerse <= ayahEnd;
-                return (
-                  <Text
-                    key={`${item.verseKey}-${item.word.position}-${idx}`}
-                    style={[
-                      styles.mushafWord,
-                      item.word.char_type_name === "end" && styles.mushafEndMarker,
-                      !inScope && styles.mushafWordDimmed,
-                    ]}
-                  >
-                    {item.word.text_uthmani}
-                  </Text>
-                );
-              })}
-            </View>
-          );
-        })}
+        {/* Header bar: surah names (left) + Juz label (right) */}
+        <View style={styles.pageHeader}>
+          <Text style={styles.pageHeaderNames} numberOfLines={1}>
+            {surahNamesStr}
+          </Text>
+          <Text style={styles.pageHeaderJuz}>{`JUZ ${juz}`}</Text>
+        </View>
+
+        {/* Page body: lines with surah banners injected at surah transitions */}
+        <View style={styles.pageBody}>
+          {lineNums.map((lineNum) => {
+            const lineItems = lineMap.get(lineNum)!;
+            const bannerSurahNum = bannerBeforeLine.get(lineNum);
+            const bannerName =
+              bannerSurahNum !== undefined
+                ? (chaptersMap.get(bannerSurahNum)?.name_arabic ?? "")
+                : null;
+
+            return (
+              <React.Fragment key={lineNum}>
+                {bannerSurahNum !== undefined && (
+                  <View style={styles.surahBanner}>
+                    <View style={styles.surahBannerRule} />
+                    <View style={styles.surahBannerLabel}>
+                      <Text style={styles.surahBannerText}>{bannerName}</Text>
+                    </View>
+                    <View style={styles.surahBannerRule} />
+                  </View>
+                )}
+                {/*
+                 * Accepted compromise: one canonical Mushaf line may wrap to
+                 * 2+ visual lines on phones due to fontSize + screen width.
+                 * Real fix is per-page native typography in a later phase.
+                 */}
+                <View style={styles.mushafLine}>
+                  {lineItems.map((item, idx) => {
+                    const ci = item.verseKey.indexOf(":");
+                    const vSurah = Number(item.verseKey.slice(0, ci));
+                    const vVerse = Number(item.verseKey.slice(ci + 1));
+                    const inScope =
+                      surahNumber !== null &&
+                      ayahStart !== null &&
+                      ayahEnd !== null &&
+                      vSurah === surahNumber &&
+                      vVerse >= ayahStart &&
+                      vVerse <= ayahEnd;
+
+                    if (item.word.char_type_name === "end") {
+                      return (
+                        <Text
+                          key={`${item.verseKey}-${item.word.position}-${idx}`}
+                          style={[
+                            styles.mushafEndMarker,
+                            !inScope && styles.mushafWordDimmed,
+                          ]}
+                        >
+                          {item.word.text_uthmani}
+                        </Text>
+                      );
+                    }
+
+                    // Pressable wrapper left intentionally without onPress —
+                    // tap-to-seek within page mode is wired in Slice 2b.
+                    return (
+                      <Pressable
+                        key={`${item.verseKey}-${item.word.position}-${idx}`}
+                      >
+                        <Text
+                          style={[
+                            styles.mushafWord,
+                            !inScope && styles.mushafWordDimmed,
+                          ]}
+                        >
+                          {item.word.text_uthmani}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              </React.Fragment>
+            );
+          })}
+        </View>
+
+        {/* Footer: centered page number */}
+        <View style={styles.pageFooter}>
+          <Text style={styles.pageFooterText}>{pageNum}</Text>
+        </View>
       </View>
     );
   }
@@ -467,7 +579,7 @@ export default function MemorizationScreen() {
             </View>
           </View>
         ) : pageStart === null || pageEnd === null ? (
-          <View style={[styles.pageCard, styles.centered]}>
+          <View style={[styles.pageCard, styles.centered, { minHeight: 200 }]}>
             <Text style={styles.errorText}>Page data not available.</Text>
           </View>
         ) : (
@@ -585,6 +697,7 @@ const styles = StyleSheet.create({
     gap: 24,
     paddingBottom: 48,
   },
+  // ── Ayah-by-Ayah card (unchanged) ───────────────────────────────────────────
   verseCard: {
     width: "100%",
     backgroundColor: "#f9fafb",
@@ -616,34 +729,98 @@ const styles = StyleSheet.create({
     lineHeight: 60,
     color: "#111111",
   },
+  // ── Parchment Mushaf page card ───────────────────────────────────────────────
   pageCard: {
     width: "100%",
-    backgroundColor: "#f9fafb",
-    borderRadius: 12,
+    backgroundColor: T.page,
+    borderRadius: 16,
     borderWidth: 1,
-    borderColor: "#e5e7eb",
-    padding: 12,
-    minHeight: 80,
+    borderColor: T.pageBorder,
+    overflow: "hidden",
   },
+  pageHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: T.pageBorder,
+  },
+  pageHeaderNames: {
+    flex: 1,
+    fontFamily: "AmiriQuran",
+    fontSize: 13,
+    color: T.pageLabel,
+  },
+  pageHeaderJuz: {
+    fontSize: 11,
+    color: T.pageLabel,
+    letterSpacing: 2,
+    fontWeight: "600",
+    marginLeft: 8,
+  },
+  pageBody: {
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  pageFooter: {
+    borderTopWidth: 1,
+    borderTopColor: T.pageBorder,
+    paddingVertical: 6,
+    alignItems: "center",
+  },
+  pageFooterText: {
+    fontSize: 11,
+    color: T.pageLabel,
+    letterSpacing: 3,
+  },
+  // ── Surah banner ─────────────────────────────────────────────────────────────
+  surahBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 8,
+    paddingHorizontal: 4,
+  },
+  surahBannerRule: {
+    flex: 1,
+    height: 1,
+    backgroundColor: T.pageRule,
+  },
+  surahBannerLabel: {
+    paddingHorizontal: 12,
+  },
+  surahBannerText: {
+    fontFamily: "AmiriQuran",
+    fontSize: 18,
+    color: T.pageLabel,
+    fontWeight: "600",
+  },
+  // ── Mushaf line words ────────────────────────────────────────────────────────
   mushafLine: {
     flexDirection: "row-reverse",
-    flexWrap: "nowrap",
+    flexWrap: "wrap",
     alignItems: "center",
+    justifyContent: "flex-start",
   },
   mushafWord: {
     fontFamily: "AmiriQuran",
-    fontSize: 22,
-    lineHeight: 44,
-    color: "#111111",
+    fontSize: 20,
+    lineHeight: 38,
+    color: T.pageText,
     marginHorizontal: 1,
   },
   mushafEndMarker: {
-    fontSize: 18,
-    lineHeight: 44,
+    fontFamily: "AmiriQuran",
+    fontSize: 16,
+    lineHeight: 38,
+    color: T.pageText,
+    marginHorizontal: 4,
   },
   mushafWordDimmed: {
-    color: "#9ca3af",
+    color: T.pageMuted,
   },
+  // ── Audio controls (unchanged) ───────────────────────────────────────────────
   controls: {
     flexDirection: "row",
     alignItems: "center",

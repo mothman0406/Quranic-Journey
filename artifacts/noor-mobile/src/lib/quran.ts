@@ -50,3 +50,34 @@ export async function fetchVersesByPage(pageNumber: number): Promise<ApiPageVers
     clearTimeout(timer);
   }
 }
+
+export type ApiChapter = {
+  id: number;
+  name_arabic: string;
+  name_simple: string;
+  verses_count: number;
+};
+
+// Module-level cache — fetched once per app session, resolves to [] on error.
+let chaptersPromise: Promise<ApiChapter[]> | null = null;
+
+export function fetchAllChapters(): Promise<ApiChapter[]> {
+  if (chaptersPromise) return chaptersPromise;
+  const ac = new AbortController();
+  const timer = setTimeout(() => ac.abort(), 10000);
+  chaptersPromise = (async (): Promise<ApiChapter[]> => {
+    try {
+      const res = await fetch("https://api.quran.com/api/v4/chapters?language=en", {
+        signal: ac.signal,
+      });
+      if (!res.ok) return [];
+      const data = (await res.json()) as { chapters?: ApiChapter[] };
+      return data.chapters ?? [];
+    } catch {
+      return [];
+    } finally {
+      clearTimeout(timer);
+    }
+  })();
+  return chaptersPromise;
+}
