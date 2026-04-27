@@ -165,7 +165,7 @@ adds parchment page chrome ported from noor-path bayaan palette.
 - ✅ Dimming: pageMuted (#b0a184) for out-of-scope words (was #9ca3af)
 - ✅ Word Pressable wrappers in place (no-op onPress; wired in Slice 2b)
 
-#### Phase 2D-Mushaf-Sync (Slice 2b) — ✅ DONE (commit TBD)
+#### Phase 2D-Mushaf-Sync (Slice 2b) — ✅ DONE (commit ef7ae00)
 
 - ✅ Sequential auto-advance through in-scope range in Full Mushaf mode
   (Ayah-by-Ayah stops on verse finish; page mode advances automatically)
