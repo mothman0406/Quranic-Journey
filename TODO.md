@@ -1,6 +1,6 @@
 # NoorPath / Quranic Journey — Status & Next Steps
 
-_Last updated: April 27, 2026 (Phase 2D Slice 4 complete; EAS dev build in progress)_
+_Last updated: April 27, 2026 (Phase 2D Slice 4 shipped + tested + 3 hotfixes; Slice 5 next)_
 
 ---
 
@@ -19,8 +19,7 @@ _Last updated: April 27, 2026 (Phase 2D Slice 4 complete; EAS dev build in progr
 - iOS distribution certificate generated (expires Apr 27 2027)
 - `eas.json` committed with `development` / `preview` / `production` profiles
 - `expo-dev-client` installed (auto-added by EAS during first dev build)
-- First EAS development build kicked off Apr 27 2026 — installs as a standalone dev app
-  on registered iPhone, replacing Expo Go for this project
+- First EAS development build shipped Apr 27 2026 — installed on registered iPhone, used to validate Slice 4 recite mode end-to-end
 
 ---
 
@@ -91,7 +90,7 @@ Review queue loads with red/orange/green priority pills; surah review session sh
 
 ---
 
-## ✅ DONE — Phase 2D — Memorization mode (5 slices)
+## ✅ DONE — Phase 2D — Memorization mode (Slices 1–4 of 5 shipped + tested)
 
 ### Phase 2D-Core (Slice 1) — `5650d9e` + `e752721`
 
@@ -144,28 +143,58 @@ Five settings + two mode buttons.
 On-device speech recognition via `expo-speech-recognition`. **Requires EAS dev build to test on hardware** — Expo Go doesn't include the native module.
 
 - `expo-speech-recognition` installed; iOS Info.plist via config plugin (microphone + speech recognition usage strings, kid-friendly copy)
-- `src/lib/recite.ts` — Arabic diacritic normalization + fuzzy match predicate (Levenshtein with length-scaled tolerance: 0 for ≤3 chars, 1 for ≤5, 2 otherwise)
 - Continuous listening; auto-restart on iOS's 1-minute recognition limit
-- Word-by-word advance: expected word N → fuzzy match → highlight N+1; end of verse advances to next; end of range shows "MashaAllah!" alert
+- Word-by-word advance: expected word N → fuzzy match → highlight N+1
 - Recite mode pauses Husary and blocks Play (iOS audio session conflict — mic and speaker can't run simultaneously)
 - Permission requested on first entry; denied → alert directing to Settings
 - Header title shows "Recite Verse X of Y" while active
 - Recognition errors displayed below controls island
 
+#### Slice 4 hotfixes (post-hardware-testing)
+
+**v1 hotfix (`53675e6`)** — Audio session conflict + concurrent play race:
+- Added `isLoadingRef` guard to `playVerse` (rapid taps during initial load no longer spawn concurrent streams)
+- New `stopAudioCompletely()` helper unloads sound + cancels RAF + resets all audio refs/state. Recite mode entry calls it unconditionally so `expo-av`'s audio session is fully released before `expo-speech-recognition` claims the mic
+
+**v2 hotfix (`74ce890`)** — Web-derived Arabic matching + play-during-load race:
+- Replaced naive `normalizeArabic`/Levenshtein with web's `stripTashkeel` (full letter-variant normalization — alef variants, ta-marbuta, ya-with-hamza, presentation forms, dagger alef)
+- Multi-predicate `wordMatches` (equality, substring either direction, subsequence either direction, noun-vowel-stripped, word-final ت→ه)
+- `stripAlPrefix` fallback for the common iOS-drops-"ال" case
+- Transcript-walking loop: scans full accumulated transcript, advances `expectedIdx` as long as matches keep landing, tracks search position via `matchedWordCountRef`
+- `handlePlayPause` now gates exclusively on `isPlayingRef` and `isLoadingRef` (no React state reads in audio paths) — closes the load-completion race window
+
+**v3 hotfix (`4b247eb`)** — Replay after natural finish + verse-boundary highlight + match logs:
+- `playVerse` status callback now unloads `soundRef.current` on natural finish when not auto-advancing (next Play creates a fresh sound from verse start)
+- `[currentVerse]` effect now sets highlight to word 0 in recite mode (was clearing to -1 and making it look like the highlight skipped word 0 of the new verse)
+- Per-match log inside the result handler loop shows intermediate matches, not just final advance summary
+
+**Slice 4 status: works very well in real recitation testing on iPhone (Apr 27 evening).** Remaining diagnostic console.logs in `memorization.tsx` and `recite.ts` will be removed in Slice 5 cleanup.
+
 ---
 
 ## 🔜 Phase 2D-Polish (Slice 5) — final Phase 2D slice
 
-Pending. Items to plan in this slice (some may need additional native deps → another EAS rebuild):
+### Slicing strategy
 
-- All 8 Mushaf themes (Madinah/Ottoman/Modern/Classic × Day/Night) — palette swap
-- Real blur via `expo-blur` (replaces opacity-dimming fallback) — adds native dep, requires rebuild
-- AsyncStorage persistence for settings (repeat count, delay, autoplay, blur, blind, view mode, theme) — `@react-native-async-storage/async-storage` is JS-only, no rebuild needed
-- Reciter picker (currently hardcoded Husary) — reciters table from `noor-path/components/verse-player.tsx`
-- Tajweed highlighting toggle (uses `text_uthmani_tajweed` field from Quran.com v4 + CSS class → color map ported from `noor-path/bayaan-constants.ts`)
+Splitting into two sub-slices around the EAS rebuild boundary:
+
+**Slice 5a (next session) — JS-only, hot-reloads over existing dev build:**
+
+- Diagnostic log cleanup (remove `[recite] transcript:` / `tokens:` / `scan:` / `match:` / `advanced:` from `memorization.tsx` and from `stripTashkeel` in `recite.ts`)
+- AsyncStorage persistence for all settings (`@react-native-async-storage/async-storage` is JS-only)
+- All 8 Mushaf themes (Madinah/Ottoman/Modern/Classic × Day/Night) — palette swap via theme picker in settings sheet
+- Reciter picker (currently hardcoded Husary) — port reciters table from `noor-path/components/verse-player.tsx`
+- Tajweed highlighting toggle (uses `text_uthmani_tajweed` field from Quran.com v4 + CSS-class → color map ported from `noor-path/components/mushaf/bayaan/bayaan-constants.ts`)
 - Long-press word for translation popup — Quran.com v4 `word_fields=translation`
 - Playback rate slider — `expo-av` `setRateAsync`
 - Cumulative review mode — auto-review previously memorized verses
+
+**Slice 5b (after 5a, requires EAS rebuild):**
+
+- Real blur via `expo-blur` (replaces opacity-0.35 fallback used by `blurMode`)
+- Possibly `expo-linear-gradient` for parchment shading if `expo-blur` rebuild is happening anyway — judgment call
+
+After Slice 5b ships, Phase 2D is complete. Phase 3 (TestFlight prep) follows.
 
 ---
 
@@ -181,8 +210,9 @@ Pending. Items to plan in this slice (some may need additional native deps → a
 - [ ] App Store submission
 - [ ] Make audio controls in `review-session` sticky / floating at bottom of screen — currently below the fold because Mushaf page image is tall (~600 px). User has to scroll to find Play / Finish & Rate buttons.
 - [ ] Add ayah-bounding-box overlay in `review-session` to highlight the active chunk's ayahs on the page image (deferred from Phase 2C MVP).
+- [ ] Migrate from `expo-av` to `expo-audio`/`expo-video` (deprecation warning surfaced in SDK 54). Audio path is the most-tested code in the app — its own slice, not bundled into anything.
 
-**Estimated remaining: 3-5 weeks** (Phase 1 + 2 complete; Phase 2D 4/5 slices complete)
+**Estimated remaining: 3-5 weeks** (Phase 1 + 2 complete; Phase 2D 4/5 slices complete and tested)
 
 ---
 
@@ -193,8 +223,7 @@ Pending. Items to plan in this slice (some may need additional native deps → a
 - Retire `feature/main-working-branch` once `main` becomes permanent working branch
 - Delete `~/Desktop/skia-quran-test/` (no longer needed; Amiri validated, page-image strategy locked in)
 - Dashboard kid name shows just first letter when truncated (cosmetic, low priority)
-- Investigate continuous-listening latency on slow networks once testing on hardware
-- Tune `recite.ts` matching tolerance after real-world kid recitation testing — current heuristic may be too strict or too lenient
+- Investigate continuous-listening latency on slow networks once recite mode sees more real-world use
 
 ---
 
@@ -239,16 +268,28 @@ Pending. Items to plan in this slice (some may need additional native deps → a
 
 ### Memorization screen architecture (2026-04-27, Phase 2D)
 - One file: `app/child/[childId]/memorization.tsx`. ~1100 lines after Slice 4. Mixes view mode logic, audio state machine, recognition controller, and renderers. If it grows another 30%, split: extract `lib/memorization-audio.ts` and `lib/memorization-recite.ts`.
-- Audio state lives in refs (`isPlayingRef`, `viewModeRef`, `currentVerseRef`, etc.) because the `expo-av` status callback closes over stale state. Every new `useState` that the audio path reads needs a parallel ref synced via a tiny effect.
+- Audio state lives in refs (`isPlayingRef`, `isLoadingRef`, `viewModeRef`, `currentVerseRef`, etc.) because the `expo-av` status callback closes over stale state. Every new `useState` that the audio path reads needs a parallel ref synced via a tiny effect.
 - Two renderers: Ayah-by-Ayah uses `displayWordsMap.get(currentVerse)` keyed by verse number. Full Mushaf uses `pageWordsMap.get(pageNum)` with words grouped by `line_number`. Both share the same audio loop; the highlight is shown via two parallel pieces of state (`highlightedWord` for ayah mode, `highlightedPage: { verseKey, position }` for page mode).
 - QDC segments are 1-indexed and skip non-word tokens (end markers). When mapping to display indexes, filter `char_type_name === "word"` first.
 - Husary `qdcId` is 6. The `quranComId` field in the reciters table is null for Husary, but the QDC API returns segment timings. Don't assume null `quranComId` means no timing data — check `qdcId`.
+- iOS audio session conflict: `expo-av` and `expo-speech-recognition` both want exclusive audio session. `pauseAsync()` is not enough — must fully `unloadAsync()` before recognition can claim the mic. The `stopAudioCompletely()` helper is the single cleanup point used by recite-mode entry and unmount.
+
+### Arabic fuzzy matching for on-device speech recognition (2026-04-27, Slice 4 hotfixes)
+- iOS speech recognition returns plain Arabic — no hamza variants (أإآاٱ all collapse to ا), no ta-marbuta (ة → ه), no ya-with-hamza (ئ → ي), often without "ال" prefix. Quranic Uthmani text has all of these. Without normalization, transcripts almost never match.
+- The web app's `stripTashkeel` does the full normalization: dagger alef → alef, tashkeel/harakat strip, tatweel strip, presentation-form decomposition, alef-variants → bare alef, alef-maqsura → ya, ta-marbuta → ha, waw/ya-with-hamza → bare letter, hamza → drop, multi-letter mada (ا+ → ا, و+ → و, ي+ → ي).
+- Multi-predicate match (any one returns true): equality, substring either direction, subsequence either direction, noun-vowel-stripped (`نو` removed) equality, word-final `ت→ه` swap. `ال` prefix stripping with ≥2-char fallback. 1-char heard tokens reject unless equal.
+- iOS sends growing partial transcripts each event ("قل", "قل هو", "قل هو الله", ...). Matcher walks full transcript from `matchedWordCountRef` forward, advances `expectedIdx` while matches keep landing. `lastMatchedWordRef` prevents re-matching same heard token. `lastMatchTimeRef` debounces rapid-fire interim events for 300ms after a successful match.
+- iOS recognition has a 60s session limit + warm-up gibberish at restart. Matcher must reject the gibberish ("إغلاق لا لام قاف" type artifacts). The web's predicates do this naturally — no additional filtering needed.
+- Skip pause marks (`SKIP_CHARS` regex covers `\u06D6-\u06ED \u0600-\u0605 \u061B \u061E \u061F \u06DD \u06DE \u06DF`) when iterating expected words — they look like words to splitters but recognition will never produce them.
+- `console.log` at every decision point is invaluable for tuning. Logs go in for hardware testing, come out before ship.
 
 ### EAS dev build (2026-04-27)
 - Expo Go does not include native modules from `expo-speech-recognition`, `expo-blur`, etc. To test these on hardware you need an EAS development build via `eas build --profile development --platform ios`.
 - First build requires: `eas-cli` (use `npx eas-cli@latest <cmd>` to avoid global-install permission issues), Expo account, Apple Developer login during the build, distribution certificate generation, provisioning profile generation, device registration via the Website method (NOT Developer Portal — Developer Portal only imports devices already registered through Apple's web UI).
 - Apple bundle identifier must be set in `app.json` under `expo.ios.bundleIdentifier` BEFORE running `eas build`. NoorPath uses `com.mothman.noorpath`.
-- Free-tier builds queue 1–5 minutes before starting; build itself takes 10–15 minutes. After completion, install via QR code on the build's "Install" page; trust the developer profile in iPhone Settings → General → VPN & Device Management.
+- iOS 16+ requires **Developer Mode** (Settings → Privacy & Security → Developer Mode → enable → restart). The toggle only appears AFTER an internal-distribution app has been installed once. Until enabled, tapping the dev app gets "Developer Mode Required" alert.
+- After install + Developer Mode + restart, trust the developer profile in iPhone Settings → General → VPN & Device Management.
+- Free-tier builds queue 5–25 minutes before starting; build itself takes 10–15 minutes.
 - After install, run `npx expo start --dev-client` from `noor-mobile/` to start the dev server. The `--dev-client` flag is critical — without it, the dev build can't connect.
 - Re-run `eas build --profile development --platform ios` only when adding new native deps or changing `app.json` plugin entries. Pure JS changes hot-reload over the existing dev build.
 
@@ -269,4 +310,4 @@ Pending. Items to plan in this slice (some may need additional native deps → a
 | iOS bundle identifier | `com.mothman.noorpath` |
 | EAS project | `@mothman123/noor-mobile` |
 | Railway project | `humble-laughter` / `production` env |
-| Mobile app HEAD | `1f6557e` (Phase 2D Slice 4 complete) |
+| Mobile app HEAD | `4b247eb` (Phase 2D Slice 4 + 3 hotfixes; tested on hardware) |

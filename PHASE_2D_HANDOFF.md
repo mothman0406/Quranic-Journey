@@ -1,10 +1,9 @@
 # NoorPath / Quranic Journey — Phase 2D Slice 5 Handoff
 
 **For: the next Claude conversation continuing this project**
-**From: the Claude that ran Phase 2D Slices 1–4 (the project's whole memorization screen)**
-**Date: 2026-04-27, evening**
+**Last updated: 2026-04-27, late evening (Slice 4 + 3 hotfixes shipped + tested; Slice 5a is next)**
 
-This handoff supersedes `PHASE_2D_HANDOFF.md` from earlier today. Where they conflict, this one wins.
+This handoff supersedes earlier handoff drafts. Where they conflict, this one wins.
 
 ---
 
@@ -16,9 +15,10 @@ You're working with a self-taught builder doing this project on weekends and eve
 - He prefers Claude Code (the agentic CLI) make all code changes. The pattern that works: I draft a precise prompt as a markdown block; he pastes it into a fresh Claude Code session at the repo root; Claude Code reports SHA + typecheck; we iterate. Direct filesystem edits from the chat assistant are reserved for tiny things (config files, doc updates, manual git commits).
 - One terminal command at a time, not walls.
 - "Let's keep going" / "next" / "good" means it. Don't suggest stopping.
-- He pushes back hard when scope is wrong. Take it seriously, but don't preemptively scope down — *ship the right slice, and offer the slicing plan transparently*. Don't bury features.
-- Test-then-ship. As of this session, every slice gets tested on Expo before the next prompt is drafted. Don't skip ahead.
+- He pushes back hard when scope is wrong. Take it seriously, but don't preemptively scope down — ship the right slice, and offer the slicing plan transparently.
+- Test-then-ship. Every slice gets tested on Expo (or now on the EAS dev build) before the next prompt is drafted. Don't skip ahead.
 - He's fine being told something is hard or that a tradeoff exists. Don't sandbag.
+- **Critical convention: only ever LOOSEN matching/acceptance, never tighten without asking.** This came up explicitly during Slice 4 hotfix work. The recite mode matcher is at parity with the web app and works well in real testing. Don't make it stricter.
 
 ---
 
@@ -37,25 +37,26 @@ You're working with a self-taught builder doing this project on weekends and eve
 - **Web frontend** (`artifacts/noor-path/`): React 19 + Vite + shadcn/ui. **Frozen archival reference.** Don't edit.
 - **iOS app** (`artifacts/noor-mobile/`): Expo SDK 54.0.33, Expo Router 6, RN 0.81.5. **The active build target.**
 - **Apple Developer:** approved Apr 26. Team ID `M7KJJDN537`. iOS bundle identifier `com.mothman.noorpath`.
-- **EAS project:** `@mothman123/noor-mobile`. First development build kicked off Apr 27 evening (likely complete by next session).
+- **EAS project:** `@mothman123/noor-mobile`. First development build shipped Apr 27 evening; installed on Mohammad's registered iPhone with Developer Mode enabled.
 
 ---
 
 ## 3. Where the project is right now
 
-The memorization screen is **Phase 2D's whole story**. Five slices planned; four shipped and tested; Slice 5 (Polish) is what the next session ships.
+**Phase 2D Slices 1–4 are shipped, hardware-tested, and working very well.** Slice 4 (recite mode) has had 3 follow-up hotfixes addressing iOS-specific issues that surfaced only on real hardware. The recite mode now correctly handles iOS speech recognition's quirks (no hamza variants, dropped "ال" prefix, growing partial transcripts, audio session conflicts).
+
+**Slice 5 (Polish) is the next and final Phase 2D slice.** It's split into 5a (JS-only, no rebuild) and 5b (`expo-blur`, requires rebuild).
 
 | Slice | Status | Commit | What |
 |---|---|---|---|
-| **2D-Core (1)** | ✅ tested | `5650d9e` | Single-verse view, Amiri font, Husary word-by-word audio sync, tap-to-seek, Mark Complete |
-| **2D-Mushaf-Render (2a)** | ✅ tested | `1dae113` | View mode toggle, page-level static rendering |
-| **2D-Mushaf-Polish (2a-fix)** | ✅ tested | `3a9307c` + line-centering tweak | Parchment chrome, surah banners, centered lines |
-| **2D-Mushaf-Sync (2b)** | ✅ tested | `ef7ae00` | Page-level word highlight, sequential auto-advance, fixed controls island |
-| **2D-Practice (3)** | ✅ tested | `e2f9be7` + `1c89b3b` + `948de29` | Settings sheet, repeat counts, auto-advance delay, blind mode (toggle, persists across auto-advance), blur mode, Recite placeholder |
-| **2D-Recite (4)** | ✅ committed; needs hardware testing via EAS dev build | `1f6557e` + `4100a1f` | On-device speech recognition, fuzzy Arabic match, word-by-word advance |
-| **2D-Polish (5)** | 🔜 next | — | Themes, AsyncStorage persistence, real blur via expo-blur, reciter picker, tajweed coloring, translation popup, playback rate, cumulative review |
-
-There is also a small commit `d154455` adding the iOS bundle identifier to `app.json`, and an `eas.json` commit for the EAS build profile. These are infrastructure, not feature work.
+| 2D-Core (1) | ✅ tested | `5650d9e` + `e752721` | Single-verse view, Amiri font, Husary word-by-word audio sync, tap-to-seek, Mark Complete |
+| 2D-Mushaf-Render (2a) | ✅ tested | `1dae113` | View mode toggle, page-level static rendering |
+| 2D-Mushaf-Polish (2a-fix) | ✅ tested | `3a9307c` + line-centering tweak | Parchment chrome, surah banners, centered lines |
+| 2D-Mushaf-Sync (2b) | ✅ tested | `ef7ae00` | Page-level word highlight, sequential auto-advance, fixed controls island |
+| 2D-Practice (3) | ✅ tested | `e2f9be7` + `1c89b3b` + `948de29` | Settings sheet, repeat counts, auto-advance delay, blind mode, blur mode |
+| 2D-Recite (4) | ✅ tested (after 3 hotfixes) | `1f6557e` + `4100a1f` + `53675e6` + `74ce890` + `4b247eb` | On-device speech recognition with web-derived Arabic matching |
+| **2D-Polish (5a)** | 🔜 **next** | — | **Diag log cleanup, AsyncStorage, themes, reciter picker, tajweed, translations, playback rate, cumulative review** |
+| 2D-Polish (5b) | after 5a | — | Real `expo-blur` (requires EAS rebuild) |
 
 `TODO.md` is current. Read it first.
 
@@ -63,30 +64,56 @@ There is also a small commit `d154455` adding the iOS bundle identifier to `app.
 
 ## 4. The single most important file
 
-`artifacts/noor-mobile/app/child/[childId]/memorization.tsx` — **the entire memorization product, ~1100 lines as of Slice 4**. Everything Phase 2D ships is in this one file (plus three supporting libs: `src/lib/memorization.ts`, `src/lib/quran.ts`, `src/lib/recite.ts`, plus `src/lib/mushaf-theme.ts`).
+`artifacts/noor-mobile/app/child/[childId]/memorization.tsx` — **the entire memorization product, ~1100 lines as of Slice 4 + hotfixes**. Everything Phase 2D ships is in this one file (plus four supporting libs: `src/lib/memorization.ts`, `src/lib/quran.ts`, `src/lib/recite.ts`, `src/lib/mushaf-theme.ts`).
 
-It's getting large. After Slice 5 ships, it will likely be ~1500–1800 lines. **If you (next Claude) find yourself scrolling repeatedly to understand state interactions, the right move is to refactor into separate concerns:** `lib/memorization-audio.ts` (audio state machine, RAF loop, segments), `lib/memorization-recite.ts` (recognition controller), and the screen file becomes mostly composition + rendering. Don't refactor preemptively — only if the file's complexity is actively slowing the work.
+After Slice 5a ships it'll likely be 1300–1500 lines. Don't refactor preemptively. If by Slice 5b it's hard to follow, extract `lib/memorization-audio.ts` (audio state machine + RAF + repeat/auto-advance) and `lib/memorization-recite.ts` (recognition controller + result handler).
 
-### Architectural notes (current state, Slice 4)
+### Architectural notes (current state, post-Slice-4 hotfixes)
 
-- **Two render modes** controlled by `viewMode: "ayah" | "page"`. Toggle pills under the header.
-- **Audio state lives in refs** because `expo-av`'s status callback closes over stale state. Pattern:
-  ```ts
-  const [foo, setFoo] = useState(...);
-  const fooRef = useRef(foo);
-  useEffect(() => { fooRef.current = foo; }, [foo]);
-  ```
-  Every state value the audio path reads has a parallel ref. After Slice 4, the synced refs are: `viewModeRef`, `currentVerseRef`, `ayahEndRef`, `isPlayingRef`, `pendingSeekPositionRef`, `repeatCountRef`, `autoAdvanceDelayRef`, `autoplayThroughRangeRef`, `reciteModeRef`, `reciteExpectedIdxRef`, plus probably `surahNumberRef` and `displayWordsMapRef` (added in Slice 4 for the recognition listener).
-- **Two highlight states**: `highlightedWord: number` (0-based, used by ayah mode) and `highlightedPage: { verseKey, position } | null` (1-based position to match `ApiWord.position`, used by page mode). Both updated from the same RAF tick.
-- **`segsRef.current`** holds segments for the *currently playing verse only*. The active verse is always the one playing — page mode plays one verse at a time, sequentially.
-- **QDC segments are 1-indexed and skip non-word tokens.** When using them with display words, filter `char_type_name === "word"` first.
-- **Husary uses `qdcId: 6`.** The reciters table has `quranComId: null` for Husary, but QDC has segment timings. Don't be fooled.
-- **Audio session conflict on iOS**: mic and speaker can't both be active. Recite mode pauses Husary and blocks Play. Same applies to anything else that opens a mic in the future.
-- **Auto-advance + delay**: `setTimeout`-gated, tracked in `advanceTimeoutRef`. Cancelled on pause / Prev / Next / unmount.
-- **Repeat count**: per-verse counter `currentRepeatRef`. Resets on verse change. Replays via `setPositionAsync(0)` + `playAsync` (no sound recreation).
-- **Blind mode**: hides in-scope verses as `••••`. Toggle behavior — tap reveals, tap again hides (no auto-timer). Reveals persist across audio auto-advance. Tap-to-seek disabled while blind mode is on (intent: blind = test mode, not seek mode). Reveals reset on view-mode change and on blind-mode toggle (those are user-driven context shifts) but NOT on verse change.
-- **Blur mode**: opacity 0.35 on non-active in-scope verses while playing. Real `expo-blur` is Slice 5.
-- **Recite mode (Slice 4)**: `expo-speech-recognition`, continuous listening, word-by-word advance via `matchesExpectedWord` from `src/lib/recite.ts`. Auto-restarts on iOS's 1-minute recognition limit. Pauses Husary on entry; blocks Play while active. Permission requested first time.
+**Two render modes** controlled by `viewMode: "ayah" | "page"`. Toggle pills under the header.
+
+**Audio state lives in refs.** `expo-av`'s status callback closes over stale state. Pattern:
+```ts
+const [foo, setFoo] = useState(...);
+const fooRef = useRef(foo);
+useEffect(() => { fooRef.current = foo; }, [foo]);
+```
+Refs as of Slice 4 + hotfixes: `viewModeRef`, `currentVerseRef`, `ayahEndRef`, `isPlayingRef`, `isLoadingRef`, `pendingSeekPositionRef`, `repeatCountRef`, `autoAdvanceDelayRef`, `autoplayThroughRangeRef`, `reciteModeRef`, `reciteExpectedIdxRef`, `displayWordsMapRef`, `surahNumberRef`, `matchedWordCountRef`, `lastMatchedWordRef`, `lastMatchTimeRef`. Plus the timer/raf/sound refs (`rafIdRef`, `advanceTimeoutRef`, `soundRef`, `segsRef`, `currentRepeatRef`, `autoPlayRef`, `positionRef`, `durationRef`).
+
+**`handlePlayPause` reads ONLY refs**, never React state. This is critical. After Slice 4 hotfix v2 the function gates exclusively on `isPlayingRef.current` and `isLoadingRef.current` to close the load-completion race window.
+
+**`stopAudioCompletely()`** is the single audio cleanup point. Used by recite-mode entry and component unmount. Unloads sound, cancels RAF + advance timeout, resets all audio refs/state including `isLoadingRef`. Don't bypass it.
+
+**Two highlight states.** `highlightedWord: number` (0-based, ayah mode) and `highlightedPage: { verseKey, position } | null` (1-based to match `ApiWord.position`, page mode). Both updated from the same RAF tick during Husary playback. In recite mode they're updated by the speech recognition result handler.
+
+**Verse-change effect (`[currentVerse]`)** behaves differently for recite vs Husary mode. In recite mode it sets highlight to word 0 (the next-to-say). In Husary mode it clears to -1. This was a Slice 4 hotfix v3 fix.
+
+**QDC segments are 1-indexed and skip non-word tokens.** Husary `qdcId: 6`. The reciters table has `quranComId: null` for Husary, but QDC has segment timings. `quranComId === null` doesn't mean no timing data.
+
+**Audio session conflict on iOS.** `expo-av` and `expo-speech-recognition` can't both hold the audio session. Recite mode entry calls `stopAudioCompletely()` to fully release `expo-av`. `pauseAsync()` is NOT enough — must `unloadAsync()`. Same applies to anything else that wants the mic in the future (e.g. memorization-by-recording would have the same issue).
+
+**Auto-advance + delay:** `setTimeout`-gated, tracked in `advanceTimeoutRef`. Cancelled on pause / Prev / Next / unmount.
+
+**Repeat count:** per-verse counter `currentRepeatRef`. Resets on verse change. Replays via `setPositionAsync(0)` + `playAsync` (no sound recreation).
+
+**Blind mode:** hides in-scope verses as `••••`. Toggle behavior — tap reveals, tap again hides. Reveals persist across audio auto-advance. Tap-to-seek disabled while blind mode is on. Reveals reset on view-mode change and on blind-mode toggle, NOT on verse change.
+
+**Blur mode:** opacity 0.35 on non-active in-scope verses while playing. Real `expo-blur` is Slice 5b.
+
+**Recite mode (Slice 4 + hotfixes):** `expo-speech-recognition`, continuous listening, word-by-word advance via `wordMatches` from `src/lib/recite.ts`. Auto-restarts on iOS's 60s recognition limit. Pauses + unloads Husary on entry. Permission requested first time. Diagnostic logs print to Metro on every transcript event — Slice 5a removes them.
+
+### The recite matcher (`src/lib/recite.ts`)
+
+This file is at parity with the web app's `stripTashkeel` + `wordMatches` logic. Don't tighten it without asking. Mohammad explicitly wants only loosening, never tightening.
+
+Exports:
+- `stripTashkeel(s)` — full Arabic normalization. Dagger alef → alef, tashkeel strip, tatweel strip, presentation-form decomposition, alef variants → bare alef, alef-maqsura → ya, ta-marbuta → ha, waw/ya-with-hamza → bare letter, hamza → drop, multi-letter mada collapse.
+- `SKIP_CHARS` — regex matching Quranic pause marks / sajda marks / verse-end glyphs.
+- `wordMatches(heardNorm, expectedNorm, lastMatched)` — multi-predicate (equality | substring either way | subsequence either way | noun-vowel-stripped equality | word-final ت→ه swap). Rejects 1-char heard tokens unless equal. Rejects re-matches of same heard token (via `lastMatched`).
+- `stripAlPrefix(w)` — strips leading "ال" if ≥2 chars remain (iOS often drops the article).
+- `tokenize(s)` — splits normalized string into Arabic-letter runs.
+
+The result handler in `memorization.tsx` walks the full accumulating transcript using `matchedWordCountRef` as the search start position. iOS sends partials like "قل", "قل هو", "قل هو الله", ... — each event sees the full accumulated string. The walker advances `expectedIdx` while matches keep landing within a single result event.
 
 ### The fixed controls island
 
@@ -99,73 +126,199 @@ This was added in Slice 2b explicitly so the user never has to scroll past a lon
 
 ### The settings sheet
 
-Bottom modal, opened by gear icon top-right of header. Contains: repeat count stepper (1–10), auto-advance delay stepper (0–5s, 0.5s increments), autoplay-through-range toggle, blur-other-verses toggle. Slice 5 will add: reciter picker, theme picker, tajweed toggle, playback rate, persistence to AsyncStorage.
+Bottom modal, opened by gear icon top-right of header. Contains as of Slice 4: repeat count stepper (1–10), auto-advance delay stepper (0–5s, 0.5s increments), autoplay-through-range toggle, blur-other-verses toggle.
+
+Slice 5a adds: theme picker, reciter picker, playback rate slider, tajweed toggle, cumulative review toggle.
 
 ---
 
-## 5. What Slice 5 needs to do
+## 5. Slice 5a — what to ship next
 
-The handoff §5.1 of the original `PHASE_2D_HANDOFF.md` listed all the web app's settings. By the end of Slice 5, the mobile app should have parity with the most-used web settings, plus a few new mobile-native polish items.
+In rough priority order. All JS-only; hot-reloads over the existing EAS dev build.
 
-### Required for Slice 5
+### 5a.1 — Diagnostic log cleanup
 
-In rough priority order:
+Remove the Slice 4 hotfix diagnostic logs. They were essential during hardware testing but are noisy now.
 
-1. **AsyncStorage persistence.** `@react-native-async-storage/async-storage`. JS-only package, doesn't require an EAS rebuild. Persist: repeat count, auto-advance delay, autoplay-through-range, blind mode, blur mode, view mode, theme, reciter, tajweed toggle, playback rate. Key prefix per child: `noorpath:settings:${childId}:*`. Load on mount; save on each setting change.
+In `memorization.tsx`'s `useSpeechRecognitionEvent("result", ...)` handler:
+- Remove `console.log("[recite] transcript:", ...)`
+- Remove `console.log("[recite] tokens:", ...)`
+- Remove `console.log("[recite] scan:", ...)`
+- Remove `console.log("[recite] match: heard token ...")`
+- Remove `console.log("[recite] advanced to expectedIdx:", ...)`
 
-2. **All 8 Mushaf themes.** Madinah/Ottoman/Modern/Classic × Day/Night. Web's palette is in `noor-path/components/mushaf/bayaan/bayaan-constants.ts` — we already ported one (`MUSHAF_PAGE_THEME` in `mushaf-theme.ts`). Extend to a map `THEMES: Record<ThemeKey, MushafTheme>`. The currently-shipped theme is Madinah Day. Add a theme picker in the settings sheet.
+In `src/lib/recite.ts`:
+- Check if there are any leftover `console.log` from `stripTashkeel` debugging. If so, remove them.
 
-3. **Real blur via `expo-blur`.** Replaces the opacity-dimming fallback. **Adds a native dep — requires another EAS dev build after Slice 5 ships.** Use `<BlurView intensity={20} tint="light" />` overlay on non-active verses while playing. Blur intensity tunable in settings. The opacity fallback stays as the implementation when `Platform.OS !== "ios"` (no blur on Android in this build target since we're iOS-only).
+Keep the structure of the result handler, just strip the logs.
 
-4. **Reciter picker.** Currently hardcoded to Husary. Reciters table is in `noor-path/components/verse-player.tsx` — port to `src/lib/reciters.ts`. UI: settings sheet row, opens a sub-list. Husary stays default. Each reciter has a `qdcId` (for word timing) or `quranComId` (alternate timing API) or both. Some reciters have neither — in that case, fall back to no word highlight (audio plays, highlight is verse-level only).
+### 5a.2 — AsyncStorage persistence
 
-5. **Tajweed highlighting toggle.** Quran.com v4 returns `text_uthmani_tajweed` field on verses (request via `fields=text_uthmani_tajweed`). It contains HTML-like tags around colored spans. Port the CSS class → color map from `noor-path/components/mushaf/bayaan/bayaan-constants.ts` (`TAJWEED_CSS`). When enabled, render words with their tajweed colors instead of solid `pageText`. Toggle in settings sheet.
+Add `@react-native-async-storage/async-storage` (JS-only, no rebuild).
 
-6. **Long-press word for translation popup.** Quran.com v4 word fields can include `translation`. Add `translation` to the `word_fields` query in `fetchSurahVerses` and `fetchVersesByPage`. On long-press a word, show a small popover with the word's English translation. RN's `Pressable` has `onLongPress`.
+```
+cd artifacts/noor-mobile
+pnpm add @react-native-async-storage/async-storage
+```
 
-7. **Playback rate slider.** `expo-av`'s `Audio.Sound.setRateAsync(rate, true)`. Range 0.5x–1.5x in 0.1 steps. Slider in settings sheet.
+Persist these settings, keyed per child:
+- repeat count
+- auto-advance delay
+- autoplay-through-range
+- blur mode
+- blind mode
+- view mode (ayah / page)
+- theme key
+- reciter id
+- tajweed toggle
+- playback rate
+- cumulative review toggle
 
-8. **Cumulative review mode.** After memorizing a new verse, automatically review all previously memorized verses in the current range. Toggle in settings sheet. When enabled, after Mark Complete, the screen plays through everything from `ayahStart` to the verse just memorized, sequentially. This is what the web does — it's the single most-loved feature for retention. Worth shipping.
+Key prefix: `noorpath:settings:${childId}:*` (one key per setting, OR a single JSON blob — let Claude Code pick whichever is cleaner). Load on mount in a single effect; save on each setting change.
 
-### Slicing recommendation for Slice 5
+### 5a.3 — All 8 Mushaf themes
 
-Slice 5 is too big for one Claude Code session if everything ships at once. Two reasonable splits:
+Currently shipped is Madinah Day (the `MUSHAF_PAGE_THEME` const in `src/lib/mushaf-theme.ts`). Web has 8 themes — Madinah / Ottoman / Modern / Classic, each in Day and Night. Web's palette is in `noor-path/src/pages/quran-memorize.tsx` under `MUSHAF_THEMES`. Port that map to mobile.
 
-**Option A — by feature category:**
-- 5a: AsyncStorage persistence + theme system + theme picker
-- 5b: Real blur + reciter picker + playback rate slider
-- 5c: Tajweed highlighting + translation popup + cumulative review
+Refactor `mushaf-theme.ts`:
+- Define a `MushafTheme` type matching the existing `MUSHAF_PAGE_THEME` shape
+- Define a `THEMES: Record<ThemeKey, MushafTheme>` map with all 8 themes
+- The 4 day themes use parchment-like backgrounds; the 4 night themes use dark backgrounds with warm-toned text
 
-**Option B — by EAS rebuild boundary:**
-- 5a: Everything that doesn't need a new native package (persistence, themes, picker, playback rate, tajweed, translation, cumulative review)
-- 5b: `expo-blur` integration + AsyncStorage if not already in 5a (requires EAS rebuild)
+In `memorization.tsx`:
+- Add `const [themeKey, setThemeKey]` state, default `"madinah_day"`
+- Replace direct uses of the `T` import with a derived `theme = THEMES[themeKey]`
+- Add a theme picker row to the settings sheet — horizontal pills with theme names
 
-**My recommendation is B.** It minimizes EAS rebuilds (one in the middle vs two), and 5a delivers the bulk of the user-visible polish in a single session. The only thing 5b adds is real blur — everything else is JS-only.
+The web's 8 keys: `teal` (Madinah), `maroon` (Ottoman), `navy` (Modern), `forest` (Classic), `madinah_dark`, `ottoman_dark`, `modern_dark`, `classic_dark`. Use clearer keys for mobile: `madinah_day`, `ottoman_day`, `modern_day`, `classic_day`, `madinah_night`, `ottoman_night`, `modern_night`, `classic_night`.
 
-**If user wants to ship in one session anyway:** that's their call. Combine all of it, plan for an EAS rebuild after, send a single big prompt. Acknowledge the size in the prompt's preamble.
+### 5a.4 — Reciter picker
 
-### Acknowledged compromises that stay through Slice 5
+Currently hardcoded Husary (`HUSARY_QDC_ID = 6`). Web has a reciters table in `noor-path/src/components/verse-player.tsx` (search for `RECITERS`). Each reciter has `id`, `display name`, `folder` (everyayah CDN folder), `qdcId` (for word timing), `quranComId` (alternate timing API). Some have neither — those play but get no word-level highlight.
 
-- One canonical Mushaf line may wrap to 2 visual lines on phones (Slice 2a-fix decision). Not fixing in Slice 5.
-- Surah banners always on their own row, even at mid-line surah transitions. Not fixing.
-- No parchment gradient (flat color). `expo-linear-gradient` is small but adds another native rebuild — defer to Slice 5b only if user wants it.
-- Auto-scroll math is approximate — Slice 2b shipped best-effort. Adequate for now; tune later if needed.
+Port to `src/lib/reciters.ts`:
+```ts
+export type Reciter = {
+  id: string;
+  name: string;
+  folder: string;
+  qdcId: number | null;
+  quranComId: number | null;
+};
+export const RECITERS: Reciter[] = [/* ported list */];
+```
 
-### Things explicitly NOT in Slice 5
+Update `src/lib/audio.ts` `ayahAudioUrl(surahNumber, ayahNumber)` to take a `Reciter` (or `folder` string) and use the right CDN folder.
 
-- Push notifications, app icon, splash screen, EAS production build, TestFlight — those are Phase 3.
-- Any new audio model (web's "blind mode + blur during recitation" was a single feature; mobile already has them as separate toggles, that's fine).
+Update `memorization.tsx`:
+- Add `const [reciterId, setReciterId]` state, default `"husary"`
+- Derive `reciter = RECITERS.find(r => r.id === reciterId)!`
+- Replace `HUSARY_QDC_ID` constant with `reciter.qdcId`
+- Re-fetch QDC timings when reciter changes (or fetch on demand)
+- If `reciter.qdcId === null` and `reciter.quranComId === null`, no word-level highlight — verse plays through, highlight stays at -1, that's fine
+
+Add a reciter picker row to the settings sheet.
+
+### 5a.5 — Tajweed highlighting toggle
+
+Quran.com v4 returns a `text_uthmani_tajweed` field that contains HTML-like tags wrapping colored sections (e.g. `<span class="madda_normal">...</span>`). The CSS-class → color map is in `noor-path/src/components/mushaf/bayaan/bayaan-constants.ts` as `TAJWEED_CSS` (or wherever — search the noor-path tree for the color rules).
+
+Update `src/lib/quran.ts`:
+- Add `text_uthmani_tajweed?: string` to `ApiWord` type
+- Add `text_uthmani_tajweed` to `word_fields` in both `fetchSurahVerses` and `fetchVersesByPage` URLs
+
+In `memorization.tsx`:
+- Add `const [tajweedEnabled, setTajweedEnabled]` state, default `false`
+- When rendering an in-scope word, if `tajweedEnabled && word.text_uthmani_tajweed`, parse the tag wrapping the word and apply the corresponding color from a `TAJWEED_COLORS` map. Don't try to use `dangerouslySetInnerHTML` (that's web-only) — parse the HTML-ish into RN-compatible color spans.
+- A simple approach: extract the outermost `class="..."` value, look up the color in a map, render the inner text with that color. If parse fails, fall back to `pageText`.
+
+Add a tajweed toggle to the settings sheet.
+
+### 5a.6 — Long-press word for translation popup
+
+Quran.com v4 supports word-level translation via `word_fields=translation`. Add it.
+
+Update `src/lib/quran.ts`:
+- Add `translation?: { text: string; language_name: string }` to `ApiWord`
+- Add `translation` to `word_fields` in both fetchers
+
+In `memorization.tsx`:
+- Add `const [tappedWord, setTappedWord]` state for the popover
+- On `onLongPress` of a word in either renderer, set the tapped word
+- Render a small popover (RN doesn't have native popover — use a `Modal` with `transparent` and centered content, or absolutely-positioned `View` near the word)
+- Show: word's Uthmani, English translation, close button
+- Close on tap outside
+
+Long-press only — short tap stays tap-to-seek. Don't break that.
+
+### 5a.7 — Playback rate slider
+
+`expo-av`'s `Audio.Sound.setRateAsync(rate, true /* shouldCorrectPitch */)`. Range 0.75x–1.5x in 0.05 steps. Slider in settings sheet.
+
+In `memorization.tsx`:
+- Add `const [playbackRate, setPlaybackRate]` state, default `1.0`
+- Add a `playbackRateRef` synced via effect (audio callbacks need it)
+- After `Audio.Sound.createAsync` resolves in `playVerse`, call `sound.setRateAsync(playbackRateRef.current, true)`
+- When `playbackRate` state changes during playback, also call `setRateAsync` on the current sound
+
+RN Slider: use `@react-native-community/slider` (JS-only, may need `pnpm add`).
+
+### 5a.8 — Cumulative review mode
+
+After Mark Complete, optionally play through everything from `ayahStart` to the verse just memorized, sequentially. This is the most-loved feature on the web app for retention.
+
+In `memorization.tsx`:
+- Add `const [cumulativeReview, setCumulativeReview]` state, default `false`
+- When true, after `submitMemorization` succeeds, instead of immediately showing the success alert, kick off a sequential play-through of `ayahStart..currentVerse` (use the existing autoplay-through-range machinery).
+- After the cumulative pass finishes, then show the success alert.
+
+This is the most behaviorally complex item in 5a — it interacts with auto-advance, repeat counts, and the existing Mark Complete flow. If it's fighting the existing state machine, defer to 5c.
+
+Add a cumulative review toggle to the settings sheet.
+
+### Things explicitly NOT in 5a
+
+- Real `expo-blur` — Slice 5b.
+- App icon, splash screen, push notifications — Phase 3.
+- `expo-av` → `expo-audio` migration — its own slice in Phase 3.
+- Cumulative review with separate "review repeat count" setting (web has it). Just plain cumulative for now; tune later.
+
+### Slicing inside 5a
+
+If 5a is too big for a single Claude Code session, the natural sub-split is:
+
+- 5a.1 (cleanup) + 5a.2 (persistence) + 5a.3 (themes) + 5a.4 (reciter picker) — settings/theming foundation, ~1 session
+- 5a.5 (tajweed) + 5a.6 (translations) + 5a.7 (playback rate) — content polish, ~1 session
+- 5a.8 (cumulative review) — its own session if tricky
+
+Recommend starting with the first chunk. After it ships and is tested, plan the next chunk based on how the file size + complexity is trending.
 
 ---
 
-## 6. The conventions
+## 6. Slice 5b — after 5a
 
-These haven't changed since the last handoff. Reproduced here so this doc stands alone.
+One thing: **real blur via `expo-blur`**. Replaces the opacity-0.35 fallback used by `blurMode`.
+
+```
+pnpm add expo-blur
+```
+
+Then `eas build --profile development --platform ios` (rebuild required). After install on iPhone, update `memorization.tsx` to render `<BlurView intensity={20} tint="light" />` (or the active theme's tint) over non-active verses while playing.
+
+Optionally bundle in `expo-linear-gradient` for parchment shading if the rebuild is happening anyway. Judgment call — skip if the Madinah parchment looks fine flat (it does as of Slice 4).
+
+After 5b ships, Phase 2D is complete. Move to Phase 3 (TestFlight).
+
+---
+
+## 7. The conventions
+
+These are mostly stable across sessions. Reproduced here so this doc stands alone.
 
 ### Workflow
 
 - Claude Code prompts as markdown blocks. User pastes; reports back commit SHA + typecheck.
-- **Test-then-ship.** Every slice gets tested on Expo (or now, the EAS dev build) before the next prompt is drafted. The chat assistant doesn't draft Slice N+1 until user confirms Slice N works.
+- **Test-then-ship.** Every slice gets tested on Expo or the EAS dev build before the next prompt is drafted.
 - Read existing files before writing. Don't guess data shapes.
 - Both branches stay in sync. Every commit:
   ```
@@ -194,46 +347,52 @@ These haven't changed since the last handoff. Reproduced here so this doc stands
 
 - `src/lib/api.ts` — `apiFetch<T>` typed helper, Better Auth cookie attached
 - `src/lib/auth-client.ts` — Better Auth Expo client
-- `src/lib/audio.ts` — `ayahAudioUrl(surahNumber, ayahNumber)` returns Husary 128kbps URL
+- `src/lib/audio.ts` — `ayahAudioUrl(surahNumber, ayahNumber)` returns Husary 128kbps URL (Slice 5a generalizes to take a reciter)
 - `src/lib/mushaf.ts` — page-image URL helper for Reading mode
-- `src/lib/mushaf-theme.ts` — parchment palette, Juz lookup
-- `src/lib/quran.ts` — Quran.com v4 surah/page/chapters fetch with module-level caches
+- `src/lib/mushaf-theme.ts` — parchment palette, Juz lookup (Slice 5a expands to multi-theme map)
+- `src/lib/quran.ts` — Quran.com v4 surah/page/chapters fetch with module-level caches (Slice 5a adds tajweed + translation fields)
 - `src/lib/memorization.ts` — dashboard fetch, QDC chapter timings, memorization POST
-- `src/lib/recite.ts` — Arabic normalization + fuzzy match
+- `src/lib/recite.ts` — Arabic normalization + multi-predicate fuzzy match. **Don't tighten without asking.**
 - `src/lib/reviews.ts` — typed review queue + submit (used by `review-session.tsx`)
+- `src/lib/reciters.ts` — to be created in Slice 5a
 
 ### Known pitfalls
 
 - **Metro + pnpm**: `metro.config.js` must set `watchFolders` and `nodeModulesPaths` per existing config. Don't set `disableHierarchicalLookup: true`. After native dep changes, `npx expo start --clear`.
-- **`npx expo install` in pnpm monorepo** can create stray `package-lock.json` in `noor-mobile/`. If it appears, delete it and run `pnpm install` from repo root.
+- **`npx expo install` in pnpm monorepo** can create stray `package-lock.json` in `noor-mobile/`. If it appears, delete it and run `pnpm install` from repo root. For Slice 5a's JS-only adds, prefer `pnpm add` from inside `noor-mobile/`.
 - **Cookie auth**: RN has no `document.cookie`. Existing `apiFetch` handles it. Don't write fetch calls without it for backend requests.
-- **Audio leaks**: always `unloadAsync()` `Audio.Sound` instances on cleanup. Never let one leak — it breaks subsequent playback.
-- **EAS dev build for native deps**: `expo-speech-recognition`, `expo-blur`, `expo-linear-gradient`, etc. require an EAS dev build. Expo Go doesn't include them. Pure JS deps (AsyncStorage, etc.) hot-reload over the existing dev build.
+- **Audio leaks**: always `unloadAsync()` `Audio.Sound` instances on cleanup. Never let one leak — it breaks subsequent playback. The `stopAudioCompletely()` helper is the single cleanup point; use it.
+- **iOS audio session**: `pauseAsync()` is not enough to release the session for the mic. Must `unloadAsync()`. This is why recite-mode entry calls `stopAudioCompletely()`.
+- **EAS dev build for native deps**: `expo-speech-recognition`, `expo-blur`, `expo-linear-gradient`, etc. require an EAS dev build. Expo Go doesn't include them. Pure JS deps (AsyncStorage, slider, etc.) hot-reload over the existing dev build.
 
 ### EAS Build basics
 
 - CLI: `npx eas-cli@latest <cmd>` (avoid global install permission issues)
 - Build: `eas build --profile development --platform ios`
 - After build completes, install via QR code on the build's "Install" page; trust the developer profile in iPhone Settings → General → VPN & Device Management.
+- iOS 16+ requires Developer Mode enabled (Settings → Privacy & Security → Developer Mode). The toggle only appears AFTER an internal-distribution app has been installed once.
 - Run dev server: `npx expo start --dev-client` (the `--dev-client` flag is critical)
 - New native deps require a rebuild. JS changes hot-reload over the existing build.
 
 ---
 
-## 7. What to do first in the next session
+## 8. What to do first in the next session
 
-1. **Read `TODO.md` and this handoff.** Don't read the older `PHASE_2D_HANDOFF.md` first; this one supersedes it.
-2. **Confirm the EAS dev build status with Mohammad.** If Slice 4 hasn't been hardware-tested yet, Slice 5 doesn't ship until it has been. Don't draft Slice 5 prompts on top of unverified Slice 4 behavior.
-3. **If Slice 4 testing surfaces bugs** (likely — speech recognition is the most heuristic part of the project), fix-prompt those before Slice 5. Common things to expect: fuzzy match too lenient (advances on garbage), too strict (doesn't advance on clearly-correct recitation), iOS recognition restart on the 1-minute mark causes a brief audio glitch, permission denial flow. Tune in `src/lib/recite.ts`.
-4. **Once Slice 4 is verified, present the Slice 5 plan.** Use the §5 slicing as the starting offer. The user will tell you if they want one big slice or two.
-5. **Same Claude Code prompt pattern as before.** Read existing files first, write a precise prompt, hand it over, verify SHA + typecheck.
+1. **Read `TODO.md` and this handoff.** Don't read older handoffs first; this one supersedes them.
+2. **Confirm with Mohammad whether to proceed with the full Slice 5a or the smaller first-chunk split.** The §5 slicing recommendation is the starting offer; he'll tell you which.
+3. **Start with the diag log cleanup (5a.1).** It's tiny, gets a quick win, and the logs are noisy if left in.
+4. **Then either ship 5a.2–5a.4 (settings/theming foundation) as one Claude Code prompt, or do them separately.** Whichever Mohammad prefers.
+5. **Test on hardware after each Claude Code commit.** Don't draft the next prompt until the previous one is verified working.
+6. **Same Claude Code prompt pattern as throughout this project.** Read existing files first, write a precise prompt, hand it over, verify SHA + typecheck, hardware-test.
 
 ---
 
-## 8. The one important reminder
+## 9. The one important reminder
 
-The whole reason this app exists is so Mohammad's kids can use it to memorize Quran with him. When you write code, when you write prompts, when you make tradeoffs — keep that user in mind. Polish matters. Performance matters. Authentic Mushaf aesthetics matter. But shipping working features his kids can actually use **right now** matters more than any of those. The web app is great. The mobile app, after Slice 5, will be at parity for the most-used features and better for some (mic-based recite is more natural on mobile).
+The whole reason this app exists is so Mohammad's kids can use it to memorize Quran with him. The app already works for that purpose as of Slice 4 + hotfixes — kid sits down with iPhone, opens NoorPath, picks themself, hits Memorization, sees today's verses, hits Play, follows Husary word by word in the parchment-themed Mushaf, marks complete, and it lands in Review. They can even recite back to the app and get word-by-word feedback. That's done.
 
-Get him to: kid sits down with iPhone, opens NoorPath, picks themself, hits Memorization, sees today's verses, hits Play, follows Husary word by word in the parchment-themed Mushaf, marks complete, watches it land in Review. That's done. Slice 5 makes it polished — themed, persistent, real blur, multi-reciter, with translations on long-press. And after Slice 5, Phase 3 takes it through TestFlight to the App Store.
+Slice 5 is polish — themed, persistent across sessions, real blur, multi-reciter, with translations and tajweed and cumulative review. It's the difference between "works" and "delightful." But "works" is already shipped, and that's the bigger threshold.
+
+Phase 3 takes it through TestFlight to the App Store. That's the next big milestone after 5b.
 
 Good luck.
