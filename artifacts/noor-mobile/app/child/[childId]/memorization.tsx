@@ -801,7 +801,7 @@ const styles = StyleSheet.create({
     flexDirection: "row-reverse",
     flexWrap: "wrap",
     alignItems: "center",
-    justifyContent: "flex-start",
+    justifyContent: "center",
   },
   mushafWord: {
     fontFamily: "AmiriQuran",
