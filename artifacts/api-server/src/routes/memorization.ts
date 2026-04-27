@@ -49,12 +49,14 @@ async function fetchVersesFromApi(surahNumber: number): Promise<{ number: number
 
     if (!versesRes.ok) throw new Error(`Verses fetch failed: ${versesRes.status}`);
 
-    const versesData = await versesRes.json();
+    const versesData = (await versesRes.json()) as { verses?: QuranComVerse[] };
     const verses: QuranComVerse[] = versesData.verses || [];
 
     let translationVerses: Array<{ text: string }> = [];
     if (translationRes.ok) {
-      const translationData = await translationRes.json();
+      const translationData = (await translationRes.json()) as {
+        translations?: Array<{ text: string }>;
+      };
       translationVerses = translationData.translations || [];
     }
 
