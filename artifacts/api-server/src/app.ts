@@ -4,10 +4,21 @@ import pinoHttp from "pino-http";
 import { toNodeHandler } from "better-auth/node";
 import { auth } from "./auth.js";
 import router from "./routes/index.js";
+import healthRouter from "./routes/health.js";
 import { requireAuth } from "./middlewares/requireAuth.js";
 import { logger } from "./lib/logger.js";
 
 const app: Express = express();
+
+const PROD_ALLOWED_ORIGINS = (process.env.PROD_ALLOWED_ORIGINS ?? "")
+  .split(",")
+  .map((s) => s.trim())
+  .filter(Boolean);
+
+function isAllowedProdOrigin(origin: string): boolean {
+  return PROD_ALLOWED_ORIGINS.includes(origin);
+}
+
 const DEV_FRONTEND_ORIGIN_PATTERNS = [
   /^http:\/\/localhost:5173$/,
   /^http:\/\/127\.0\.0\.1:5173$/,
@@ -44,7 +55,7 @@ app.use(
 app.use(
   cors({
     origin(origin, callback) {
-      if (!origin || isAllowedDevOrigin(origin)) {
+      if (!origin || isAllowedDevOrigin(origin) || isAllowedProdOrigin(origin)) {
         callback(null, true);
         return;
       }
@@ -59,6 +70,9 @@ app.use(express.urlencoded({ extended: true }));
 
 // Better Auth handles all /api/auth/* routes (sign-in, sign-up, sign-out, session)
 app.all("/api/auth/*splat", toNodeHandler(auth));
+
+// Public health check — must be BEFORE requireAuth
+app.use("/api", healthRouter);
 
 // All other /api/* routes require a valid session
 app.use("/api", requireAuth, router);

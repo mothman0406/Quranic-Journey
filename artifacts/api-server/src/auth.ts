@@ -11,6 +11,11 @@ const DEV_TRUSTED_ORIGINS = [
   ...Array.from({ length: 16 }, (_, index) => `http://172.${index + 16}.*:5173`),
 ].filter((origin): origin is string => !!origin);
 
+const PROD_TRUSTED_ORIGINS = (process.env.PROD_TRUSTED_ORIGINS ?? "")
+  .split(",")
+  .map((s) => s.trim())
+  .filter(Boolean);
+
 if (!process.env.BETTER_AUTH_SECRET) {
   throw new Error("BETTER_AUTH_SECRET must be set in .env");
 }
@@ -34,7 +39,7 @@ export const auth = betterAuth({
   emailAndPassword: {
     enabled: true,
   },
-  trustedOrigins: DEV_TRUSTED_ORIGINS,
+  trustedOrigins: [...DEV_TRUSTED_ORIGINS, ...PROD_TRUSTED_ORIGINS],
 });
 
 export type Session = typeof auth.$Infer.Session;
