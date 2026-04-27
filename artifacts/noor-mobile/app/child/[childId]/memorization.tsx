@@ -17,7 +17,12 @@ import {
   submitMemorization,
   type Segment,
 } from "@/src/lib/memorization";
-import { fetchSurahVerses, type ApiWord } from "@/src/lib/quran";
+import {
+  fetchSurahVerses,
+  fetchVersesByPage,
+  type ApiWord,
+  type ApiPageVerse,
+} from "@/src/lib/quran";
 
 const HUSARY_QDC_ID = 6;
 
@@ -44,11 +49,15 @@ export default function MemorizationScreen() {
   const [currentVerse, setCurrentVerse] = useState<number>(
     params.ayahStart ? Number(params.ayahStart) : 1,
   );
+  const [pageStart, setPageStart] = useState<number | null>(null);
+  const [pageEnd, setPageEnd] = useState<number | null>(null);
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [displayWordsMap, setDisplayWordsMap] = useState<Map<number, ApiWord[]>>(new Map());
   const [segmentsMap, setSegmentsMap] = useState<Map<string, Segment[]>>(new Map());
+  const [viewMode, setViewMode] = useState<"ayah" | "page">("ayah");
+  const [pageWordsMap, setPageWordsMap] = useState<Map<number, ApiPageVerse[]>>(new Map());
 
   const [isPlaying, setIsPlaying] = useState(false);
   const [highlightedWord, setHighlightedWord] = useState(-1);
@@ -86,6 +95,8 @@ export default function MemorizationScreen() {
         setAyahStart(as);
         setAyahEnd(ae);
         setCurrentVerse(as);
+        setPageStart(nm.pageStart);
+        setPageEnd(nm.pageEnd);
       } catch (e) {
         setError(e instanceof Error ? e.message : "Failed to load today's plan.");
         setLoading(false);
@@ -125,6 +136,33 @@ export default function MemorizationScreen() {
       cancelled = true;
     };
   }, [surahNumber]);
+
+  // Fetch Mushaf page data when switching to Full Mushaf mode
+  useEffect(() => {
+    if (viewMode !== "page" || pageStart === null || pageEnd === null) return;
+    const pagesToFetch: number[] = [];
+    for (let p = pageStart; p <= pageEnd; p++) {
+      if (!pageWordsMap.has(p)) pagesToFetch.push(p);
+    }
+    if (pagesToFetch.length === 0) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const results = await Promise.all(pagesToFetch.map((p) => fetchVersesByPage(p)));
+        if (cancelled) return;
+        setPageWordsMap((prev) => {
+          const next = new Map(prev);
+          pagesToFetch.forEach((p, i) => next.set(p, results[i]!));
+          return next;
+        });
+      } catch {
+        // fail silently; page card continues showing loading indicator
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [viewMode, pageStart, pageEnd]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Keep segsRef up-to-date for the RAF tick
   useEffect(() => {
@@ -283,6 +321,66 @@ export default function MemorizationScreen() {
     }
   }
 
+  // ── Full Mushaf page renderer ────────────────────────────────────────────────
+
+  function renderMushafPage(pageNum: number) {
+    const verses = pageWordsMap.get(pageNum);
+    if (!verses) {
+      return (
+        <View key={pageNum} style={[styles.pageCard, styles.centered]}>
+          <ActivityIndicator color="#2563eb" />
+        </View>
+      );
+    }
+
+    // Group all words (including end markers) by line_number, preserving order
+    const lineMap = new Map<number, Array<{ word: ApiWord; verseKey: string }>>();
+    for (const verse of verses) {
+      for (const word of verse.words) {
+        const ln = word.line_number;
+        if (!lineMap.has(ln)) lineMap.set(ln, []);
+        lineMap.get(ln)!.push({ word, verseKey: verse.verse_key });
+      }
+    }
+    const lineNums = [...lineMap.keys()].sort((a, b) => a - b);
+
+    return (
+      <View key={pageNum} style={styles.pageCard}>
+        {lineNums.map((lineNum) => {
+          const lineItems = lineMap.get(lineNum)!;
+          return (
+            <View key={lineNum} style={styles.mushafLine}>
+              {lineItems.map((item, idx) => {
+                const colonIdx = item.verseKey.indexOf(":");
+                const vSurah = Number(item.verseKey.slice(0, colonIdx));
+                const vVerse = Number(item.verseKey.slice(colonIdx + 1));
+                const inScope =
+                  surahNumber !== null &&
+                  ayahStart !== null &&
+                  ayahEnd !== null &&
+                  vSurah === surahNumber &&
+                  vVerse >= ayahStart &&
+                  vVerse <= ayahEnd;
+                return (
+                  <Text
+                    key={`${item.verseKey}-${item.word.position}-${idx}`}
+                    style={[
+                      styles.mushafWord,
+                      item.word.char_type_name === "end" && styles.mushafEndMarker,
+                      !inScope && styles.mushafWordDimmed,
+                    ]}
+                  >
+                    {item.word.text_uthmani}
+                  </Text>
+                );
+              })}
+            </View>
+          );
+        })}
+      </View>
+    );
+  }
+
   // ── Derived values ───────────────────────────────────────────────────────────
 
   const words = displayWordsMap.get(currentVerse) ?? [];
@@ -324,20 +422,61 @@ export default function MemorizationScreen() {
         <View style={styles.headerSpacer} />
       </View>
 
+      <View style={styles.toggleContainer}>
+        <Pressable
+          style={[styles.togglePill, viewMode === "ayah" && styles.togglePillSelected]}
+          onPress={() => setViewMode("ayah")}
+        >
+          <Text
+            style={[
+              styles.togglePillText,
+              viewMode === "ayah" && styles.togglePillTextSelected,
+            ]}
+          >
+            Ayah by Ayah
+          </Text>
+        </Pressable>
+        <Pressable
+          style={[styles.togglePill, viewMode === "page" && styles.togglePillSelected]}
+          onPress={() => setViewMode("page")}
+        >
+          <Text
+            style={[
+              styles.togglePillText,
+              viewMode === "page" && styles.togglePillTextSelected,
+            ]}
+          >
+            Full Mushaf
+          </Text>
+        </Pressable>
+      </View>
+
       <ScrollView contentContainerStyle={styles.scrollContent}>
-        <View style={styles.verseCard}>
-          <View style={styles.wordContainer}>
-            {words.map((word, idx) => (
-              <Pressable
-                key={`${currentVerse}-${idx}`}
-                onPress={() => handleWordTap(idx)}
-                style={[styles.wordWrapper, highlightedWord === idx && styles.wordHighlighted]}
-              >
-                <Text style={styles.arabicWord}>{word.text_uthmani}</Text>
-              </Pressable>
-            ))}
+        {viewMode === "ayah" ? (
+          <View style={styles.verseCard}>
+            <View style={styles.wordContainer}>
+              {words.map((word, idx) => (
+                <Pressable
+                  key={`${currentVerse}-${idx}`}
+                  onPress={() => handleWordTap(idx)}
+                  style={[styles.wordWrapper, highlightedWord === idx && styles.wordHighlighted]}
+                >
+                  <Text style={styles.arabicWord}>{word.text_uthmani}</Text>
+                </Pressable>
+              ))}
+            </View>
           </View>
-        </View>
+        ) : pageStart === null || pageEnd === null ? (
+          <View style={[styles.pageCard, styles.centered]}>
+            <Text style={styles.errorText}>Page data not available.</Text>
+          </View>
+        ) : (
+          <>
+            {Array.from({ length: pageEnd - pageStart + 1 }, (_, i) =>
+              renderMushafPage(pageStart + i),
+            )}
+          </>
+        )}
 
         <View style={styles.controls}>
           <Pressable
@@ -411,6 +550,35 @@ const styles = StyleSheet.create({
   headerSpacer: {
     width: 60,
   },
+  toggleContainer: {
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    gap: 8,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "#e5e7eb",
+  },
+  togglePill: {
+    backgroundColor: "#f9fafb",
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+  },
+  togglePillSelected: {
+    backgroundColor: "#2563eb",
+    borderColor: "#2563eb",
+  },
+  togglePillText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#111111",
+  },
+  togglePillTextSelected: {
+    color: "#ffffff",
+  },
   scrollContent: {
     padding: 16,
     alignItems: "center",
@@ -447,6 +615,34 @@ const styles = StyleSheet.create({
     fontSize: 32,
     lineHeight: 60,
     color: "#111111",
+  },
+  pageCard: {
+    width: "100%",
+    backgroundColor: "#f9fafb",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+    padding: 12,
+    minHeight: 80,
+  },
+  mushafLine: {
+    flexDirection: "row-reverse",
+    flexWrap: "nowrap",
+    alignItems: "center",
+  },
+  mushafWord: {
+    fontFamily: "AmiriQuran",
+    fontSize: 22,
+    lineHeight: 44,
+    color: "#111111",
+    marginHorizontal: 1,
+  },
+  mushafEndMarker: {
+    fontSize: 18,
+    lineHeight: 44,
+  },
+  mushafWordDimmed: {
+    color: "#9ca3af",
   },
   controls: {
     flexDirection: "row",

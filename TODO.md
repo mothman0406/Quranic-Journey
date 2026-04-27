@@ -139,14 +139,23 @@ Single-verse focused memorization screen with Husary word-by-word audio sync.
 - ✅ `app/child/[childId]/memorization.tsx` — single-verse view, Amiri font, QDC word-by-word highlight via requestAnimationFrame, tap-to-seek, Prev/Next with auto-play, Mark Complete
 - ✅ Dashboard Memorization card navigates to this screen
 
-#### Phase 2D-Mushaf (Slice 2) — pending
+#### Phase 2D-Mushaf-Render (Slice 2a) — ✅ DONE (commit TBD — see git log)
 
-Full Mushaf page rendering in continuous flow with word-sync across the whole page.
+Full Mushaf static view mode added to memorization screen.
 
-- [ ] Multi-verse continuous view using `verses/by_page` endpoint
-- [ ] All verses on the page, out-of-scope verses dimmed
-- [ ] Word-by-word sync extended to entire page
-- [ ] 1-2 themes (Madinah Day, Madinah Night)
+- ✅ `fetchVersesByPage` + `ApiPageVerse` type added to `src/lib/quran.ts`
+- ✅ View mode toggle ("Ayah by Ayah" / "Full Mushaf") in memorization screen header
+- ✅ Page fetch via `verses/by_page` on toggle, cached in `pageWordsMap`
+- ✅ All words on page rendered in Amiri, grouped by `line_number`, `row-reverse` per line
+- ✅ Out-of-scope verses dimmed (`#9ca3af`); in-scope rendered at full `#111111`
+- ✅ Audio behavior unchanged (single-verse play, Prev/Next, Mark Complete)
+- ✅ Multi-page support (stacked when `pageStart !== pageEnd`)
+- Slice 2b: page-level word highlight + auto-scroll — pending
+
+#### Phase 2D-Mushaf (Slice 2b) — pending
+
+- [ ] Word-by-word audio highlight extended across full Mushaf page
+- [ ] Auto-scroll to keep active word visible
 
 #### Phase 2D-Practice (Slice 3) — pending
 
