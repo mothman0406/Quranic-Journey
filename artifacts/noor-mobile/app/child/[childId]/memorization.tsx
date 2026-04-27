@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -19,7 +19,7 @@ import { ayahAudioUrl } from "@/src/lib/audio";
 import { stripTashkeel, wordMatches, stripAlPrefix, tokenize, SKIP_CHARS } from "@/src/lib/recite";
 import {
   fetchDashboard,
-  fetchQdcChapterTimings,
+  fetchTimingsForReciter,
   submitMemorization,
   type Segment,
 } from "@/src/lib/memorization";
@@ -31,9 +31,16 @@ import {
   type ApiPageVerse,
   type ApiChapter,
 } from "@/src/lib/quran";
-import { MUSHAF_PAGE_THEME as T, getJuzForPage } from "@/src/lib/mushaf-theme";
-
-const HUSARY_QDC_ID = 6;
+import {
+  THEMES,
+  DEFAULT_THEME_KEY,
+  THEME_DISPLAY_NAMES,
+  getJuzForPage,
+  type ThemeKey,
+  type MushafTheme,
+} from "@/src/lib/mushaf-theme";
+import { findReciter, RECITERS } from "@/src/lib/reciters";
+import { loadSettings, saveSettings } from "@/src/lib/settings";
 
 export default function MemorizationScreen() {
   const router = useRouter();
@@ -65,7 +72,6 @@ export default function MemorizationScreen() {
   const [error, setError] = useState<string | null>(null);
   const [displayWordsMap, setDisplayWordsMap] = useState<Map<number, ApiWord[]>>(new Map());
   const [segmentsMap, setSegmentsMap] = useState<Map<string, Segment[]>>(new Map());
-  const [viewMode, setViewMode] = useState<"ayah" | "page">("ayah");
   const [pageWordsMap, setPageWordsMap] = useState<Map<number, ApiPageVerse[]>>(new Map());
   const [chaptersMap, setChaptersMap] = useState<Map<number, ApiChapter>>(new Map());
 
@@ -77,12 +83,16 @@ export default function MemorizationScreen() {
   } | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
-  // Practice settings (session-only; persistence in Slice 5)
+  // Practice settings — persisted to AsyncStorage per child
   const [repeatCount, setRepeatCount] = useState(1);
   const [autoAdvanceDelayMs, setAutoAdvanceDelayMs] = useState(0);
   const [autoplayThroughRange, setAutoplayThroughRange] = useState(true);
   const [blindMode, setBlindMode] = useState(false);
   const [blurMode, setBlurMode] = useState(false);
+  const [viewMode, setViewMode] = useState<"ayah" | "page">("ayah");
+  const [themeKey, setThemeKey] = useState<ThemeKey>(DEFAULT_THEME_KEY);
+  const [reciterId, setReciterId] = useState("husary");
+  const [settingsLoaded, setSettingsLoaded] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [revealedVerses, setRevealedVerses] = useState<Set<string>>(new Set());
 
@@ -91,6 +101,12 @@ export default function MemorizationScreen() {
   const [reciteListening, setReciteListening] = useState(false);
   const [reciteError, setReciteError] = useState<string | null>(null);
   const [reciteExpectedIdx, setReciteExpectedIdx] = useState(0);
+
+  // Derived from reciterId state
+  const reciter = findReciter(reciterId);
+
+  // Themed styles factory — recomputed only when themeKey changes
+  const themedStyles = useMemo(() => makeThemedStyles(THEMES[themeKey]), [themeKey]);
 
   // Audio + RAF refs
   const soundRef = useRef<Audio.Sound | null>(null);
@@ -107,6 +123,7 @@ export default function MemorizationScreen() {
   const ayahEndRef = useRef<number | null>(ayahEnd);
   const isPlayingRef = useRef(false);
   const pendingSeekPositionRef = useRef<number | null>(null);
+  const reciterRef = useRef(reciter);
 
   // Refs for practice settings (audio callbacks close over stale state otherwise)
   const repeatCountRef = useRef(repeatCount);
@@ -114,6 +131,7 @@ export default function MemorizationScreen() {
   const autoplayThroughRangeRef = useRef(autoplayThroughRange);
   const currentRepeatRef = useRef(1);
   const advanceTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Layout refs for auto-scroll
   const scrollViewRef = useRef<ScrollView>(null);
@@ -136,6 +154,7 @@ export default function MemorizationScreen() {
   useEffect(() => { reciteExpectedIdxRef.current = reciteExpectedIdx; }, [reciteExpectedIdx]);
   useEffect(() => { displayWordsMapRef.current = displayWordsMap; }, [displayWordsMap]);
   useEffect(() => { surahNumberRef.current = surahNumber; }, [surahNumber]);
+  useEffect(() => { reciterRef.current = reciter; }, [reciter]);
 
   // Clear reveals on context switches so old peeks don't bleed through
   useEffect(() => { setRevealedVerses(new Set()); }, [viewMode]);
@@ -144,6 +163,50 @@ export default function MemorizationScreen() {
   useEffect(() => { repeatCountRef.current = repeatCount; }, [repeatCount]);
   useEffect(() => { autoAdvanceDelayRef.current = autoAdvanceDelayMs; }, [autoAdvanceDelayMs]);
   useEffect(() => { autoplayThroughRangeRef.current = autoplayThroughRange; }, [autoplayThroughRange]);
+
+  // Hydrate settings from AsyncStorage on mount
+  useEffect(() => {
+    (async () => {
+      const s = await loadSettings(childId);
+      setRepeatCount(s.repeatCount);
+      setAutoAdvanceDelayMs(s.autoAdvanceDelayMs);
+      setAutoplayThroughRange(s.autoplayThroughRange);
+      setBlurMode(s.blurMode);
+      setBlindMode(s.blindMode);
+      setViewMode(s.viewMode);
+      setThemeKey(s.themeKey);
+      setReciterId(s.reciterId);
+      setSettingsLoaded(true);
+    })();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Persist settings on change (300ms debounce, skip during initial hydration)
+  useEffect(() => {
+    if (!settingsLoaded) return;
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(() => {
+      void saveSettings(childId, {
+        repeatCount,
+        autoAdvanceDelayMs,
+        autoplayThroughRange,
+        blurMode,
+        blindMode,
+        viewMode,
+        themeKey,
+        reciterId,
+      });
+    }, 300);
+    return () => {
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    };
+  }, [childId, settingsLoaded, repeatCount, autoAdvanceDelayMs, autoplayThroughRange, blurMode, blindMode, viewMode, themeKey, reciterId]);
+
+  // Stop audio when reciter changes so next Play tap recreates sound with new URL
+  useEffect(() => {
+    if (settingsLoaded) {
+      void stopAudioCompletely();
+    }
+  }, [reciterId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Load chapter metadata once for surah name lookups
   useEffect(() => {
@@ -187,15 +250,18 @@ export default function MemorizationScreen() {
     })();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Step 2: once surahNumber is known, fetch verses + QDC timings in parallel
+  // Step 2: once surahNumber + chapters are known, fetch verses + timings in parallel.
+  // Gated on chaptersMap.size > 0 to avoid a wasted fetch with the fallback verse count.
   useEffect(() => {
-    if (surahNumber === null) return;
+    if (surahNumber === null || chaptersMap.size === 0) return;
+    const currentReciter = findReciter(reciterId);
+    const verseCount = chaptersMap.get(surahNumber)?.verses_count ?? 286;
     let cancelled = false;
     (async () => {
       try {
         const [verses, timings] = await Promise.all([
           fetchSurahVerses(surahNumber),
-          fetchQdcChapterTimings(HUSARY_QDC_ID, surahNumber),
+          fetchTimingsForReciter(currentReciter, surahNumber, verseCount),
         ]);
         if (cancelled) return;
         const map = new Map<number, ApiWord[]>();
@@ -216,7 +282,7 @@ export default function MemorizationScreen() {
       }
     })();
     return () => { cancelled = true; };
-  }, [surahNumber]);
+  }, [surahNumber, reciterId, chaptersMap]);
 
   // Fetch Mushaf page data when switching to Full Mushaf mode
   useEffect(() => {
@@ -293,7 +359,7 @@ export default function MemorizationScreen() {
     cancelAnimationFrame(rafIdRef.current);
 
     // In recite mode, the highlight tracks the next word to say. On verse change,
-    // reset to word 0. Otherwise (Husary playback), clear highlight entirely.
+    // reset to word 0. Otherwise (audio playback), clear highlight entirely.
     if (reciteModeRef.current) {
       setHighlightedWord(0);
       if (surahNumberRef.current !== null) {
@@ -412,7 +478,7 @@ export default function MemorizationScreen() {
         await soundRef.current.unloadAsync();
         soundRef.current = null;
       }
-      const url = ayahAudioUrl(surahNumber, verseNum);
+      const url = ayahAudioUrl(reciter, surahNumber, verseNum);
       const { sound } = await Audio.Sound.createAsync(
         { uri: url },
         { shouldPlay: true },
@@ -500,7 +566,7 @@ export default function MemorizationScreen() {
 
   async function handlePlayPause() {
     if (reciteMode) {
-      Alert.alert("Recite mode is on", "Turn off Recite mode to play Husary.");
+      Alert.alert("Recite mode is on", "Turn off Recite mode to play audio.");
       return;
     }
     // Block re-entry while audio is loading. Without this, rapid taps during
@@ -638,11 +704,8 @@ export default function MemorizationScreen() {
     if (!transcript) return;
     const isFinal = !!event.isFinal;
 
-    console.log("[recite] transcript:", transcript, "| final:", isFinal);
-
     const heardNormFull = stripTashkeel(transcript);
     const heardTokens = tokenize(heardNormFull);
-    console.log("[recite] tokens:", heardTokens);
 
     const verseWords = displayWordsMapRef.current.get(currentVerseRef.current);
     if (!verseWords) return;
@@ -684,7 +747,6 @@ export default function MemorizationScreen() {
         if (!heardRaw) continue;
         const heardTry = stripAlPrefix(heardRaw);
         const heardFinal = heardTry.length >= 2 ? heardTry : heardRaw;
-        console.log("[recite] scan:", heardFinal, "vs expected:", expectedFinal);
         if (wordMatches(heardFinal, expectedFinal, lastMatchedWordRef.current)) {
           foundAt = i;
           break;
@@ -703,12 +765,9 @@ export default function MemorizationScreen() {
       searchFrom = foundAt + 1;
 
       expectedIdx++;
-      console.log("[recite] match: heard token", foundAt, "(", heardTokens[foundAt], ")", "→ expectedIdx now", expectedIdx);
     }
 
     if (advanced) {
-      console.log("[recite] advanced to expectedIdx:", expectedIdx);
-
       if (expectedIdx >= verseWords.length) {
         if (
           ayahEndRef.current !== null &&
@@ -785,8 +844,8 @@ export default function MemorizationScreen() {
 
     if (!verses) {
       return (
-        <View key={pageNum} style={[styles.pageCard, styles.centered, { minHeight: 200 }]}>
-          <ActivityIndicator color={T.pageMuted} />
+        <View key={pageNum} style={[themedStyles.pageCard, styles.centered, { minHeight: 200 }]}>
+          <ActivityIndicator color={THEMES[themeKey].pageMuted} />
         </View>
       );
     }
@@ -836,17 +895,17 @@ export default function MemorizationScreen() {
     return (
       <View
         key={pageNum}
-        style={styles.pageCard}
+        style={themedStyles.pageCard}
         onLayout={(e) => {
           pageCardLayoutMap.current.set(pageNum, e.nativeEvent.layout.y);
         }}
       >
         {/* Header bar: surah names (left) + Juz label (right) */}
-        <View style={styles.pageHeader}>
-          <Text style={styles.pageHeaderNames} numberOfLines={1}>
+        <View style={themedStyles.pageHeader}>
+          <Text style={themedStyles.pageHeaderNames} numberOfLines={1}>
             {surahNamesStr}
           </Text>
-          <Text style={styles.pageHeaderJuz}>{`JUZ ${juz}`}</Text>
+          <Text style={themedStyles.pageHeaderJuz}>{`JUZ ${juz}`}</Text>
         </View>
 
         {/* Page body: lines with surah banners injected at surah transitions */}
@@ -863,11 +922,11 @@ export default function MemorizationScreen() {
               <React.Fragment key={lineNum}>
                 {bannerSurahNum !== undefined && (
                   <View style={styles.surahBanner}>
-                    <View style={styles.surahBannerRule} />
+                    <View style={themedStyles.surahBannerRule} />
                     <View style={styles.surahBannerLabel}>
-                      <Text style={styles.surahBannerText}>{bannerName}</Text>
+                      <Text style={themedStyles.surahBannerText}>{bannerName}</Text>
                     </View>
-                    <View style={styles.surahBannerRule} />
+                    <View style={themedStyles.surahBannerRule} />
                   </View>
                 )}
                 {/*
@@ -900,8 +959,8 @@ export default function MemorizationScreen() {
                         <Text
                           key={`${item.verseKey}-${item.word.position}-${idx}`}
                           style={[
-                            styles.mushafEndMarker,
-                            !inScope && styles.mushafWordDimmed,
+                            themedStyles.mushafEndMarker,
+                            !inScope && themedStyles.mushafWordDimmed,
                           ]}
                         >
                           {item.word.text_uthmani}
@@ -921,7 +980,7 @@ export default function MemorizationScreen() {
                     return (
                       <Pressable
                         key={`${item.verseKey}-${item.word.position}-${idx}`}
-                        style={isHighlighted ? styles.mushafWordHighlighted : undefined}
+                        style={isHighlighted ? themedStyles.mushafWordHighlighted : undefined}
                         onPress={
                           inScope
                             ? () => {
@@ -936,8 +995,8 @@ export default function MemorizationScreen() {
                       >
                         <Text
                           style={[
-                            styles.mushafWord,
-                            !inScope && styles.mushafWordDimmed,
+                            themedStyles.mushafWord,
+                            !inScope && themedStyles.mushafWordDimmed,
                             isBlurred && styles.mushafWordBlurred,
                           ]}
                         >
@@ -953,8 +1012,8 @@ export default function MemorizationScreen() {
         </View>
 
         {/* Footer: centered page number */}
-        <View style={styles.pageFooter}>
-          <Text style={styles.pageFooterText}>{pageNum}</Text>
+        <View style={themedStyles.pageFooter}>
+          <Text style={themedStyles.pageFooterText}>{pageNum}</Text>
         </View>
       </View>
     );
@@ -1068,7 +1127,7 @@ export default function MemorizationScreen() {
             </View>
           </View>
         ) : pageStart === null || pageEnd === null ? (
-          <View style={[styles.pageCard, styles.centered, { minHeight: 200 }]}>
+          <View style={[themedStyles.pageCard, styles.centered, { minHeight: 200 }]}>
             <Text style={styles.errorText}>Page data not available.</Text>
           </View>
         ) : (
@@ -1234,6 +1293,64 @@ export default function MemorizationScreen() {
             </Pressable>
           </View>
 
+          <View style={styles.settingRow}>
+            <Text style={styles.settingLabel}>Theme</Text>
+          </View>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={{ gap: 8, paddingVertical: 4 }}
+          >
+            {(Object.keys(THEMES) as ThemeKey[]).map((k) => (
+              <Pressable
+                key={k}
+                onPress={() => setThemeKey(k)}
+                style={[
+                  styles.themePill,
+                  themeKey === k && styles.themePillSelected,
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.themePillText,
+                    themeKey === k && styles.themePillTextSelected,
+                  ]}
+                >
+                  {THEME_DISPLAY_NAMES[k]}
+                </Text>
+              </Pressable>
+            ))}
+          </ScrollView>
+
+          <View style={styles.settingRow}>
+            <Text style={styles.settingLabel}>Reciter</Text>
+          </View>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={{ gap: 8, paddingVertical: 4 }}
+          >
+            {RECITERS.map((r) => (
+              <Pressable
+                key={r.id}
+                onPress={() => setReciterId(r.id)}
+                style={[
+                  styles.reciterPill,
+                  reciterId === r.id && styles.reciterPillSelected,
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.reciterPillText,
+                    reciterId === r.id && styles.reciterPillTextSelected,
+                  ]}
+                >
+                  {r.fullName.split(" ").slice(-1)[0]}
+                </Text>
+              </Pressable>
+            ))}
+          </ScrollView>
+
           <Pressable style={styles.sheetDoneButton} onPress={() => setSettingsOpen(false)}>
             <Text style={styles.sheetDoneText}>Done</Text>
           </Pressable>
@@ -1242,6 +1359,91 @@ export default function MemorizationScreen() {
     </View>
   );
 }
+
+// ── Themed styles factory ────────────────────────────────────────────────────
+// Called from useMemo inside the component; defined at module scope so the
+// StyleSheet.create call is not recreated on every render.
+
+function makeThemedStyles(theme: MushafTheme) {
+  return StyleSheet.create({
+    pageCard: {
+      width: "100%",
+      backgroundColor: theme.page,
+      borderRadius: 16,
+      borderWidth: 1,
+      borderColor: theme.pageBorder,
+      overflow: "hidden",
+    },
+    pageHeader: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+      paddingVertical: 8,
+      paddingHorizontal: 16,
+      borderBottomWidth: 1,
+      borderBottomColor: theme.pageBorder,
+    },
+    pageHeaderNames: {
+      flex: 1,
+      fontFamily: "AmiriQuran",
+      fontSize: 13,
+      color: theme.pageLabel,
+    },
+    pageHeaderJuz: {
+      fontSize: 11,
+      color: theme.pageLabel,
+      letterSpacing: 2,
+      fontWeight: "600",
+      marginLeft: 8,
+    },
+    pageFooter: {
+      borderTopWidth: 1,
+      borderTopColor: theme.pageBorder,
+      paddingVertical: 6,
+      alignItems: "center",
+    },
+    pageFooterText: {
+      fontSize: 11,
+      color: theme.pageLabel,
+      letterSpacing: 3,
+    },
+    surahBannerRule: {
+      flex: 1,
+      height: 1,
+      backgroundColor: theme.pageRule,
+    },
+    surahBannerText: {
+      fontFamily: "AmiriQuran",
+      fontSize: 18,
+      color: theme.pageLabel,
+      fontWeight: "600",
+    },
+    mushafWord: {
+      fontFamily: "AmiriQuran",
+      fontSize: 20,
+      lineHeight: 38,
+      color: theme.pageText,
+      marginHorizontal: 1,
+    },
+    mushafEndMarker: {
+      fontFamily: "AmiriQuran",
+      fontSize: 16,
+      lineHeight: 38,
+      color: theme.pageText,
+      marginHorizontal: 4,
+    },
+    mushafWordDimmed: {
+      color: theme.pageMuted,
+    },
+    mushafWordHighlighted: {
+      backgroundColor: theme.activeHighlight,
+      borderRadius: 3,
+      paddingHorizontal: 2,
+    },
+  });
+}
+
+// ── Static styles (no theme references) ─────────────────────────────────────
 
 const styles = StyleSheet.create({
   container: {
@@ -1353,101 +1555,27 @@ const styles = StyleSheet.create({
     lineHeight: 60,
     color: "#111111",
   },
-  // ── Parchment Mushaf page card ───────────────────────────────────────────────
-  pageCard: {
-    width: "100%",
-    backgroundColor: T.page,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: T.pageBorder,
-    overflow: "hidden",
-  },
-  pageHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: T.pageBorder,
-  },
-  pageHeaderNames: {
-    flex: 1,
-    fontFamily: "AmiriQuran",
-    fontSize: 13,
-    color: T.pageLabel,
-  },
-  pageHeaderJuz: {
-    fontSize: 11,
-    color: T.pageLabel,
-    letterSpacing: 2,
-    fontWeight: "600",
-    marginLeft: 8,
-  },
+  // ── Parchment Mushaf page card (static parts) ────────────────────────────────
   pageBody: {
     paddingHorizontal: 14,
     paddingVertical: 12,
   },
-  pageFooter: {
-    borderTopWidth: 1,
-    borderTopColor: T.pageBorder,
-    paddingVertical: 6,
-    alignItems: "center",
-  },
-  pageFooterText: {
-    fontSize: 11,
-    color: T.pageLabel,
-    letterSpacing: 3,
-  },
-  // ── Surah banner ─────────────────────────────────────────────────────────────
+  // ── Surah banner (static parts) ─────────────────────────────────────────────
   surahBanner: {
     flexDirection: "row",
     alignItems: "center",
     paddingVertical: 8,
     paddingHorizontal: 4,
   },
-  surahBannerRule: {
-    flex: 1,
-    height: 1,
-    backgroundColor: T.pageRule,
-  },
   surahBannerLabel: {
     paddingHorizontal: 12,
   },
-  surahBannerText: {
-    fontFamily: "AmiriQuran",
-    fontSize: 18,
-    color: T.pageLabel,
-    fontWeight: "600",
-  },
-  // ── Mushaf line words ────────────────────────────────────────────────────────
+  // ── Mushaf line words (static parts) ────────────────────────────────────────
   mushafLine: {
     flexDirection: "row-reverse",
     flexWrap: "wrap",
     alignItems: "center",
     justifyContent: "center",
-  },
-  mushafWord: {
-    fontFamily: "AmiriQuran",
-    fontSize: 20,
-    lineHeight: 38,
-    color: T.pageText,
-    marginHorizontal: 1,
-  },
-  mushafEndMarker: {
-    fontFamily: "AmiriQuran",
-    fontSize: 16,
-    lineHeight: 38,
-    color: T.pageText,
-    marginHorizontal: 4,
-  },
-  mushafWordDimmed: {
-    color: T.pageMuted,
-  },
-  mushafWordHighlighted: {
-    backgroundColor: T.activeHighlight,
-    borderRadius: 3,
-    paddingHorizontal: 2,
   },
   mushafWordBlurred: {
     opacity: 0.35,
@@ -1633,5 +1761,46 @@ const styles = StyleSheet.create({
     color: "#ffffff",
     fontSize: 16,
     fontWeight: "700",
+  },
+  // ── Theme + Reciter picker pills ─────────────────────────────────────────────
+  themePill: {
+    backgroundColor: "#f9fafb",
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+  },
+  themePillSelected: {
+    backgroundColor: "#2563eb",
+    borderColor: "#2563eb",
+  },
+  themePillText: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#111111",
+  },
+  themePillTextSelected: {
+    color: "#ffffff",
+  },
+  reciterPill: {
+    backgroundColor: "#f9fafb",
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+  },
+  reciterPillSelected: {
+    backgroundColor: "#2563eb",
+    borderColor: "#2563eb",
+  },
+  reciterPillText: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#111111",
+  },
+  reciterPillTextSelected: {
+    color: "#ffffff",
   },
 });

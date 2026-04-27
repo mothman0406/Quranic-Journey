@@ -1,5 +1,9 @@
-export function ayahAudioUrl(surahNumber: number, ayahNumber: number): string {
-  const s = String(surahNumber).padStart(3, "0");
-  const a = String(ayahNumber).padStart(3, "0");
-  return `https://everyayah.com/data/Husary_128kbps/${s}${a}.mp3`;
+import type { Reciter } from "@/src/lib/reciters";
+
+function pad(n: number, len: number): string {
+  return String(n).padStart(len, "0");
+}
+
+export function ayahAudioUrl(reciter: Reciter, surahNumber: number, ayahNumber: number): string {
+  return `https://everyayah.com/data/${reciter.folder}/${pad(surahNumber, 3)}${pad(ayahNumber, 3)}.mp3`;
 }

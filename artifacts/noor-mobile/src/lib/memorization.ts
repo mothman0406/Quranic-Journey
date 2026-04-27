@@ -1,4 +1,5 @@
 import { apiFetch } from "@/src/lib/api";
+import type { Reciter } from "@/src/lib/reciters";
 
 export type Segment = [number, number, number]; // [wordIdx1based, startFrac, endFrac]
 
@@ -99,6 +100,78 @@ export async function fetchQdcChapterTimings(
 
   qdcCache.set(key, promise);
   return promise;
+}
+
+const v4Cache = new Map<string, Promise<Map<string, Segment[]>>>();
+
+async function fetchQuranComV4VerseTiming(
+  quranComId: number,
+  surah: number,
+  verse: number,
+): Promise<Segment[]> {
+  const ac = new AbortController();
+  const timer = setTimeout(() => ac.abort(), 4000);
+  try {
+    const res = await fetch(
+      `https://api.quran.com/api/v4/recitations/${quranComId}/by_ayah/${surah}:${verse}`,
+      { signal: ac.signal },
+    );
+    if (!res.ok) return [];
+    const data = (await res.json()) as {
+      audio_files?: Array<{ segments?: Array<[number, number, number]> }>;
+    };
+    const segs = data.audio_files?.[0]?.segments;
+    if (!Array.isArray(segs) || segs.length === 0) return [];
+    const last = segs[segs.length - 1];
+    if (!last) return [];
+    const span = last[2];
+    if (span <= 0) {
+      return segs.map((s, i) => [i + 1, s[1], s[2]] as Segment);
+    }
+    return segs.map((s, i) => [i + 1, s[1] / span, s[2] / span] as Segment);
+  } catch {
+    return [];
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function fetchQuranComV4ChapterTimings(
+  quranComId: number,
+  surah: number,
+  verseCount: number,
+): Promise<Map<string, Segment[]>> {
+  const key = `${quranComId}:${surah}`;
+  const cached = v4Cache.get(key);
+  if (cached) return cached;
+
+  const promise = (async (): Promise<Map<string, Segment[]>> => {
+    const result = new Map<string, Segment[]>();
+    const fetches = Array.from({ length: verseCount }, (_, i) =>
+      fetchQuranComV4VerseTiming(quranComId, surah, i + 1).then((segs) => {
+        if (segs.length > 0) result.set(`${surah}:${i + 1}`, segs);
+      }),
+    );
+    await Promise.all(fetches);
+    return result;
+  })();
+
+  v4Cache.set(key, promise);
+  return promise;
+}
+
+export async function fetchTimingsForReciter(
+  reciter: Reciter,
+  surah: number,
+  verseCount: number,
+): Promise<Map<string, Segment[]>> {
+  if (reciter.qdcId !== null) {
+    return fetchQdcChapterTimings(reciter.qdcId, surah);
+  }
+  if (reciter.quranComId !== null) {
+    return fetchQuranComV4ChapterTimings(reciter.quranComId, surah, verseCount);
+  }
+  return new Map();
 }
 
 export async function submitMemorization(

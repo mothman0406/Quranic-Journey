@@ -15,6 +15,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { Audio } from "expo-av";
 import { mushafPageUrl } from "@/src/lib/mushaf";
 import { ayahAudioUrl } from "@/src/lib/audio";
+import { findReciter } from "@/src/lib/reciters";
 import { submitReview } from "@/src/lib/reviews";
 
 const PAGE_ASPECT_RATIO = 1.45;
@@ -85,7 +86,7 @@ export default function ReviewSession() {
       await soundRef.current.unloadAsync();
       soundRef.current = null;
     }
-    const url = ayahAudioUrl(surahNumberN, ayahNumber);
+    const url = ayahAudioUrl(findReciter("husary"), surahNumberN, ayahNumber);
     const { sound } = await Audio.Sound.createAsync(
       { uri: url },
       { shouldPlay: true },
