@@ -129,7 +129,7 @@ and updates schedule. Verified end-to-end on iPhone.**
 
 ### Phase 2D — Memorization mode
 
-#### Phase 2D-Core (Slice 1) — ✅ DONE (commit TBD)
+#### Phase 2D-Core (Slice 1) — ✅ DONE (commit 5650d9e)
 
 Single-verse focused memorization screen with Husary word-by-word audio sync.
 
