@@ -79,7 +79,7 @@ export default function MemorizationScreen() {
   const [blindMode, setBlindMode] = useState(false);
   const [blurMode, setBlurMode] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [revealedWords, setRevealedWords] = useState<Set<string>>(new Set());
+  const [revealedVerses, setRevealedVerses] = useState<Set<string>>(new Set());
 
   // Audio + RAF refs
   const soundRef = useRef<Audio.Sound | null>(null);
@@ -504,23 +504,23 @@ export default function MemorizationScreen() {
     }
   }
 
-  function revealWord(key: string) {
-    setRevealedWords((prev) => {
+  function revealVerse(verseKey: string) {
+    setRevealedVerses((prev) => {
       const next = new Set(prev);
-      next.add(key);
+      next.add(verseKey);
       return next;
     });
-    const existing = revealTimeoutsRef.current.get(key);
+    const existing = revealTimeoutsRef.current.get(verseKey);
     if (existing) clearTimeout(existing);
     const t = setTimeout(() => {
-      setRevealedWords((prev) => {
+      setRevealedVerses((prev) => {
         const next = new Set(prev);
-        next.delete(key);
+        next.delete(verseKey);
         return next;
       });
-      revealTimeoutsRef.current.delete(key);
+      revealTimeoutsRef.current.delete(verseKey);
     }, 4000);
-    revealTimeoutsRef.current.set(key, t);
+    revealTimeoutsRef.current.set(verseKey, t);
   }
 
   // ── Full Mushaf page renderer ────────────────────────────────────────────────
@@ -657,8 +657,7 @@ export default function MemorizationScreen() {
                     const isHighlighted =
                       highlightedPage?.verseKey === item.verseKey &&
                       highlightedPage?.position === item.word.position;
-                    const wordKey = `${item.verseKey}:${item.word.position}`;
-                    const isBlindHidden = blindMode && inScope && !revealedWords.has(wordKey);
+                    const verseHidden = inScope && blindMode && !revealedVerses.has(item.verseKey);
                     const isCurrentlyPlayingVerse =
                       isPlaying && item.verseKey === `${surahNumber}:${currentVerse}`;
                     const isBlurred =
@@ -671,7 +670,10 @@ export default function MemorizationScreen() {
                         onPress={
                           inScope
                             ? () => {
-                                if (blindMode) revealWord(wordKey);
+                                if (blindMode) {
+                                  revealVerse(item.verseKey);
+                                  return;
+                                }
                                 handlePageWordTap(item.verseKey, item.word.position);
                               }
                             : undefined
@@ -684,7 +686,7 @@ export default function MemorizationScreen() {
                             isBlurred && styles.mushafWordBlurred,
                           ]}
                         >
-                          {isBlindHidden ? "••••" : item.word.text_uthmani}
+                          {verseHidden ? "••••" : item.word.text_uthmani}
                         </Text>
                       </Pressable>
                     );
@@ -706,6 +708,8 @@ export default function MemorizationScreen() {
   // ── Derived values ───────────────────────────────────────────────────────────
 
   const words = displayWordsMap.get(currentVerse) ?? [];
+  const ayahVerseKey = surahNumber !== null ? `${surahNumber}:${currentVerse}` : "";
+  const ayahVerseHidden = blindMode && !revealedVerses.has(ayahVerseKey);
   const verseIndex = ayahStart !== null ? currentVerse - ayahStart + 1 : 1;
   const totalVerses = ayahStart !== null && ayahEnd !== null ? ayahEnd - ayahStart + 1 : 0;
   const canPrev = ayahStart !== null && currentVerse > ayahStart;
@@ -789,24 +793,23 @@ export default function MemorizationScreen() {
         {viewMode === "ayah" ? (
           <View style={styles.verseCard}>
             <View style={styles.wordContainer}>
-              {words.map((word, idx) => {
-                const wordKey = `${surahNumber}:${currentVerse}:${idx + 1}`;
-                const isBlindHidden = blindMode && !revealedWords.has(wordKey);
-                return (
-                  <Pressable
-                    key={`${currentVerse}-${idx}`}
-                    onPress={() => {
-                      if (blindMode) revealWord(wordKey);
-                      handleWordTap(idx);
-                    }}
-                    style={[styles.wordWrapper, highlightedWord === idx && styles.wordHighlighted]}
-                  >
-                    <Text style={styles.arabicWord}>
-                      {isBlindHidden ? "••••" : word.text_uthmani}
-                    </Text>
-                  </Pressable>
-                );
-              })}
+              {words.map((word, idx) => (
+                <Pressable
+                  key={`${currentVerse}-${idx}`}
+                  onPress={() => {
+                    if (blindMode) {
+                      revealVerse(ayahVerseKey);
+                      return;
+                    }
+                    handleWordTap(idx);
+                  }}
+                  style={[styles.wordWrapper, highlightedWord === idx && styles.wordHighlighted]}
+                >
+                  <Text style={styles.arabicWord}>
+                    {ayahVerseHidden ? "••••" : word.text_uthmani}
+                  </Text>
+                </Pressable>
+              ))}
             </View>
           </View>
         ) : pageStart === null || pageEnd === null ? (
