@@ -12,7 +12,12 @@ export default function ChildDashboard() {
   const router = useRouter();
 
   function handleCardPress(key: string) {
-    if (key === "reading") {
+    if (key === "review") {
+      router.push({
+        pathname: "/child/[childId]/review",
+        params: { childId, name: name ?? "" },
+      });
+    } else if (key === "reading") {
       router.push({
         pathname: "/child/[childId]/mushaf",
         params: { childId, name: name ?? "" },
