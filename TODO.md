@@ -173,6 +173,20 @@ This is the only screen that needs custom text rendering:
 - pnpm's `node_modules/.pnpm/` content-addressed store works fine with Metro/Expo without `node-linker=hoisted`. Don't preemptively add hoisting workarounds.
 - App-wide light mode: set `"userInterfaceStyle": "light"` in `app.json` AND use explicit colors in StyleSheet (don't rely on `useColorScheme` defaults). Belt-and-suspenders.
 
+### From QPC font test (2026-04-27)
+- QPC V1/V2 per-page fonts (e.g. QCF_P001.TTF from `nuqayah/qpc-fonts`) are
+  NOT standard Arabic-text fonts with ligature substitution. They use
+  Private Use Area codepoints — each word on a Mushaf page is encoded as a
+  custom glyph at a PUA codepoint. Rendering plain Arabic with a QPC page
+  font produces empty boxes for every word.
+- To use QPC fonts for Mushaf rendering you'd need a per-page lookup table
+  mapping ayah verses to their PUA codepoint sequences for that page. The
+  `qcf_quran` Flutter package bundles this; raw data not easily downloadable.
+- Decision: NOT pursuing QPC font rendering. Sticking with PNG page images
+  for Full Mushaf + Review. Memorization screen uses RN <Text> + Bayaan QCF
+  fonts (which DO use real Unicode and DO shape correctly) for word-level
+  interactivity.
+
 ---
 
 ## 🔐 Environment / URLs reference
