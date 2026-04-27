@@ -80,9 +80,7 @@ Low-priority, mostly forms and lists. Can be skipped to jump straight to Phase 2
 
 ### Phase 2A — Page image foundation (shared by Full Mushaf + Review)
 
-**Status: research complete. Streaming from GitHub raw URLs validated on
-iPhone (commit pending — skia-quran-test reference impl in
-~/Desktop/skia-quran-test/App.tsx).**
+**Status: ✅ DONE. Validated and shipped in Phase 2B (commit 4432f21).**
 
 - [ ] Source 604 PNGs of Madinah 15-line Mushaf
   - First check Quran.com's image API (likely the easiest path)
@@ -101,6 +99,16 @@ iPhone (commit pending — skia-quran-test reference impl in
   - Used by both Full Mushaf reader and Review screen
 
 ### Phase 2B — Full Mushaf reader
+
+**Status: ✅ DONE (commit 4432f21). Reading card on dashboard navigates
+to a working Mushaf reader. 604 pages stream from raw.githubusercontent.com,
+RTL paging via FlatList inverted prop, jump buttons (1/50/300/604) work,
+manual Save Page button, 2s debounced auto-save on swipe, last-page-read
+persists per child via POST /api/children/:childId/reading-progress and
+restored from GET /api/children/:childId/dashboard's readingGoal.lastPage
+on screen mount. Verified end-to-end on iPhone hardware.**
+
+Items still pending in this section (not blocking — Phase 2 polish):
 
 - [ ] Mushaf reader screen — horizontal pager between pages
 - [ ] Page bookmarks (existing DB schema: `readingLastPage`)
