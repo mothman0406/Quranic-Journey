@@ -165,10 +165,18 @@ adds parchment page chrome ported from noor-path bayaan palette.
 - ✅ Dimming: pageMuted (#b0a184) for out-of-scope words (was #9ca3af)
 - ✅ Word Pressable wrappers in place (no-op onPress; wired in Slice 2b)
 
-#### Phase 2D-Mushaf-Sync (Slice 2b) — pending
+#### Phase 2D-Mushaf-Sync (Slice 2b) — ✅ DONE (commit TBD)
 
-- [ ] Word-by-word audio highlight extended across full Mushaf page
-- [ ] Auto-scroll to keep active word visible
+- ✅ Sequential auto-advance through in-scope range in Full Mushaf mode
+  (Ayah-by-Ayah stops on verse finish; page mode advances automatically)
+- ✅ Page-level word highlighting via QDC RAF tick — parallel highlightedPage
+  state keyed by verseKey + 1-based ApiWord.position
+- ✅ Tap-to-seek on in-scope words in page mode; cross-verse taps switch
+  currentVerse and seek after new verse loads (pendingSeekPositionRef)
+- ✅ Fixed-position controls island below ScrollView (Play/Mark Complete
+  always reachable without scrolling)
+- ✅ Auto-scroll on verse change (page mode) — best-effort onLayout Y;
+  lineLayoutMap + pageCardLayoutMap track positions
 
 #### Phase 2D-Practice (Slice 3) — pending
 

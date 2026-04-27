@@ -65,6 +65,10 @@ export default function MemorizationScreen() {
 
   const [isPlaying, setIsPlaying] = useState(false);
   const [highlightedWord, setHighlightedWord] = useState(-1);
+  const [highlightedPage, setHighlightedPage] = useState<{
+    verseKey: string;
+    position: number;
+  } | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
   // Audio + RAF refs
@@ -72,12 +76,27 @@ export default function MemorizationScreen() {
   const rafIdRef = useRef<number>(0);
   const positionRef = useRef(0);
   const durationRef = useRef(0);
-  // Segments for the currently-playing verse (updated in effects)
   const segsRef = useRef<Segment[]>([]);
-  // Whether prev/next navigation should auto-play the new verse
   const autoPlayRef = useRef(false);
 
-  // Load chapter metadata once for surah name lookups (header + banners)
+  // Refs readable inside async callbacks and RAF ticks (avoid stale closures)
+  const viewModeRef = useRef<"ayah" | "page">(viewMode);
+  const currentVerseRef = useRef<number>(currentVerse);
+  const ayahEndRef = useRef<number | null>(ayahEnd);
+  const isPlayingRef = useRef(false);
+  const pendingSeekPositionRef = useRef<number | null>(null);
+
+  // Layout refs for auto-scroll
+  const scrollViewRef = useRef<ScrollView>(null);
+  const lineLayoutMap = useRef<Map<string, number>>(new Map());
+  const pageCardLayoutMap = useRef<Map<number, number>>(new Map());
+
+  // Keep callback-visible refs in sync with state
+  useEffect(() => { viewModeRef.current = viewMode; }, [viewMode]);
+  useEffect(() => { currentVerseRef.current = currentVerse; }, [currentVerse]);
+  useEffect(() => { ayahEndRef.current = ayahEnd; }, [ayahEnd]);
+
+  // Load chapter metadata once for surah name lookups
   useEffect(() => {
     fetchAllChapters()
       .then((chapters) => {
@@ -85,9 +104,7 @@ export default function MemorizationScreen() {
         for (const ch of chapters) map.set(ch.id, ch);
         setChaptersMap(map);
       })
-      .catch(() => {
-        // fail silently — header and banners show empty names until loaded
-      });
+      .catch(() => {});
   }, []);
 
   // Step 1: if no params, fetch dashboard to get today's memorization target
@@ -149,9 +166,7 @@ export default function MemorizationScreen() {
         }
       }
     })();
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, [surahNumber]);
 
   // Fetch Mushaf page data when switching to Full Mushaf mode
@@ -173,12 +188,10 @@ export default function MemorizationScreen() {
           return next;
         });
       } catch {
-        // fail silently; page card continues showing loading indicator
+        // fail silently; page card shows loading indicator
       }
     })();
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, [viewMode, pageStart, pageEnd]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Keep segsRef up-to-date for the RAF tick
@@ -187,6 +200,32 @@ export default function MemorizationScreen() {
       segsRef.current = segmentsMap.get(`${surahNumber}:${currentVerse}`) ?? [];
     }
   }, [segmentsMap, surahNumber, currentVerse]);
+
+  // Auto-scroll to active verse on verse/mode change (page mode only, best-effort)
+  useEffect(() => {
+    if (viewMode !== "page" || pageStart === null || pageEnd === null || surahNumber === null) return;
+    for (let p = pageStart; p <= pageEnd; p++) {
+      const verses = pageWordsMap.get(p);
+      if (!verses) continue;
+      for (const verse of verses) {
+        const ci = verse.verse_key.indexOf(":");
+        const vSurah = Number(verse.verse_key.slice(0, ci));
+        const vVerse = Number(verse.verse_key.slice(ci + 1));
+        if (vSurah !== surahNumber || vVerse !== currentVerse) continue;
+        if (!verse.words.length) continue;
+        const firstWord = verse.words[0]!;
+        const lineKey = `page:${p}:line:${firstWord.line_number}`;
+        const lineY = lineLayoutMap.current.get(lineKey);
+        const pageCardY = pageCardLayoutMap.current.get(p);
+        if (lineY !== undefined && pageCardY !== undefined) {
+          // pageCardY = card's Y in scroll content; ~40px header; lineY within pageBody
+          const targetY = pageCardY + 40 + lineY;
+          scrollViewRef.current?.scrollTo({ y: Math.max(0, targetY - 80), animated: true });
+        }
+        return;
+      }
+    }
+  }, [currentVerse, viewMode]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Cleanup on unmount
   useEffect(() => {
@@ -200,6 +239,7 @@ export default function MemorizationScreen() {
   useEffect(() => {
     cancelAnimationFrame(rafIdRef.current);
     setHighlightedWord(-1);
+    setHighlightedPage(null);
     positionRef.current = 0;
     durationRef.current = 0;
 
@@ -210,21 +250,27 @@ export default function MemorizationScreen() {
         soundRef.current = null;
       }
       if (cancelled) return;
+      isPlayingRef.current = false;
       setIsPlaying(false);
       if (autoPlayRef.current) {
         autoPlayRef.current = false;
         await playVerse(currentVerse);
+        // Seek to tapped word position after new verse starts
+        if (pendingSeekPositionRef.current !== null) {
+          const pos = pendingSeekPositionRef.current;
+          pendingSeekPositionRef.current = null;
+          await seekToWordPosition(pos);
+        }
       }
     };
     doChange();
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, [currentVerse]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── RAF highlight loop ───────────────────────────────────────────────────────
 
   function startRAF() {
+    const sn = surahNumber; // captured at call time; stable during playback
     function tick() {
       const dur = durationRef.current;
       const pos = positionRef.current;
@@ -238,12 +284,23 @@ export default function MemorizationScreen() {
             break;
           }
         }
-        // stick on last word after audio ends
+        // Stick on last word after audio ends
         if (found === -1 && frac > 0 && segs.length > 0) {
           const last = segs[segs.length - 1];
           if (last && frac >= last[1]) found = last[0] - 1;
         }
         setHighlightedWord(found);
+        // Page-mode highlight: 1-based position matches ApiWord.position
+        if (sn !== null) {
+          if (found === -1) {
+            setHighlightedPage(null);
+          } else {
+            setHighlightedPage({
+              verseKey: `${sn}:${currentVerseRef.current}`,
+              position: found + 1,
+            });
+          }
+        }
       }
       rafIdRef.current = requestAnimationFrame(tick);
     }
@@ -268,23 +325,52 @@ export default function MemorizationScreen() {
         if (status.durationMillis) durationRef.current = status.durationMillis;
         if (status.didJustFinish) {
           cancelAnimationFrame(rafIdRef.current);
+          isPlayingRef.current = false;
           setIsPlaying(false);
           setHighlightedWord(-1);
+          setHighlightedPage(null);
+          // Page mode: auto-advance to next verse in scope
+          if (
+            viewModeRef.current === "page" &&
+            ayahEndRef.current !== null &&
+            currentVerseRef.current < ayahEndRef.current
+          ) {
+            autoPlayRef.current = true;
+            setCurrentVerse((v) => v + 1);
+          }
         }
       },
     );
     soundRef.current = sound;
+    isPlayingRef.current = true;
     setIsPlaying(true);
     startRAF();
+  }
+
+  async function seekToWordPosition(position: number) {
+    const seg = segsRef.current.find((s) => s[0] === position);
+    if (!seg) return;
+    const dur = durationRef.current;
+    if (soundRef.current && dur > 0) {
+      await soundRef.current.setPositionAsync(Math.floor(seg[1] * dur));
+      if (!isPlayingRef.current) {
+        await soundRef.current.playAsync();
+        isPlayingRef.current = true;
+        setIsPlaying(true);
+        startRAF();
+      }
+    }
   }
 
   async function handlePlayPause() {
     if (isPlaying) {
       cancelAnimationFrame(rafIdRef.current);
       await soundRef.current?.pauseAsync();
+      isPlayingRef.current = false;
       setIsPlaying(false);
     } else if (soundRef.current) {
       await soundRef.current.playAsync();
+      isPlayingRef.current = true;
       setIsPlaying(true);
       startRAF();
     } else {
@@ -298,12 +384,30 @@ export default function MemorizationScreen() {
     const dur = durationRef.current;
     if (soundRef.current && dur > 0) {
       await soundRef.current.setPositionAsync(Math.floor(seg[1] * dur));
-      if (!isPlaying) {
+      if (!isPlayingRef.current) {
         await soundRef.current.playAsync();
+        isPlayingRef.current = true;
         setIsPlaying(true);
         startRAF();
       }
     }
+  }
+
+  async function handlePageWordTap(verseKey: string, position: number) {
+    const ci = verseKey.indexOf(":");
+    const vSurah = Number(verseKey.slice(0, ci));
+    const vVerse = Number(verseKey.slice(ci + 1));
+    if (vSurah !== surahNumber) return;
+
+    if (vVerse !== currentVerse) {
+      // Switch to the tapped verse, then seek to the tapped word after load
+      pendingSeekPositionRef.current = position;
+      autoPlayRef.current = true;
+      setCurrentVerse(vVerse);
+      return;
+    }
+
+    await seekToWordPosition(position);
   }
 
   function handlePrev() {
@@ -351,7 +455,7 @@ export default function MemorizationScreen() {
       );
     }
 
-    // Group all words (including end markers) by line_number, preserving order
+    // Group all words (including end markers) by line_number
     const lineMap = new Map<number, Array<{ word: ApiWord; verseKey: string }>>();
     for (const verse of verses) {
       for (const word of verse.words) {
@@ -361,10 +465,7 @@ export default function MemorizationScreen() {
       }
     }
 
-    // Determine where surah banners should be injected.
-    // A banner is inserted before the first line of each new surah on the page.
-    // When a surah transition happens mid-line, the banner still appears before
-    // that line — accepted compromise for mobile wrap-aware rendering.
+    // Surah banners: injected before the first line of each new surah on the page
     let prevSurah: number | null = null;
     const bannerBeforeLine = new Map<number, number>(); // lineNum → surahNumber
     for (const verse of verses) {
@@ -375,16 +476,13 @@ export default function MemorizationScreen() {
       const firstWord = verse.words[0];
       if (!firstWord) continue;
       if (prevSurah === null && vVerse === 1) {
-        // Page starts at beginning of a surah → show its banner
         bannerBeforeLine.set(firstWord.line_number, vSurah);
       } else if (prevSurah !== null && vSurah !== prevSurah) {
-        // Surah transition → inject banner before this surah's first line
         bannerBeforeLine.set(firstWord.line_number, vSurah);
       }
       prevSurah = vSurah;
     }
 
-    // Build surah names string for the page header bar
     const uniqueSurahs: number[] = [];
     for (const verse of verses) {
       const ci = verse.verse_key.indexOf(":");
@@ -400,7 +498,13 @@ export default function MemorizationScreen() {
     const lineNums = [...lineMap.keys()].sort((a, b) => a - b);
 
     return (
-      <View key={pageNum} style={styles.pageCard}>
+      <View
+        key={pageNum}
+        style={styles.pageCard}
+        onLayout={(e) => {
+          pageCardLayoutMap.current.set(pageNum, e.nativeEvent.layout.y);
+        }}
+      >
         {/* Header bar: surah names (left) + Juz label (right) */}
         <View style={styles.pageHeader}>
           <Text style={styles.pageHeaderNames} numberOfLines={1}>
@@ -431,11 +535,18 @@ export default function MemorizationScreen() {
                   </View>
                 )}
                 {/*
-                 * Accepted compromise: one canonical Mushaf line may wrap to
-                 * 2+ visual lines on phones due to fontSize + screen width.
-                 * Real fix is per-page native typography in a later phase.
+                 * One canonical Mushaf line may wrap to 2+ visual lines on phones.
+                 * Real per-page typography is a later phase.
                  */}
-                <View style={styles.mushafLine}>
+                <View
+                  style={styles.mushafLine}
+                  onLayout={(e) => {
+                    lineLayoutMap.current.set(
+                      `page:${pageNum}:line:${lineNum}`,
+                      e.nativeEvent.layout.y,
+                    );
+                  }}
+                >
                   {lineItems.map((item, idx) => {
                     const ci = item.verseKey.indexOf(":");
                     const vSurah = Number(item.verseKey.slice(0, ci));
@@ -462,11 +573,19 @@ export default function MemorizationScreen() {
                       );
                     }
 
-                    // Pressable wrapper left intentionally without onPress —
-                    // tap-to-seek within page mode is wired in Slice 2b.
+                    const isHighlighted =
+                      highlightedPage?.verseKey === item.verseKey &&
+                      highlightedPage?.position === item.word.position;
+
                     return (
                       <Pressable
                         key={`${item.verseKey}-${item.word.position}-${idx}`}
+                        style={isHighlighted ? styles.mushafWordHighlighted : undefined}
+                        onPress={
+                          inScope
+                            ? () => handlePageWordTap(item.verseKey, item.word.position)
+                            : undefined
+                        }
                       >
                         <Text
                           style={[
@@ -524,6 +643,7 @@ export default function MemorizationScreen() {
 
   return (
     <View style={styles.container}>
+      {/* Header */}
       <View style={styles.header}>
         <Pressable onPress={() => router.back()}>
           <Text style={styles.back}>← Back</Text>
@@ -534,6 +654,7 @@ export default function MemorizationScreen() {
         <View style={styles.headerSpacer} />
       </View>
 
+      {/* View mode toggle */}
       <View style={styles.toggleContainer}>
         <Pressable
           style={[styles.togglePill, viewMode === "ayah" && styles.togglePillSelected]}
@@ -563,7 +684,12 @@ export default function MemorizationScreen() {
         </Pressable>
       </View>
 
-      <ScrollView contentContainerStyle={styles.scrollContent}>
+      {/* Scrollable content — flex: 1 so controls island stays pinned below */}
+      <ScrollView
+        ref={scrollViewRef}
+        style={styles.scrollFlex}
+        contentContainerStyle={styles.scrollContent}
+      >
         {viewMode === "ayah" ? (
           <View style={styles.verseCard}>
             <View style={styles.wordContainer}>
@@ -589,7 +715,10 @@ export default function MemorizationScreen() {
             )}
           </>
         )}
+      </ScrollView>
 
+      {/* Fixed controls island — always visible below the scroll area */}
+      <View style={styles.controlsIsland}>
         <View style={styles.controls}>
           <Pressable
             style={[styles.navButton, !canPrev && styles.navButtonDisabled]}
@@ -623,7 +752,7 @@ export default function MemorizationScreen() {
             <Text style={styles.completeButtonText}>Mark Complete</Text>
           )}
         </Pressable>
-      </ScrollView>
+      </View>
     </View>
   );
 }
@@ -691,11 +820,14 @@ const styles = StyleSheet.create({
   togglePillTextSelected: {
     color: "#ffffff",
   },
+  scrollFlex: {
+    flex: 1,
+  },
   scrollContent: {
     padding: 16,
     alignItems: "center",
     gap: 24,
-    paddingBottom: 48,
+    paddingBottom: 16,
   },
   // ── Ayah-by-Ayah card (unchanged) ───────────────────────────────────────────
   verseCard: {
@@ -820,7 +952,21 @@ const styles = StyleSheet.create({
   mushafWordDimmed: {
     color: T.pageMuted,
   },
-  // ── Audio controls (unchanged) ───────────────────────────────────────────────
+  mushafWordHighlighted: {
+    backgroundColor: T.activeHighlight,
+    borderRadius: 3,
+    paddingHorizontal: 2,
+  },
+  // ── Fixed controls island ────────────────────────────────────────────────────
+  controlsIsland: {
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 24,
+    gap: 12,
+    borderTopWidth: 1,
+    borderTopColor: "#e5e7eb",
+    backgroundColor: "#ffffff",
+  },
   controls: {
     flexDirection: "row",
     alignItems: "center",
