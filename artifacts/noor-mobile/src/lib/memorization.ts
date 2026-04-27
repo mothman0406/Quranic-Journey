@@ -128,15 +128,26 @@ export async function fetchQuranComV4VerseTiming(
       const data = (await res.json()) as {
         audio_files?: Array<{ segments?: Array<[number, number, number]> }>;
       };
+      console.log("[v4-fetch]", `${quranComId}:${surah}:${verse}`, "audio_files count:", data.audio_files?.length, "segments count:", data.audio_files?.[0]?.segments?.length);
       const segs = data.audio_files?.[0]?.segments;
-      if (!Array.isArray(segs) || segs.length === 0) return [];
+      if (!Array.isArray(segs) || segs.length === 0) {
+        console.log("[v4-fetch] returning empty (no segs)");
+        return [];
+      }
       const last = segs[segs.length - 1];
-      if (!last) return [];
+      if (!last) {
+        console.log("[v4-fetch] returning empty (no last)");
+        return [];
+      }
       const span = last[2];
+      console.log("[v4-fetch] first seg:", segs[0], "last seg:", last, "span:", span);
       if (span <= 0) {
+        console.log("[v4-fetch] span <= 0, returning unnormalized");
         return segs.map((s, i) => [i + 1, s[1], s[2]] as Segment);
       }
-      return segs.map((s, i) => [i + 1, s[1] / span, s[2] / span] as Segment);
+      const result = segs.map((s, i) => [i + 1, s[1] / span, s[2] / span] as Segment);
+      console.log("[v4-fetch] normalized first:", result[0], "last:", result[result.length - 1], "count:", result.length);
+      return result;
     } catch {
       return [];
     } finally {

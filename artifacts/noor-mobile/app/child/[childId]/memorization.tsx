@@ -133,6 +133,7 @@ export default function MemorizationScreen() {
   const currentRepeatRef = useRef(1);
   const advanceTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastTickLog = useRef<{ found: number; segCount: number }>({ found: -2, segCount: -1 });
 
   // Layout refs for auto-scroll
   const scrollViewRef = useRef<ScrollView>(null);
@@ -309,18 +310,32 @@ export default function MemorizationScreen() {
 
   // Keep segsRef up-to-date for the RAF tick
   useEffect(() => {
-    if (surahNumber === null || chapterTimings === null) return;
+    if (surahNumber === null || chapterTimings === null) {
+      console.log("[timings-effect] skip — surah:", surahNumber, "chapterTimings:", chapterTimings === null ? "null" : chapterTimings.kind);
+      return;
+    }
     if (chapterTimings.kind === "chapter") {
-      segsRef.current = chapterTimings.map.get(`${surahNumber}:${currentVerse}`) ?? [];
+      const key = `${surahNumber}:${currentVerse}`;
+      const segs = chapterTimings.map.get(key) ?? [];
+      console.log("[timings-effect] chapter mode, key:", key, "segs count:", segs.length, "first:", segs[0]);
+      segsRef.current = segs;
       return;
     }
     // On-demand: fetch this verse's timings (cached + dedup'd inside fetchQuranComV4VerseTiming)
+    console.log("[timings-effect] ondemand mode, fetching verse:", currentVerse);
     let cancelled = false;
     segsRef.current = [];
     chapterTimings.fetch(currentVerse).then((segs) => {
-      if (!cancelled && currentVerseRef.current === currentVerse) {
-        segsRef.current = segs;
+      if (cancelled) {
+        console.log("[timings-effect] resolved but cancelled");
+        return;
       }
+      if (currentVerseRef.current !== currentVerse) {
+        console.log("[timings-effect] resolved but verse changed, skipping");
+        return;
+      }
+      console.log("[timings-effect] ondemand resolved, segs count:", segs.length, "first:", segs[0]);
+      segsRef.current = segs;
     });
     return () => { cancelled = true; };
   }, [chapterTimings, surahNumber, currentVerse]);
@@ -434,6 +449,14 @@ export default function MemorizationScreen() {
           const last = segs[segs.length - 1];
           if (last && frac >= last[1]) found = last[0] - 1;
         }
+        // Log only on transitions to avoid 60fps spam
+        if (
+          found !== lastTickLog.current.found ||
+          segs.length !== lastTickLog.current.segCount
+        ) {
+          console.log("[tick] frac:", frac.toFixed(3), "segs:", segs.length, "found:", found);
+          lastTickLog.current = { found, segCount: segs.length };
+        }
         setHighlightedWord(found);
         // Page-mode highlight: 1-based position matches ApiWord.position
         if (sn !== null) {
@@ -482,6 +505,7 @@ export default function MemorizationScreen() {
     if (!surahNumber) return;
     if (isLoadingRef.current) return;
     isLoadingRef.current = true;
+    console.log("[play] verse:", verseNum, "reciter:", reciter.id, "segsRef at start:", segsRef.current.length, "segs");
     try {
       if (soundRef.current) {
         await soundRef.current.unloadAsync();
