@@ -102,7 +102,6 @@ export default function MemorizationScreen() {
   const autoplayThroughRangeRef = useRef(autoplayThroughRange);
   const currentRepeatRef = useRef(1);
   const advanceTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const revealTimeoutsRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
 
   // Layout refs for auto-scroll
   const scrollViewRef = useRef<ScrollView>(null);
@@ -112,6 +111,10 @@ export default function MemorizationScreen() {
   // Keep callback-visible refs in sync with state
   useEffect(() => { viewModeRef.current = viewMode; }, [viewMode]);
   useEffect(() => { currentVerseRef.current = currentVerse; }, [currentVerse]);
+
+  // Clear reveals on context switches so old peeks don't bleed through
+  useEffect(() => { setRevealedVerses(new Set()); }, [viewMode]);
+  useEffect(() => { setRevealedVerses(new Set()); }, [blindMode]);
   useEffect(() => { ayahEndRef.current = ayahEnd; }, [ayahEnd]);
   useEffect(() => { repeatCountRef.current = repeatCount; }, [repeatCount]);
   useEffect(() => { autoAdvanceDelayRef.current = autoAdvanceDelayMs; }, [autoAdvanceDelayMs]);
@@ -254,7 +257,6 @@ export default function MemorizationScreen() {
       cancelAnimationFrame(rafIdRef.current);
       soundRef.current?.unloadAsync();
       if (advanceTimeoutRef.current) clearTimeout(advanceTimeoutRef.current);
-      revealTimeoutsRef.current.forEach(clearTimeout);
     };
   }, []);
 
@@ -268,6 +270,7 @@ export default function MemorizationScreen() {
     cancelAnimationFrame(rafIdRef.current);
     setHighlightedWord(-1);
     setHighlightedPage(null);
+    setRevealedVerses(new Set());
     positionRef.current = 0;
     durationRef.current = 0;
 
@@ -504,23 +507,16 @@ export default function MemorizationScreen() {
     }
   }
 
-  function revealVerse(verseKey: string) {
+  function toggleVerseReveal(verseKey: string) {
     setRevealedVerses((prev) => {
       const next = new Set(prev);
-      next.add(verseKey);
+      if (next.has(verseKey)) {
+        next.delete(verseKey);
+      } else {
+        next.add(verseKey);
+      }
       return next;
     });
-    const existing = revealTimeoutsRef.current.get(verseKey);
-    if (existing) clearTimeout(existing);
-    const t = setTimeout(() => {
-      setRevealedVerses((prev) => {
-        const next = new Set(prev);
-        next.delete(verseKey);
-        return next;
-      });
-      revealTimeoutsRef.current.delete(verseKey);
-    }, 4000);
-    revealTimeoutsRef.current.set(verseKey, t);
   }
 
   // ── Full Mushaf page renderer ────────────────────────────────────────────────
@@ -671,7 +667,7 @@ export default function MemorizationScreen() {
                           inScope
                             ? () => {
                                 if (blindMode) {
-                                  revealVerse(item.verseKey);
+                                  toggleVerseReveal(item.verseKey);
                                   return;
                                 }
                                 handlePageWordTap(item.verseKey, item.word.position);
@@ -798,7 +794,7 @@ export default function MemorizationScreen() {
                   key={`${currentVerse}-${idx}`}
                   onPress={() => {
                     if (blindMode) {
-                      revealVerse(ayahVerseKey);
+                      toggleVerseReveal(ayahVerseKey);
                       return;
                     }
                     handleWordTap(idx);
