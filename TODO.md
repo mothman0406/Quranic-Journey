@@ -178,12 +178,15 @@ adds parchment page chrome ported from noor-path bayaan palette.
 - ✅ Auto-scroll on verse change (page mode) — best-effort onLayout Y;
   lineLayoutMap + pageCardLayoutMap track positions
 
-#### Phase 2D-Practice (Slice 3) — pending
+#### Phase 2D-Practice (Slice 3) — ✅ DONE (commit e2f9be7)
 
-- [ ] Repeat counts (slider 1-10 per verse)
-- [ ] Auto-advance with configurable delay
-- [ ] Blind mode (hide verses, reveal on tap)
-- [ ] Blur non-active verses during recitation
+- ✅ Repeat counts (1-10 per verse, stepper in settings sheet)
+- ✅ Auto-advance with configurable delay (0-5s in 0.5s steps, cancellable)
+- ✅ Autoplay-through-range toggle (Full Mushaf mode)
+- ✅ Blind mode button in controls island: hides in-scope words as ••••, tap reveals for 4s
+- ✅ Blur mode toggle (settings sheet): dims non-active in-scope verses at opacity 0.35 while playing
+- ✅ Settings gear in header opens bottom sheet
+- ✅ Recite mode disabled placeholder button (wired in Slice 4)
 
 #### Phase 2D-Recite (Slice 4) — pending
 
