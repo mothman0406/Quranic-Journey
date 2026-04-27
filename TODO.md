@@ -117,6 +117,11 @@ Items still pending in this section (not blocking — Phase 2 polish):
 
 ### Phase 2C — Review screen
 
+**Status: ✅ DONE (commit bf8cb9a + metro.config.js fix). Review queue
+loads, surah review session shows mushaf page image + audio playback +
+"Finish & Rate" with 0-5 quality rating modal, submit hits SM-2 backend
+and updates schedule. Verified end-to-end on iPhone.**
+
 - [ ] Review session screen showing the active ayah range as a `<MushafPage>` with highlight overlay
 - [ ] Audio playback for the in-scope verses (everyayah.com)
 - [ ] Quality rating UI (1-5) → existing `/reviews` POST endpoint
@@ -147,6 +152,11 @@ This is the only screen that needs custom text rendering:
 - [ ] TestFlight beta with wife + trusted users
 - [ ] Bug fixes from beta feedback
 - [ ] App Store submission
+- [ ] Make audio controls in review-session sticky / floating at bottom of
+  screen — currently below the fold because Mushaf page image is tall
+  (~600px). User has to scroll to find Play / Finish & Rate buttons.
+- [ ] Add ayah-bounding-box overlay in review-session to highlight the active
+  chunk's ayahs on the page image (deferred from Phase 2C MVP).
 
 **Estimated remaining: 4-7 weeks** (Phase 1 complete, ~25% of total work done)
 
@@ -214,6 +224,22 @@ This is the only screen that needs custom text rendering:
   the same page are instant (RN's <Image> caches automatically).
 - For Phase 2 production: keep streaming, no need to bundle. Add a small
   in-app message on first launch explaining "first browse needs internet".
+
+### Metro + pnpm requires explicit config (2026-04-27)
+- When adding native dependencies (e.g. expo-av) to noor-mobile, Metro
+  bundler with pnpm-style symlinks fails to resolve packages by default.
+- Fix: artifacts/noor-mobile/metro.config.js must set:
+    config.watchFolders = [workspaceRoot]
+    config.resolver.nodeModulesPaths = [
+      path.resolve(projectRoot, "node_modules"),
+      path.resolve(workspaceRoot, "node_modules"),
+    ]
+  DO NOT set disableHierarchicalLookup: true — pnpm's deeply nested
+  .pnpm/ structure requires hierarchical lookup ON to find peer deps
+  like @expo/metro-runtime that live inside expo-router's internal
+  node_modules subtree.
+- After modifying metro.config.js, always restart with `npx expo start
+  --clear` to rebuild Metro's cache.
 
 ---
 
