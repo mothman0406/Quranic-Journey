@@ -10,7 +10,12 @@
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.mothman.noorpath"
+      "bundleIdentifier": "com.mothman.noorpath",
+      "infoPlist": {
+        "NSSpeechRecognitionUsageDescription": "Allow NoorPath to recognize your recitation so it can follow along word by word.",
+        "NSMicrophoneUsageDescription": "Allow NoorPath to use the microphone to listen as you recite Quran.",
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -20,7 +25,10 @@
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "permissions": [
+        "android.permission.RECORD_AUDIO"
+      ]
     },
     "web": {
       "output": "static",
@@ -51,6 +59,12 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "a9b0cbd2-b32a-4b97-9be1-23d7ebc7afdd"
+      }
     }
   }
 }
