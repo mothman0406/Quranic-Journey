@@ -1,4 +1,4 @@
-import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 
 const FEATURE_CARDS = [
@@ -22,8 +22,11 @@ export default function ChildDashboard() {
         pathname: "/child/[childId]/mushaf",
         params: { childId, name: name ?? "" },
       });
-    } else {
-      Alert.alert("Coming in Phase 2");
+    } else if (key === "memorization") {
+      router.push({
+        pathname: "/child/[childId]/memorization",
+        params: { childId, name: name ?? "" },
+      });
     }
   }
 

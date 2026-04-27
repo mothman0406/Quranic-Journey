@@ -7,6 +7,7 @@ export default function ChildLayout() {
       <Stack.Screen name="mushaf" />
       <Stack.Screen name="review" />
       <Stack.Screen name="review-session" />
+      <Stack.Screen name="memorization" />
     </Stack>
   );
 }

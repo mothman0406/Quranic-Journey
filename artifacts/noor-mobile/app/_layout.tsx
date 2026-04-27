@@ -1,7 +1,14 @@
+import { useFonts } from 'expo-font';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 
 export default function RootLayout() {
+  const [fontsLoaded] = useFonts({
+    AmiriQuran: require('../assets/fonts/AmiriQuran.ttf'),
+  });
+
+  if (!fontsLoaded) return null;
+
   return (
     <>
       <Stack>

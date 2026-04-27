@@ -127,18 +127,45 @@ and updates schedule. Verified end-to-end on iPhone.**
 - [ ] Quality rating UI (1-5) → existing `/reviews` POST endpoint
 - [ ] When the chunk spans multiple pages, paginate within the review screen
 
-### Phase 2D — Memorization mode (the interactive one)
+### Phase 2D — Memorization mode
 
-This is the only screen that needs custom text rendering:
-- [ ] Use existing `fetchVersesFromApi` data (word-level array from Quran.com v4)
-- [ ] Render each word as separate `<Text>` with `onPress`, in QCF font
-- [ ] Load QCF fonts via `expo-font` (`digital-khatt.otf`, `quran-common.ttf`, `surah-name-qcf.ttf` — already in `noor-path/public/fonts/bayaan/`)
-- [ ] Audio playback (everyayah.com URLs, install `expo-av`)
-- [ ] Track current word index in component state during audio playback
-- [ ] Apply highlight style to currently-playing word
-- [ ] Tap a word to jump audio to that word
-- [ ] Long-press a word for translation/meaning
-- [ ] Mark surah memorized → existing `/memorization` POST endpoint
+#### Phase 2D-Core (Slice 1) — ✅ DONE (commit TBD)
+
+Single-verse focused memorization screen with Husary word-by-word audio sync.
+
+- ✅ Amiri Quran font bundled (`assets/fonts/AmiriQuran.ttf`, 133KB, validated on iPhone)
+- ✅ `src/lib/quran.ts` — Quran.com v4 word-level verse fetch
+- ✅ `src/lib/memorization.ts` — dashboard fetch, QDC chapter timings (cached per surah), memorization POST
+- ✅ `app/child/[childId]/memorization.tsx` — single-verse view, Amiri font, QDC word-by-word highlight via requestAnimationFrame, tap-to-seek, Prev/Next with auto-play, Mark Complete
+- ✅ Dashboard Memorization card navigates to this screen
+
+#### Phase 2D-Mushaf (Slice 2) — pending
+
+Full Mushaf page rendering in continuous flow with word-sync across the whole page.
+
+- [ ] Multi-verse continuous view using `verses/by_page` endpoint
+- [ ] All verses on the page, out-of-scope verses dimmed
+- [ ] Word-by-word sync extended to entire page
+- [ ] 1-2 themes (Madinah Day, Madinah Night)
+
+#### Phase 2D-Practice (Slice 3) — pending
+
+- [ ] Repeat counts (slider 1-10 per verse)
+- [ ] Auto-advance with configurable delay
+- [ ] Blind mode (hide verses, reveal on tap)
+- [ ] Blur non-active verses during recitation
+
+#### Phase 2D-Recite (Slice 4) — pending
+
+- [ ] Recite-to-NoorPath mode using `/api/transcribe` (Hugging Face Whisper)
+
+#### Phase 2D-Polish (Slice 5) — pending
+
+- [ ] All 8 Mushaf themes
+- [ ] Tajweed highlighting toggle
+- [ ] Reciter picker, playback rate slider
+- [ ] Bookmark persistence (AsyncStorage)
+- [ ] Settings sheet, long-press word translation
 
 ---
 
