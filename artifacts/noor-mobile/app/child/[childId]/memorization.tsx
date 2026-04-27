@@ -291,8 +291,22 @@ export default function MemorizationScreen() {
       advanceTimeoutRef.current = null;
     }
     cancelAnimationFrame(rafIdRef.current);
-    setHighlightedWord(-1);
-    setHighlightedPage(null);
+
+    // In recite mode, the highlight tracks the next word to say. On verse change,
+    // reset to word 0. Otherwise (Husary playback), clear highlight entirely.
+    if (reciteModeRef.current) {
+      setHighlightedWord(0);
+      if (surahNumberRef.current !== null) {
+        setHighlightedPage({
+          verseKey: `${surahNumberRef.current}:${currentVerse}`,
+          position: 1,
+        });
+      }
+    } else {
+      setHighlightedWord(-1);
+      setHighlightedPage(null);
+    }
+
     setReciteExpectedIdx(0);
     matchedWordCountRef.current = 0;
     lastMatchedWordRef.current = "";
@@ -441,6 +455,21 @@ export default function MemorizationScreen() {
                 autoPlayRef.current = true;
                 setCurrentVerse((v) => v + 1);
               }
+            } else {
+              // Audio ended naturally and we're not auto-advancing.
+              // Unload the sound so the next Play tap creates a fresh one
+              // (otherwise playAsync() runs on a finished sound and either
+              // does nothing or plays from a weird position).
+              void (async () => {
+                if (soundRef.current) {
+                  try {
+                    await soundRef.current.unloadAsync();
+                  } catch {
+                    // already gone
+                  }
+                  soundRef.current = null;
+                }
+              })();
             }
           }
         },
@@ -674,6 +703,7 @@ export default function MemorizationScreen() {
       searchFrom = foundAt + 1;
 
       expectedIdx++;
+      console.log("[recite] match: heard token", foundAt, "(", heardTokens[foundAt], ")", "→ expectedIdx now", expectedIdx);
     }
 
     if (advanced) {
