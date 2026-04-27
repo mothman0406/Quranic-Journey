@@ -22,6 +22,7 @@ import {
   fetchTimingsForReciter,
   submitMemorization,
   type Segment,
+  type ChapterTimings,
 } from "@/src/lib/memorization";
 import {
   fetchSurahVerses,
@@ -40,7 +41,7 @@ import {
   type MushafTheme,
 } from "@/src/lib/mushaf-theme";
 import { findReciter, RECITERS } from "@/src/lib/reciters";
-import { loadSettings, saveSettings } from "@/src/lib/settings";
+import { loadProfileSettings, saveProfileSettings, DEFAULT_SESSION_SETTINGS } from "@/src/lib/settings";
 
 export default function MemorizationScreen() {
   const router = useRouter();
@@ -71,7 +72,7 @@ export default function MemorizationScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [displayWordsMap, setDisplayWordsMap] = useState<Map<number, ApiWord[]>>(new Map());
-  const [segmentsMap, setSegmentsMap] = useState<Map<string, Segment[]>>(new Map());
+  const [chapterTimings, setChapterTimings] = useState<ChapterTimings | null>(null);
   const [pageWordsMap, setPageWordsMap] = useState<Map<number, ApiPageVerse[]>>(new Map());
   const [chaptersMap, setChaptersMap] = useState<Map<number, ApiChapter>>(new Map());
 
@@ -83,12 +84,12 @@ export default function MemorizationScreen() {
   } | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
-  // Practice settings — persisted to AsyncStorage per child
-  const [repeatCount, setRepeatCount] = useState(1);
-  const [autoAdvanceDelayMs, setAutoAdvanceDelayMs] = useState(0);
-  const [autoplayThroughRange, setAutoplayThroughRange] = useState(true);
-  const [blindMode, setBlindMode] = useState(false);
-  const [blurMode, setBlurMode] = useState(false);
+  // Session-level settings — reset to defaults each session (not persisted)
+  const [repeatCount, setRepeatCount] = useState<number>(DEFAULT_SESSION_SETTINGS.repeatCount);
+  const [autoAdvanceDelayMs, setAutoAdvanceDelayMs] = useState<number>(DEFAULT_SESSION_SETTINGS.autoAdvanceDelayMs);
+  const [autoplayThroughRange, setAutoplayThroughRange] = useState<boolean>(DEFAULT_SESSION_SETTINGS.autoplayThroughRange);
+  const [blindMode, setBlindMode] = useState<boolean>(DEFAULT_SESSION_SETTINGS.blindMode);
+  const [blurMode, setBlurMode] = useState<boolean>(DEFAULT_SESSION_SETTINGS.blurMode);
   const [viewMode, setViewMode] = useState<"ayah" | "page">("ayah");
   const [themeKey, setThemeKey] = useState<ThemeKey>(DEFAULT_THEME_KEY);
   const [reciterId, setReciterId] = useState("husary");
@@ -164,42 +165,40 @@ export default function MemorizationScreen() {
   useEffect(() => { autoAdvanceDelayRef.current = autoAdvanceDelayMs; }, [autoAdvanceDelayMs]);
   useEffect(() => { autoplayThroughRangeRef.current = autoplayThroughRange; }, [autoplayThroughRange]);
 
-  // Hydrate settings from AsyncStorage on mount
+  // Hydrate profile settings from AsyncStorage on mount
   useEffect(() => {
     (async () => {
-      const s = await loadSettings(childId);
-      setRepeatCount(s.repeatCount);
-      setAutoAdvanceDelayMs(s.autoAdvanceDelayMs);
-      setAutoplayThroughRange(s.autoplayThroughRange);
-      setBlurMode(s.blurMode);
-      setBlindMode(s.blindMode);
-      setViewMode(s.viewMode);
-      setThemeKey(s.themeKey);
-      setReciterId(s.reciterId);
+      const p = await loadProfileSettings(childId);
+      setThemeKey(p.themeKey);
+      setReciterId(p.reciterId);
+      setViewMode(p.viewMode);
       setSettingsLoaded(true);
     })();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Persist settings on change (300ms debounce, skip during initial hydration)
+  // Configure iOS audio session so playback works through the speaker even
+  // when the silent switch is on (AirPods always worked via Bluetooth).
+  useEffect(() => {
+    Audio.setAudioModeAsync({
+      playsInSilentModeIOS: true,
+      staysActiveInBackground: false,
+      shouldDuckAndroid: true,
+    }).catch(() => {
+      // setAudioModeAsync can fail on simulator; non-fatal in production
+    });
+  }, []);
+
+  // Persist profile settings on change (300ms debounce, skip during initial hydration)
   useEffect(() => {
     if (!settingsLoaded) return;
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(() => {
-      void saveSettings(childId, {
-        repeatCount,
-        autoAdvanceDelayMs,
-        autoplayThroughRange,
-        blurMode,
-        blindMode,
-        viewMode,
-        themeKey,
-        reciterId,
-      });
+      void saveProfileSettings(childId, { themeKey, reciterId, viewMode });
     }, 300);
     return () => {
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     };
-  }, [childId, settingsLoaded, repeatCount, autoAdvanceDelayMs, autoplayThroughRange, blurMode, blindMode, viewMode, themeKey, reciterId]);
+  }, [childId, settingsLoaded, themeKey, reciterId, viewMode]);
 
   // Stop audio when reciter changes so next Play tap recreates sound with new URL
   useEffect(() => {
@@ -251,17 +250,16 @@ export default function MemorizationScreen() {
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Step 2: once surahNumber + chapters are known, fetch verses + timings in parallel.
-  // Gated on chaptersMap.size > 0 to avoid a wasted fetch with the fallback verse count.
+  // Gated on chaptersMap.size > 0 so chapter metadata (name_arabic etc.) is available.
   useEffect(() => {
     if (surahNumber === null || chaptersMap.size === 0) return;
     const currentReciter = findReciter(reciterId);
-    const verseCount = chaptersMap.get(surahNumber)?.verses_count ?? 286;
     let cancelled = false;
     (async () => {
       try {
         const [verses, timings] = await Promise.all([
           fetchSurahVerses(surahNumber),
-          fetchTimingsForReciter(currentReciter, surahNumber, verseCount),
+          fetchTimingsForReciter(currentReciter, surahNumber),
         ]);
         if (cancelled) return;
         const map = new Map<number, ApiWord[]>();
@@ -272,7 +270,7 @@ export default function MemorizationScreen() {
           );
         }
         setDisplayWordsMap(map);
-        setSegmentsMap(timings);
+        setChapterTimings(timings);
         setLoading(false);
       } catch (e) {
         if (!cancelled) {
@@ -311,10 +309,21 @@ export default function MemorizationScreen() {
 
   // Keep segsRef up-to-date for the RAF tick
   useEffect(() => {
-    if (surahNumber !== null) {
-      segsRef.current = segmentsMap.get(`${surahNumber}:${currentVerse}`) ?? [];
+    if (surahNumber === null || chapterTimings === null) return;
+    if (chapterTimings.kind === "chapter") {
+      segsRef.current = chapterTimings.map.get(`${surahNumber}:${currentVerse}`) ?? [];
+      return;
     }
-  }, [segmentsMap, surahNumber, currentVerse]);
+    // On-demand: fetch this verse's timings (cached + dedup'd inside fetchQuranComV4VerseTiming)
+    let cancelled = false;
+    segsRef.current = [];
+    chapterTimings.fetch(currentVerse).then((segs) => {
+      if (!cancelled && currentVerseRef.current === currentVerse) {
+        segsRef.current = segs;
+      }
+    });
+    return () => { cancelled = true; };
+  }, [chapterTimings, surahNumber, currentVerse]);
 
   // Auto-scroll to active verse on verse/mode change (page mode only, best-effort)
   useEffect(() => {

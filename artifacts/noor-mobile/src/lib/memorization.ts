@@ -102,76 +102,76 @@ export async function fetchQdcChapterTimings(
   return promise;
 }
 
-const v4Cache = new Map<string, Promise<Map<string, Segment[]>>>();
+const v4VerseCache = new Map<string, Segment[]>();
+const v4InflightCache = new Map<string, Promise<Segment[]>>();
 
-async function fetchQuranComV4VerseTiming(
+export async function fetchQuranComV4VerseTiming(
   quranComId: number,
   surah: number,
   verse: number,
 ): Promise<Segment[]> {
-  const ac = new AbortController();
-  const timer = setTimeout(() => ac.abort(), 4000);
-  try {
-    const res = await fetch(
-      `https://api.quran.com/api/v4/recitations/${quranComId}/by_ayah/${surah}:${verse}`,
-      { signal: ac.signal },
-    );
-    if (!res.ok) return [];
-    const data = (await res.json()) as {
-      audio_files?: Array<{ segments?: Array<[number, number, number]> }>;
-    };
-    const segs = data.audio_files?.[0]?.segments;
-    if (!Array.isArray(segs) || segs.length === 0) return [];
-    const last = segs[segs.length - 1];
-    if (!last) return [];
-    const span = last[2];
-    if (span <= 0) {
-      return segs.map((s, i) => [i + 1, s[1], s[2]] as Segment);
-    }
-    return segs.map((s, i) => [i + 1, s[1] / span, s[2] / span] as Segment);
-  } catch {
-    return [];
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
-function fetchQuranComV4ChapterTimings(
-  quranComId: number,
-  surah: number,
-  verseCount: number,
-): Promise<Map<string, Segment[]>> {
-  const key = `${quranComId}:${surah}`;
-  const cached = v4Cache.get(key);
+  const key = `${quranComId}:${surah}:${verse}`;
+  const cached = v4VerseCache.get(key);
   if (cached) return cached;
+  const inflight = v4InflightCache.get(key);
+  if (inflight) return inflight;
 
-  const promise = (async (): Promise<Map<string, Segment[]>> => {
-    const result = new Map<string, Segment[]>();
-    const fetches = Array.from({ length: verseCount }, (_, i) =>
-      fetchQuranComV4VerseTiming(quranComId, surah, i + 1).then((segs) => {
-        if (segs.length > 0) result.set(`${surah}:${i + 1}`, segs);
-      }),
-    );
-    await Promise.all(fetches);
-    return result;
+  const promise = (async (): Promise<Segment[]> => {
+    const ac = new AbortController();
+    const timer = setTimeout(() => ac.abort(), 4000);
+    try {
+      const res = await fetch(
+        `https://api.quran.com/api/v4/recitations/${quranComId}/by_ayah/${surah}:${verse}`,
+        { signal: ac.signal },
+      );
+      if (!res.ok) return [];
+      const data = (await res.json()) as {
+        audio_files?: Array<{ segments?: Array<[number, number, number]> }>;
+      };
+      const segs = data.audio_files?.[0]?.segments;
+      if (!Array.isArray(segs) || segs.length === 0) return [];
+      const last = segs[segs.length - 1];
+      if (!last) return [];
+      const span = last[2];
+      if (span <= 0) {
+        return segs.map((s, i) => [i + 1, s[1], s[2]] as Segment);
+      }
+      return segs.map((s, i) => [i + 1, s[1] / span, s[2] / span] as Segment);
+    } catch {
+      return [];
+    } finally {
+      clearTimeout(timer);
+    }
   })();
 
-  v4Cache.set(key, promise);
+  v4InflightCache.set(key, promise);
+  promise.then((segs) => {
+    v4VerseCache.set(key, segs);
+    v4InflightCache.delete(key);
+  });
   return promise;
 }
+
+export type ChapterTimings =
+  | { kind: "chapter"; map: Map<string, Segment[]> }
+  | { kind: "ondemand"; fetch: (verse: number) => Promise<Segment[]> };
 
 export async function fetchTimingsForReciter(
   reciter: Reciter,
   surah: number,
-  verseCount: number,
-): Promise<Map<string, Segment[]>> {
+): Promise<ChapterTimings> {
   if (reciter.qdcId !== null) {
-    return fetchQdcChapterTimings(reciter.qdcId, surah);
+    const map = await fetchQdcChapterTimings(reciter.qdcId, surah);
+    return { kind: "chapter", map };
   }
   if (reciter.quranComId !== null) {
-    return fetchQuranComV4ChapterTimings(reciter.quranComId, surah, verseCount);
+    const id = reciter.quranComId;
+    return {
+      kind: "ondemand",
+      fetch: (verse: number) => fetchQuranComV4VerseTiming(id, surah, verse),
+    };
   }
-  return new Map();
+  return { kind: "chapter", map: new Map() };
 }
 
 export async function submitMemorization(
