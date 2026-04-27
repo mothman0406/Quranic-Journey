@@ -437,11 +437,18 @@ export default function MemorizationScreen() {
             if (last && frac >= last[1]) found = last[0] - 1;
           }
         } else {
-          // Fallback: no segment data — spread highlight evenly across verse duration.
-          // Mirrors the web app's behavior when fetchWordTimingV4 returns empty.
+          // Fallback: no segment data. Spread highlight evenly across verse duration,
+          // but shift forward by LEAD_MS so the highlight anticipates the audio rather
+          // than chasing it. Husary's QDC segments produce a similar anticipatory feel
+          // because segment 1 starts at frac=0 and extends through the leading silence.
+          // Without this shift, the highlight runs ~300ms behind audio because everyayah
+          // files have leading silence before recitation begins.
+          const LEAD_MS = 300;
           const wordCount = displayWordsMapRef.current.get(currentVerseRef.current)?.length ?? 0;
-          if (wordCount > 0 && frac > 0) {
-            found = Math.min(Math.floor(frac * wordCount), wordCount - 1);
+          if (wordCount > 0) {
+            const shiftedPos = pos + LEAD_MS;
+            const shiftedFrac = Math.min(shiftedPos / dur, 1);
+            found = Math.min(Math.floor(shiftedFrac * wordCount), wordCount - 1);
           }
         }
 
