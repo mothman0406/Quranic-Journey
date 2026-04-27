@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Modal,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -71,6 +72,15 @@ export default function MemorizationScreen() {
   } | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
+  // Practice settings (session-only; persistence in Slice 5)
+  const [repeatCount, setRepeatCount] = useState(1);
+  const [autoAdvanceDelayMs, setAutoAdvanceDelayMs] = useState(0);
+  const [autoplayThroughRange, setAutoplayThroughRange] = useState(true);
+  const [blindMode, setBlindMode] = useState(false);
+  const [blurMode, setBlurMode] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [revealedWords, setRevealedWords] = useState<Set<string>>(new Set());
+
   // Audio + RAF refs
   const soundRef = useRef<Audio.Sound | null>(null);
   const rafIdRef = useRef<number>(0);
@@ -86,6 +96,14 @@ export default function MemorizationScreen() {
   const isPlayingRef = useRef(false);
   const pendingSeekPositionRef = useRef<number | null>(null);
 
+  // Refs for practice settings (audio callbacks close over stale state otherwise)
+  const repeatCountRef = useRef(repeatCount);
+  const autoAdvanceDelayRef = useRef(autoAdvanceDelayMs);
+  const autoplayThroughRangeRef = useRef(autoplayThroughRange);
+  const currentRepeatRef = useRef(1);
+  const advanceTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const revealTimeoutsRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+
   // Layout refs for auto-scroll
   const scrollViewRef = useRef<ScrollView>(null);
   const lineLayoutMap = useRef<Map<string, number>>(new Map());
@@ -95,6 +113,9 @@ export default function MemorizationScreen() {
   useEffect(() => { viewModeRef.current = viewMode; }, [viewMode]);
   useEffect(() => { currentVerseRef.current = currentVerse; }, [currentVerse]);
   useEffect(() => { ayahEndRef.current = ayahEnd; }, [ayahEnd]);
+  useEffect(() => { repeatCountRef.current = repeatCount; }, [repeatCount]);
+  useEffect(() => { autoAdvanceDelayRef.current = autoAdvanceDelayMs; }, [autoAdvanceDelayMs]);
+  useEffect(() => { autoplayThroughRangeRef.current = autoplayThroughRange; }, [autoplayThroughRange]);
 
   // Load chapter metadata once for surah name lookups
   useEffect(() => {
@@ -232,11 +253,18 @@ export default function MemorizationScreen() {
     return () => {
       cancelAnimationFrame(rafIdRef.current);
       soundRef.current?.unloadAsync();
+      if (advanceTimeoutRef.current) clearTimeout(advanceTimeoutRef.current);
+      revealTimeoutsRef.current.forEach(clearTimeout);
     };
   }, []);
 
   // Cleanup + optional auto-play on verse change
   useEffect(() => {
+    currentRepeatRef.current = 1;
+    if (advanceTimeoutRef.current) {
+      clearTimeout(advanceTimeoutRef.current);
+      advanceTimeoutRef.current = null;
+    }
     cancelAnimationFrame(rafIdRef.current);
     setHighlightedWord(-1);
     setHighlightedPage(null);
@@ -324,19 +352,40 @@ export default function MemorizationScreen() {
         positionRef.current = status.positionMillis;
         if (status.durationMillis) durationRef.current = status.durationMillis;
         if (status.didJustFinish) {
+          // Repeat logic: replay this verse without unloading if repeat count not reached
+          if (currentRepeatRef.current < repeatCountRef.current) {
+            currentRepeatRef.current += 1;
+            soundRef.current
+              ?.setPositionAsync(0)
+              .then(() => soundRef.current?.playAsync())
+              .catch(() => {});
+            return;
+          }
+          // All repeats done for this verse
+          currentRepeatRef.current = 1;
           cancelAnimationFrame(rafIdRef.current);
           isPlayingRef.current = false;
           setIsPlaying(false);
           setHighlightedWord(-1);
           setHighlightedPage(null);
-          // Page mode: auto-advance to next verse in scope
-          if (
+          // Page mode: auto-advance to next verse in scope (gated by autoplayThroughRange)
+          const shouldAutoAdvance =
             viewModeRef.current === "page" &&
+            autoplayThroughRangeRef.current &&
             ayahEndRef.current !== null &&
-            currentVerseRef.current < ayahEndRef.current
-          ) {
-            autoPlayRef.current = true;
-            setCurrentVerse((v) => v + 1);
+            currentVerseRef.current < ayahEndRef.current;
+          if (shouldAutoAdvance) {
+            const delay = autoAdvanceDelayRef.current;
+            if (delay > 0) {
+              advanceTimeoutRef.current = setTimeout(() => {
+                advanceTimeoutRef.current = null;
+                autoPlayRef.current = true;
+                setCurrentVerse((v) => v + 1);
+              }, delay);
+            } else {
+              autoPlayRef.current = true;
+              setCurrentVerse((v) => v + 1);
+            }
           }
         }
       },
@@ -364,6 +413,10 @@ export default function MemorizationScreen() {
 
   async function handlePlayPause() {
     if (isPlaying) {
+      if (advanceTimeoutRef.current) {
+        clearTimeout(advanceTimeoutRef.current);
+        advanceTimeoutRef.current = null;
+      }
       cancelAnimationFrame(rafIdRef.current);
       await soundRef.current?.pauseAsync();
       isPlayingRef.current = false;
@@ -374,6 +427,7 @@ export default function MemorizationScreen() {
       setIsPlaying(true);
       startRAF();
     } else {
+      currentRepeatRef.current = 1;
       await playVerse(currentVerse);
     }
   }
@@ -411,12 +465,20 @@ export default function MemorizationScreen() {
   }
 
   function handlePrev() {
+    if (advanceTimeoutRef.current) {
+      clearTimeout(advanceTimeoutRef.current);
+      advanceTimeoutRef.current = null;
+    }
     if (ayahStart === null || currentVerse <= ayahStart) return;
     autoPlayRef.current = true;
     setCurrentVerse((v) => v - 1);
   }
 
   function handleNext() {
+    if (advanceTimeoutRef.current) {
+      clearTimeout(advanceTimeoutRef.current);
+      advanceTimeoutRef.current = null;
+    }
     if (ayahEnd === null || currentVerse >= ayahEnd) return;
     autoPlayRef.current = true;
     setCurrentVerse((v) => v + 1);
@@ -440,6 +502,25 @@ export default function MemorizationScreen() {
     } finally {
       setSubmitting(false);
     }
+  }
+
+  function revealWord(key: string) {
+    setRevealedWords((prev) => {
+      const next = new Set(prev);
+      next.add(key);
+      return next;
+    });
+    const existing = revealTimeoutsRef.current.get(key);
+    if (existing) clearTimeout(existing);
+    const t = setTimeout(() => {
+      setRevealedWords((prev) => {
+        const next = new Set(prev);
+        next.delete(key);
+        return next;
+      });
+      revealTimeoutsRef.current.delete(key);
+    }, 4000);
+    revealTimeoutsRef.current.set(key, t);
   }
 
   // ── Full Mushaf page renderer ────────────────────────────────────────────────
@@ -576,6 +657,12 @@ export default function MemorizationScreen() {
                     const isHighlighted =
                       highlightedPage?.verseKey === item.verseKey &&
                       highlightedPage?.position === item.word.position;
+                    const wordKey = `${item.verseKey}:${item.word.position}`;
+                    const isBlindHidden = blindMode && inScope && !revealedWords.has(wordKey);
+                    const isCurrentlyPlayingVerse =
+                      isPlaying && item.verseKey === `${surahNumber}:${currentVerse}`;
+                    const isBlurred =
+                      blurMode && isPlaying && inScope && !isCurrentlyPlayingVerse;
 
                     return (
                       <Pressable
@@ -583,7 +670,10 @@ export default function MemorizationScreen() {
                         style={isHighlighted ? styles.mushafWordHighlighted : undefined}
                         onPress={
                           inScope
-                            ? () => handlePageWordTap(item.verseKey, item.word.position)
+                            ? () => {
+                                if (blindMode) revealWord(wordKey);
+                                handlePageWordTap(item.verseKey, item.word.position);
+                              }
                             : undefined
                         }
                       >
@@ -591,9 +681,10 @@ export default function MemorizationScreen() {
                           style={[
                             styles.mushafWord,
                             !inScope && styles.mushafWordDimmed,
+                            isBlurred && styles.mushafWordBlurred,
                           ]}
                         >
-                          {item.word.text_uthmani}
+                          {isBlindHidden ? "••••" : item.word.text_uthmani}
                         </Text>
                       </Pressable>
                     );
@@ -651,7 +742,12 @@ export default function MemorizationScreen() {
         <Text style={styles.headerTitle}>
           Verse {verseIndex} of {totalVerses}
         </Text>
-        <View style={styles.headerSpacer} />
+        <Pressable
+          style={styles.headerButton}
+          onPress={() => setSettingsOpen(true)}
+        >
+          <Text style={styles.headerButtonIcon}>⚙</Text>
+        </Pressable>
       </View>
 
       {/* View mode toggle */}
@@ -693,15 +789,24 @@ export default function MemorizationScreen() {
         {viewMode === "ayah" ? (
           <View style={styles.verseCard}>
             <View style={styles.wordContainer}>
-              {words.map((word, idx) => (
-                <Pressable
-                  key={`${currentVerse}-${idx}`}
-                  onPress={() => handleWordTap(idx)}
-                  style={[styles.wordWrapper, highlightedWord === idx && styles.wordHighlighted]}
-                >
-                  <Text style={styles.arabicWord}>{word.text_uthmani}</Text>
-                </Pressable>
-              ))}
+              {words.map((word, idx) => {
+                const wordKey = `${surahNumber}:${currentVerse}:${idx + 1}`;
+                const isBlindHidden = blindMode && !revealedWords.has(wordKey);
+                return (
+                  <Pressable
+                    key={`${currentVerse}-${idx}`}
+                    onPress={() => {
+                      if (blindMode) revealWord(wordKey);
+                      handleWordTap(idx);
+                    }}
+                    style={[styles.wordWrapper, highlightedWord === idx && styles.wordHighlighted]}
+                  >
+                    <Text style={styles.arabicWord}>
+                      {isBlindHidden ? "••••" : word.text_uthmani}
+                    </Text>
+                  </Pressable>
+                );
+              })}
             </View>
           </View>
         ) : pageStart === null || pageEnd === null ? (
@@ -719,6 +824,27 @@ export default function MemorizationScreen() {
 
       {/* Fixed controls island — always visible below the scroll area */}
       <View style={styles.controlsIsland}>
+        {/* Mode buttons: Blind + Recite placeholder */}
+        <View style={styles.modeButtonRow}>
+          <Pressable
+            style={[styles.modeButton, blindMode && styles.modeButtonActive]}
+            onPress={() => setBlindMode(!blindMode)}
+          >
+            <Text style={[styles.modeButtonText, blindMode && styles.modeButtonTextActive]}>
+              {blindMode ? "👁 Blind ON" : "Blind"}
+            </Text>
+          </Pressable>
+          <Pressable
+            style={[styles.modeButton, styles.modeButtonDisabled]}
+            disabled
+          >
+            <Text style={[styles.modeButtonText, styles.modeButtonTextDisabled]}>
+              🎤 Recite (soon)
+            </Text>
+          </Pressable>
+        </View>
+
+        {/* Prev / Play / Next */}
         <View style={styles.controls}>
           <Pressable
             style={[styles.navButton, !canPrev && styles.navButtonDisabled]}
@@ -753,6 +879,81 @@ export default function MemorizationScreen() {
           )}
         </Pressable>
       </View>
+
+      {/* Settings bottom sheet */}
+      <Modal
+        visible={settingsOpen}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setSettingsOpen(false)}
+      >
+        <Pressable style={styles.backdrop} onPress={() => setSettingsOpen(false)} />
+        <View style={styles.settingsSheet}>
+          <Text style={styles.sheetTitle}>Settings</Text>
+
+          <View style={styles.settingRow}>
+            <Text style={styles.settingLabel}>Repeat count</Text>
+            <View style={styles.stepper}>
+              <Pressable
+                style={styles.stepperButton}
+                onPress={() => setRepeatCount(Math.max(1, repeatCount - 1))}
+              >
+                <Text style={styles.stepperButtonText}>−</Text>
+              </Pressable>
+              <Text style={styles.stepperValue}>{repeatCount}</Text>
+              <Pressable
+                style={styles.stepperButton}
+                onPress={() => setRepeatCount(Math.min(10, repeatCount + 1))}
+              >
+                <Text style={styles.stepperButtonText}>+</Text>
+              </Pressable>
+            </View>
+          </View>
+
+          <View style={styles.settingRow}>
+            <Text style={styles.settingLabel}>Delay between verses</Text>
+            <View style={styles.stepper}>
+              <Pressable
+                style={styles.stepperButton}
+                onPress={() => setAutoAdvanceDelayMs(Math.max(0, autoAdvanceDelayMs - 500))}
+              >
+                <Text style={styles.stepperButtonText}>−</Text>
+              </Pressable>
+              <Text style={styles.stepperValue}>{(autoAdvanceDelayMs / 1000).toFixed(1)}s</Text>
+              <Pressable
+                style={styles.stepperButton}
+                onPress={() => setAutoAdvanceDelayMs(Math.min(5000, autoAdvanceDelayMs + 500))}
+              >
+                <Text style={styles.stepperButtonText}>+</Text>
+              </Pressable>
+            </View>
+          </View>
+
+          <View style={styles.settingRow}>
+            <Text style={styles.settingLabel}>Autoplay through range (Full Mushaf)</Text>
+            <Pressable
+              onPress={() => setAutoplayThroughRange(!autoplayThroughRange)}
+              style={[styles.toggleSwitch, autoplayThroughRange && styles.toggleSwitchOn]}
+            >
+              <View style={[styles.toggleKnob, autoplayThroughRange && styles.toggleKnobOn]} />
+            </Pressable>
+          </View>
+
+          <View style={styles.settingRow}>
+            <Text style={styles.settingLabel}>Blur other verses while playing</Text>
+            <Pressable
+              onPress={() => setBlurMode(!blurMode)}
+              style={[styles.toggleSwitch, blurMode && styles.toggleSwitchOn]}
+            >
+              <View style={[styles.toggleKnob, blurMode && styles.toggleKnobOn]} />
+            </Pressable>
+          </View>
+
+          <Pressable style={styles.sheetDoneButton} onPress={() => setSettingsOpen(false)}>
+            <Text style={styles.sheetDoneText}>Done</Text>
+          </Pressable>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -788,8 +989,14 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: "#111111",
   },
-  headerSpacer: {
+  headerButton: {
     width: 60,
+    alignItems: "flex-end",
+    justifyContent: "center",
+  },
+  headerButtonIcon: {
+    fontSize: 22,
+    color: "#2563eb",
   },
   toggleContainer: {
     flexDirection: "row",
@@ -829,7 +1036,7 @@ const styles = StyleSheet.create({
     gap: 24,
     paddingBottom: 16,
   },
-  // ── Ayah-by-Ayah card (unchanged) ───────────────────────────────────────────
+  // ── Ayah-by-Ayah card ────────────────────────────────────────────────────────
   verseCard: {
     width: "100%",
     backgroundColor: "#f9fafb",
@@ -957,6 +1164,9 @@ const styles = StyleSheet.create({
     borderRadius: 3,
     paddingHorizontal: 2,
   },
+  mushafWordBlurred: {
+    opacity: 0.35,
+  },
   // ── Fixed controls island ────────────────────────────────────────────────────
   controlsIsland: {
     paddingHorizontal: 16,
@@ -966,6 +1176,40 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: "#e5e7eb",
     backgroundColor: "#ffffff",
+  },
+  modeButtonRow: {
+    flexDirection: "row",
+    gap: 12,
+  },
+  modeButton: {
+    flex: 1,
+    backgroundColor: "#f9fafb",
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+    borderRadius: 999,
+    paddingVertical: 10,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  modeButtonActive: {
+    backgroundColor: "#2563eb",
+    borderColor: "#2563eb",
+  },
+  modeButtonDisabled: {
+    backgroundColor: "#f3f4f6",
+    borderColor: "#e5e7eb",
+    opacity: 0.6,
+  },
+  modeButtonText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#111111",
+  },
+  modeButtonTextActive: {
+    color: "#ffffff",
+  },
+  modeButtonTextDisabled: {
+    color: "#9ca3af",
   },
   controls: {
     flexDirection: "row",
@@ -1022,5 +1266,95 @@ const styles = StyleSheet.create({
     textAlign: "center",
     paddingHorizontal: 24,
     marginBottom: 16,
+  },
+  // ── Settings sheet ───────────────────────────────────────────────────────────
+  backdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.4)",
+  },
+  settingsSheet: {
+    backgroundColor: "#ffffff",
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    padding: 24,
+    paddingBottom: 40,
+    gap: 16,
+  },
+  sheetTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#111111",
+    textAlign: "center",
+    marginBottom: 4,
+  },
+  settingRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+  settingLabel: {
+    flex: 1,
+    fontSize: 15,
+    color: "#111111",
+  },
+  stepper: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  stepperButton: {
+    width: 40,
+    height: 40,
+    backgroundColor: "#f9fafb",
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+    borderRadius: 8,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  stepperButtonText: {
+    fontSize: 18,
+    fontWeight: "600",
+    color: "#111111",
+  },
+  stepperValue: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: "#111111",
+    minWidth: 36,
+    textAlign: "center",
+  },
+  toggleSwitch: {
+    width: 48,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: "#e5e7eb",
+    justifyContent: "center",
+    paddingHorizontal: 2,
+  },
+  toggleSwitchOn: {
+    backgroundColor: "#2563eb",
+  },
+  toggleKnob: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: "#ffffff",
+  },
+  toggleKnobOn: {
+    alignSelf: "flex-end",
+  },
+  sheetDoneButton: {
+    backgroundColor: "#2563eb",
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: "center",
+    marginTop: 4,
+  },
+  sheetDoneText: {
+    color: "#ffffff",
+    fontSize: 16,
+    fontWeight: "700",
   },
 });
