@@ -22,6 +22,10 @@ type DashboardChild = {
   totalPoints: number;
 };
 
+type ChildDetail = DashboardChild & {
+  readPagesPerDay: number;
+};
+
 type NewMemorization = {
   surahName: string;
   surahNumber: number;
@@ -71,6 +75,7 @@ type DashboardState =
       dashboard: DashboardResponse;
       reviews: ReviewQueueResponse | null;
       reviewError: string | null;
+      dashboardError: string | null;
     };
 
 type CardTone = {
@@ -113,6 +118,47 @@ function formatPageRange(start: number | undefined, end: number | undefined) {
 
 function formatDayStreak(days: number) {
   return `${days} day${days === 1 ? "" : "s"}`;
+}
+
+function wait(ms: number) {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
+
+function fallbackDashboard(
+  child: ChildDetail,
+  reviews: ReviewQueueResponse | null,
+): DashboardResponse {
+  const reviewCount = reviews?.dueToday.length ?? 0;
+  const readPagesPerDay = child.readPagesPerDay ?? 0;
+
+  return {
+    child: {
+      name: child.name,
+      avatarEmoji: child.avatarEmoji,
+      streakDays: child.streakDays,
+      totalPoints: child.totalPoints,
+    },
+    todaysPlan: {
+      newMemorization: null,
+      totalEstimatedMinutes: 0,
+    },
+    reviewsDueToday: reviewCount,
+    todayProgress: {
+      memStatus: "not_started",
+      reviewStatus: "not_started",
+      reviewTargetCount: reviewCount,
+      reviewCompletedCount: 0,
+    },
+    readingGoal: {
+      targetPages: readPagesPerDay,
+      completedPages: 0,
+      lastPage: null,
+      status: "not_started",
+      isEnabled: readPagesPerDay > 0,
+    },
+  };
 }
 
 function WorkCard({
@@ -204,9 +250,17 @@ export default function ChildDashboard() {
       }
 
       try {
-        const dashboard = await apiFetch<DashboardResponse>(
-          `/api/children/${childId}/dashboard`,
-        );
+        let dashboard: DashboardResponse;
+        try {
+          dashboard = await apiFetch<DashboardResponse>(
+            `/api/children/${childId}/dashboard`,
+          );
+        } catch {
+          await wait(350);
+          dashboard = await apiFetch<DashboardResponse>(
+            `/api/children/${childId}/dashboard`,
+          );
+        }
         let reviews: ReviewQueueResponse | null = null;
         let reviewError: string | null = null;
 
@@ -216,12 +270,43 @@ export default function ChildDashboard() {
           reviewError = e instanceof Error ? e.message : "Review queue unavailable";
         }
 
-        setState({ status: "ok", dashboard, reviews, reviewError });
-      } catch (e) {
         setState({
-          status: "error",
-          message: e instanceof Error ? e.message : "Failed to load dashboard.",
+          status: "ok",
+          dashboard,
+          reviews,
+          reviewError,
+          dashboardError: null,
         });
+      } catch (e) {
+        const dashboardError =
+          e instanceof Error ? e.message : "Today's plan is temporarily unavailable.";
+        try {
+          let reviews: ReviewQueueResponse | null = null;
+          let reviewError: string | null = null;
+
+          try {
+            reviews = await fetchReviewQueue(childId);
+          } catch (reviewFetchError) {
+            reviewError =
+              reviewFetchError instanceof Error
+                ? reviewFetchError.message
+                : "Review queue unavailable";
+          }
+
+          const child = await apiFetch<ChildDetail>(`/api/children/${childId}`);
+          setState({
+            status: "ok",
+            dashboard: fallbackDashboard(child, reviews),
+            reviews,
+            reviewError,
+            dashboardError,
+          });
+        } catch {
+          setState({
+            status: "error",
+            message: dashboardError,
+          });
+        }
       } finally {
         setRefreshing(false);
       }
@@ -281,7 +366,7 @@ export default function ChildDashboard() {
       );
     }
 
-    const { dashboard, reviews, reviewError } = state;
+    const { dashboard, reviews, reviewError, dashboardError } = state;
     const child = dashboard.child;
     const todaysMem = dashboard.todaysPlan.newMemorization;
     const todayProgress = dashboard.todayProgress;
@@ -375,6 +460,14 @@ export default function ChildDashboard() {
             <Text style={styles.summaryStatMuted}>{child.totalPoints} pts</Text>
           </View>
         </View>
+
+        {dashboardError && (
+          <View style={styles.warningBanner}>
+            <Text style={styles.warningText}>
+              Today's plan is temporarily unavailable. Pull down to refresh shortly.
+            </Text>
+          </View>
+        )}
 
         <WorkCard
           title="Memorization"
@@ -543,6 +636,20 @@ const styles = StyleSheet.create({
   summaryStatMuted: {
     fontSize: 13,
     color: "#d1d5db",
+    fontWeight: "600",
+  },
+  warningBanner: {
+    backgroundColor: "#fffbeb",
+    borderWidth: 1,
+    borderColor: "#fde68a",
+    borderRadius: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+  },
+  warningText: {
+    color: "#92400e",
+    fontSize: 13,
+    lineHeight: 18,
     fontWeight: "600",
   },
   card: {
