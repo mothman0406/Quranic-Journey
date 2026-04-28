@@ -1,6 +1,6 @@
 # NoorPath / Quranic Journey — Status & Next Steps
 
-_Last updated: April 28, 2026 (Phase 2E dashboard polish implemented and passed local TypeScript QA; active branch `main` at the Phase 2E final commit; remote sync in progress for this handoff; hardware QA pending)_
+_Last updated: April 28, 2026 (Phase 2E dashboard polish implemented, typechecked, and synced; code commit `3a19f2f`; latest docs sync is current branch HEAD; hardware QA pending)_
 
 ---
 
@@ -16,16 +16,16 @@ After every meaningful action, update this file and `PHASE_2D_HANDOFF.md` before
 
 ## Current work log — April 28, 2026
 
-- Active branch/SHA: `main` at the Phase 2E final commit. Local pre-doc-refresh commit was `33707bf`; final synced SHA is reported in the handoff response after push/sync.
-- Remote sync status: pushing/syncing `main` and `feature/main-working-branch` to the Phase 2E final commit is the remaining handoff step.
+- Active branch/SHA: `main`; Phase 2E code commit is `3a19f2f`; latest docs sync is current branch HEAD.
+- Remote sync status: `main`, `origin/main`, `feature/main-working-branch`, and `origin/feature/main-working-branch` are synced through Phase 2E after the final docs sync push. `safe-cumulative` is intentionally behind and can be ignored.
 - QA status: `cd artifacts/noor-mobile && npx tsc --noEmit` passed clean after final polish edits.
 - Inspection notes: `app/child/[childId]/index.tsx` is still a three-card skeleton; `src/lib/api.ts` is a thin authenticated fetch helper; `/api/children/:id/dashboard` exposes `todaysPlan.newMemorization`, `todayProgress`, `reviewsDueToday`, and `readingGoal`; `/api/children/:id/reviews` exposes detailed queue items with `reviewPriority`.
 - Implementation notes: mobile dashboard now fetches dashboard plus review queue data, the Memorization/Review/Reading cards show today's assigned work, review previews use shared red/orange/green priority styling, the review queue cards have matching priority rails/backgrounds, and the profile selector has richer child rows with age, streak, and points.
 - Diff-review notes: removed new dashboard letter spacing and fixed streak pluralization before final QA.
 - Exact next checklist:
-  1. Push `main`.
-  2. Merge `main` into `feature/main-working-branch` and push it.
-  3. Return to `main`, verify branch sync, and hand off final SHA.
+  1. Hardware-test Phase 2E on iPhone with the existing dev client/Metro path.
+  2. Verify profile selector, dashboard cards, and review priority colors.
+  3. If approved, start Phase 2F target-setting UI.
 
 ---
 
@@ -37,7 +37,7 @@ After every meaningful action, update this file and `PHASE_2D_HANDOFF.md` before
 - `PROD_ALLOWED_ORIGINS` + `PROD_TRUSTED_ORIGINS` configured for CORS / Better Auth
 - `/api/healthz` returns `{"status":"ok"}` (public, mounted above `requireAuth`)
 - Three secrets rotated (Neon password, Better Auth secret, Hugging Face token)
-- Branch-sync note: `main` + `feature/main-working-branch` are synced with Slice 5b code/docs. `safe-cumulative` was the temporary rescue branch and currently matches them. Slice 5b code commit is `aa004ff`; latest docs refresh is current branch HEAD.
+- Branch-sync note: `main` + `feature/main-working-branch` are synced through Phase 2E code/docs. `safe-cumulative` was the temporary rescue branch and is now intentionally behind; ignore unless needed for archaeology. Phase 2E code commit is `3a19f2f`; latest docs refresh is current branch HEAD.
 - Typecheck baseline clean
 - iOS bundle identifier registered: `com.mothman.noorpath`
 - EAS project created at `@mothman123/noor-mobile`

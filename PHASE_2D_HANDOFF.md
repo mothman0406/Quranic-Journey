@@ -1,22 +1,22 @@
 # NoorPath / Quranic Journey — Phase 2E Handoff
 
 **For: the next Codex/Claude Code conversation continuing this project**
-**Last updated: 2026-04-28 (Phase 2E dashboard polish implemented and passed local TypeScript QA; active branch `main` at the Phase 2E final commit; remote sync in progress for this handoff; hardware QA pending)**
+**Last updated: 2026-04-28 (Phase 2E dashboard polish implemented, typechecked, and synced; code commit `3a19f2f`; latest docs sync is current branch HEAD; hardware QA pending)**
 
 This handoff supersedes earlier handoff drafts.
 
 ## Current work log — 2026-04-28
 
-- Active branch/SHA: `main` at the Phase 2E final commit. Local pre-doc-refresh commit was `33707bf`; final synced SHA is reported in the handoff response after push/sync.
-- Remote sync status: pushing/syncing `main` and `feature/main-working-branch` to the Phase 2E final commit is the remaining handoff step.
+- Active branch/SHA: `main`; Phase 2E code commit is `3a19f2f`; latest docs sync is current branch HEAD.
+- Remote sync status: `main`, `origin/main`, `feature/main-working-branch`, and `origin/feature/main-working-branch` are synced through Phase 2E after the final docs sync push. `safe-cumulative` is intentionally behind and can be ignored.
 - QA status: `cd artifacts/noor-mobile && npx tsc --noEmit` passed clean after final polish edits.
 - Inspection notes: `app/child/[childId]/index.tsx` is still a three-card skeleton; `src/lib/api.ts` is a thin authenticated fetch helper; `/api/children/:id/dashboard` exposes `todaysPlan.newMemorization`, `todayProgress`, `reviewsDueToday`, and `readingGoal`; `/api/children/:id/reviews` exposes detailed queue items with `reviewPriority`.
 - Implementation notes: mobile dashboard now fetches dashboard plus review queue data, the Memorization/Review/Reading cards show today's assigned work, review previews use shared red/orange/green priority styling, the review queue cards have matching priority rails/backgrounds, and the profile selector has richer child rows with age, streak, and points.
 - Diff-review notes: removed new dashboard letter spacing and fixed streak pluralization before final QA.
 - Exact next checklist:
-  1. Push `main`.
-  2. Merge `main` into `feature/main-working-branch` and push it.
-  3. Return to `main`, verify branch sync, and hand off final SHA.
+  1. Hardware-test Phase 2E on iPhone with the existing dev client/Metro path.
+  2. Verify profile selector, dashboard cards, and review priority colors.
+  3. If approved, start Phase 2F target-setting UI.
 
 ---
 
@@ -43,7 +43,7 @@ You're working with a self-taught builder doing this project on weekends and eve
 ### Repo
 - GitHub: `https://github.com/mothman0406/Quranic-Journey`
 - Local: `/Users/mothmanaurascape.ai/Desktop/Quranic-Journey/`
-- Normal branch policy: `main` (deploy) and `feature/main-working-branch` stay synced. `safe-cumulative` was a temporary rescue branch for Slice 5a Session 3 and currently matches both, but the next chat should work from `main`. Slice 5b code commit is `aa004ff`; latest docs refresh is current branch HEAD.
+- Normal branch policy: `main` (deploy) and `feature/main-working-branch` stay synced. `safe-cumulative` was a temporary rescue branch for Slice 5a Session 3 and is now intentionally behind; ignore unless needed for archaeology. Phase 2E code commit is `3a19f2f`; latest docs refresh is current branch HEAD.
 
 ### Stack
 - **Monorepo:** pnpm 9.15.9 (NOT 10).
