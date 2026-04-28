@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { BlurView } from "expo-blur";
 import {
   ActivityIndicator,
   Alert,
@@ -1215,7 +1216,10 @@ export default function MemorizationScreen() {
                     return (
                       <Pressable
                         key={`${item.verseKey}-${item.word.position}-${idx}`}
-                        style={isHighlighted ? themedStyles.mushafWordHighlighted : undefined}
+                        style={[
+                          styles.mushafWordPressable,
+                          isHighlighted && themedStyles.mushafWordHighlighted,
+                        ]}
                         onPress={
                           inScope
                             ? () => {
@@ -1246,12 +1250,19 @@ export default function MemorizationScreen() {
                           style={[
                             themedStyles.mushafWord,
                             !inScope && themedStyles.mushafWordDimmed,
-                            isBlurred && styles.mushafWordBlurred,
                             tajweedColor ? { color: tajweedColor } : undefined,
                           ]}
                         >
                           {verseHidden ? "••••" : item.word.text_uthmani}
                         </Text>
+                        {isBlurred && (
+                          <BlurView
+                            intensity={32}
+                            tint={themeKey.endsWith("_dark") ? "dark" : "light"}
+                            pointerEvents="none"
+                            style={styles.mushafWordBlurOverlay}
+                          />
+                        )}
                       </Pressable>
                     );
                   })}
@@ -1946,8 +1957,14 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  mushafWordBlurred: {
-    opacity: 0.35,
+  mushafWordPressable: {
+    position: "relative",
+    overflow: "hidden",
+    borderRadius: 4,
+  },
+  mushafWordBlurOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: 4,
   },
   // ── Fixed controls island ────────────────────────────────────────────────────
   controlsIsland: {
