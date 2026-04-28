@@ -45,6 +45,7 @@ import { loadProfileSettings, saveProfileSettings, DEFAULT_SESSION_SETTINGS } fr
 import { extractTajweedColor } from "@/src/lib/tajweed";
 
 const PLAYBACK_RATES = [0.75, 0.85, 1.0, 1.15, 1.25, 1.5] as const;
+type InternalPhase = "single" | "cumulative";
 
 export default function MemorizationScreen() {
   const router = useRouter();
@@ -106,7 +107,12 @@ export default function MemorizationScreen() {
   } | null>(null);
   const [playbackRate, setPlaybackRate] = useState<number>(1.0);
   const playbackRateRef = useRef(playbackRate);
+  const [internalPhase, setInternalPhase] = useState<InternalPhase>("single");
+  const [cumAyahIdx, setCumAyahIdx] = useState<number>(0);
+  const [cumPass, setCumPass] = useState<number>(1);
+  const [cumUpTo, setCumUpTo] = useState<number>(0);
   const [cumulativeReview, setCumulativeReview] = useState<boolean>(false);
+  const [reviewRepeatCount, setReviewRepeatCount] = useState<number>(3);
 
   // Recite mode
   const [reciteMode, setReciteMode] = useState(false);
@@ -116,6 +122,10 @@ export default function MemorizationScreen() {
 
   // Derived from reciterId state
   const reciter = findReciter(reciterId);
+  const playingVerseNumber =
+    internalPhase === "cumulative" && ayahStart !== null
+      ? ayahStart + cumAyahIdx
+      : currentVerse;
 
   // Themed styles factory — recomputed only when themeKey changes
   const themedStyles = useMemo(() => makeThemedStyles(THEMES[themeKey]), [themeKey]);
@@ -132,10 +142,18 @@ export default function MemorizationScreen() {
   // Refs readable inside async callbacks and RAF ticks (avoid stale closures)
   const viewModeRef = useRef<"ayah" | "page">(viewMode);
   const currentVerseRef = useRef<number>(currentVerse);
+  const playingVerseNumberRef = useRef<number>(playingVerseNumber);
+  const ayahStartRef = useRef<number | null>(ayahStart);
   const ayahEndRef = useRef<number | null>(ayahEnd);
   const isPlayingRef = useRef(false);
   const pendingSeekPositionRef = useRef<number | null>(null);
   const reciterRef = useRef(reciter);
+  const internalPhaseRef = useRef<InternalPhase>("single");
+  const cumAyahIdxRef = useRef(0);
+  const cumPassRef = useRef(1);
+  const cumUpToRef = useRef(0);
+  const cumulativeReviewRef = useRef(cumulativeReview);
+  const reviewRepeatCountRef = useRef(reviewRepeatCount);
 
   // Refs for practice settings (audio callbacks close over stale state otherwise)
   const repeatCountRef = useRef(repeatCount);
@@ -144,10 +162,6 @@ export default function MemorizationScreen() {
   const currentRepeatRef = useRef(1);
   const advanceTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // True while a cumulative-review playback pass is active. Set by handleMarkComplete
-  // after a successful submit; cleared when the pass finishes naturally, the user
-  // pauses/Prev/Next, or the success alert dismisses.
-  const cumulativePassActiveRef = useRef(false);
 
   // Layout refs for auto-scroll
   const scrollViewRef = useRef<ScrollView>(null);
@@ -166,15 +180,26 @@ export default function MemorizationScreen() {
   // Keep callback-visible refs in sync with state
   useEffect(() => { viewModeRef.current = viewMode; }, [viewMode]);
   useEffect(() => { currentVerseRef.current = currentVerse; }, [currentVerse]);
+  useEffect(() => { playingVerseNumberRef.current = playingVerseNumber; }, [playingVerseNumber]);
   useEffect(() => { reciteModeRef.current = reciteMode; }, [reciteMode]);
   useEffect(() => { reciteExpectedIdxRef.current = reciteExpectedIdx; }, [reciteExpectedIdx]);
   useEffect(() => { displayWordsMapRef.current = displayWordsMap; }, [displayWordsMap]);
   useEffect(() => { surahNumberRef.current = surahNumber; }, [surahNumber]);
   useEffect(() => { reciterRef.current = reciter; }, [reciter]);
+  useEffect(() => { internalPhaseRef.current = internalPhase; }, [internalPhase]);
+  useEffect(() => { cumAyahIdxRef.current = cumAyahIdx; }, [cumAyahIdx]);
+  useEffect(() => { cumPassRef.current = cumPass; }, [cumPass]);
+  useEffect(() => { cumUpToRef.current = cumUpTo; }, [cumUpTo]);
+  useEffect(() => { cumulativeReviewRef.current = cumulativeReview; }, [cumulativeReview]);
+  useEffect(() => { reviewRepeatCountRef.current = reviewRepeatCount; }, [reviewRepeatCount]);
 
   // Clear reveals on context switches so old peeks don't bleed through
   useEffect(() => { setRevealedVerses(new Set()); }, [viewMode]);
   useEffect(() => { setRevealedVerses(new Set()); }, [blindMode]);
+  useEffect(() => {
+    if (ayahStart !== null) setCumUpTo(ayahStart);
+  }, [ayahStart]);
+  useEffect(() => { ayahStartRef.current = ayahStart; }, [ayahStart]);
   useEffect(() => { ayahEndRef.current = ayahEnd; }, [ayahEnd]);
   useEffect(() => { repeatCountRef.current = repeatCount; }, [repeatCount]);
   useEffect(() => { autoAdvanceDelayRef.current = autoAdvanceDelayMs; }, [autoAdvanceDelayMs]);
@@ -336,19 +361,19 @@ export default function MemorizationScreen() {
   useEffect(() => {
     if (surahNumber === null || chapterTimings === null) return;
     if (chapterTimings.kind === "chapter") {
-      segsRef.current = chapterTimings.map.get(`${surahNumber}:${currentVerse}`) ?? [];
+      segsRef.current = chapterTimings.map.get(`${surahNumber}:${playingVerseNumber}`) ?? [];
       return;
     }
     // On-demand: fetch this verse's timings (cached + dedup'd inside fetchQuranComV4VerseTiming)
     let cancelled = false;
     segsRef.current = [];
-    chapterTimings.fetch(currentVerse).then((segs) => {
-      if (!cancelled && currentVerseRef.current === currentVerse) {
+    chapterTimings.fetch(playingVerseNumber).then((segs) => {
+      if (!cancelled && playingVerseNumberRef.current === playingVerseNumber) {
         segsRef.current = segs;
       }
     });
     return () => { cancelled = true; };
-  }, [chapterTimings, surahNumber, currentVerse]);
+  }, [chapterTimings, surahNumber, playingVerseNumber]);
 
   // Auto-scroll to active verse on verse/mode change (page mode only, best-effort)
   useEffect(() => {
@@ -360,7 +385,7 @@ export default function MemorizationScreen() {
         const ci = verse.verse_key.indexOf(":");
         const vSurah = Number(verse.verse_key.slice(0, ci));
         const vVerse = Number(verse.verse_key.slice(ci + 1));
-        if (vSurah !== surahNumber || vVerse !== currentVerse) continue;
+        if (vSurah !== surahNumber || vVerse !== playingVerseNumber) continue;
         if (!verse.words.length) continue;
         const firstWord = verse.words[0]!;
         const lineKey = `page:${p}:line:${firstWord.line_number}`;
@@ -374,7 +399,7 @@ export default function MemorizationScreen() {
         return;
       }
     }
-  }, [currentVerse, viewMode]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [playingVerseNumber, viewMode]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Cleanup on unmount
   useEffect(() => {
@@ -398,7 +423,7 @@ export default function MemorizationScreen() {
       setHighlightedWord(0);
       if (surahNumberRef.current !== null) {
         setHighlightedPage({
-          verseKey: `${surahNumberRef.current}:${currentVerse}`,
+          verseKey: `${surahNumberRef.current}:${currentVerseRef.current}`,
           position: 1,
         });
       }
@@ -424,7 +449,7 @@ export default function MemorizationScreen() {
       setIsPlaying(false);
       if (autoPlayRef.current) {
         autoPlayRef.current = false;
-        await playVerse(currentVerse);
+        await playVerse(playingVerseNumberRef.current);
         // Seek to tapped word position after new verse starts
         if (pendingSeekPositionRef.current !== null) {
           const pos = pendingSeekPositionRef.current;
@@ -435,7 +460,7 @@ export default function MemorizationScreen() {
     };
     doChange();
     return () => { cancelled = true; };
-  }, [currentVerse]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [playingVerseNumber]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── RAF highlight loop ───────────────────────────────────────────────────────
 
@@ -469,7 +494,7 @@ export default function MemorizationScreen() {
           // Without this shift, the highlight runs ~300ms behind audio because everyayah
           // files have leading silence before recitation begins.
           const LEAD_MS = 500;
-          const wordCount = displayWordsMapRef.current.get(currentVerseRef.current)?.length ?? 0;
+          const wordCount = displayWordsMapRef.current.get(playingVerseNumberRef.current)?.length ?? 0;
           if (wordCount > 0) {
             const shiftedPos = pos + LEAD_MS;
             const shiftedFrac = Math.min(shiftedPos / dur, 1);
@@ -484,7 +509,7 @@ export default function MemorizationScreen() {
             setHighlightedPage(null);
           } else {
             setHighlightedPage({
-              verseKey: `${sn}:${currentVerseRef.current}`,
+              verseKey: `${sn}:${playingVerseNumberRef.current}`,
               position: found + 1,
             });
           }
@@ -498,7 +523,6 @@ export default function MemorizationScreen() {
   // ── Audio helpers ────────────────────────────────────────────────────────────
 
   async function stopAudioCompletely() {
-    cumulativePassActiveRef.current = false;
     cancelAnimationFrame(rafIdRef.current);
     if (advanceTimeoutRef.current) {
       clearTimeout(advanceTimeoutRef.current);
@@ -521,6 +545,104 @@ export default function MemorizationScreen() {
     isLoadingRef.current = false;
   }
 
+  function handleSessionComplete() {
+    isPlayingRef.current = false;
+    setIsPlaying(false);
+    cancelAnimationFrame(rafIdRef.current);
+    setHighlightedWord(-1);
+    setHighlightedPage(null);
+  }
+
+  function handleAllRepeatsDone() {
+    if (advanceTimeoutRef.current) {
+      clearTimeout(advanceTimeoutRef.current);
+      advanceTimeoutRef.current = null;
+    }
+
+    const fromA = ayahStartRef.current;
+    const toA = ayahEndRef.current;
+    if (fromA === null || toA === null) return;
+
+    const delay = autoAdvanceDelayRef.current;
+    const scheduleNext = (fn: () => void) => {
+      if (delay > 0) {
+        advanceTimeoutRef.current = setTimeout(() => {
+          advanceTimeoutRef.current = null;
+          fn();
+        }, delay);
+      } else {
+        fn();
+      }
+    };
+
+    if (internalPhaseRef.current === "single") {
+      const cur = currentVerseRef.current;
+      if (cumulativeReviewRef.current && cur > fromA) {
+        currentRepeatRef.current = 1;
+        autoPlayRef.current = true;
+        setCumUpTo(cur);
+        cumUpToRef.current = cur;
+        setCumAyahIdx(0);
+        cumAyahIdxRef.current = 0;
+        setCumPass(1);
+        cumPassRef.current = 1;
+        setInternalPhase("cumulative");
+        internalPhaseRef.current = "cumulative";
+        return;
+      }
+
+      if (cur < toA) {
+        const shouldAutoAdvance =
+          cumulativeReviewRef.current ||
+          (viewModeRef.current === "page" && autoplayThroughRangeRef.current);
+        currentRepeatRef.current = 1;
+        if (shouldAutoAdvance) {
+          scheduleNext(() => {
+            autoPlayRef.current = true;
+            setCurrentVerse((v) => v + 1);
+          });
+        }
+        return;
+      }
+
+      handleSessionComplete();
+      return;
+    }
+
+    const rangeLen = cumUpToRef.current - fromA + 1;
+    const nextIdx = cumAyahIdxRef.current + 1;
+    if (nextIdx < rangeLen) {
+      currentRepeatRef.current = 1;
+      autoPlayRef.current = true;
+      setCumAyahIdx(nextIdx);
+      cumAyahIdxRef.current = nextIdx;
+      return;
+    }
+
+    const nextPass = cumPassRef.current + 1;
+    if (nextPass <= reviewRepeatCountRef.current) {
+      currentRepeatRef.current = 1;
+      autoPlayRef.current = true;
+      setCumAyahIdx(0);
+      cumAyahIdxRef.current = 0;
+      setCumPass(nextPass);
+      cumPassRef.current = nextPass;
+      return;
+    }
+
+    setInternalPhase("single");
+    internalPhaseRef.current = "single";
+    if (currentVerseRef.current < toA) {
+      currentRepeatRef.current = 1;
+      scheduleNext(() => {
+        autoPlayRef.current = true;
+        setCurrentVerse((v) => v + 1);
+      });
+    } else {
+      handleSessionComplete();
+    }
+  }
+
   async function playVerse(verseNum: number) {
     if (reciteModeRef.current) return;
     if (!surahNumber) return;
@@ -540,12 +662,10 @@ export default function MemorizationScreen() {
           positionRef.current = status.positionMillis;
           if (status.durationMillis) durationRef.current = status.durationMillis;
           if (status.didJustFinish) {
-            // Repeat logic: replay this verse without unloading if repeat count not reached.
-            // During cumulative review, skip repeats — we want one pass through the range.
-            if (
-              !cumulativePassActiveRef.current &&
-              currentRepeatRef.current < repeatCountRef.current
-            ) {
+            // During cumulative phase each verse plays once (no per-verse repeats).
+            const effectiveRepeatCount =
+              internalPhaseRef.current === "cumulative" ? 1 : repeatCountRef.current;
+            if (currentRepeatRef.current < effectiveRepeatCount) {
               currentRepeatRef.current += 1;
               soundRef.current
                 ?.setPositionAsync(0)
@@ -560,54 +680,19 @@ export default function MemorizationScreen() {
             setIsPlaying(false);
             setHighlightedWord(-1);
             setHighlightedPage(null);
-            // Cumulative review pass overrides the normal gating: auto-advance through the
-            // range regardless of view mode or autoplay setting. End of pass triggers the
-            // "marked complete" alert.
-            const isCumulativePass = cumulativePassActiveRef.current;
-            const shouldAutoAdvance =
-              ayahEndRef.current !== null &&
-              currentVerseRef.current < ayahEndRef.current &&
-              (isCumulativePass ||
-                (viewModeRef.current === "page" && autoplayThroughRangeRef.current));
-            if (shouldAutoAdvance) {
-              const delay = autoAdvanceDelayRef.current;
-              if (delay > 0) {
-                advanceTimeoutRef.current = setTimeout(() => {
-                  advanceTimeoutRef.current = null;
-                  autoPlayRef.current = true;
-                  setCurrentVerse((v) => v + 1);
-                }, delay);
-              } else {
-                autoPlayRef.current = true;
-                setCurrentVerse((v) => v + 1);
-              }
-            } else {
-              // Audio ended naturally and we're not auto-advancing.
-              // Unload the sound so the next Play tap creates a fresh one.
-              void (async () => {
-                if (soundRef.current) {
-                  try {
-                    await soundRef.current.unloadAsync();
-                  } catch {
-                    // already gone
-                  }
-                  soundRef.current = null;
-                }
-              })();
 
-              // If a cumulative review pass was active and we just hit the end of the
-              // range, fire the success alert and clear the pass flag.
-              if (
-                cumulativePassActiveRef.current &&
-                ayahEndRef.current !== null &&
-                currentVerseRef.current >= ayahEndRef.current
-              ) {
-                cumulativePassActiveRef.current = false;
-                Alert.alert("Marked complete.", "Cumulative review done.", [
-                  { text: "OK", onPress: () => router.back() },
-                ]);
+            // Unload the just-finished sound so the next playVerse creates a fresh instance.
+            void (async () => {
+              if (soundRef.current) {
+                try {
+                  await soundRef.current.unloadAsync();
+                } catch {
+                  // already gone
+                }
+                soundRef.current = null;
               }
-            }
+              handleAllRepeatsDone();
+            })();
           }
         },
       );
@@ -659,12 +744,6 @@ export default function MemorizationScreen() {
     if (isLoadingRef.current) return;
 
     if (isPlayingRef.current) {
-      // User pause — abort cumulative pass if active.
-      cumulativePassActiveRef.current = false;
-      if (advanceTimeoutRef.current) {
-        clearTimeout(advanceTimeoutRef.current);
-        advanceTimeoutRef.current = null;
-      }
       cancelAnimationFrame(rafIdRef.current);
       await soundRef.current?.pauseAsync();
       isPlayingRef.current = false;
@@ -678,7 +757,7 @@ export default function MemorizationScreen() {
       startRAF();
     } else {
       currentRepeatRef.current = 1;
-      await playVerse(currentVerse);
+      await playVerse(playingVerseNumberRef.current);
     }
   }
 
@@ -715,10 +794,15 @@ export default function MemorizationScreen() {
   }
 
   function handlePrev() {
-    cumulativePassActiveRef.current = false;
     if (advanceTimeoutRef.current) {
       clearTimeout(advanceTimeoutRef.current);
       advanceTimeoutRef.current = null;
+    }
+    if (internalPhaseRef.current === "cumulative") {
+      setInternalPhase("single");
+      internalPhaseRef.current = "single";
+      void stopAudioCompletely();
+      return;
     }
     if (ayahStart === null || currentVerse <= ayahStart) return;
     autoPlayRef.current = true;
@@ -726,10 +810,22 @@ export default function MemorizationScreen() {
   }
 
   function handleNext() {
-    cumulativePassActiveRef.current = false;
     if (advanceTimeoutRef.current) {
       clearTimeout(advanceTimeoutRef.current);
       advanceTimeoutRef.current = null;
+    }
+    if (internalPhaseRef.current === "cumulative") {
+      void stopAudioCompletely();
+      setInternalPhase("single");
+      internalPhaseRef.current = "single";
+      if (
+        ayahEndRef.current !== null &&
+        currentVerseRef.current < ayahEndRef.current
+      ) {
+        autoPlayRef.current = true;
+        setCurrentVerse((v) => v + 1);
+      }
+      return;
     }
     if (ayahEnd === null || currentVerse >= ayahEnd) return;
     autoPlayRef.current = true;
@@ -738,6 +834,9 @@ export default function MemorizationScreen() {
 
   async function handleMarkComplete() {
     if (!surahNumber || ayahStart === null || ayahEnd === null) return;
+    setInternalPhase("single");
+    internalPhaseRef.current = "single";
+    void stopAudioCompletely();
     const ayahs = Array.from({ length: ayahEnd - ayahStart + 1 }, (_, i) => ayahStart + i);
     setSubmitting(true);
     try {
@@ -749,25 +848,9 @@ export default function MemorizationScreen() {
         status: "memorized",
       });
 
-      if (cumulativeReview && ayahEnd > ayahStart) {
-        // Kick off cumulative pass: jump back to ayahStart, set the pass flag,
-        // and let the verse-change effect's autoPlay branch begin playback.
-        // Success alert fires from playVerse status callback at end of range.
-        cumulativePassActiveRef.current = true;
-        autoPlayRef.current = true;
-        currentRepeatRef.current = 1;
-        if (currentVerse !== ayahStart) {
-          setCurrentVerse(ayahStart);
-        } else {
-          // Already at ayahStart — kick playback directly.
-          await playVerse(ayahStart);
-        }
-      } else {
-        // Single-verse range or cumulative review off → original flow.
-        Alert.alert("Marked complete.", undefined, [
-          { text: "OK", onPress: () => router.back() },
-        ]);
-      }
+      Alert.alert("Marked complete.", undefined, [
+        { text: "OK", onPress: () => router.back() },
+      ]);
     } catch (e) {
       Alert.alert("Error", e instanceof Error ? e.message : "Failed to save.");
     } finally {
@@ -1088,7 +1171,7 @@ export default function MemorizationScreen() {
                       highlightedPage?.position === item.word.position;
                     const verseHidden = inScope && blindMode && !revealedVerses.has(item.verseKey);
                     const isCurrentlyPlayingVerse =
-                      isPlaying && item.verseKey === `${surahNumber}:${currentVerse}`;
+                      isPlaying && item.verseKey === `${surahNumber}:${playingVerseNumber}`;
                     const isBlurred =
                       blurMode && isPlaying && inScope && !isCurrentlyPlayingVerse;
 
@@ -1155,13 +1238,13 @@ export default function MemorizationScreen() {
 
   // ── Derived values ───────────────────────────────────────────────────────────
 
-  const words = displayWordsMap.get(currentVerse) ?? [];
-  const ayahVerseKey = surahNumber !== null ? `${surahNumber}:${currentVerse}` : "";
+  const words = displayWordsMap.get(playingVerseNumber) ?? [];
+  const ayahVerseKey = surahNumber !== null ? `${surahNumber}:${playingVerseNumber}` : "";
   const ayahVerseHidden = blindMode && !revealedVerses.has(ayahVerseKey);
   const verseIndex = ayahStart !== null ? currentVerse - ayahStart + 1 : 1;
   const totalVerses = ayahStart !== null && ayahEnd !== null ? ayahEnd - ayahStart + 1 : 0;
   const canPrev = ayahStart !== null && currentVerse > ayahStart;
-  const canNext = ayahEnd !== null && currentVerse < ayahEnd;
+  const canNext = internalPhase === "cumulative" || (ayahEnd !== null && currentVerse < ayahEnd);
 
   // ── Render ───────────────────────────────────────────────────────────────────
 
@@ -1192,7 +1275,11 @@ export default function MemorizationScreen() {
           <Text style={styles.back}>← Back</Text>
         </Pressable>
         <Text style={styles.headerTitle}>
-          {reciteMode ? "Recite " : ""}Verse {verseIndex} of {totalVerses}
+          {reciteMode
+            ? `Recite Verse ${verseIndex} of ${totalVerses}`
+            : internalPhase === "cumulative" && ayahStart !== null
+              ? `Pass ${cumPass}/${reviewRepeatCount} · Ayahs ${ayahStart}–${cumUpTo}`
+              : `Verse ${verseIndex} of ${totalVerses}`}
         </Text>
         <Pressable
           style={styles.headerButton}
@@ -1245,7 +1332,7 @@ export default function MemorizationScreen() {
                 const tajweedColor = tajweedEnabled ? extractTajweedColor(word.text_uthmani_tajweed) : null;
                 return (
                   <Pressable
-                    key={`${currentVerse}-${idx}`}
+                    key={`${playingVerseNumber}-${idx}`}
                     onPress={() => {
                       if (blindMode) {
                         toggleVerseReveal(ayahVerseKey);
@@ -1313,6 +1400,8 @@ export default function MemorizationScreen() {
               // Fully release the audio session so expo-speech-recognition can claim the mic.
               // pauseAsync alone leaves iOS holding the session for expo-av, blocking mic access.
               await stopAudioCompletely();
+              setInternalPhase("single");
+              internalPhaseRef.current = "single";
               matchedWordCountRef.current = 0;
               lastMatchedWordRef.current = "";
               setReciteExpectedIdx(0);
@@ -1453,7 +1542,7 @@ export default function MemorizationScreen() {
           </View>
 
           <View style={styles.settingRow}>
-            <Text style={styles.settingLabel}>Cumulative review on Mark Complete</Text>
+            <Text style={styles.settingLabel}>Cumulative review</Text>
             <Pressable
               onPress={() => setCumulativeReview(!cumulativeReview)}
               style={[styles.toggleSwitch, cumulativeReview && styles.toggleSwitchOn]}
@@ -1461,6 +1550,27 @@ export default function MemorizationScreen() {
               <View style={[styles.toggleKnob, cumulativeReview && styles.toggleKnobOn]} />
             </Pressable>
           </View>
+
+          {cumulativeReview && (
+            <View style={styles.settingRow}>
+              <Text style={styles.settingLabel}>Review repeat count</Text>
+              <View style={styles.stepper}>
+                <Pressable
+                  style={styles.stepperButton}
+                  onPress={() => setReviewRepeatCount(Math.max(1, reviewRepeatCount - 1))}
+                >
+                  <Text style={styles.stepperButtonText}>−</Text>
+                </Pressable>
+                <Text style={styles.stepperValue}>{reviewRepeatCount}×</Text>
+                <Pressable
+                  style={styles.stepperButton}
+                  onPress={() => setReviewRepeatCount(Math.min(10, reviewRepeatCount + 1))}
+                >
+                  <Text style={styles.stepperButtonText}>+</Text>
+                </Pressable>
+              </View>
+            </View>
+          )}
 
           <View style={styles.settingRow}>
             <Text style={styles.settingLabel}>Playback speed</Text>
