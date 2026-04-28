@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { useCallback, useState, type ReactNode } from "react";
 import {
   ActivityIndicator,
   Pressable,
@@ -8,7 +8,7 @@ import {
   Text,
   View,
 } from "react-native";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { apiFetch } from "@/src/lib/api";
 import { fetchReviewQueue, type ReviewQueueItem, type ReviewQueueResponse } from "@/src/lib/reviews";
 import { getReviewPriorityStyle } from "@/src/lib/review-priority";
@@ -229,9 +229,11 @@ export default function ChildDashboard() {
     [childId],
   );
 
-  useEffect(() => {
-    loadDashboard();
-  }, [loadDashboard]);
+  useFocusEffect(
+    useCallback(() => {
+      loadDashboard();
+    }, [loadDashboard]),
+  );
 
   function handleCardPress(key: string) {
     if (key === "review") {
@@ -250,6 +252,13 @@ export default function ChildDashboard() {
         params: { childId, name: name ?? "" },
       });
     }
+  }
+
+  function handleTargetsPress() {
+    router.push({
+      pathname: "./targets",
+      params: { childId, name: name ?? "" },
+    });
   }
 
   function renderContent() {
@@ -415,7 +424,9 @@ export default function ChildDashboard() {
           <Text style={styles.back}>← Back</Text>
         </Pressable>
         <Text style={styles.title}>{name ?? "Dashboard"}</Text>
-        <View style={styles.headerSpacer} />
+        <Pressable style={styles.headerRight} onPress={handleTargetsPress}>
+          <Text style={styles.targetsText}>Targets</Text>
+        </Pressable>
       </View>
 
       {renderContent()}
@@ -441,7 +452,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: "#2563eb",
     fontWeight: "500",
-    width: 60,
+    width: 70,
   },
   title: {
     flex: 1,
@@ -450,8 +461,14 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: "#111111",
   },
-  headerSpacer: {
-    width: 60,
+  headerRight: {
+    width: 70,
+    alignItems: "flex-end",
+  },
+  targetsText: {
+    fontSize: 14,
+    color: "#2563eb",
+    fontWeight: "700",
   },
   list: {
     padding: 20,

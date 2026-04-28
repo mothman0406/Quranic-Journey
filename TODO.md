@@ -1,6 +1,6 @@
 # NoorPath / Quranic Journey — Status & Next Steps
 
-_Last updated: April 28, 2026 (Phase 2E dashboard polish passed hardware QA; code commit `3a19f2f`; latest docs sync is current branch HEAD; Phase 2F target-setting UI is next)_
+_Last updated: April 28, 2026 (Phase 2F target-setting UI implemented and typechecked locally; active branch `main` at `fa67e4f` with uncommitted code/doc updates; hardware QA pending)_
 
 ---
 
@@ -17,18 +17,19 @@ After every meaningful action, update this file and `PHASE_2D_HANDOFF.md` before
 ## Current work log — April 28, 2026
 
 - Active branch/SHA: `main`; Phase 2E code commit is `3a19f2f`; latest docs sync is current branch HEAD.
-- Remote sync status: `main`, `origin/main`, `feature/main-working-branch`, and `origin/feature/main-working-branch` are synced through final Phase 2E code/docs after this docs sync push. `safe-cumulative` is intentionally behind and can be ignored.
-- QA status: `cd artifacts/noor-mobile && npx tsc --noEmit` passed clean again on Apr 28. Mohammad hardware-tested Phase 2E on iPhone and reported the profile/dashboard/review-priority UI looks good.
+- Remote sync status: `main`, `origin/main`, `feature/main-working-branch`, and `origin/feature/main-working-branch` are synced at `fa67e4f` before the Phase 2F commit. `safe-cumulative` is intentionally behind and can be ignored.
+- QA status: `cd artifacts/noor-mobile && npx tsc --noEmit` passed clean after Phase 2F edits. Hardware QA is pending.
 - Dev-server note: starting Expo inside the sandbox fails with `ERR_SOCKET_BAD_PORT` because sandboxed Node cannot bind local ports (`EPERM` on 8081). Run the dev server outside the sandbox/escalated when using this environment.
 - Inspection notes: initial Phase 2E inspection found `app/child/[childId]/index.tsx` was a three-card skeleton; `src/lib/api.ts` is a thin authenticated fetch helper; `/api/children/:id/dashboard` exposes `todaysPlan.newMemorization`, `todayProgress`, `reviewsDueToday`, and `readingGoal`; `/api/children/:id/reviews` exposes detailed queue items with `reviewPriority`.
 - Implementation notes: mobile dashboard now fetches dashboard plus review queue data, the Memorization/Review/Reading cards show today's assigned work, review previews use shared red/orange/green priority styling, the review queue cards have matching priority rails/backgrounds, and the profile selector has richer child rows with age, streak, and points.
 - Diff-review notes: removed new dashboard letter spacing and fixed streak pluralization before final QA.
+- Phase 2F inspection notes: targets are stored on `children` as `memorizePagePerDay`, `reviewPagesPerDay`, and `readPagesPerDay`; `GET /api/children/:childId` returns them through `formatChild`; `PUT /api/children/:childId` accepts all three fields. Web reference options live in `artifacts/noor-path/src/pages/settings.tsx`.
+- Phase 2F implementation notes: added `app/child/[childId]/targets.tsx`, registered it in the child stack, added a dashboard `Targets` entry point, and made the dashboard refresh on focus after returning from target edits. The screen uses preset chips plus minus/plus fine tuning and saves directly through `apiFetch`.
 - Exact next checklist:
-  1. Start Phase 2F target-setting UI from `main`.
-  2. Inspect backend target-setting fields/routes and existing web settings/targets behavior as read-only reference.
-  3. Keep Phase 2F JS-only if possible; do not add native dependencies and do not touch tajweed.
-  4. Run `cd artifacts/noor-mobile && npx tsc --noEmit`.
-  5. Commit once and sync `main` plus `feature/main-working-branch`.
+  1. Run final diff review and `git diff --check`.
+  2. Commit once and sync `main` plus `feature/main-working-branch`.
+  3. Hardware-test Phase 2F on iPhone with the existing dev client/Metro path.
+  4. Verify target changes save and the dashboard reflects updated reading/review/memorization target values after returning.
 
 ---
 
@@ -239,9 +240,26 @@ Implemented, typechecked, and hardware-tested Apr 28, 2026.
 - Local QA: `cd artifacts/noor-mobile && npx tsc --noEmit` passed clean.
 - Hardware QA: Mohammad checked the profile/dashboard/review priority polish on iPhone and said it looks good.
 
-## 🔜 Phase 2F — target-setting UI
+## ✅ DONE LOCALLY — Phase 2F — target-setting UI
 
-- UI to set memorization/review/reading targets by page number per child. Backend already supports it via dashboard endpoint.
+Implemented and typechecked Apr 28, 2026. Hardware QA is still pending.
+
+- Added a mobile Targets screen at `app/child/[childId]/targets.tsx`.
+- Parents can set memorization, review, and reading pages-per-day per child.
+- Uses existing backend fields: `memorizePagePerDay`, `reviewPagesPerDay`, `readPagesPerDay`.
+- Preset chips match the web reference; minus/plus controls allow fine tuning without keyboard input.
+- Child dashboard has a `Targets` header action and refreshes when returning from the Targets screen.
+- No native dependencies added. Tajweed untouched.
+- Local QA: `cd artifacts/noor-mobile && npx tsc --noEmit` passed clean.
+
+## 🔜 NEXT — Phase 2F hardware QA
+
+1. Start Metro with `npx expo start --dev-client --clear --port 8081` outside the sandbox/escalated.
+2. Open the installed development build on iPhone.
+3. From a child dashboard, tap `Targets`.
+4. Change memorization, review, and reading targets; confirm each save indicator appears.
+5. Return to the dashboard and verify reading/review/memorization cards reflect the updated target data after refresh.
+6. If approved, move to Phase 3 TestFlight polish or the planned web-app deep dive.
 
 ---
 
