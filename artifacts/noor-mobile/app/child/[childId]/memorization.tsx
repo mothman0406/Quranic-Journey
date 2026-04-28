@@ -42,6 +42,9 @@ import {
 } from "@/src/lib/mushaf-theme";
 import { findReciter, RECITERS } from "@/src/lib/reciters";
 import { loadProfileSettings, saveProfileSettings, DEFAULT_SESSION_SETTINGS } from "@/src/lib/settings";
+import { extractTajweedColor } from "@/src/lib/tajweed";
+
+const PLAYBACK_RATES = [0.75, 0.85, 1.0, 1.15, 1.25, 1.5] as const;
 
 export default function MemorizationScreen() {
   const router = useRouter();
@@ -96,6 +99,13 @@ export default function MemorizationScreen() {
   const [settingsLoaded, setSettingsLoaded] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [revealedVerses, setRevealedVerses] = useState<Set<string>>(new Set());
+  const [tajweedEnabled, setTajweedEnabled] = useState<boolean>(false);
+  const [translationPopup, setTranslationPopup] = useState<{
+    arabic: string;
+    translation: string;
+  } | null>(null);
+  const [playbackRate, setPlaybackRate] = useState<number>(1.0);
+  const playbackRateRef = useRef(playbackRate);
 
   // Recite mode
   const [reciteMode, setReciteMode] = useState(false);
@@ -164,6 +174,16 @@ export default function MemorizationScreen() {
   useEffect(() => { repeatCountRef.current = repeatCount; }, [repeatCount]);
   useEffect(() => { autoAdvanceDelayRef.current = autoAdvanceDelayMs; }, [autoAdvanceDelayMs]);
   useEffect(() => { autoplayThroughRangeRef.current = autoplayThroughRange; }, [autoplayThroughRange]);
+  useEffect(() => { playbackRateRef.current = playbackRate; }, [playbackRate]);
+
+  // Apply playback rate changes to the currently-playing sound
+  useEffect(() => {
+    if (soundRef.current && isPlayingRef.current) {
+      soundRef.current.setRateAsync(playbackRate, true).catch(() => {
+        // best-effort
+      });
+    }
+  }, [playbackRate]);
 
   // Hydrate profile settings from AsyncStorage on mount
   useEffect(() => {
@@ -575,6 +595,12 @@ export default function MemorizationScreen() {
       } catch {
         // best-effort; sound may already be playing
       }
+      try {
+        await sound.setRateAsync(playbackRateRef.current, true);
+        // shouldCorrectPitch=true keeps recitation pitch natural
+      } catch {
+        // best-effort; some sound states may reject setRateAsync
+      }
       isPlayingRef.current = true;
       setIsPlaying(true);
       startRAF();
@@ -871,6 +897,14 @@ export default function MemorizationScreen() {
     });
   }
 
+  // ── Helpers ──────────────────────────────────────────────────────────────────
+
+  function getTranslationText(t: ApiWord["translation"]): string {
+    if (!t) return "";
+    if (typeof t === "string") return t;
+    return t.text ?? "";
+  }
+
   // ── Full Mushaf page renderer ────────────────────────────────────────────────
 
   function renderMushafPage(pageNum: number) {
@@ -1011,6 +1045,10 @@ export default function MemorizationScreen() {
                     const isBlurred =
                       blurMode && isPlaying && inScope && !isCurrentlyPlayingVerse;
 
+                    const tajweedColor =
+                      tajweedEnabled && inScope
+                        ? extractTajweedColor(item.word.text_uthmani_tajweed)
+                        : null;
                     return (
                       <Pressable
                         key={`${item.verseKey}-${item.word.position}-${idx}`}
@@ -1026,12 +1064,27 @@ export default function MemorizationScreen() {
                               }
                             : undefined
                         }
+                        onLongPress={
+                          inScope
+                            ? () => {
+                                const translation = getTranslationText(item.word.translation);
+                                if (translation) {
+                                  setTranslationPopup({
+                                    arabic: item.word.text_uthmani,
+                                    translation,
+                                  });
+                                }
+                              }
+                            : undefined
+                        }
+                        delayLongPress={400}
                       >
                         <Text
                           style={[
                             themedStyles.mushafWord,
                             !inScope && themedStyles.mushafWordDimmed,
                             isBlurred && styles.mushafWordBlurred,
+                            tajweedColor ? { color: tajweedColor } : undefined,
                           ]}
                         >
                           {verseHidden ? "••••" : item.word.text_uthmani}
@@ -1141,23 +1194,38 @@ export default function MemorizationScreen() {
         {viewMode === "ayah" ? (
           <View style={styles.verseCard}>
             <View style={styles.wordContainer}>
-              {words.map((word, idx) => (
-                <Pressable
-                  key={`${currentVerse}-${idx}`}
-                  onPress={() => {
-                    if (blindMode) {
-                      toggleVerseReveal(ayahVerseKey);
-                      return;
-                    }
-                    handleWordTap(idx);
-                  }}
-                  style={[styles.wordWrapper, highlightedWord === idx && styles.wordHighlighted]}
-                >
-                  <Text style={styles.arabicWord}>
-                    {ayahVerseHidden ? "••••" : word.text_uthmani}
-                  </Text>
-                </Pressable>
-              ))}
+              {words.map((word, idx) => {
+                const tajweedColor = tajweedEnabled ? extractTajweedColor(word.text_uthmani_tajweed) : null;
+                return (
+                  <Pressable
+                    key={`${currentVerse}-${idx}`}
+                    onPress={() => {
+                      if (blindMode) {
+                        toggleVerseReveal(ayahVerseKey);
+                        return;
+                      }
+                      handleWordTap(idx);
+                    }}
+                    onLongPress={() => {
+                      const translation = getTranslationText(word.translation);
+                      if (translation) {
+                        setTranslationPopup({ arabic: word.text_uthmani, translation });
+                      }
+                    }}
+                    delayLongPress={400}
+                    style={[styles.wordWrapper, highlightedWord === idx && styles.wordHighlighted]}
+                  >
+                    <Text
+                      style={[
+                        styles.arabicWord,
+                        tajweedColor ? { color: tajweedColor } : undefined,
+                      ]}
+                    >
+                      {ayahVerseHidden ? "••••" : word.text_uthmani}
+                    </Text>
+                  </Pressable>
+                );
+              })}
             </View>
           </View>
         ) : pageStart === null || pageEnd === null ? (
@@ -1328,6 +1396,45 @@ export default function MemorizationScreen() {
           </View>
 
           <View style={styles.settingRow}>
+            <Text style={styles.settingLabel}>Tajweed coloring</Text>
+            <Pressable
+              onPress={() => setTajweedEnabled(!tajweedEnabled)}
+              style={[styles.toggleSwitch, tajweedEnabled && styles.toggleSwitchOn]}
+            >
+              <View style={[styles.toggleKnob, tajweedEnabled && styles.toggleKnobOn]} />
+            </Pressable>
+          </View>
+
+          <View style={styles.settingRow}>
+            <Text style={styles.settingLabel}>Playback speed</Text>
+          </View>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={{ gap: 8, paddingVertical: 4 }}
+          >
+            {PLAYBACK_RATES.map((r) => (
+              <Pressable
+                key={r}
+                onPress={() => setPlaybackRate(r)}
+                style={[
+                  styles.ratePill,
+                  playbackRate === r && styles.ratePillSelected,
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.ratePillText,
+                    playbackRate === r && styles.ratePillTextSelected,
+                  ]}
+                >
+                  {r === 1.0 ? "1x" : `${r}x`}
+                </Text>
+              </Pressable>
+            ))}
+          </ScrollView>
+
+          <View style={styles.settingRow}>
             <Text style={styles.settingLabel}>Theme</Text>
           </View>
           <ScrollView
@@ -1389,6 +1496,23 @@ export default function MemorizationScreen() {
             <Text style={styles.sheetDoneText}>Done</Text>
           </Pressable>
         </View>
+      </Modal>
+
+      <Modal
+        visible={translationPopup !== null}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setTranslationPopup(null)}
+      >
+        <Pressable style={styles.translationBackdrop} onPress={() => setTranslationPopup(null)}>
+          <Pressable onPress={() => {}} style={styles.translationCard}>
+            <Text style={styles.translationArabic}>{translationPopup?.arabic ?? ""}</Text>
+            <Text style={styles.translationText}>{translationPopup?.translation ?? ""}</Text>
+            <Pressable style={styles.translationCloseButton} onPress={() => setTranslationPopup(null)}>
+              <Text style={styles.translationCloseText}>Close</Text>
+            </Pressable>
+          </Pressable>
+        </Pressable>
       </Modal>
     </View>
   );
@@ -1836,5 +1960,68 @@ const styles = StyleSheet.create({
   },
   reciterPillTextSelected: {
     color: "#ffffff",
+  },
+  ratePill: {
+    backgroundColor: "#f9fafb",
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    minWidth: 56,
+    alignItems: "center",
+  },
+  ratePillSelected: {
+    backgroundColor: "#2563eb",
+    borderColor: "#2563eb",
+  },
+  ratePillText: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#111111",
+  },
+  ratePillTextSelected: {
+    color: "#ffffff",
+  },
+  translationBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.4)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 24,
+  },
+  translationCard: {
+    backgroundColor: "#ffffff",
+    borderRadius: 16,
+    padding: 24,
+    alignItems: "center",
+    gap: 16,
+    minWidth: 240,
+    maxWidth: "90%",
+  },
+  translationArabic: {
+    fontFamily: "AmiriQuran",
+    fontSize: 32,
+    lineHeight: 56,
+    color: "#111111",
+    textAlign: "center",
+  },
+  translationText: {
+    fontSize: 16,
+    color: "#444444",
+    textAlign: "center",
+    lineHeight: 22,
+  },
+  translationCloseButton: {
+    backgroundColor: "#2563eb",
+    paddingVertical: 10,
+    paddingHorizontal: 24,
+    borderRadius: 999,
+    marginTop: 4,
+  },
+  translationCloseText: {
+    color: "#ffffff",
+    fontSize: 14,
+    fontWeight: "600",
   },
 });
