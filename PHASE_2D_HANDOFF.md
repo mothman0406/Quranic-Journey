@@ -1,22 +1,25 @@
 # NoorPath / Quranic Journey — Phase 2E Handoff
 
 **For: the next Codex/Claude Code conversation continuing this project**
-**Last updated: 2026-04-28 (Phase 2E dashboard polish implemented, typechecked, and synced; code commit `3a19f2f`; latest docs sync is current branch HEAD; hardware QA pending)**
+**Last updated: 2026-04-28 (Phase 2E dashboard polish passed hardware QA; code commit `3a19f2f`; latest docs sync is current branch HEAD; Phase 2F target-setting UI is next)**
 
 This handoff supersedes earlier handoff drafts.
 
 ## Current work log — 2026-04-28
 
 - Active branch/SHA: `main`; Phase 2E code commit is `3a19f2f`; latest docs sync is current branch HEAD.
-- Remote sync status: `main`, `origin/main`, `feature/main-working-branch`, and `origin/feature/main-working-branch` are synced through Phase 2E after the final docs sync push. `safe-cumulative` is intentionally behind and can be ignored.
-- QA status: `cd artifacts/noor-mobile && npx tsc --noEmit` passed clean after final polish edits.
-- Inspection notes: `app/child/[childId]/index.tsx` is still a three-card skeleton; `src/lib/api.ts` is a thin authenticated fetch helper; `/api/children/:id/dashboard` exposes `todaysPlan.newMemorization`, `todayProgress`, `reviewsDueToday`, and `readingGoal`; `/api/children/:id/reviews` exposes detailed queue items with `reviewPriority`.
+- Remote sync status: `main`, `origin/main`, `feature/main-working-branch`, and `origin/feature/main-working-branch` are synced through final Phase 2E code/docs after this docs sync push. `safe-cumulative` is intentionally behind and can be ignored.
+- QA status: `cd artifacts/noor-mobile && npx tsc --noEmit` passed clean again on Apr 28. Mohammad hardware-tested Phase 2E on iPhone and reported the profile/dashboard/review-priority UI looks good.
+- Dev-server note: starting Expo inside the sandbox fails with `ERR_SOCKET_BAD_PORT` because sandboxed Node cannot bind local ports (`EPERM` on 8081). Run the dev server outside the sandbox/escalated when using this environment.
+- Inspection notes: initial Phase 2E inspection found `app/child/[childId]/index.tsx` was a three-card skeleton; `src/lib/api.ts` is a thin authenticated fetch helper; `/api/children/:id/dashboard` exposes `todaysPlan.newMemorization`, `todayProgress`, `reviewsDueToday`, and `readingGoal`; `/api/children/:id/reviews` exposes detailed queue items with `reviewPriority`.
 - Implementation notes: mobile dashboard now fetches dashboard plus review queue data, the Memorization/Review/Reading cards show today's assigned work, review previews use shared red/orange/green priority styling, the review queue cards have matching priority rails/backgrounds, and the profile selector has richer child rows with age, streak, and points.
 - Diff-review notes: removed new dashboard letter spacing and fixed streak pluralization before final QA.
 - Exact next checklist:
-  1. Hardware-test Phase 2E on iPhone with the existing dev client/Metro path.
-  2. Verify profile selector, dashboard cards, and review priority colors.
-  3. If approved, start Phase 2F target-setting UI.
+  1. Start Phase 2F target-setting UI from `main`.
+  2. Inspect backend target-setting fields/routes and existing web settings/targets behavior as read-only reference.
+  3. Keep Phase 2F JS-only if possible; do not add native dependencies and do not touch tajweed.
+  4. Run `cd artifacts/noor-mobile && npx tsc --noEmit`.
+  5. Commit once and sync `main` plus `feature/main-working-branch`.
 
 ---
 
@@ -57,7 +60,7 @@ You're working with a self-taught builder doing this project on weekends and eve
 
 ## 3. Where the project is right now
 
-**Phase 2D is complete through Slice 5b. Phase 2E is implemented locally and typechecked; hardware QA is next.** Recite mode is at parity with web. Multi-reciter playback works for all 7 reciters. Word tracking works for all (true QDC for Husary, fractional fallback w/ 500ms lead for others). Audio plays through iPhone silent switch. Theme + reciter pickers in settings sheet. Profile vs session settings split. **Long-press translation popup works.** **Playback rate (0.75x–1.5x discrete pills) works.** **Cumulative review works from hardware QA.** **Real blur mode via `expo-blur` is built and hardware-tested.** **Tajweed coloring is wired but doesn't render** (likely API field shape — backlogged; do not tackle unless Mohammad explicitly asks).
+**Phase 2D is complete through Slice 5b. Phase 2E is implemented, typechecked, and hardware-tested. Phase 2F target-setting UI is next.** Recite mode is at parity with web. Multi-reciter playback works for all 7 reciters. Word tracking works for all (true QDC for Husary, fractional fallback w/ 500ms lead for others). Audio plays through iPhone silent switch. Theme + reciter pickers in settings sheet. Profile vs session settings split. **Long-press translation popup works.** **Playback rate (0.75x–1.5x discrete pills) works.** **Cumulative review works from hardware QA.** **Real blur mode via `expo-blur` is built and hardware-tested.** **Tajweed coloring is wired but doesn't render** (likely API field shape — backlogged; do not tackle unless Mohammad explicitly asks).
 
 | Slice | Status | Commit | What |
 |---|---|---|---|
@@ -71,7 +74,7 @@ You're working with a self-taught builder doing this project on weekends and eve
 | 2D-Polish 5a Session 2 | ✅ tested (tajweed broken — backlogged) | `18f054d` | Translation popup, playback rate, tajweed wiring (no colors) |
 | 2D-Polish 5a Session 3 | ✅ hardware-tested enough to proceed; synced | `4599dff` + fixes through `b2b3186`; docs sync `7e56509` | Web-style cumulative review during memorization, review repeat count, pass labels, final-verse skip fixes |
 | **2D-Polish 5b** | ✅ tested; synced | `aa004ff` + docs | Real `expo-blur` overlay in page-mode blur. Tajweed explicitly deferred. |
-| **2E Dashboard polish** | ✅ local typecheck; hardware QA pending | Phase 2E final HEAD | Today's-work dashboard cards, review priority colors, profile selector polish |
+| **2E Dashboard polish** | ✅ hardware-tested | `3a19f2f` + docs | Today's-work dashboard cards, review priority colors, profile selector polish |
 
 `TODO.md` is current. Read it first.
 
@@ -236,11 +239,10 @@ Phase 2D is complete.
 
 Per user (confirmed Apr 27 evening): Option A — finish Slice 5 first, then do 2E + 2F before TestFlight.
 
-- **Phase 2E — hardware QA next** — Dashboard polish is implemented/typechecked; test profile selector, dashboard cards, and review priority colors on iPhone.
-- **Phase 2F** — Target-setting UI (set memorization/review/reading targets by page number — backend already supports it via dashboard endpoint)
+- **Phase 2F — next** — Target-setting UI (set memorization/review/reading targets by page number — backend already supports it via dashboard endpoint)
 - **Then Phase 3** — TestFlight (app icon, splash, EAS production build, App Store Connect, TestFlight beta)
 
-User also requested **deep-dive into web app's `noor-path/` for "lots of cool stuff that took a lot of work"** — to be done after Phase 2 completes. Consider during Phase 2E/2F drafting.
+User also requested **deep-dive into web app's `noor-path/` for "lots of cool stuff that took a lot of work"** — to be done after Phase 2 completes. Consider during Phase 2F drafting.
 
 ---
 
@@ -318,12 +320,11 @@ User also requested **deep-dive into web app's `noor-path/` for "lots of cool st
 
 1. **Read `TODO.md` and this handoff.** This one supersedes earlier handoffs.
 2. **Check git state.** `main` and `feature/main-working-branch` should both contain the Phase 2E dashboard-polish commit. Start new work from `main`; `safe-cumulative` can be ignored unless needed for archaeology.
-3. **Hardware-test Phase 2E on iPhone.** No new EAS build should be required because this slice is JS-only. Use the existing dev client/Metro path.
-4. **Verify the profile selector, child dashboard, and review queue.** Confirm today's-work content is useful, card text fits, and red/orange/green review accents are readable.
-5. **If Mohammad approves Phase 2E, start Phase 2F target-setting UI.** Backend already exposes the daily memorization/review/reading target data.
-6. **Keep future slices JS-only unless explicitly approved.** Do not touch tajweed. Do not add native dependencies unless Mohammad explicitly approves a rebuild.
-7. **Run `cd artifacts/noor-mobile && npx tsc --noEmit` after changes.**
-8. **Update `TODO.md` and this handoff after meaningful work** with current date, branch/SHA, remote sync status, QA status, and the exact next checklist.
+3. **Start Phase 2F target-setting UI.** Backend already exposes the daily memorization/review/reading target data.
+4. **Inspect backend target-setting fields/routes and use `artifacts/noor-path/` only as read-only reference** for existing settings/targets behavior.
+5. **Keep future slices JS-only unless explicitly approved.** Do not touch tajweed. Do not add native dependencies unless Mohammad explicitly approves a rebuild.
+6. **Run `cd artifacts/noor-mobile && npx tsc --noEmit` after changes.**
+7. **Update `TODO.md` and this handoff after meaningful work** with current date, branch/SHA, remote sync status, QA status, and the exact next checklist.
 
 ---
 

@@ -1,6 +1,6 @@
 # NoorPath / Quranic Journey — Status & Next Steps
 
-_Last updated: April 28, 2026 (Phase 2E dashboard polish implemented, typechecked, and synced; code commit `3a19f2f`; latest docs sync is current branch HEAD; hardware QA pending)_
+_Last updated: April 28, 2026 (Phase 2E dashboard polish passed hardware QA; code commit `3a19f2f`; latest docs sync is current branch HEAD; Phase 2F target-setting UI is next)_
 
 ---
 
@@ -17,15 +17,18 @@ After every meaningful action, update this file and `PHASE_2D_HANDOFF.md` before
 ## Current work log — April 28, 2026
 
 - Active branch/SHA: `main`; Phase 2E code commit is `3a19f2f`; latest docs sync is current branch HEAD.
-- Remote sync status: `main`, `origin/main`, `feature/main-working-branch`, and `origin/feature/main-working-branch` are synced through Phase 2E after the final docs sync push. `safe-cumulative` is intentionally behind and can be ignored.
-- QA status: `cd artifacts/noor-mobile && npx tsc --noEmit` passed clean after final polish edits.
-- Inspection notes: `app/child/[childId]/index.tsx` is still a three-card skeleton; `src/lib/api.ts` is a thin authenticated fetch helper; `/api/children/:id/dashboard` exposes `todaysPlan.newMemorization`, `todayProgress`, `reviewsDueToday`, and `readingGoal`; `/api/children/:id/reviews` exposes detailed queue items with `reviewPriority`.
+- Remote sync status: `main`, `origin/main`, `feature/main-working-branch`, and `origin/feature/main-working-branch` are synced through final Phase 2E code/docs after this docs sync push. `safe-cumulative` is intentionally behind and can be ignored.
+- QA status: `cd artifacts/noor-mobile && npx tsc --noEmit` passed clean again on Apr 28. Mohammad hardware-tested Phase 2E on iPhone and reported the profile/dashboard/review-priority UI looks good.
+- Dev-server note: starting Expo inside the sandbox fails with `ERR_SOCKET_BAD_PORT` because sandboxed Node cannot bind local ports (`EPERM` on 8081). Run the dev server outside the sandbox/escalated when using this environment.
+- Inspection notes: initial Phase 2E inspection found `app/child/[childId]/index.tsx` was a three-card skeleton; `src/lib/api.ts` is a thin authenticated fetch helper; `/api/children/:id/dashboard` exposes `todaysPlan.newMemorization`, `todayProgress`, `reviewsDueToday`, and `readingGoal`; `/api/children/:id/reviews` exposes detailed queue items with `reviewPriority`.
 - Implementation notes: mobile dashboard now fetches dashboard plus review queue data, the Memorization/Review/Reading cards show today's assigned work, review previews use shared red/orange/green priority styling, the review queue cards have matching priority rails/backgrounds, and the profile selector has richer child rows with age, streak, and points.
 - Diff-review notes: removed new dashboard letter spacing and fixed streak pluralization before final QA.
 - Exact next checklist:
-  1. Hardware-test Phase 2E on iPhone with the existing dev client/Metro path.
-  2. Verify profile selector, dashboard cards, and review priority colors.
-  3. If approved, start Phase 2F target-setting UI.
+  1. Start Phase 2F target-setting UI from `main`.
+  2. Inspect backend target-setting fields/routes and existing web settings/targets behavior as read-only reference.
+  3. Keep Phase 2F JS-only if possible; do not add native dependencies and do not touch tajweed.
+  4. Run `cd artifacts/noor-mobile && npx tsc --noEmit`.
+  5. Commit once and sync `main` plus `feature/main-working-branch`.
 
 ---
 
@@ -223,9 +226,9 @@ Phase 2D is complete. Tajweed remains wired-but-not-rendering and is intentional
 
 ---
 
-## ✅ DONE LOCALLY — Phase 2E — dashboard polish & today's-work content
+## ✅ DONE — Phase 2E — dashboard polish & today's-work content
 
-Implemented and typechecked Apr 28, 2026. Hardware QA is still pending.
+Implemented, typechecked, and hardware-tested Apr 28, 2026.
 
 - Mobile dashboard now loads `/api/children/:id/dashboard` plus `/api/children/:id/reviews`.
 - Memorization, Review, and Reading cards show today's concrete queued work/status.
@@ -234,15 +237,7 @@ Implemented and typechecked Apr 28, 2026. Hardware QA is still pending.
 - Profile selector rows now show richer child details: avatar bubble, age label, streak, points, and arrow affordance.
 - No native dependencies added. Tajweed untouched.
 - Local QA: `cd artifacts/noor-mobile && npx tsc --noEmit` passed clean.
-
-## 🔜 NEXT — Phase 2E hardware QA
-
-1. Pull latest `main` after sync.
-2. Run the existing dev client/Metro path (no new EAS build required; JS-only changes).
-3. On iPhone, verify profile selector rows render cleanly for all children.
-4. Open a child dashboard and verify Memorization, Review, and Reading cards show useful current work.
-5. Open Review and confirm red/orange/green queue accents are readable and not visually noisy.
-6. If approved, move to Phase 2F target-setting UI.
+- Hardware QA: Mohammad checked the profile/dashboard/review priority polish on iPhone and said it looks good.
 
 ## 🔜 Phase 2F — target-setting UI
 
