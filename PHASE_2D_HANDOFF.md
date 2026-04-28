@@ -1,7 +1,7 @@
 # NoorPath / Quranic Journey — Phase 2D Slice 5b Handoff
 
 **For: the next Codex/Claude Code conversation continuing this project**
-**Last updated: 2026-04-28 (Slice 5a Session 3 cumulative review implemented locally; hardware QA + branch sync next, then Slice 5b real blur)**
+**Last updated: 2026-04-28 (Slice 5a Session 3 hardware-tested and synced; Slice 5b real blur code committed/typechecked at `aa004ff`; EAS build pending explicit approval/manual run)**
 
 This handoff supersedes earlier handoff drafts.
 
@@ -30,7 +30,7 @@ You're working with a self-taught builder doing this project on weekends and eve
 ### Repo
 - GitHub: `https://github.com/mothman0406/Quranic-Journey`
 - Local: `/Users/mothmanaurascape.ai/Desktop/Quranic-Journey/`
-- Normal branch policy: `main` (deploy) and `feature/main-working-branch` stay synced. **Current exception:** corrected Slice 5a Session 3 work is local on `safe-cumulative` through `b2b3186`. `origin/main` still points at obsolete `d01fae2` (wrong Mark Complete-style cumulative review) and `origin/feature/main-working-branch` is still `6104bce`. Before 5b, hardware-test the local branch and then sync/push the corrected work to both branches.
+- Normal branch policy: `main` (deploy) and `feature/main-working-branch` stay synced. Slice 5a Session 3 was hardware-tested by Mohammad and synced to both remotes at `7e56509`. Slice 5b code is committed locally at `aa004ff`; push this code/docs state to both branches after the docs refresh.
 
 ### Stack
 - **Monorepo:** pnpm 9.15.9 (NOT 10).
@@ -44,7 +44,7 @@ You're working with a self-taught builder doing this project on weekends and eve
 
 ## 3. Where the project is right now
 
-**Phase 2D Slices 1–4 + Slice 5a Sessions 1+2 are shipped, hardware-tested, working very well. Slice 5a Session 3 is implemented locally on `safe-cumulative` and typechecked, but still needs hardware QA and branch sync.** Recite mode at parity with web. Multi-reciter playback works for all 7 reciters. Word tracking works for all (true QDC for Husary, fractional fallback w/ 500ms lead for others). Audio plays through iPhone silent switch. Theme + reciter pickers in settings sheet. Profile vs session settings split. **Long-press translation popup works.** **Playback rate (0.75x–1.5x discrete pills) works.** **Cumulative review is implemented locally.** **Tajweed coloring wired but doesn't render** (likely API field shape — backlogged; do not tackle before 5b unless Mohammad explicitly asks).
+**Phase 2D Slices 1–4 + Slice 5a Sessions 1–3 are shipped/tested enough to move forward; Session 3 is synced to both branches. Slice 5b real blur is code-complete locally at `aa004ff` and typechecked, but the EAS development build/hardware QA are pending.** Recite mode at parity with web. Multi-reciter playback works for all 7 reciters. Word tracking works for all (true QDC for Husary, fractional fallback w/ 500ms lead for others). Audio plays through iPhone silent switch. Theme + reciter pickers in settings sheet. Profile vs session settings split. **Long-press translation popup works.** **Playback rate (0.75x–1.5x discrete pills) works.** **Cumulative review works from local hardware QA.** **Tajweed coloring wired but doesn't render** (likely API field shape — backlogged; do not tackle before/inside 5b unless Mohammad explicitly asks).
 
 | Slice | Status | Commit | What |
 |---|---|---|---|
@@ -56,8 +56,8 @@ You're working with a self-taught builder doing this project on weekends and eve
 | 2D-Recite (4) | ✅ tested (after 3 hotfixes) | `1f6557e` + `4100a1f` + `53675e6` + `74ce890` + `4b247eb` | On-device speech recognition |
 | 2D-Polish 5a Session 1 | ✅ tested (after 4 hotfixes) | `b73ed60` + 4 hotfixes (latest `45d58a3` then `d5d5f1f` then LEAD_MS=500) | Cleanup, AsyncStorage, 8 themes, 7 reciters, profile/session split, fractional fallback, anticipatory shift |
 | 2D-Polish 5a Session 2 | ✅ tested (tajweed broken — backlogged) | `18f054d` | Translation popup, playback rate, tajweed wiring (no colors) |
-| 2D-Polish 5a Session 3 | 🟡 local, typechecked; hardware QA next | `4599dff` + fixes through `b2b3186` on `safe-cumulative` | Web-style cumulative review during memorization, review repeat count, pass labels, final-verse skip fixes |
-| **2D-Polish 5b** | 🔜 **next after Session 3 QA/sync** | — | Real `expo-blur` (requires EAS rebuild). Tajweed explicitly deferred. |
+| 2D-Polish 5a Session 3 | ✅ hardware-tested enough to proceed; synced | `4599dff` + fixes through `b2b3186`; docs sync `7e56509` | Web-style cumulative review during memorization, review repeat count, pass labels, final-verse skip fixes |
+| **2D-Polish 5b** | 🟡 code complete locally; EAS build + hardware QA pending | `aa004ff` | Real `expo-blur` overlay in page-mode blur. Tajweed explicitly deferred. |
 
 `TODO.md` is current. Read it first.
 
@@ -170,11 +170,11 @@ Bottom modal, opened by gear icon top-right of header.
 
 ---
 
-## 5. Slice 5a Session 3 — current QA/sync checklist
+## 5. Slice 5a Session 3 — done/current
 
-Cumulative review is implemented locally on branch `safe-cumulative` through `b2b3186`. It is JS-only and `cd artifacts/noor-mobile && npx tsc --noEmit` was clean after the latest repeat-pass header change.
+Cumulative review is implemented through `b2b3186`, hardware-tested by Mohammad, and synced to both remotes via docs sync `7e56509`.
 
-Do **not** use `origin/main` as canonical for Session 3 yet: it still has `d01fae2`, the earlier wrong "after Mark Complete" approach. The canonical corrected local chain is:
+Canonical corrected chain:
 
 - `4599dff` — real web-style cumulative review state machine
 - `2eaad4b` — single-phase Next enters cumulative instead of skipping review
@@ -182,7 +182,7 @@ Do **not** use `origin/main` as canonical for Session 3 yet: it still has `d01fa
 - `2147b07` — final-verse Next button enabled for cumulative review
 - `b2b3186` — normal repeated verses show `Pass X/Y · Verse A of B`
 
-Hardware QA before 5b:
+Hardware QA notes:
 - Al-Nasr 1-4, `repeatCount=3`, `reviewRepeatCount=2`, cumulative on. Expected: verse 1 repeats 3x; verse 2 repeats 3x; cumulative 1-2 twice; verse 3 repeats 3x; cumulative 1-3 twice; verse 4 repeats 3x; cumulative 1-4 twice; then complete.
 - On final verse, Next/skip must be enabled and start final cumulative review.
 - Next during final cumulative should exit cumulative and complete the session.
@@ -192,54 +192,43 @@ Hardware QA before 5b:
 - `cumulativeReview=false` should preserve previous behavior.
 - Header labels should show normal repeat pass (`Pass X/Y · Verse A of B`) and cumulative pass (`Pass X/Y · Ayahs A-B`).
 
-After QA, sync branches:
-```
-git push origin safe-cumulative:main
-git checkout feature/main-working-branch
-git merge main
-git push origin feature/main-working-branch
-git checkout main
-```
-
-If push policy blocks direct remote updates, ask Mohammad to explicitly approve pushing the local `safe-cumulative` work to both branches.
-
 ---
 
-## 6. Slice 5b — next action items
+## 6. Slice 5b — current state + next action items
 
 Goal: real blur via `expo-blur`. This replaces the opacity-0.35 fallback currently used by `blurMode` in `memorization.tsx`.
 
-Scope:
+Completed locally in `aa004ff`:
+- Installed `expo-blur@~15.0.8` in `@workspace/noor-mobile`.
+- Imported `BlurView` in `memorization.tsx`.
+- Replaced page-mode inactive-word opacity fallback with a real `BlurView` overlay.
+- Kept the existing outer `Pressable`, so tap-to-seek and long-press translation should still work.
+- Removed `styles.mushafWordBlurred`.
+- Ran `cd artifacts/noor-mobile && npx tsc --noEmit` clean.
+
+Scope reminders:
 - Do **not** fix tajweed in 5b. Mohammad said "No tajweed for now" on Apr 28.
 - Native dependency is allowed here because 5b already requires an EAS rebuild.
-- Keep the code change focused on `artifacts/noor-mobile/app/child/[childId]/memorization.tsx`, except package manifest/lockfile changes from installing `expo-blur`.
-- Do not add `expo-linear-gradient` unless real blur cannot be made presentable without it.
+- Do not add `expo-linear-gradient` unless real blur cannot be made presentable without it. It was not added in `aa004ff`.
 
-Implementation checklist:
-1. Start from a clean, QA-approved Session 3 branch.
-2. Install `expo-blur` in the mobile workspace. Watch for the Expo/pnpm trap: if `npx expo install` creates `artifacts/noor-mobile/package-lock.json`, delete it and keep the root `pnpm-lock.yaml` as the only lockfile.
-3. Import `BlurView` from `expo-blur`.
-4. Replace the page-mode opacity fallback (`styles.mushafWordBlurred`) with real blur for inactive in-scope words/verses while audio is playing.
-5. Preserve current semantics:
+Next checklist:
+1. Push `aa004ff` plus this docs refresh to `main` and `feature/main-working-branch`.
+2. Start the required EAS development build. Codex could not start it because EAS uploads private repo contents to Expo's external build service and requires explicit approval/manual execution. Manual command:
+   `cd artifacts/noor-mobile && npx eas-cli@latest build --profile development --platform ios --non-interactive --no-wait`
+3. Install the new dev build on iPhone.
+4. Hardware-test:
    - active verse remains readable/unblurred
    - out-of-scope words remain dimmed
    - blind mode still hides/reveals as before
    - tap-to-seek and long-press translation still work
    - cumulative review and normal playback both update the active verse correctly via `playingVerseNumber`
-6. Avoid layout shifts. If per-word `BlurView` wrappers cause text wrapping or press handling problems, prefer a stable per-verse/line overlay approach in page mode.
-7. Run `cd artifacts/noor-mobile && npx tsc --noEmit`.
-8. Run dev client: `cd artifacts/noor-mobile && npx expo start --dev-client`.
-9. Build the new iOS dev client: `cd artifacts/noor-mobile && npx eas-cli@latest build --profile development --platform ios`.
-10. Install on iPhone and hardware-test:
-    - blur mode on/off while page-mode audio plays
-    - active verse unblurs as playback advances
-    - cumulative review still works
-    - playback rate still applies
-    - all 7 reciters still play
-    - long-press translation still opens
-    - blind mode still reveals/toggles
-    - recite mode still unloads audio and starts mic cleanly
-11. Commit and sync both branches.
+   - blur mode on/off while page-mode audio plays
+   - active verse unblurs as playback advances
+   - playback rate still applies
+   - all 7 reciters still play
+   - recite mode still unloads audio and starts mic cleanly
+5. If per-word `BlurView` overlays cause layout shifts or weak blur on hardware, revise with a stable per-line/per-verse overlay approach.
+6. If hardware QA passes, mark Slice 5b done; Phase 2D is complete.
 
 After 5b ships, Phase 2D is complete.
 
@@ -329,10 +318,10 @@ User also requested **deep-dive into web app's `noor-path/` for "lots of cool st
 ## 9. What to do first in the next session
 
 1. **Read `TODO.md` and this handoff.** This one supersedes earlier handoffs.
-2. **Check git state.** Expected local branch is `safe-cumulative` at or after `b2b3186`. Remote branches may still be stale.
-3. **Do not start 5b until Slice 5a Session 3 is hardware-tested.** Run the cumulative review QA checklist in Section 5.
-4. **After QA, sync the corrected local work to `main` and `feature/main-working-branch`.** If the push needs explicit approval, ask Mohammad.
-5. **Then implement Slice 5b (`expo-blur`) using Section 6.** Do not touch tajweed unless Mohammad explicitly changes his mind.
+2. **Check git state.** Expected local branch is `safe-cumulative` at or after `aa004ff` plus this docs refresh.
+3. **Push/sync if needed.** `main` and `feature/main-working-branch` should contain `aa004ff` and this docs refresh.
+4. **Run or approve the EAS development build.** It uploads repo contents to Expo; Codex needs explicit approval or Mohammad can run the manual command in Section 6.
+5. **Hardware-test 5b blur using Section 6.** Do not touch tajweed unless Mohammad explicitly changes his mind.
 6. **Same Codex/Claude Code prompt pattern as throughout this project.**
 
 ---
