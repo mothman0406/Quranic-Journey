@@ -1,7 +1,7 @@
-# NoorPath / Quranic Journey — Phase 2D Slice 5a Session 3 Handoff
+# NoorPath / Quranic Journey — Phase 2D Slice 5b Handoff
 
-**For: the next Claude conversation continuing this project**
-**Last updated: 2026-04-27, late evening (Slice 5a Session 2 shipped + tested except tajweed; Slice 5a Session 3 is next)**
+**For: the next Codex/Claude Code conversation continuing this project**
+**Last updated: 2026-04-28 (Slice 5a Session 3 cumulative review implemented locally; hardware QA + branch sync next, then Slice 5b real blur)**
 
 This handoff supersedes earlier handoff drafts.
 
@@ -30,7 +30,7 @@ You're working with a self-taught builder doing this project on weekends and eve
 ### Repo
 - GitHub: `https://github.com/mothman0406/Quranic-Journey`
 - Local: `/Users/mothmanaurascape.ai/Desktop/Quranic-Journey/`
-- Branches: `main` (deploy) and `feature/main-working-branch`. Every commit goes to both.
+- Normal branch policy: `main` (deploy) and `feature/main-working-branch` stay synced. **Current exception:** corrected Slice 5a Session 3 work is local on `safe-cumulative` through `b2b3186`. `origin/main` still points at obsolete `d01fae2` (wrong Mark Complete-style cumulative review) and `origin/feature/main-working-branch` is still `6104bce`. Before 5b, hardware-test the local branch and then sync/push the corrected work to both branches.
 
 ### Stack
 - **Monorepo:** pnpm 9.15.9 (NOT 10).
@@ -44,7 +44,7 @@ You're working with a self-taught builder doing this project on weekends and eve
 
 ## 3. Where the project is right now
 
-**Phase 2D Slices 1–4 + Slice 5a Sessions 1+2 are shipped, hardware-tested, working very well** with two known issues backlogged. Recite mode at parity with web. Multi-reciter playback works for all 7 reciters. Word tracking works for all (true QDC for Husary, fractional fallback w/ 500ms lead for others). Audio plays through iPhone silent switch. Theme + reciter pickers in settings sheet. Profile vs session settings split. **Long-press translation popup works.** **Playback rate (0.75x–1.5x discrete pills) works.** **Tajweed coloring wired but doesn't render** (likely API field shape — backlogged).
+**Phase 2D Slices 1–4 + Slice 5a Sessions 1+2 are shipped, hardware-tested, working very well. Slice 5a Session 3 is implemented locally on `safe-cumulative` and typechecked, but still needs hardware QA and branch sync.** Recite mode at parity with web. Multi-reciter playback works for all 7 reciters. Word tracking works for all (true QDC for Husary, fractional fallback w/ 500ms lead for others). Audio plays through iPhone silent switch. Theme + reciter pickers in settings sheet. Profile vs session settings split. **Long-press translation popup works.** **Playback rate (0.75x–1.5x discrete pills) works.** **Cumulative review is implemented locally.** **Tajweed coloring wired but doesn't render** (likely API field shape — backlogged; do not tackle before 5b unless Mohammad explicitly asks).
 
 | Slice | Status | Commit | What |
 |---|---|---|---|
@@ -56,8 +56,8 @@ You're working with a self-taught builder doing this project on weekends and eve
 | 2D-Recite (4) | ✅ tested (after 3 hotfixes) | `1f6557e` + `4100a1f` + `53675e6` + `74ce890` + `4b247eb` | On-device speech recognition |
 | 2D-Polish 5a Session 1 | ✅ tested (after 4 hotfixes) | `b73ed60` + 4 hotfixes (latest `45d58a3` then `d5d5f1f` then LEAD_MS=500) | Cleanup, AsyncStorage, 8 themes, 7 reciters, profile/session split, fractional fallback, anticipatory shift |
 | 2D-Polish 5a Session 2 | ✅ tested (tajweed broken — backlogged) | `18f054d` | Translation popup, playback rate, tajweed wiring (no colors) |
-| **2D-Polish 5a Session 3** | 🔜 **next** | — | **Cumulative review** |
-| 2D-Polish 5b | after Session 3 | — | Real `expo-blur` (requires EAS rebuild). May piggyback tajweed fix here or earlier. |
+| 2D-Polish 5a Session 3 | 🟡 local, typechecked; hardware QA next | `4599dff` + fixes through `b2b3186` on `safe-cumulative` | Web-style cumulative review during memorization, review repeat count, pass labels, final-verse skip fixes |
+| **2D-Polish 5b** | 🔜 **next after Session 3 QA/sync** | — | Real `expo-blur` (requires EAS rebuild). Tajweed explicitly deferred. |
 
 `TODO.md` is current. Read it first.
 
@@ -65,11 +65,11 @@ You're working with a self-taught builder doing this project on weekends and eve
 
 ## 4. The single most important file
 
-`artifacts/noor-mobile/app/child/[childId]/memorization.tsx` — **the entire memorization product, ~1500 lines after Slice 5a Session 2**. Plus supporting libs: `src/lib/memorization.ts`, `src/lib/quran.ts`, `src/lib/recite.ts`, `src/lib/mushaf-theme.ts`, `src/lib/reciters.ts`, `src/lib/settings.ts`, `src/lib/audio.ts`, `src/lib/tajweed.ts`.
+`artifacts/noor-mobile/app/child/[childId]/memorization.tsx` — **the entire memorization product, ~1500 lines after Slice 5a Session 3**. Plus supporting libs: `src/lib/memorization.ts`, `src/lib/quran.ts`, `src/lib/recite.ts`, `src/lib/mushaf-theme.ts`, `src/lib/reciters.ts`, `src/lib/settings.ts`, `src/lib/audio.ts`, `src/lib/tajweed.ts`.
 
-Don't refactor preemptively. If it gets unwieldy after Session 3, extract `lib/memorization-audio.ts` and `lib/memorization-recite.ts`.
+Don't refactor preemptively. If it gets unwieldy after 5b, extract `lib/memorization-audio.ts` and `lib/memorization-recite.ts`.
 
-### Architectural notes (current state, post-Slice-5a-Session-2)
+### Architectural notes (current state, post-Slice-5a-Session-3 local)
 
 **Two render modes** controlled by `viewMode: "ayah" | "page"`. Toggle pills under the header.
 
@@ -80,7 +80,7 @@ const fooRef = useRef(foo);
 useEffect(() => { fooRef.current = foo; }, [foo]);
 ```
 
-All refs as of Slice 5a Session 2: `viewModeRef`, `currentVerseRef`, `ayahEndRef`, `isPlayingRef`, `isLoadingRef`, `pendingSeekPositionRef`, `repeatCountRef`, `autoAdvanceDelayRef`, `autoplayThroughRangeRef`, `reciteModeRef`, `reciteExpectedIdxRef`, `displayWordsMapRef`, `surahNumberRef`, `matchedWordCountRef`, `lastMatchedWordRef`, `lastMatchTimeRef`, `reciterRef`, `saveTimerRef`, `playbackRateRef`. Plus timer/raf/sound refs.
+Important refs as of Slice 5a Session 3: `viewModeRef`, `currentVerseRef`, `playingVerseNumberRef`, `ayahStartRef`, `ayahEndRef`, `isPlayingRef`, `isLoadingRef`, `pendingSeekPositionRef`, `repeatCountRef`, `autoAdvanceDelayRef`, `autoplayThroughRangeRef`, `internalPhaseRef`, `cumAyahIdxRef`, `cumPassRef`, `cumUpToRef`, `cumulativeReviewRef`, `reviewRepeatCountRef`, `reciteModeRef`, `reciteExpectedIdxRef`, `displayWordsMapRef`, `surahNumberRef`, `matchedWordCountRef`, `lastMatchedWordRef`, `lastMatchTimeRef`, `reciterRef`, `saveTimerRef`, `playbackRateRef`. Plus timer/raf/sound refs.
 
 **`handlePlayPause` reads ONLY refs.** Critical. After Slice 4 hotfix v2 the function gates exclusively on `isPlayingRef.current` and `isLoadingRef.current` to close the load-completion race window.
 
@@ -124,6 +124,19 @@ Provides anticipatory feel. Works for short ayahs; trails on long ones — accep
 - `setRateAsync(rate, true)` in `playVerse` after `createAsync`
 - Separate effect pushes mid-playback rate changes to active sound
 
+**Cumulative review (Slice 5a Session 3 local):**
+- Web-style state machine, not a Mark Complete after-pass.
+- `internalPhase: "single" | "cumulative"` drives whether the audio is playing the study verse or cumulative review.
+- `currentVerse` remains the single-phase study cursor. `playingVerseNumber` is what actually plays/highlights; in cumulative phase it is `ayahStart + cumAyahIdx`.
+- `cumulativeReview` toggle defaults false. `reviewRepeatCount` defaults 3 and ranges 1-10.
+- After a new verse finishes normal repeats, if cumulative review is enabled and `currentVerse > ayahStart`, cumulative plays `ayahStart..currentVerse` for `reviewRepeatCount` passes.
+- During cumulative, each verse plays once regardless of normal repeat count.
+- Header labels:
+  - single phase with repeat count > 1: `Pass X/Y · Verse A of B`
+  - cumulative phase: `Pass X/Y · Ayahs A-B`
+- `Next` during single phase enters cumulative if cumulative review is due, including on the final verse. `Next` during cumulative exits cumulative and advances/completes. `Prev` during cumulative bails back to single phase.
+- Latest local commit for repeat-pass header: `b2b3186`.
+
 **Tajweed (Slice 5a Session 2 — wired but not rendering):**
 - `src/lib/tajweed.ts` has 21-class `TAJWEED_COLORS` map + `extractTajweedColor(html)` helper
 - `text_uthmani_tajweed` added as `word_field` on both fetchers (likely the bug — see backlog in TODO.md)
@@ -148,122 +161,85 @@ Bottom modal, opened by gear icon top-right of header.
 3. Autoplay-through-range toggle
 4. Blur-other-verses toggle
 5. Tajweed coloring toggle (wired but not rendering)
-6. Playback speed pills (0.75x, 0.85x, 1x, 1.15x, 1.25x, 1.5x)
-7. Theme pills (8 themes)
-8. Reciter pills (7 reciters, last-name only)
-9. Done button
-
-Slice 5a Session 3 will add: cumulative review toggle.
-
----
-
-## 5. Slice 5a Session 3 — what to ship next
-
-Cumulative review. JS-only.
-
-After Mark Complete, optionally play through everything from `ayahStart` to the verse just memorized, sequentially. Most-loved feature on web for retention.
-
-In `memorization.tsx`:
-- Add `const [cumulativeReview, setCumulativeReview]` state, default `false`
-- When `true`, after `submitMemorization` succeeds, instead of immediately showing the success alert:
-  - Set `currentVerse` back to `ayahStart`
-  - Engage autoplay-through-range (it already exists; reuse the autoPlayRef pattern)
-  - When the playback reaches the end of the range, show the success alert
-- Add a cumulative review toggle to the settings sheet (with the other toggles)
-
-**Behavioral interactions to think through:**
-- Repeat count: should each verse repeat N times during cumulative review, or just play once? Web treats cumulative as "play through once, no repeats." Recommend mirroring that.
-- Auto-advance delay: should respect the configured delay between verses. Reuse existing machinery.
-- Blind mode: incompatible with cumulative review (kid needs to *see* the words to refresh memory). Recommend auto-disabling blind mode during cumulative pass, OR just let it be — kid can toggle blind off if they want.
-- Blur mode: works fine; the active verse un-blurs as it plays. No special handling needed.
-- Mark Complete during cumulative pass: should be no-op. The flow already submitted before the cumulative pass started.
-- Stop button: kid should be able to abort cumulative review. The Pause button can serve this — just needs to also clear the pending success alert.
-
-If the state machine fights this, split. The cumulative-review machinery may live in its own ref/effect to avoid corrupting normal playback state.
-
-**Implementation skeleton:**
-
-```ts
-const [cumulativeReview, setCumulativeReview] = useState<boolean>(false);
-const cumulativeReviewRef = useRef(cumulativeReview);
-useEffect(() => { cumulativeReviewRef.current = cumulativeReview; }, [cumulativeReview]);
-
-const cumulativePassActiveRef = useRef(false);
-
-async function handleMarkComplete() {
-  if (!surahNumber || ayahStart === null || ayahEnd === null) return;
-  const ayahs = Array.from({ length: ayahEnd - ayahStart + 1 }, (_, i) => ayahStart + i);
-  setSubmitting(true);
-  try {
-    await submitMemorization(childId, { ... });
-    if (cumulativeReviewRef.current) {
-      // Kick off cumulative pass — defer the success alert
-      cumulativePassActiveRef.current = true;
-      autoPlayRef.current = true;
-      setCurrentVerse(ayahStart);
-      setSubmitting(false);
-      // Success alert fires from playVerse status callback when end-of-range reached
-    } else {
-      Alert.alert("Marked complete.", undefined, [{ text: "OK", onPress: () => router.back() }]);
-    }
-  } catch (e) {
-    Alert.alert("Error", e instanceof Error ? e.message : "Failed to save.");
-  } finally {
-    if (!cumulativeReviewRef.current) setSubmitting(false);
-  }
-}
-```
-
-In the `playVerse` status callback's natural-finish branch, after the existing auto-advance logic, add:
-
-```ts
-if (cumulativePassActiveRef.current && currentVerseRef.current >= ayahEndRef.current) {
-  cumulativePassActiveRef.current = false;
-  Alert.alert("Marked complete.", "Cumulative review done.", [
-    { text: "OK", onPress: () => router.back() },
-  ]);
-}
-```
-
-The existing autoplay-through-range logic in the status callback should naturally drive verse-to-verse advance during the cumulative pass since `autoPlayRef.current = true` was set in `handleMarkComplete`.
-
-Pause/abort: when the user taps Pause during cumulative review, set `cumulativePassActiveRef.current = false` so the success alert doesn't fire on the next verse-end. Verify the pause flow in `handlePlayPause` and add this clear if it's not already there.
-
-Settings sheet:
-
-```tsx
-<View style={styles.settingRow}>
-  <Text style={styles.settingLabel}>Cumulative review after Mark Complete</Text>
-  <Pressable
-    onPress={() => setCumulativeReview(!cumulativeReview)}
-    style={[styles.toggleSwitch, cumulativeReview && styles.toggleSwitchOn]}
-  >
-    <View style={[styles.toggleKnob, cumulativeReview && styles.toggleKnobOn]} />
-  </Pressable>
-</View>
-```
-
-Place the new toggle right below the "Tajweed coloring" toggle (or wherever it fits in the visual flow — Mohammad will adjust if needed).
-
-### Things explicitly NOT in Session 3
-
-- "Review repeat count" separate from main repeat count (web has it). Out of scope; tune later if requested.
-- Tajweed fix (still backlogged). Could be tackled in a small dedicated commit before 5b if Mohammad wants.
-- Real `expo-blur` (Slice 5b — requires rebuild)
-- Profile Settings page (Phase 2E)
+6. Cumulative review toggle
+7. Review repeat count stepper (conditional; visible when cumulative review is on)
+8. Playback speed pills (0.75x, 0.85x, 1x, 1.15x, 1.25x, 1.5x)
+9. Theme pills (8 themes)
+10. Reciter pills (7 reciters, last-name only)
+11. Done button
 
 ---
 
-## 6. Slice 5b — after Session 3
+## 5. Slice 5a Session 3 — current QA/sync checklist
 
-Real blur via `expo-blur`. Replaces the opacity-0.35 fallback used by `blurMode`. Requires EAS rebuild.
+Cumulative review is implemented locally on branch `safe-cumulative` through `b2b3186`. It is JS-only and `cd artifacts/noor-mobile && npx tsc --noEmit` was clean after the latest repeat-pass header change.
 
+Do **not** use `origin/main` as canonical for Session 3 yet: it still has `d01fae2`, the earlier wrong "after Mark Complete" approach. The canonical corrected local chain is:
+
+- `4599dff` — real web-style cumulative review state machine
+- `2eaad4b` — single-phase Next enters cumulative instead of skipping review
+- `34d0172` — final-verse Next starts final cumulative review
+- `2147b07` — final-verse Next button enabled for cumulative review
+- `b2b3186` — normal repeated verses show `Pass X/Y · Verse A of B`
+
+Hardware QA before 5b:
+- Al-Nasr 1-4, `repeatCount=3`, `reviewRepeatCount=2`, cumulative on. Expected: verse 1 repeats 3x; verse 2 repeats 3x; cumulative 1-2 twice; verse 3 repeats 3x; cumulative 1-3 twice; verse 4 repeats 3x; cumulative 1-4 twice; then complete.
+- On final verse, Next/skip must be enabled and start final cumulative review.
+- Next during final cumulative should exit cumulative and complete the session.
+- Prev during cumulative should bail to single phase and stay on the current study verse.
+- Pause/resume during cumulative should resume the current cumulative verse.
+- Single-verse range should never enter cumulative.
+- `cumulativeReview=false` should preserve previous behavior.
+- Header labels should show normal repeat pass (`Pass X/Y · Verse A of B`) and cumulative pass (`Pass X/Y · Ayahs A-B`).
+
+After QA, sync branches:
 ```
-pnpm add expo-blur
-eas build --profile development --platform ios
+git push origin safe-cumulative:main
+git checkout feature/main-working-branch
+git merge main
+git push origin feature/main-working-branch
+git checkout main
 ```
 
-Possibly bundle tajweed fix into this commit since you're rebuilding anyway. Or do tajweed first as a JS-only commit; doesn't matter.
+If push policy blocks direct remote updates, ask Mohammad to explicitly approve pushing the local `safe-cumulative` work to both branches.
+
+---
+
+## 6. Slice 5b — next action items
+
+Goal: real blur via `expo-blur`. This replaces the opacity-0.35 fallback currently used by `blurMode` in `memorization.tsx`.
+
+Scope:
+- Do **not** fix tajweed in 5b. Mohammad said "No tajweed for now" on Apr 28.
+- Native dependency is allowed here because 5b already requires an EAS rebuild.
+- Keep the code change focused on `artifacts/noor-mobile/app/child/[childId]/memorization.tsx`, except package manifest/lockfile changes from installing `expo-blur`.
+- Do not add `expo-linear-gradient` unless real blur cannot be made presentable without it.
+
+Implementation checklist:
+1. Start from a clean, QA-approved Session 3 branch.
+2. Install `expo-blur` in the mobile workspace. Watch for the Expo/pnpm trap: if `npx expo install` creates `artifacts/noor-mobile/package-lock.json`, delete it and keep the root `pnpm-lock.yaml` as the only lockfile.
+3. Import `BlurView` from `expo-blur`.
+4. Replace the page-mode opacity fallback (`styles.mushafWordBlurred`) with real blur for inactive in-scope words/verses while audio is playing.
+5. Preserve current semantics:
+   - active verse remains readable/unblurred
+   - out-of-scope words remain dimmed
+   - blind mode still hides/reveals as before
+   - tap-to-seek and long-press translation still work
+   - cumulative review and normal playback both update the active verse correctly via `playingVerseNumber`
+6. Avoid layout shifts. If per-word `BlurView` wrappers cause text wrapping or press handling problems, prefer a stable per-verse/line overlay approach in page mode.
+7. Run `cd artifacts/noor-mobile && npx tsc --noEmit`.
+8. Run dev client: `cd artifacts/noor-mobile && npx expo start --dev-client`.
+9. Build the new iOS dev client: `cd artifacts/noor-mobile && npx eas-cli@latest build --profile development --platform ios`.
+10. Install on iPhone and hardware-test:
+    - blur mode on/off while page-mode audio plays
+    - active verse unblurs as playback advances
+    - cumulative review still works
+    - playback rate still applies
+    - all 7 reciters still play
+    - long-press translation still opens
+    - blind mode still reveals/toggles
+    - recite mode still unloads audio and starts mic cleanly
+11. Commit and sync both branches.
 
 After 5b ships, Phase 2D is complete.
 
@@ -287,6 +263,7 @@ User also requested **deep-dive into web app's `noor-path/` for "lots of cool st
 
 - Claude Code prompts as markdown blocks. User pastes; reports back commit SHA + typecheck.
 - **Test-then-ship.** Every slice tested on EAS dev build before next prompt drafted.
+- **Docs after every meaningful action.** Update `TODO.md` and `PHASE_2D_HANDOFF.md` with current date, active branch, latest local SHA, remote sync status, QA results, and the exact next checklist. Never leave a completed slice described as "next."
 - Read existing files before writing. Don't guess data shapes.
 - Both branches stay in sync. Every commit:
   ```
@@ -352,10 +329,11 @@ User also requested **deep-dive into web app's `noor-path/` for "lots of cool st
 ## 9. What to do first in the next session
 
 1. **Read `TODO.md` and this handoff.** This one supersedes earlier handoffs.
-2. **Confirm with Mohammad whether to proceed with Session 3 (cumulative review) or address tajweed first.** Mohammad explicitly backlogged tajweed; Session 3 is the recommended next step. He'll say if he wants tajweed first.
-3. **For cumulative review:** read existing `handleMarkComplete` and the `playVerse` status callback (auto-advance branch). Plan the integration. Draft the prompt.
-4. **Test on hardware after the commit.** Pay special attention to: pause-during-cumulative-pass, blind mode interaction, success alert firing exactly once at end of range.
-5. **Same Claude Code prompt pattern as throughout this project.**
+2. **Check git state.** Expected local branch is `safe-cumulative` at or after `b2b3186`. Remote branches may still be stale.
+3. **Do not start 5b until Slice 5a Session 3 is hardware-tested.** Run the cumulative review QA checklist in Section 5.
+4. **After QA, sync the corrected local work to `main` and `feature/main-working-branch`.** If the push needs explicit approval, ask Mohammad.
+5. **Then implement Slice 5b (`expo-blur`) using Section 6.** Do not touch tajweed unless Mohammad explicitly changes his mind.
+6. **Same Codex/Claude Code prompt pattern as throughout this project.**
 
 ---
 
@@ -363,7 +341,7 @@ User also requested **deep-dive into web app's `noor-path/` for "lots of cool st
 
 The whole reason this app exists is so Mohammad's kids can use it to memorize Quran with him. The app already works for that purpose — kid sits down with iPhone, opens NoorPath, picks themself, hits Memorization, sees today's verses, hits Play, follows their chosen reciter (Husary, Afasy, Sudais, Basit, Minshawi, Ghamdi, or Ajmi) word by word in the Madinah-themed Mushaf at their preferred speed (0.75x for slow learning, 1x for normal, faster for review), long-presses any word for an English translation, marks complete, and it lands in Review. They can recite back to the app and get word-by-word feedback. They can switch themes. That's done.
 
-Slice 5a Session 3 adds cumulative review (the retention secret weapon). 5b adds real blur. After that Phase 2D is done and we move to dashboard polish (2E) + target setting (2F) before TestFlight.
+Slice 5a Session 3 added cumulative review (the retention secret weapon) locally and needs final hardware QA/sync. 5b adds real blur. After that Phase 2D is done and we move to dashboard polish (2E) + target setting (2F) before TestFlight.
 
 Phase 3 takes it through TestFlight to the App Store.
 

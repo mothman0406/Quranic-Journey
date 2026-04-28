@@ -1,6 +1,18 @@
 # NoorPath / Quranic Journey — Status & Next Steps
 
-_Last updated: April 27, 2026 (Phase 2D Slice 5a Session 2 shipped + tested except tajweed; Slice 5a Session 3 next)_
+_Last updated: April 28, 2026 (Phase 2D Slice 5a Session 3 implemented locally on `safe-cumulative`; hardware QA + branch sync next, then Slice 5b real blur)_
+
+---
+
+## Documentation rule for every new action
+
+After every meaningful action, update this file and `PHASE_2D_HANDOFF.md` before handing off:
+
+- Update the "Last updated" line with the date and actual current state.
+- Record the active branch, latest local SHA, and whether remote branches are synced or stale.
+- Move completed work out of "next" sections and into the done/current-state section.
+- Add any hardware QA results or known failures immediately.
+- Make the next action checklist concrete enough that a fresh Codex/Claude chat can start without reconstructing context.
 
 ---
 
@@ -12,7 +24,7 @@ _Last updated: April 27, 2026 (Phase 2D Slice 5a Session 2 shipped + tested exce
 - `PROD_ALLOWED_ORIGINS` + `PROD_TRUSTED_ORIGINS` configured for CORS / Better Auth
 - `/api/healthz` returns `{"status":"ok"}` (public, mounted above `requireAuth`)
 - Three secrets rotated (Neon password, Better Auth secret, Hugging Face token)
-- Both branches synced
+- Branch-sync note: historically `main` + `feature/main-working-branch` stay synced, but current Slice 5a Session 3 work is local on `safe-cumulative` through `b2b3186`. `origin/main` still points at obsolete `d01fae2` (wrong Mark Complete-style cumulative review) and `origin/feature/main-working-branch` is still `6104bce` until Mohammad approves/pushes the corrected local work.
 - Typecheck baseline clean
 - iOS bundle identifier registered: `com.mothman.noorpath`
 - EAS project created at `@mothman123/noor-mobile`
@@ -90,7 +102,7 @@ Review queue loads with red/orange/green priority pills; surah review session sh
 
 ---
 
-## ✅ DONE — Phase 2D — Memorization mode (Slices 1–4 + Slice 5a Sessions 1–2)
+## ✅ DONE — Phase 2D — Memorization mode (Slices 1–4 + Slice 5a Sessions 1–3 local)
 
 ### Phase 2D-Core (Slice 1) — `5650d9e` + `e752721`
 
@@ -155,18 +167,58 @@ JS-only. Three features in one commit:
 
 ---
 
-## 🔜 Phase 2D-Polish Slice 5a Session 3 — cumulative review (next)
+### Phase 2D-Polish Slice 5a Session 3 — cumulative review — local branch `safe-cumulative`
 
-Most behaviorally complex Session 5a item. JS-only.
+JS-only. Implemented locally and typechecked, but still needs hardware QA and branch sync before 5b.
 
-- **Cumulative review mode** — after Mark Complete, optionally play through `ayahStart..currentVerse` sequentially before showing the success alert. Reuse existing autoplay-through-range machinery. Settings toggle.
-- Watch for interaction with auto-advance, repeat counts, blind/blur modes, and existing Mark Complete flow. If it's fighting the state machine, split further.
+Current local commits:
+- `4599dff` — web-style cumulative review state machine (`internalPhase: "single" | "cumulative"`, `cumAyahIdx`, `cumPass`, `cumUpTo`, `playingVerseNumber`, `reviewRepeatCount`)
+- `2eaad4b` — skip handling fix: Next from newest single verse enters cumulative instead of skipping review
+- `34d0172` — final-verse Next starts final cumulative review instead of completing immediately
+- `2147b07` — final-verse Next button enabled when cumulative review can start
+- `b2b3186` — normal repeated verses show `Pass X/Y · Verse A of B` in the header
+
+Behavior now mirrors the web retention flow:
+- `cumulativeReview` toggle defaults false each screen mount.
+- `reviewRepeatCount` defaults 3 and ranges 1-10.
+- After each new verse finishes its normal repeats, cumulative review plays `ayahStart..currentVerse` for `reviewRepeatCount` passes.
+- During cumulative review, each verse plays once (no per-verse repeats).
+- Header shows `Pass X/Y · Ayahs A-B` during cumulative review.
+- Header shows `Pass X/Y · Verse A of B` during normal repeated single-verse playback.
+- `Next` during cumulative exits cumulative and advances/completes; `Prev` during cumulative bails back to single phase.
+- `Mark Complete` remains submit + success alert; cumulative review happens during memorization, not after submit.
+
+Before 5b, hardware-test on iPhone:
+- Al-Nasr 1-4 with `repeatCount=3`, `reviewRepeatCount=2`, cumulative on: verse 1 repeats, verse 2 repeats, cumulative 1-2 twice, verse 3 repeats, cumulative 1-3 twice, verse 4 repeats, cumulative 1-4 twice, then complete.
+- On verse 4, `Next` must be enabled and start final cumulative review.
+- `Next` during final cumulative should exit cumulative and complete the session.
+- `Prev` during cumulative should bail to single phase on the current study verse.
+- Single-verse range (`ayahStart === ayahEnd`) never enters cumulative.
+- `cumulativeReview=false` preserves old behavior.
+- Header labels update correctly for both normal repeats and cumulative passes.
+- Typecheck command remains clean: `cd artifacts/noor-mobile && npx tsc --noEmit`.
 
 ## 🔜 Phase 2D-Polish Slice 5b — `expo-blur` (requires EAS rebuild)
 
-- Real blur via `expo-blur` (replaces opacity-0.35 fallback used by `blurMode`)
-- Possibly `expo-linear-gradient` for parchment shading if rebuild is happening anyway — judgment call
-- Tajweed fix (still JS-only — could ship before 5b if user wants it)
+Goal: real blur via `expo-blur`, replacing the current opacity fallback (`styles.mushafWordBlurred { opacity: 0.35 }`) used by `blurMode` in `memorization.tsx`.
+
+Scope for 5b:
+- Do **not** do tajweed now. Mohammad explicitly said "No tajweed for now" on Apr 28.
+- Add native dependency `expo-blur` and rebuild the EAS development app.
+- Preserve current blur semantics: only blur/dim in-scope non-active verses while audio is playing; active verse remains readable; out-of-scope words stay dimmed; blind mode still works; tap-to-seek and long-press translation still work.
+- Keep implementation focused on `memorization.tsx` unless Expo install changes package manifests/lockfile.
+- Avoid adding `expo-linear-gradient` unless the blur implementation truly needs it. Real blur is the slice.
+
+Implementation checklist:
+1. Start from clean `safe-cumulative` after Session 3 hardware QA, then sync/push corrected cumulative work to `main` and `feature/main-working-branch`.
+2. Install `expo-blur` for the mobile workspace. Preferred pnpm-safe approach: use Expo's installer from `artifacts/noor-mobile`, then delete any accidental `package-lock.json` and make sure the root `pnpm-lock.yaml` is the only lockfile.
+3. Import `BlurView` from `expo-blur`.
+4. Replace the opacity-only inactive-word treatment in page-mode `renderMushafPage` with a real blur treatment. Keep layout stable and do not break `Pressable` handlers.
+5. Confirm the blur works in Full Mushaf page mode while audio plays through a range; active verse should unblur as it becomes active.
+6. Run `cd artifacts/noor-mobile && npx tsc --noEmit`.
+7. Run the dev client (`npx expo start --dev-client`) and trigger a new development build: `npx eas-cli@latest build --profile development --platform ios`.
+8. Install on iPhone and hardware-test blur + a quick regression pass for cumulative review, playback rate, reciters, translation popup, blind mode, and recite mode audio/mic handoff.
+9. Commit and sync both branches.
 
 After Slice 5b ships, Phase 2D is complete.
 
@@ -317,10 +369,10 @@ After Phase 2D, before TestFlight. User-requested:
 | Frontend (dev) | `http://localhost:5173` |
 | Database | Neon serverless Postgres (rotated Apr 26) |
 | Repo | `https://github.com/mothman0406/Quranic-Journey` |
-| Branches | `main` (deploy), `feature/main-working-branch` |
+| Branches | Normal policy: `main` (deploy) + `feature/main-working-branch`; current local work is on `safe-cumulative` until Session 3 QA/sync |
 | Apple Developer | Approved Apr 26; Team ID `M7KJJDN537` |
 | iOS bundle identifier | `com.mothman.noorpath` |
 | EAS project | `@mothman123/noor-mobile` |
 | Railway project | `humble-laughter` / `production` env |
-| Mobile app HEAD | `18f054d` (Slice 5a Session 2 — translations + playback rate working, tajweed wiring shipped but not coloring) |
+| Mobile app HEAD | Local: `b2b3186` on `safe-cumulative` (Slice 5a Session 3 cumulative review + repeat pass labels). Remote `origin/main` is stale at `d01fae2`; remote `feature/main-working-branch` is stale at `6104bce`. |
 </content>
