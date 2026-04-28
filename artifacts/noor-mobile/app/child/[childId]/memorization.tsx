@@ -825,6 +825,8 @@ export default function MemorizationScreen() {
       ) {
         autoPlayRef.current = true;
         setCurrentVerse((v) => v + 1);
+      } else {
+        handleSessionComplete();
       }
       return;
     }
@@ -845,13 +847,14 @@ export default function MemorizationScreen() {
       cumPassRef.current = 1;
       setInternalPhase("cumulative");
       internalPhaseRef.current = "cumulative";
-      if (isPlayingRef.current) {
-        void stopAudioCompletely();
-      }
+      void stopAudioCompletely();
       return;
     }
 
-    if (ayahEnd === null || currentVerse >= ayahEnd) return;
+    if (ayahEnd === null || currentVerse >= ayahEnd) {
+      handleSessionComplete();
+      return;
+    }
     autoPlayRef.current = true;
     setCurrentVerse((v) => v + 1);
   }
