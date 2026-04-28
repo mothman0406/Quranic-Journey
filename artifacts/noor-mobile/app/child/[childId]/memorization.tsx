@@ -81,6 +81,7 @@ export default function MemorizationScreen() {
   const [chaptersMap, setChaptersMap] = useState<Map<number, ApiChapter>>(new Map());
 
   const [isPlaying, setIsPlaying] = useState(false);
+  const [currentRepeatDisplay, setCurrentRepeatDisplay] = useState(1);
   const [highlightedWord, setHighlightedWord] = useState(-1);
   const [highlightedPage, setHighlightedPage] = useState<{
     verseKey: string;
@@ -410,7 +411,7 @@ export default function MemorizationScreen() {
 
   // Cleanup + optional auto-play on verse change
   useEffect(() => {
-    currentRepeatRef.current = 1;
+    setCurrentRepeat(1);
     if (advanceTimeoutRef.current) {
       clearTimeout(advanceTimeoutRef.current);
       advanceTimeoutRef.current = null;
@@ -553,6 +554,11 @@ export default function MemorizationScreen() {
     setHighlightedPage(null);
   }
 
+  function setCurrentRepeat(nextRepeat: number) {
+    currentRepeatRef.current = nextRepeat;
+    setCurrentRepeatDisplay(nextRepeat);
+  }
+
   function handleAllRepeatsDone() {
     if (advanceTimeoutRef.current) {
       clearTimeout(advanceTimeoutRef.current);
@@ -578,7 +584,7 @@ export default function MemorizationScreen() {
     if (internalPhaseRef.current === "single") {
       const cur = currentVerseRef.current;
       if (cumulativeReviewRef.current && cur > fromA) {
-        currentRepeatRef.current = 1;
+        setCurrentRepeat(1);
         autoPlayRef.current = true;
         setCumUpTo(cur);
         cumUpToRef.current = cur;
@@ -595,7 +601,7 @@ export default function MemorizationScreen() {
         const shouldAutoAdvance =
           cumulativeReviewRef.current ||
           (viewModeRef.current === "page" && autoplayThroughRangeRef.current);
-        currentRepeatRef.current = 1;
+        setCurrentRepeat(1);
         if (shouldAutoAdvance) {
           scheduleNext(() => {
             autoPlayRef.current = true;
@@ -612,7 +618,7 @@ export default function MemorizationScreen() {
     const rangeLen = cumUpToRef.current - fromA + 1;
     const nextIdx = cumAyahIdxRef.current + 1;
     if (nextIdx < rangeLen) {
-      currentRepeatRef.current = 1;
+      setCurrentRepeat(1);
       autoPlayRef.current = true;
       setCumAyahIdx(nextIdx);
       cumAyahIdxRef.current = nextIdx;
@@ -621,7 +627,7 @@ export default function MemorizationScreen() {
 
     const nextPass = cumPassRef.current + 1;
     if (nextPass <= reviewRepeatCountRef.current) {
-      currentRepeatRef.current = 1;
+      setCurrentRepeat(1);
       autoPlayRef.current = true;
       setCumAyahIdx(0);
       cumAyahIdxRef.current = 0;
@@ -633,7 +639,7 @@ export default function MemorizationScreen() {
     setInternalPhase("single");
     internalPhaseRef.current = "single";
     if (currentVerseRef.current < toA) {
-      currentRepeatRef.current = 1;
+      setCurrentRepeat(1);
       scheduleNext(() => {
         autoPlayRef.current = true;
         setCurrentVerse((v) => v + 1);
@@ -666,7 +672,7 @@ export default function MemorizationScreen() {
             const effectiveRepeatCount =
               internalPhaseRef.current === "cumulative" ? 1 : repeatCountRef.current;
             if (currentRepeatRef.current < effectiveRepeatCount) {
-              currentRepeatRef.current += 1;
+              setCurrentRepeat(currentRepeatRef.current + 1);
               soundRef.current
                 ?.setPositionAsync(0)
                 .then(() => soundRef.current?.playAsync())
@@ -674,7 +680,7 @@ export default function MemorizationScreen() {
               return;
             }
             // All repeats done for this verse
-            currentRepeatRef.current = 1;
+            setCurrentRepeat(1);
             cancelAnimationFrame(rafIdRef.current);
             isPlayingRef.current = false;
             setIsPlaying(false);
@@ -756,7 +762,7 @@ export default function MemorizationScreen() {
       await soundRef.current.playAsync();
       startRAF();
     } else {
-      currentRepeatRef.current = 1;
+      setCurrentRepeat(1);
       await playVerse(playingVerseNumberRef.current);
     }
   }
@@ -837,7 +843,7 @@ export default function MemorizationScreen() {
       currentVerseRef.current > ayahStartRef.current
     ) {
       const cur = currentVerseRef.current;
-      currentRepeatRef.current = 1;
+      setCurrentRepeat(1);
       autoPlayRef.current = true;
       setCumUpTo(cur);
       cumUpToRef.current = cur;
@@ -1270,6 +1276,7 @@ export default function MemorizationScreen() {
   const ayahVerseHidden = blindMode && !revealedVerses.has(ayahVerseKey);
   const verseIndex = ayahStart !== null ? currentVerse - ayahStart + 1 : 1;
   const totalVerses = ayahStart !== null && ayahEnd !== null ? ayahEnd - ayahStart + 1 : 0;
+  const singleRepeatPass = Math.min(currentRepeatDisplay, repeatCount);
   const canPrev = ayahStart !== null && currentVerse > ayahStart;
   const canEnterCumulativeFromSingle =
     internalPhase === "single" &&
@@ -1314,6 +1321,8 @@ export default function MemorizationScreen() {
             ? `Recite Verse ${verseIndex} of ${totalVerses}`
             : internalPhase === "cumulative" && ayahStart !== null
               ? `Pass ${cumPass}/${reviewRepeatCount} · Ayahs ${ayahStart}–${cumUpTo}`
+              : repeatCount > 1
+                ? `Pass ${singleRepeatPass}/${repeatCount} · Verse ${verseIndex} of ${totalVerses}`
               : `Verse ${verseIndex} of ${totalVerses}`}
         </Text>
         <Pressable
