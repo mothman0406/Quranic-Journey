@@ -8,7 +8,7 @@ This handoff supersedes earlier handoff drafts.
 ## Current work log — 2026-04-28
 
 - Active branch/SHA: `main`; Phase 2F target-setting UI commit is `fe83e97`; API client hardening commit is `ce8b9f6`; latest docs sync is current branch HEAD.
-- Remote sync status: pending final push at the time of this docs edit; after sync, `main`, `origin/main`, `feature/main-working-branch`, and `origin/feature/main-working-branch` should all contain `ce8b9f6` plus this docs sync. `safe-cumulative` is intentionally behind and can be ignored.
+- Remote sync status: `main`, `origin/main`, `feature/main-working-branch`, and `origin/feature/main-working-branch` are synced at the latest docs sync/current branch HEAD. `safe-cumulative` is intentionally behind and can be ignored.
 - QA status: `cd artifacts/noor-mobile && npx tsc --noEmit` passed clean after Phase 2F edits and again after the API client hardening hotfix. Production `/api/children/23/dashboard` returned 200 with the active Better Auth session after the user screenshot showed a transient API 500. Hardware re-QA is pending.
 - Dev-server note: starting Expo inside the sandbox fails with `ERR_SOCKET_BAD_PORT` because sandboxed Node cannot bind local ports (`EPERM` on 8081). Run the dev server outside the sandbox/escalated when using this environment.
 - Inspection notes: initial Phase 2E inspection found `app/child/[childId]/index.tsx` was a three-card skeleton; `src/lib/api.ts` is a thin authenticated fetch helper; `/api/children/:id/dashboard` exposes `todaysPlan.newMemorization`, `todayProgress`, `reviewsDueToday`, and `readingGoal`; `/api/children/:id/reviews` exposes detailed queue items with `reviewPriority`.
@@ -18,11 +18,10 @@ This handoff supersedes earlier handoff drafts.
 - Phase 2F implementation notes: added `app/child/[childId]/targets.tsx`, registered it in the child stack, added a dashboard `Targets` entry point, and made the dashboard refresh on focus after returning from target edits. The screen uses preset chips plus minus/plus fine tuning and saves directly through `apiFetch`.
 - Phase 2F hotfix notes: after a screenshot showed the dashboard rendering raw HTML from an API 500, production was checked directly and returned 200 for child L. `apiFetch` now sends `x-local-date` from the phone and normalizes JSON/plain-text/HTML failures into short readable error messages instead of showing full HTML documents.
 - Exact next checklist:
-  1. Sync `main` and `feature/main-working-branch` after this docs refresh.
-  2. Ask Mohammad to tap Retry/reopen L's dashboard in the existing dev client.
-  3. Re-test `Targets`: change memorization, review, and reading targets; confirm saved indicators.
-  4. Return to the dashboard and verify the cards reflect the saved target values.
-  5. If approved, move to Phase 3 TestFlight polish or the planned web-app deep dive.
+  1. Ask Mohammad to tap Retry/reopen L's dashboard in the existing dev client.
+  2. Re-test `Targets`: change memorization, review, and reading targets; confirm saved indicators.
+  3. Return to the dashboard and verify the cards reflect the saved target values.
+  4. If approved, move to Phase 3 TestFlight polish or the planned web-app deep dive.
 
 ---
 
