@@ -1,6 +1,6 @@
 # NoorPath / Quranic Journey — Status & Next Steps
 
-_Last updated: April 28, 2026 (Phase 2D Slice 5a Session 3 hardware-tested and synced; Slice 5b real blur code/docs synced to both branches; EAS build pending explicit approval/manual run)_
+_Last updated: April 28, 2026 (Phase 2D complete through Slice 5b real blur hardware QA; branches synced; Phase 2E dashboard polish is next)_
 
 ---
 
@@ -24,7 +24,7 @@ After every meaningful action, update this file and `PHASE_2D_HANDOFF.md` before
 - `PROD_ALLOWED_ORIGINS` + `PROD_TRUSTED_ORIGINS` configured for CORS / Better Auth
 - `/api/healthz` returns `{"status":"ok"}` (public, mounted above `requireAuth`)
 - Three secrets rotated (Neon password, Better Auth secret, Hugging Face token)
-- Branch-sync note: `main` + `feature/main-working-branch` are synced with Slice 5b code/docs. Slice 5b code commit is `aa004ff`; latest docs refresh is current branch HEAD.
+- Branch-sync note: `main` + `feature/main-working-branch` are synced with Slice 5b code/docs. `safe-cumulative` was the temporary rescue branch and currently matches them. Slice 5b code commit is `aa004ff`; latest docs refresh is current branch HEAD.
 - Typecheck baseline clean
 - iOS bundle identifier registered: `com.mothman.noorpath`
 - EAS project created at `@mothman123/noor-mobile`
@@ -192,42 +192,39 @@ Hardware QA status:
 - Mohammad tested the final cumulative review fixes and repeat-pass header and approved moving to 5b.
 - Branches were synced afterward: `origin/main` and `origin/feature/main-working-branch` advanced to `7e56509`.
 
-### Phase 2D-Polish Slice 5b — `expo-blur` — code committed at `aa004ff`
+### Phase 2D-Polish Slice 5b — `expo-blur` — `aa004ff`
 
 Goal: real blur via `expo-blur`, replacing the current opacity fallback (`styles.mushafWordBlurred { opacity: 0.35 }`) used by `blurMode` in `memorization.tsx`.
 
-Completed locally:
+Completed and hardware-tested:
 - Installed `expo-blur@~15.0.8` in `@workspace/noor-mobile` using pnpm.
 - Updated `memorization.tsx` page-mode word rendering to use a `BlurView` overlay for inactive in-scope words while audio is playing.
 - Removed the old opacity fallback from blurred words.
 - Preserved `Pressable` handlers so tap-to-seek and long-press translation still route through the same word wrapper.
 - Ran `cd artifacts/noor-mobile && npx tsc --noEmit` clean.
+- EAS development build finished: `cfb3f406-5fec-405a-a150-e525a96ecff2`.
+- User installed/tested the build and reported "All done."
+- Metro initially showed a stale `Unable to resolve "expo-blur"` bundle error after native install; restarting `npx expo start --dev-client --clear` with the new dev build resolved the expected native-dependency refresh path.
 
-Scope reminders:
-- Do **not** do tajweed now. Mohammad explicitly said "No tajweed for now" on Apr 28.
-- Preserve current blur semantics: only blur/dim in-scope non-active verses while audio is playing; active verse remains readable; out-of-scope words stay dimmed; blind mode still works; tap-to-seek and long-press translation still work.
-- Avoid adding `expo-linear-gradient` unless the blur implementation truly needs it. Real blur is the slice.
-
-Next checklist:
-1. Start the required EAS development build. Codex could not start it because that uploads private repo contents to Expo's external EAS service and requires explicit approval. Manual command:
-   `cd artifacts/noor-mobile && npx eas-cli@latest build --profile development --platform ios --non-interactive --no-wait`
-2. Install the new dev build on iPhone.
-3. Hardware-test blur mode in Full Mushaf page mode while audio plays through a range.
-4. Confirm active verse unblurs as playback advances.
-5. Quick regression pass: cumulative review, playback rate, all reciters, translation popup, blind mode, recite mode audio/mic handoff.
-6. If hardware QA passes, mark Slice 5b done; Phase 2D is complete.
-
-After Slice 5b ships, Phase 2D is complete.
+Phase 2D is complete. Tajweed remains wired-but-not-rendering and is intentionally backlogged.
 
 ---
 
-## 🔜 Phase 2E — dashboard polish & today's-work content
+## 🔜 NEXT — Phase 2E — dashboard polish & today's-work content
 
-After Phase 2D, before TestFlight. User-requested:
+Before target-setting/TestFlight. User-requested:
 
 - Today's-work content on the three dashboard cards (Memorization / Review / Reading banners — show what's queued)
 - Red/orange/green surah quality coloring on review queue
 - Profile selector polish
+
+Starter checklist for the next chat:
+1. Work from `main`; `safe-cumulative` can be ignored unless needed for archaeology.
+2. Read `artifacts/noor-mobile/app/child/[childId]/index.tsx` and the supporting dashboard/API data shape in `src/lib/api.ts` or nearby libs.
+3. Use `artifacts/noor-path/` only as read-only reference if dashboard behavior needs web context.
+4. Keep this slice JS-only if possible; do not touch tajweed.
+5. Run `cd artifacts/noor-mobile && npx tsc --noEmit`.
+6. Update this file and `PHASE_2D_HANDOFF.md` after meaningful work with branch/SHA, remote sync, QA, and the next checklist.
 
 ## 🔜 Phase 2F — target-setting UI
 
@@ -366,10 +363,10 @@ After Phase 2D, before TestFlight. User-requested:
 | Frontend (dev) | `http://localhost:5173` |
 | Database | Neon serverless Postgres (rotated Apr 26) |
 | Repo | `https://github.com/mothman0406/Quranic-Journey` |
-| Branches | `main` (deploy) + `feature/main-working-branch`; both synced with Slice 5b code/docs |
+| Branches | `main` (deploy) + `feature/main-working-branch`; both synced with Slice 5b code/docs. `safe-cumulative` currently matches but should not be the default working branch. |
 | Apple Developer | Approved Apr 26; Team ID `M7KJJDN537` |
 | iOS bundle identifier | `com.mothman.noorpath` |
 | EAS project | `@mothman123/noor-mobile` |
 | Railway project | `humble-laughter` / `production` env |
-| Mobile app HEAD | Slice 5b code commit `aa004ff` on `safe-cumulative`; includes `expo-blur` and clean mobile typecheck. EAS build/hardware QA pending. |
+| Mobile app HEAD | Phase 2D complete through Slice 5b. Slice 5b code commit `aa004ff`; latest docs refresh is current branch HEAD. EAS build `cfb3f406-5fec-405a-a150-e525a96ecff2` finished and was hardware-tested by Mohammad. Next work should start from `main`. |
 </content>
