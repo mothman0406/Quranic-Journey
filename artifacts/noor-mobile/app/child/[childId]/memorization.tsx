@@ -814,6 +814,7 @@ export default function MemorizationScreen() {
       clearTimeout(advanceTimeoutRef.current);
       advanceTimeoutRef.current = null;
     }
+
     if (internalPhaseRef.current === "cumulative") {
       void stopAudioCompletely();
       setInternalPhase("single");
@@ -827,6 +828,29 @@ export default function MemorizationScreen() {
       }
       return;
     }
+
+    if (
+      cumulativeReviewRef.current &&
+      ayahStartRef.current !== null &&
+      currentVerseRef.current > ayahStartRef.current
+    ) {
+      const cur = currentVerseRef.current;
+      currentRepeatRef.current = 1;
+      autoPlayRef.current = true;
+      setCumUpTo(cur);
+      cumUpToRef.current = cur;
+      setCumAyahIdx(0);
+      cumAyahIdxRef.current = 0;
+      setCumPass(1);
+      cumPassRef.current = 1;
+      setInternalPhase("cumulative");
+      internalPhaseRef.current = "cumulative";
+      if (isPlayingRef.current) {
+        void stopAudioCompletely();
+      }
+      return;
+    }
+
     if (ayahEnd === null || currentVerse >= ayahEnd) return;
     autoPlayRef.current = true;
     setCurrentVerse((v) => v + 1);
