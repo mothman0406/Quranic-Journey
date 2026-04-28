@@ -9,7 +9,11 @@ import {
   View,
 } from "react-native";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
-import { apiFetch } from "@/src/lib/api";
+import {
+  ApiError,
+  apiFetch,
+  getApiRuntimeInfo,
+} from "@/src/lib/api";
 import { fetchReviewQueue, type ReviewQueueItem, type ReviewQueueResponse } from "@/src/lib/reviews";
 import { getReviewPriorityStyle } from "@/src/lib/review-priority";
 
@@ -67,15 +71,26 @@ type DashboardResponse = {
   readingGoal: ReadingGoal | null;
 };
 
+type DiagnosticStep = {
+  label: string;
+  status: "ok" | "failed";
+  detail: string;
+};
+
+type DashboardDiagnostics = ReturnType<typeof getApiRuntimeInfo> & {
+  steps: DiagnosticStep[];
+};
+
 type DashboardState =
   | { status: "loading" }
-  | { status: "error"; message: string }
+  | { status: "error"; message: string; diagnostics: DashboardDiagnostics }
   | {
       status: "ok";
       dashboard: DashboardResponse;
       reviews: ReviewQueueResponse | null;
       reviewError: string | null;
       dashboardError: string | null;
+      diagnostics: DashboardDiagnostics;
     };
 
 type CardTone = {
@@ -124,6 +139,33 @@ function wait(ms: number) {
   return new Promise((resolve) => {
     setTimeout(resolve, ms);
   });
+}
+
+function makeDiagnostics(steps: DiagnosticStep[]): DashboardDiagnostics {
+  return {
+    ...getApiRuntimeInfo(),
+    steps,
+  };
+}
+
+function describeError(error: unknown) {
+  if (error instanceof ApiError) {
+    return `${error.message} (${error.path}; cookie=${error.hasCookie ? "yes" : "no"})`;
+  }
+  if (error instanceof Error) {
+    return error.message;
+  }
+  return "Unknown failure";
+}
+
+function fallbackChild(childId: string | undefined, name: string | undefined): ChildDetail {
+  return {
+    name: name || (childId ? `Child ${childId}` : "Child"),
+    avatarEmoji: "?",
+    streakDays: 0,
+    totalPoints: 0,
+    readPagesPerDay: 0,
+  };
 }
 
 function fallbackDashboard(
@@ -235,6 +277,36 @@ function ReviewPreviewItem({ item }: { item: ReviewQueueItem }) {
   );
 }
 
+function DashboardDiagnosticPanel({
+  diagnostics,
+}: {
+  diagnostics: DashboardDiagnostics;
+}) {
+  return (
+    <View style={styles.diagnosticBox}>
+      <Text style={styles.diagnosticTitle}>
+        NoorPath diagnostic · {diagnostics.marker}
+      </Text>
+      <Text style={styles.diagnosticText}>API: {diagnostics.baseURL}</Text>
+      <Text style={styles.diagnosticText}>
+        Local date: {diagnostics.localDate} · Cookie:{" "}
+        {diagnostics.hasCookie ? "present" : "missing"}
+      </Text>
+      {diagnostics.steps.map((step, index) => (
+        <Text
+          key={`${step.label}-${index}`}
+          style={[
+            styles.diagnosticText,
+            step.status === "failed" && styles.diagnosticFailed,
+          ]}
+        >
+          {step.status === "ok" ? "OK" : "FAIL"} {step.label}: {step.detail}
+        </Text>
+      ))}
+    </View>
+  );
+}
+
 export default function ChildDashboard() {
   const { childId, name } = useLocalSearchParams<{ childId: string; name: string }>();
   const router = useRouter();
@@ -243,31 +315,75 @@ export default function ChildDashboard() {
 
   const loadDashboard = useCallback(
     async (mode: "initial" | "refresh" = "initial") => {
+      const steps: DiagnosticStep[] = [];
+      const childIdParam = childId;
+      const nameParam = name;
+
       if (mode === "initial") {
         setState({ status: "loading" });
       } else {
         setRefreshing(true);
       }
 
+      if (!childIdParam) {
+        steps.push({
+          label: "route params",
+          status: "failed",
+          detail: "missing childId",
+        });
+        setState({
+          status: "error",
+          message: "Missing child dashboard id.",
+          diagnostics: makeDiagnostics(steps),
+        });
+        setRefreshing(false);
+        return;
+      }
+
       try {
         let dashboard: DashboardResponse;
         try {
           dashboard = await apiFetch<DashboardResponse>(
-            `/api/children/${childId}/dashboard`,
+            `/api/children/${childIdParam}/dashboard`,
           );
-        } catch {
+          steps.push({
+            label: "dashboard first attempt",
+            status: "ok",
+            detail: "200",
+          });
+        } catch (firstDashboardError) {
+          steps.push({
+            label: "dashboard first attempt",
+            status: "failed",
+            detail: describeError(firstDashboardError),
+          });
           await wait(350);
           dashboard = await apiFetch<DashboardResponse>(
-            `/api/children/${childId}/dashboard`,
+            `/api/children/${childIdParam}/dashboard`,
           );
+          steps.push({
+            label: "dashboard retry",
+            status: "ok",
+            detail: "200",
+          });
         }
         let reviews: ReviewQueueResponse | null = null;
         let reviewError: string | null = null;
 
         try {
-          reviews = await fetchReviewQueue(childId);
+          reviews = await fetchReviewQueue(childIdParam);
+          steps.push({
+            label: "review queue",
+            status: "ok",
+            detail: "loaded",
+          });
         } catch (e) {
-          reviewError = e instanceof Error ? e.message : "Review queue unavailable";
+          reviewError = describeError(e);
+          steps.push({
+            label: "review queue",
+            status: "failed",
+            detail: reviewError,
+          });
         }
 
         setState({
@@ -276,42 +392,60 @@ export default function ChildDashboard() {
           reviews,
           reviewError,
           dashboardError: null,
+          diagnostics: makeDiagnostics(steps),
         });
       } catch (e) {
-        const dashboardError =
-          e instanceof Error ? e.message : "Today's plan is temporarily unavailable.";
+        const dashboardError = describeError(e);
+        let reviews: ReviewQueueResponse | null = null;
+        let reviewError: string | null = null;
+        let child: ChildDetail | null = null;
+
         try {
-          let reviews: ReviewQueueResponse | null = null;
-          let reviewError: string | null = null;
-
-          try {
-            reviews = await fetchReviewQueue(childId);
-          } catch (reviewFetchError) {
-            reviewError =
-              reviewFetchError instanceof Error
-                ? reviewFetchError.message
-                : "Review queue unavailable";
-          }
-
-          const child = await apiFetch<ChildDetail>(`/api/children/${childId}`);
-          setState({
+          reviews = await fetchReviewQueue(childIdParam);
+          steps.push({
+            label: "fallback review queue",
             status: "ok",
-            dashboard: fallbackDashboard(child, reviews),
-            reviews,
-            reviewError,
-            dashboardError,
+            detail: "loaded",
           });
-        } catch {
-          setState({
-            status: "error",
-            message: dashboardError,
+        } catch (reviewFetchError) {
+          reviewError = describeError(reviewFetchError);
+          steps.push({
+            label: "fallback review queue",
+            status: "failed",
+            detail: reviewError,
           });
         }
+
+        try {
+          child = await apiFetch<ChildDetail>(`/api/children/${childIdParam}`);
+          steps.push({
+            label: "fallback child fetch",
+            status: "ok",
+            detail: "loaded",
+          });
+        } catch (childFetchError) {
+          const childError = describeError(childFetchError);
+          steps.push({
+            label: "fallback child fetch",
+            status: "failed",
+            detail: childError,
+          });
+          child = fallbackChild(childIdParam, nameParam);
+        }
+
+        setState({
+          status: "ok",
+          dashboard: fallbackDashboard(child, reviews),
+          reviews,
+          reviewError,
+          dashboardError,
+          diagnostics: makeDiagnostics(steps),
+        });
       } finally {
         setRefreshing(false);
       }
     },
-    [childId],
+    [childId, name],
   );
 
   useFocusEffect(
@@ -359,6 +493,7 @@ export default function ChildDashboard() {
       return (
         <View style={styles.center}>
           <Text style={styles.errorText}>{state.message}</Text>
+          <DashboardDiagnosticPanel diagnostics={state.diagnostics} />
           <Pressable style={styles.retryButton} onPress={() => loadDashboard()}>
             <Text style={styles.retryText}>Retry</Text>
           </Pressable>
@@ -366,7 +501,7 @@ export default function ChildDashboard() {
       );
     }
 
-    const { dashboard, reviews, reviewError, dashboardError } = state;
+    const { dashboard, reviews, reviewError, dashboardError, diagnostics } = state;
     const child = dashboard.child;
     const todaysMem = dashboard.todaysPlan.newMemorization;
     const todayProgress = dashboard.todayProgress;
@@ -467,6 +602,10 @@ export default function ChildDashboard() {
               Today's plan is temporarily unavailable. Pull down to refresh shortly.
             </Text>
           </View>
+        )}
+
+        {(dashboardError || reviewError) && (
+          <DashboardDiagnosticPanel diagnostics={diagnostics} />
         )}
 
         <WorkCard
@@ -651,6 +790,29 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 18,
     fontWeight: "600",
+  },
+  diagnosticBox: {
+    backgroundColor: "#f8fafc",
+    borderWidth: 1,
+    borderColor: "#cbd5e1",
+    borderRadius: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    gap: 4,
+  },
+  diagnosticTitle: {
+    color: "#0f172a",
+    fontSize: 12,
+    fontWeight: "800",
+  },
+  diagnosticText: {
+    color: "#334155",
+    fontSize: 11,
+    lineHeight: 15,
+    fontWeight: "600",
+  },
+  diagnosticFailed: {
+    color: "#b91c1c",
   },
   card: {
     backgroundColor: "#f9fafb",

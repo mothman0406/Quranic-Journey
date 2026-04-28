@@ -1,28 +1,29 @@
 # NoorPath / Quranic Journey — Phase 2E Handoff
 
 **For: the next Codex/Claude Code conversation continuing this project**
-**Last updated: 2026-04-28 (Phase 2F target-setting UI and dashboard fallback committed; production dashboards for L/Joll return 200, but phone re-QA still saw a Joll 500; hardware re-QA pending)**
+**Last updated: 2026-04-28 (temporary mobile dashboard diagnostics and deeper fallback hardening implemented; mobile typecheck passed; commit/sync pending)**
 
 This handoff supersedes earlier handoff drafts.
 
 ## Current work log — 2026-04-28
 
 - Active branch/SHA: `main`; Phase 2F target-setting UI commit is `fe83e97`; API client hardening commit is `ce8b9f6`; dashboard fallback commit is `8fa113a`; latest docs sync is current branch HEAD.
-- Remote sync status: `main`, `origin/main`, `feature/main-working-branch`, and `origin/feature/main-working-branch` are synced at the latest docs sync/current branch HEAD. `safe-cumulative` is intentionally behind and can be ignored.
-- QA status: `cd artifacts/noor-mobile && npx tsc --noEmit` passed clean after Phase 2F edits, after the API client hardening hotfix, and after the dashboard fallback. Production `/api/children/23/dashboard` and `/api/children/22/dashboard` returned 200 with the active Better Auth session; Joll also returned 200 across local-date headers `2026-04-24` through `2026-04-30`. Hardware re-QA is pending because the phone still showed a Joll dashboard 500.
+- Remote sync status: `main`, `origin/main`, `feature/main-working-branch`, and `origin/feature/main-working-branch` are confirmed synced at `1b73781`. `safe-cumulative` is intentionally behind and can be ignored.
+- QA status: `cd artifacts/noor-mobile && npx tsc --noEmit` passed clean after Phase 2F edits, after the API client hardening hotfix, after the dashboard fallback, and after the new diagnostic/fallback patch. Production `/api/children/23/dashboard` and `/api/children/22/dashboard` returned 200 with the active Better Auth session; Joll also returned 200 across local-date headers `2026-04-24` through `2026-04-30`. Hardware re-QA still showed a full-screen Joll dashboard `API 500: Internal Server Error`; the new mobile diagnostic/fallback patch is ready to commit.
 - Dev-server note: starting Expo inside the sandbox fails with `ERR_SOCKET_BAD_PORT` because sandboxed Node cannot bind local ports (`EPERM` on 8081). Run the dev server outside the sandbox/escalated when using this environment.
 - Inspection notes: initial Phase 2E inspection found `app/child/[childId]/index.tsx` was a three-card skeleton; `src/lib/api.ts` is a thin authenticated fetch helper; `/api/children/:id/dashboard` exposes `todaysPlan.newMemorization`, `todayProgress`, `reviewsDueToday`, and `readingGoal`; `/api/children/:id/reviews` exposes detailed queue items with `reviewPriority`.
 - Implementation notes: mobile dashboard now fetches dashboard plus review queue data, the Memorization/Review/Reading cards show today's assigned work, review previews use shared red/orange/green priority styling, the review queue cards have matching priority rails/backgrounds, and the profile selector has richer child rows with age, streak, and points.
 - Diff-review notes: removed new dashboard letter spacing and fixed streak pluralization before final QA.
 - Phase 2F inspection notes: targets are stored on `children` as `memorizePagePerDay`, `reviewPagesPerDay`, and `readPagesPerDay`; `GET /api/children/:childId` returns them through `formatChild`; `PUT /api/children/:childId` accepts all three fields. Web reference options live in `artifacts/noor-path/src/pages/settings.tsx`.
 - Phase 2F implementation notes: added `app/child/[childId]/targets.tsx`, registered it in the child stack, added a dashboard `Targets` entry point, and made the dashboard refresh on focus after returning from target edits. The screen uses preset chips plus minus/plus fine tuning and saves directly through `apiFetch`.
-- Phase 2F hotfix notes: after screenshots showed the dashboard rendering API 500s for L and Joll, production was checked directly and returned 200 for both children. `apiFetch` now sends `x-local-date` from the phone and normalizes JSON/plain-text/HTML failures into short readable error messages instead of showing full HTML documents. The dashboard now retries `/dashboard` once and then falls back to child/profile plus review queue data, keeping Targets reachable if today's plan endpoint flakes.
+- Phase 2F hotfix notes: after screenshots showed the dashboard rendering API 500s for L and Joll, production was checked directly and returned 200 for both children. `apiFetch` now sends `x-local-date` from the phone and normalizes JSON/plain-text/HTML failures into short readable error messages instead of showing full HTML documents. The dashboard now retries `/dashboard` once and then falls back to child/profile plus review queue data, keeping Targets reachable if today's plan endpoint flakes. Fresh inspection found that if the fallback path itself fails, the full-screen error still only shows the original dashboard error, so the phone cannot distinguish stale JS, wrong API base, dashboard failure, review failure, or child fallback failure yet.
+- Phase 2F diagnostic implementation notes: added `ApiError`, `getApiRuntimeInfo`, console request/response logs, and diagnostic marker `dashboard-diag-2026-04-28a` in mobile `apiFetch`. The dashboard now tracks primary/retry/fallback review/fallback child stages, renders a compact diagnostic panel on fallback/error, and if the child fallback fetch fails it renders a degraded shell from route params instead of the original full-screen dashboard 500.
 - Exact next checklist:
-  1. Ask Mohammad to reload the JS bundle and reopen Joll's dashboard in the existing dev client.
-  2. If the warning fallback appears, pull to refresh once; otherwise verify the full dashboard loads normally.
-  3. Re-test `Targets`: change memorization, review, and reading targets; confirm saved indicators.
-  4. Return to the dashboard and verify the cards reflect the saved target values.
-  5. If approved, move to Phase 3 TestFlight polish or the planned web-app deep dive.
+  1. Commit the diagnostic fallback and sync `main` plus `feature/main-working-branch`.
+  2. Ask Mohammad to reload the JS bundle and reopen Joll's dashboard; if the old full-screen error lacks diagnostic marker `dashboard-diag-2026-04-28a`, treat it as stale JS.
+  3. If the diagnostic panel appears, use its stage/path/status/base URL/cookie-presence details to decide the next fix.
+  4. If the dashboard loads normally, re-test `Targets`: change memorization, review, and reading targets; confirm saved indicators.
+  5. Return to the dashboard and verify the cards reflect the saved target values.
 
 ---
 
