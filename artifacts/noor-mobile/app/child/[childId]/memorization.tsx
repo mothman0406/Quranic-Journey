@@ -106,6 +106,7 @@ export default function MemorizationScreen() {
   } | null>(null);
   const [playbackRate, setPlaybackRate] = useState<number>(1.0);
   const playbackRateRef = useRef(playbackRate);
+  const [cumulativeReview, setCumulativeReview] = useState<boolean>(false);
 
   // Recite mode
   const [reciteMode, setReciteMode] = useState(false);
@@ -143,6 +144,10 @@ export default function MemorizationScreen() {
   const currentRepeatRef = useRef(1);
   const advanceTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // True while a cumulative-review playback pass is active. Set by handleMarkComplete
+  // after a successful submit; cleared when the pass finishes naturally, the user
+  // pauses/Prev/Next, or the success alert dismisses.
+  const cumulativePassActiveRef = useRef(false);
 
   // Layout refs for auto-scroll
   const scrollViewRef = useRef<ScrollView>(null);
@@ -493,6 +498,7 @@ export default function MemorizationScreen() {
   // ── Audio helpers ────────────────────────────────────────────────────────────
 
   async function stopAudioCompletely() {
+    cumulativePassActiveRef.current = false;
     cancelAnimationFrame(rafIdRef.current);
     if (advanceTimeoutRef.current) {
       clearTimeout(advanceTimeoutRef.current);
@@ -534,8 +540,12 @@ export default function MemorizationScreen() {
           positionRef.current = status.positionMillis;
           if (status.durationMillis) durationRef.current = status.durationMillis;
           if (status.didJustFinish) {
-            // Repeat logic: replay this verse without unloading if repeat count not reached
-            if (currentRepeatRef.current < repeatCountRef.current) {
+            // Repeat logic: replay this verse without unloading if repeat count not reached.
+            // During cumulative review, skip repeats — we want one pass through the range.
+            if (
+              !cumulativePassActiveRef.current &&
+              currentRepeatRef.current < repeatCountRef.current
+            ) {
               currentRepeatRef.current += 1;
               soundRef.current
                 ?.setPositionAsync(0)
@@ -550,12 +560,15 @@ export default function MemorizationScreen() {
             setIsPlaying(false);
             setHighlightedWord(-1);
             setHighlightedPage(null);
-            // Page mode: auto-advance to next verse in scope (gated by autoplayThroughRange)
+            // Cumulative review pass overrides the normal gating: auto-advance through the
+            // range regardless of view mode or autoplay setting. End of pass triggers the
+            // "marked complete" alert.
+            const isCumulativePass = cumulativePassActiveRef.current;
             const shouldAutoAdvance =
-              viewModeRef.current === "page" &&
-              autoplayThroughRangeRef.current &&
               ayahEndRef.current !== null &&
-              currentVerseRef.current < ayahEndRef.current;
+              currentVerseRef.current < ayahEndRef.current &&
+              (isCumulativePass ||
+                (viewModeRef.current === "page" && autoplayThroughRangeRef.current));
             if (shouldAutoAdvance) {
               const delay = autoAdvanceDelayRef.current;
               if (delay > 0) {
@@ -570,9 +583,7 @@ export default function MemorizationScreen() {
               }
             } else {
               // Audio ended naturally and we're not auto-advancing.
-              // Unload the sound so the next Play tap creates a fresh one
-              // (otherwise playAsync() runs on a finished sound and either
-              // does nothing or plays from a weird position).
+              // Unload the sound so the next Play tap creates a fresh one.
               void (async () => {
                 if (soundRef.current) {
                   try {
@@ -583,6 +594,19 @@ export default function MemorizationScreen() {
                   soundRef.current = null;
                 }
               })();
+
+              // If a cumulative review pass was active and we just hit the end of the
+              // range, fire the success alert and clear the pass flag.
+              if (
+                cumulativePassActiveRef.current &&
+                ayahEndRef.current !== null &&
+                currentVerseRef.current >= ayahEndRef.current
+              ) {
+                cumulativePassActiveRef.current = false;
+                Alert.alert("Marked complete.", "Cumulative review done.", [
+                  { text: "OK", onPress: () => router.back() },
+                ]);
+              }
             }
           }
         },
@@ -635,6 +659,8 @@ export default function MemorizationScreen() {
     if (isLoadingRef.current) return;
 
     if (isPlayingRef.current) {
+      // User pause — abort cumulative pass if active.
+      cumulativePassActiveRef.current = false;
       if (advanceTimeoutRef.current) {
         clearTimeout(advanceTimeoutRef.current);
         advanceTimeoutRef.current = null;
@@ -689,6 +715,7 @@ export default function MemorizationScreen() {
   }
 
   function handlePrev() {
+    cumulativePassActiveRef.current = false;
     if (advanceTimeoutRef.current) {
       clearTimeout(advanceTimeoutRef.current);
       advanceTimeoutRef.current = null;
@@ -699,6 +726,7 @@ export default function MemorizationScreen() {
   }
 
   function handleNext() {
+    cumulativePassActiveRef.current = false;
     if (advanceTimeoutRef.current) {
       clearTimeout(advanceTimeoutRef.current);
       advanceTimeoutRef.current = null;
@@ -720,7 +748,26 @@ export default function MemorizationScreen() {
         qualityRating: 5,
         status: "memorized",
       });
-      Alert.alert("Marked complete.", undefined, [{ text: "OK", onPress: () => router.back() }]);
+
+      if (cumulativeReview && ayahEnd > ayahStart) {
+        // Kick off cumulative pass: jump back to ayahStart, set the pass flag,
+        // and let the verse-change effect's autoPlay branch begin playback.
+        // Success alert fires from playVerse status callback at end of range.
+        cumulativePassActiveRef.current = true;
+        autoPlayRef.current = true;
+        currentRepeatRef.current = 1;
+        if (currentVerse !== ayahStart) {
+          setCurrentVerse(ayahStart);
+        } else {
+          // Already at ayahStart — kick playback directly.
+          await playVerse(ayahStart);
+        }
+      } else {
+        // Single-verse range or cumulative review off → original flow.
+        Alert.alert("Marked complete.", undefined, [
+          { text: "OK", onPress: () => router.back() },
+        ]);
+      }
     } catch (e) {
       Alert.alert("Error", e instanceof Error ? e.message : "Failed to save.");
     } finally {
@@ -1402,6 +1449,16 @@ export default function MemorizationScreen() {
               style={[styles.toggleSwitch, tajweedEnabled && styles.toggleSwitchOn]}
             >
               <View style={[styles.toggleKnob, tajweedEnabled && styles.toggleKnobOn]} />
+            </Pressable>
+          </View>
+
+          <View style={styles.settingRow}>
+            <Text style={styles.settingLabel}>Cumulative review on Mark Complete</Text>
+            <Pressable
+              onPress={() => setCumulativeReview(!cumulativeReview)}
+              style={[styles.toggleSwitch, cumulativeReview && styles.toggleSwitchOn]}
+            >
+              <View style={[styles.toggleKnob, cumulativeReview && styles.toggleKnobOn]} />
             </Pressable>
           </View>
 
