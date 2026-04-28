@@ -1,6 +1,6 @@
 # NoorPath / Quranic Journey — Status & Next Steps
 
-_Last updated: April 28, 2026 (malformed Targets navigation fix committed; mobile typecheck passed; remote sync pending)_
+_Last updated: April 28, 2026 (malformed Targets navigation fix synced; mobile typecheck passed; hardware re-QA pending)_
 
 ---
 
@@ -16,8 +16,8 @@ After every meaningful action, update this file and `PHASE_2D_HANDOFF.md` before
 
 ## Current work log — April 28, 2026
 
-- Active branch/SHA: `main` at local route fix commit `0c1e088`; diagnostic fallback code commit is `ccbf1ec`. Phase 2F target-setting UI commit is `fe83e97`; API client hardening commit is `ce8b9f6`; previous dashboard fallback commit is `8fa113a`.
-- Remote sync status: local `main` is ahead of `origin/main` until `0c1e088` is pushed; `feature/main-working-branch` and `origin/feature/main-working-branch` are still at `03f4fa5` until fast-forwarded. `safe-cumulative` is intentionally behind and can be ignored.
+- Active branch/SHA: `main` at the latest docs sync/current branch HEAD; route fix commit is `0c1e088`; diagnostic fallback code commit is `ccbf1ec`. Phase 2F target-setting UI commit is `fe83e97`; API client hardening commit is `ce8b9f6`; previous dashboard fallback commit is `8fa113a`.
+- Remote sync status: `main`, `origin/main`, `feature/main-working-branch`, and `origin/feature/main-working-branch` are synced at the latest docs sync/current branch HEAD. `safe-cumulative` is intentionally behind and can be ignored.
 - QA status: `cd artifacts/noor-mobile && npx tsc --noEmit` passed clean after Phase 2F edits, after the API client hardening hotfix, after the dashboard fallback, after the diagnostic/fallback patch, and after the malformed Targets route fix. Production `/api/children/23/dashboard` and `/api/children/22/dashboard` returned 200 with the active Better Auth session; Joll also returned 200 across local-date headers `2026-04-24` through `2026-04-30`. Hardware screenshot from the diagnostic patch showed the real failure: the dashboard was mounted with `childId = "targets"` and called `/api/children/targets/dashboard`, `/reviews`, and child fetch.
 - Dev-server note: starting Expo inside the sandbox fails with `ERR_SOCKET_BAD_PORT` because sandboxed Node cannot bind local ports (`EPERM` on 8081). Run the dev server outside the sandbox/escalated when using this environment.
 - Inspection notes: initial Phase 2E inspection found `app/child/[childId]/index.tsx` was a three-card skeleton; `src/lib/api.ts` is a thin authenticated fetch helper; `/api/children/:id/dashboard` exposes `todaysPlan.newMemorization`, `todayProgress`, `reviewsDueToday`, and `readingGoal`; `/api/children/:id/reviews` exposes detailed queue items with `reviewPriority`.
@@ -30,11 +30,11 @@ After every meaningful action, update this file and `PHASE_2D_HANDOFF.md` before
 - Phase 2F route bug diagnosis: dashboard `handleTargetsPress` used relative `pathname: "./targets"`, which Expo Router resolved as `/child/targets` instead of `/child/:childId/targets`. That made the dashboard route match `[childId] = "targets"` on return/reload, causing API calls to `/api/children/targets/*`.
 - Phase 2F route fix notes: dashboard Targets navigation now uses absolute `pathname: "/child/[childId]/targets"`, and dashboard loading now rejects non-numeric child IDs before making API calls.
 - Exact next checklist:
-  1. Push `main`, fast-forward `feature/main-working-branch`, and push that branch too.
-  2. Ask Mohammad to reload the JS bundle, go Back to the child picker if currently stuck on `/child/targets`, reopen L/Joll, then test Targets save and dashboard refresh.
-  3. Verify the diagnostic panel no longer reports `/api/children/targets/*`.
-  4. If all good, remove or downgrade the temporary visible diagnostic panel in a follow-up.
-  5. Continue Phase 2F hardware QA only after L/Joll dashboards stay on numeric child routes.
+  1. Ask Mohammad to reload the JS bundle, go Back to the child picker if currently stuck on `/child/targets`, reopen L/Joll, then test Targets save and dashboard refresh.
+  2. Verify the diagnostic panel no longer reports `/api/children/targets/*`.
+  3. Verify Targets save for memorization, review, and reading targets.
+  4. Return to the dashboard and verify the cards reflect the saved target values.
+  5. If all good, remove or downgrade the temporary visible diagnostic panel in a follow-up.
 
 ---
 
