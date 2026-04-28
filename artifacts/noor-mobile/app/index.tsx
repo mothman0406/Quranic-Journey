@@ -16,9 +16,22 @@ type Child = {
   name: string;
   ageGroup: "toddler" | "child" | "preteen" | "teen";
   avatarEmoji: string;
+  streakDays?: number;
+  totalPoints?: number;
 };
 
 type ChildrenResponse = { children: Child[] };
+
+const AGE_LABELS: Record<Child["ageGroup"], string> = {
+  toddler: "Toddler",
+  child: "Child",
+  preteen: "Preteen",
+  teen: "Teen",
+};
+
+function formatDayStreak(days: number) {
+  return `${days} day${days === 1 ? "" : "s"} streak`;
+}
 
 export default function HomeScreen() {
   const { data: session, isPending: sessionPending } = authClient.useSession();
@@ -82,7 +95,14 @@ export default function HomeScreen() {
         </View>
       ) : (
         <ScrollView contentContainerStyle={styles.list}>
-          <Text style={styles.subtitle}>Select a child</Text>
+          <View style={styles.listHeader}>
+            <View>
+              <Text style={styles.subtitle}>Select a child</Text>
+              <Text style={styles.listHint}>
+                {children!.length} profile{children!.length === 1 ? "" : "s"}
+              </Text>
+            </View>
+          </View>
           {children!.map((child) => (
             <Pressable
               key={child.id}
@@ -94,11 +114,26 @@ export default function HomeScreen() {
                 })
               }
             >
-              <Text style={styles.avatar}>{child.avatarEmoji}</Text>
-              <View>
-                <Text style={styles.childName}>{child.name}</Text>
-                <Text style={styles.ageGroup}>{child.ageGroup}</Text>
+              <View style={styles.avatarBubble}>
+                <Text style={styles.avatar}>{child.avatarEmoji}</Text>
               </View>
+              <View style={styles.childText}>
+                <View style={styles.childNameRow}>
+                  <Text style={styles.childName} numberOfLines={1}>
+                    {child.name}
+                  </Text>
+                  <Text style={styles.agePill}>{AGE_LABELS[child.ageGroup]}</Text>
+                </View>
+                <View style={styles.childMetaRow}>
+                  <Text style={styles.childMeta}>
+                    {formatDayStreak(child.streakDays ?? 0)}
+                  </Text>
+                  <Text style={styles.childMetaMuted}>
+                    {child.totalPoints ?? 0} pts
+                  </Text>
+                </View>
+              </View>
+              <Text style={styles.cardArrow}>›</Text>
             </Pressable>
           ))}
         </ScrollView>
@@ -164,12 +199,23 @@ const styles = StyleSheet.create({
   list: {
     padding: 20,
     gap: 12,
+    paddingBottom: 32,
+  },
+  listHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 2,
   },
   subtitle: {
-    fontSize: 16,
-    fontWeight: "600",
+    fontSize: 20,
+    fontWeight: "700",
+    color: "#111111",
+  },
+  listHint: {
+    fontSize: 13,
     color: "#666666",
-    marginBottom: 4,
+    marginTop: 2,
   },
   card: {
     backgroundColor: "#f9fafb",
@@ -181,18 +227,64 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 14,
   },
+  avatarBubble: {
+    width: 52,
+    height: 52,
+    borderRadius: 15,
+    backgroundColor: "#ffffff",
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+    alignItems: "center",
+    justifyContent: "center",
+  },
   avatar: {
-    fontSize: 36,
+    fontSize: 32,
+  },
+  childText: {
+    flex: 1,
+    minWidth: 0,
+  },
+  childNameRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
   },
   childName: {
     fontSize: 18,
-    fontWeight: "600",
+    fontWeight: "700",
     color: "#111111",
+    flexShrink: 1,
   },
-  ageGroup: {
+  agePill: {
+    fontSize: 11,
+    color: "#2563eb",
+    fontWeight: "700",
+    backgroundColor: "#eff6ff",
+    borderWidth: 1,
+    borderColor: "#bfdbfe",
+    borderRadius: 99,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    overflow: "hidden",
+  },
+  childMetaRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    marginTop: 5,
+  },
+  childMeta: {
+    fontSize: 13,
+    color: "#b45309",
+    fontWeight: "600",
+  },
+  childMetaMuted: {
     fontSize: 13,
     color: "#666666",
-    marginTop: 2,
-    textTransform: "capitalize",
+    fontWeight: "600",
+  },
+  cardArrow: {
+    fontSize: 24,
+    color: "#999999",
   },
 });

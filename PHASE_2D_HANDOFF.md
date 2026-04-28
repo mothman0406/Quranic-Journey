@@ -1,9 +1,22 @@
 # NoorPath / Quranic Journey — Phase 2E Handoff
 
 **For: the next Codex/Claude Code conversation continuing this project**
-**Last updated: 2026-04-28 (Phase 2D complete through Slice 5b real blur hardware QA; branches synced; Phase 2E dashboard polish is next)**
+**Last updated: 2026-04-28 (Phase 2E dashboard polish implemented and passed local TypeScript QA; active branch `main` at the Phase 2E final commit; remote sync in progress for this handoff; hardware QA pending)**
 
 This handoff supersedes earlier handoff drafts.
+
+## Current work log — 2026-04-28
+
+- Active branch/SHA: `main` at the Phase 2E final commit. Local pre-doc-refresh commit was `33707bf`; final synced SHA is reported in the handoff response after push/sync.
+- Remote sync status: pushing/syncing `main` and `feature/main-working-branch` to the Phase 2E final commit is the remaining handoff step.
+- QA status: `cd artifacts/noor-mobile && npx tsc --noEmit` passed clean after final polish edits.
+- Inspection notes: `app/child/[childId]/index.tsx` is still a three-card skeleton; `src/lib/api.ts` is a thin authenticated fetch helper; `/api/children/:id/dashboard` exposes `todaysPlan.newMemorization`, `todayProgress`, `reviewsDueToday`, and `readingGoal`; `/api/children/:id/reviews` exposes detailed queue items with `reviewPriority`.
+- Implementation notes: mobile dashboard now fetches dashboard plus review queue data, the Memorization/Review/Reading cards show today's assigned work, review previews use shared red/orange/green priority styling, the review queue cards have matching priority rails/backgrounds, and the profile selector has richer child rows with age, streak, and points.
+- Diff-review notes: removed new dashboard letter spacing and fixed streak pluralization before final QA.
+- Exact next checklist:
+  1. Push `main`.
+  2. Merge `main` into `feature/main-working-branch` and push it.
+  3. Return to `main`, verify branch sync, and hand off final SHA.
 
 ---
 
@@ -44,7 +57,7 @@ You're working with a self-taught builder doing this project on weekends and eve
 
 ## 3. Where the project is right now
 
-**Phase 2D is complete through Slice 5b.** Recite mode is at parity with web. Multi-reciter playback works for all 7 reciters. Word tracking works for all (true QDC for Husary, fractional fallback w/ 500ms lead for others). Audio plays through iPhone silent switch. Theme + reciter pickers in settings sheet. Profile vs session settings split. **Long-press translation popup works.** **Playback rate (0.75x–1.5x discrete pills) works.** **Cumulative review works from hardware QA.** **Real blur mode via `expo-blur` is built and hardware-tested.** **Tajweed coloring is wired but doesn't render** (likely API field shape — backlogged; do not tackle unless Mohammad explicitly asks).
+**Phase 2D is complete through Slice 5b. Phase 2E is implemented locally and typechecked; hardware QA is next.** Recite mode is at parity with web. Multi-reciter playback works for all 7 reciters. Word tracking works for all (true QDC for Husary, fractional fallback w/ 500ms lead for others). Audio plays through iPhone silent switch. Theme + reciter pickers in settings sheet. Profile vs session settings split. **Long-press translation popup works.** **Playback rate (0.75x–1.5x discrete pills) works.** **Cumulative review works from hardware QA.** **Real blur mode via `expo-blur` is built and hardware-tested.** **Tajweed coloring is wired but doesn't render** (likely API field shape — backlogged; do not tackle unless Mohammad explicitly asks).
 
 | Slice | Status | Commit | What |
 |---|---|---|---|
@@ -58,6 +71,7 @@ You're working with a self-taught builder doing this project on weekends and eve
 | 2D-Polish 5a Session 2 | ✅ tested (tajweed broken — backlogged) | `18f054d` | Translation popup, playback rate, tajweed wiring (no colors) |
 | 2D-Polish 5a Session 3 | ✅ hardware-tested enough to proceed; synced | `4599dff` + fixes through `b2b3186`; docs sync `7e56509` | Web-style cumulative review during memorization, review repeat count, pass labels, final-verse skip fixes |
 | **2D-Polish 5b** | ✅ tested; synced | `aa004ff` + docs | Real `expo-blur` overlay in page-mode blur. Tajweed explicitly deferred. |
+| **2E Dashboard polish** | ✅ local typecheck; hardware QA pending | Phase 2E final HEAD | Today's-work dashboard cards, review priority colors, profile selector polish |
 
 `TODO.md` is current. Read it first.
 
@@ -222,7 +236,7 @@ Phase 2D is complete.
 
 Per user (confirmed Apr 27 evening): Option A — finish Slice 5 first, then do 2E + 2F before TestFlight.
 
-- **Phase 2E — next** — Dashboard polish (today's-work content on Mem/Review/Reading banners, red/orange/green surah quality colors, profile selector polish)
+- **Phase 2E — hardware QA next** — Dashboard polish is implemented/typechecked; test profile selector, dashboard cards, and review priority colors on iPhone.
 - **Phase 2F** — Target-setting UI (set memorization/review/reading targets by page number — backend already supports it via dashboard endpoint)
 - **Then Phase 3** — TestFlight (app icon, splash, EAS production build, App Store Connect, TestFlight beta)
 
@@ -271,6 +285,7 @@ User also requested **deep-dive into web app's `noor-path/` for "lots of cool st
 - `src/lib/quran.ts` — Quran.com v4 fetchers with `text_uthmani_tajweed` + `translation` word_fields + `translations=131`
 - `src/lib/memorization.ts` — dashboard fetch, QDC chapter timings, on-demand v4 fetcher, `fetchTimingsForReciter` router, `ChapterTimings` discriminated union, memorization POST
 - `src/lib/recite.ts` — Arabic normalization + multi-predicate fuzzy match. **Don't tighten without asking.**
+- `src/lib/review-priority.ts` — shared red/orange/green review priority labels and colors for dashboard/review queue UI.
 - `src/lib/reviews.ts` — typed review queue + submit
 - `src/lib/reciters.ts` — 7-reciter table
 - `src/lib/settings.ts` — `ProfileSettings`, `loadProfileSettings`, `saveProfileSettings`, `DEFAULT_SESSION_SETTINGS`
@@ -302,12 +317,13 @@ User also requested **deep-dive into web app's `noor-path/` for "lots of cool st
 ## 9. What to do first in the next session
 
 1. **Read `TODO.md` and this handoff.** This one supersedes earlier handoffs.
-2. **Check git state.** `main`, `feature/main-working-branch`, and `safe-cumulative` should all contain Slice 5b code/docs. Start new work from `main`; `safe-cumulative` can be ignored unless needed for archaeology.
-3. **Start Phase 2E dashboard polish.** Inspect `artifacts/noor-mobile/app/child/[childId]/index.tsx` plus the supporting dashboard/API data shape in `src/lib/api.ts` or nearby libs.
-4. **Use `artifacts/noor-path/` only as read-only reference** if the mobile dashboard needs web behavior context.
-5. **Keep the slice JS-only if possible.** Do not touch tajweed. Do not add native dependencies unless Mohammad explicitly approves a rebuild.
-6. **Run `cd artifacts/noor-mobile && npx tsc --noEmit`.**
-7. **Update `TODO.md` and this handoff after meaningful work** with current date, branch/SHA, remote sync status, QA status, and the exact next checklist.
+2. **Check git state.** `main` and `feature/main-working-branch` should both contain the Phase 2E dashboard-polish commit. Start new work from `main`; `safe-cumulative` can be ignored unless needed for archaeology.
+3. **Hardware-test Phase 2E on iPhone.** No new EAS build should be required because this slice is JS-only. Use the existing dev client/Metro path.
+4. **Verify the profile selector, child dashboard, and review queue.** Confirm today's-work content is useful, card text fits, and red/orange/green review accents are readable.
+5. **If Mohammad approves Phase 2E, start Phase 2F target-setting UI.** Backend already exposes the daily memorization/review/reading target data.
+6. **Keep future slices JS-only unless explicitly approved.** Do not touch tajweed. Do not add native dependencies unless Mohammad explicitly approves a rebuild.
+7. **Run `cd artifacts/noor-mobile && npx tsc --noEmit` after changes.**
+8. **Update `TODO.md` and this handoff after meaningful work** with current date, branch/SHA, remote sync status, QA status, and the exact next checklist.
 
 ---
 

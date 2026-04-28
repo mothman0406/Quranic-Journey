@@ -9,20 +9,23 @@ import {
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { fetchReviewQueue, ReviewQueueItem, ReviewQueueResponse } from "@/src/lib/reviews";
-
-const PRIORITY_COLORS: Record<string, { text: string; bg: string }> = {
-  red: { text: "#dc2626", bg: "#fef2f2" },
-  orange: { text: "#ea580c", bg: "#fff7ed" },
-  green: { text: "#16a34a", bg: "#f0fdf4" },
-};
+import { getReviewPriorityStyle } from "@/src/lib/review-priority";
 
 function PriorityPill({ priority }: { priority: string }) {
-  const colors = PRIORITY_COLORS[priority] ?? PRIORITY_COLORS.green;
+  const priorityStyle = getReviewPriorityStyle(priority);
   return (
-    <View style={[styles.pill, { backgroundColor: colors.bg }]}>
-      <View style={[styles.pillDot, { backgroundColor: colors.text }]} />
-      <Text style={[styles.pillText, { color: colors.text }]}>
-        {priority.charAt(0).toUpperCase() + priority.slice(1)}
+    <View
+      style={[
+        styles.pill,
+        {
+          backgroundColor: priorityStyle.bg,
+          borderColor: priorityStyle.border,
+        },
+      ]}
+    >
+      <View style={[styles.pillDot, { backgroundColor: priorityStyle.text }]} />
+      <Text style={[styles.pillText, { color: priorityStyle.text }]}>
+        {priorityStyle.label}
       </Text>
     </View>
   );
@@ -39,9 +42,20 @@ function ReviewCard({
     item.pageStart === item.pageEnd
       ? `Page ${item.pageStart}`
       : `Pages ${item.pageStart}–${item.pageEnd}`;
+  const priorityStyle = getReviewPriorityStyle(item.reviewPriority);
 
   return (
-    <Pressable style={styles.card} onPress={onPress}>
+    <Pressable
+      style={[
+        styles.card,
+        {
+          backgroundColor: priorityStyle.cardBg,
+          borderColor: priorityStyle.border,
+        },
+      ]}
+      onPress={onPress}
+    >
+      <View style={[styles.priorityRail, { backgroundColor: priorityStyle.text }]} />
       <View style={styles.cardTop}>
         <PriorityPill priority={item.reviewPriority} />
         <Text style={styles.surahName} numberOfLines={1}>
@@ -262,7 +276,16 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#e5e7eb",
     padding: 14,
+    paddingLeft: 18,
     gap: 6,
+    overflow: "hidden",
+  },
+  priorityRail: {
+    position: "absolute",
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: 5,
   },
   cardTop: {
     flexDirection: "row",
@@ -276,6 +299,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 99,
+    borderWidth: 1,
   },
   pillDot: {
     width: 6,
