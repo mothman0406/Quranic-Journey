@@ -168,6 +168,10 @@ function fallbackChild(childId: string | undefined, name: string | undefined): C
   };
 }
 
+function isValidChildId(childId: string | undefined) {
+  return typeof childId === "string" && /^\d+$/.test(childId);
+}
+
 function fallbackDashboard(
   child: ChildDetail,
   reviews: ReviewQueueResponse | null,
@@ -325,15 +329,15 @@ export default function ChildDashboard() {
         setRefreshing(true);
       }
 
-      if (!childIdParam) {
+      if (!isValidChildId(childIdParam)) {
         steps.push({
           label: "route params",
           status: "failed",
-          detail: "missing childId",
+          detail: childIdParam ? `invalid childId: ${childIdParam}` : "missing childId",
         });
         setState({
           status: "error",
-          message: "Missing child dashboard id.",
+          message: "This dashboard route is missing a valid child id. Go back and reopen the child profile.",
           diagnostics: makeDiagnostics(steps),
         });
         setRefreshing(false);
@@ -474,8 +478,10 @@ export default function ChildDashboard() {
   }
 
   function handleTargetsPress() {
+    if (!isValidChildId(childId)) return;
+
     router.push({
-      pathname: "./targets",
+      pathname: "/child/[childId]/targets",
       params: { childId, name: name ?? "" },
     });
   }
