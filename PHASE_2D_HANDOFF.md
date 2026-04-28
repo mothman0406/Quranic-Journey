@@ -1,7 +1,7 @@
 # NoorPath / Quranic Journey — Phase 2D Slice 5b Handoff
 
 **For: the next Codex/Claude Code conversation continuing this project**
-**Last updated: 2026-04-28 (Slice 5a Session 3 hardware-tested and synced; Slice 5b real blur code committed/typechecked at `aa004ff`; EAS build pending explicit approval/manual run)**
+**Last updated: 2026-04-28 (Slice 5a Session 3 hardware-tested and synced; Slice 5b real blur code/docs synced to both branches; EAS build pending explicit approval/manual run)**
 
 This handoff supersedes earlier handoff drafts.
 
@@ -30,7 +30,7 @@ You're working with a self-taught builder doing this project on weekends and eve
 ### Repo
 - GitHub: `https://github.com/mothman0406/Quranic-Journey`
 - Local: `/Users/mothmanaurascape.ai/Desktop/Quranic-Journey/`
-- Normal branch policy: `main` (deploy) and `feature/main-working-branch` stay synced. Slice 5a Session 3 was hardware-tested by Mohammad and synced to both remotes at `7e56509`. Slice 5b code is committed locally at `aa004ff`; push this code/docs state to both branches after the docs refresh.
+- Normal branch policy: `main` (deploy) and `feature/main-working-branch` stay synced. Slice 5a Session 3 was hardware-tested by Mohammad and synced to both remotes at `7e56509`. Slice 5b code/docs are now synced to both remotes; Slice 5b code commit is `aa004ff`.
 
 ### Stack
 - **Monorepo:** pnpm 9.15.9 (NOT 10).
@@ -212,11 +212,10 @@ Scope reminders:
 - Do not add `expo-linear-gradient` unless real blur cannot be made presentable without it. It was not added in `aa004ff`.
 
 Next checklist:
-1. Push `aa004ff` plus this docs refresh to `main` and `feature/main-working-branch`.
-2. Start the required EAS development build. Codex could not start it because EAS uploads private repo contents to Expo's external build service and requires explicit approval/manual execution. Manual command:
+1. Start the required EAS development build. Codex could not start it because EAS uploads private repo contents to Expo's external build service and requires explicit approval/manual execution. Manual command:
    `cd artifacts/noor-mobile && npx eas-cli@latest build --profile development --platform ios --non-interactive --no-wait`
-3. Install the new dev build on iPhone.
-4. Hardware-test:
+2. Install the new dev build on iPhone.
+3. Hardware-test:
    - active verse remains readable/unblurred
    - out-of-scope words remain dimmed
    - blind mode still hides/reveals as before
@@ -227,8 +226,8 @@ Next checklist:
    - playback rate still applies
    - all 7 reciters still play
    - recite mode still unloads audio and starts mic cleanly
-5. If per-word `BlurView` overlays cause layout shifts or weak blur on hardware, revise with a stable per-line/per-verse overlay approach.
-6. If hardware QA passes, mark Slice 5b done; Phase 2D is complete.
+4. If per-word `BlurView` overlays cause layout shifts or weak blur on hardware, revise with a stable per-line/per-verse overlay approach.
+5. If hardware QA passes, mark Slice 5b done; Phase 2D is complete.
 
 After 5b ships, Phase 2D is complete.
 
@@ -318,10 +317,9 @@ User also requested **deep-dive into web app's `noor-path/` for "lots of cool st
 ## 9. What to do first in the next session
 
 1. **Read `TODO.md` and this handoff.** This one supersedes earlier handoffs.
-2. **Check git state.** Expected local branch is `safe-cumulative` at or after `aa004ff` plus this docs refresh.
-3. **Push/sync if needed.** `main` and `feature/main-working-branch` should contain `aa004ff` and this docs refresh.
-4. **Run or approve the EAS development build.** It uploads repo contents to Expo; Codex needs explicit approval or Mohammad can run the manual command in Section 6.
-5. **Hardware-test 5b blur using Section 6.** Do not touch tajweed unless Mohammad explicitly changes his mind.
+2. **Check git state.** `main`, `feature/main-working-branch`, and `safe-cumulative` should all contain Slice 5b code/docs.
+3. **Run or approve the EAS development build.** It uploads repo contents to Expo; Codex needs explicit approval or Mohammad can run the manual command in Section 6.
+4. **Hardware-test 5b blur using Section 6.** Do not touch tajweed unless Mohammad explicitly changes his mind.
 6. **Same Codex/Claude Code prompt pattern as throughout this project.**
 
 ---

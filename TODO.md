@@ -1,6 +1,6 @@
 # NoorPath / Quranic Journey — Status & Next Steps
 
-_Last updated: April 28, 2026 (Phase 2D Slice 5a Session 3 hardware-tested and synced; Slice 5b real blur code committed/typechecked at `aa004ff`; EAS build pending explicit approval/manual run)_
+_Last updated: April 28, 2026 (Phase 2D Slice 5a Session 3 hardware-tested and synced; Slice 5b real blur code/docs synced to both branches; EAS build pending explicit approval/manual run)_
 
 ---
 
@@ -24,7 +24,7 @@ After every meaningful action, update this file and `PHASE_2D_HANDOFF.md` before
 - `PROD_ALLOWED_ORIGINS` + `PROD_TRUSTED_ORIGINS` configured for CORS / Better Auth
 - `/api/healthz` returns `{"status":"ok"}` (public, mounted above `requireAuth`)
 - Three secrets rotated (Neon password, Better Auth secret, Hugging Face token)
-- Branch-sync note: `main` + `feature/main-working-branch` were synced to `7e56509` after Slice 5a Session 3 hardware QA. Slice 5b code is committed locally at `aa004ff`; this docs refresh should be pushed to both branches with it.
+- Branch-sync note: `main` + `feature/main-working-branch` are synced with Slice 5b code/docs. Slice 5b code commit is `aa004ff`; latest docs refresh is current branch HEAD.
 - Typecheck baseline clean
 - iOS bundle identifier registered: `com.mothman.noorpath`
 - EAS project created at `@mothman123/noor-mobile`
@@ -209,14 +209,13 @@ Scope reminders:
 - Avoid adding `expo-linear-gradient` unless the blur implementation truly needs it. Real blur is the slice.
 
 Next checklist:
-1. Push this 5b code/docs state to both branches.
-2. Start the required EAS development build. Codex could not start it because that uploads private repo contents to Expo's external EAS service and requires explicit approval. Manual command:
+1. Start the required EAS development build. Codex could not start it because that uploads private repo contents to Expo's external EAS service and requires explicit approval. Manual command:
    `cd artifacts/noor-mobile && npx eas-cli@latest build --profile development --platform ios --non-interactive --no-wait`
-3. Install the new dev build on iPhone.
-4. Hardware-test blur mode in Full Mushaf page mode while audio plays through a range.
-5. Confirm active verse unblurs as playback advances.
-6. Quick regression pass: cumulative review, playback rate, all reciters, translation popup, blind mode, recite mode audio/mic handoff.
-7. If hardware QA passes, mark Slice 5b done; Phase 2D is complete.
+2. Install the new dev build on iPhone.
+3. Hardware-test blur mode in Full Mushaf page mode while audio plays through a range.
+4. Confirm active verse unblurs as playback advances.
+5. Quick regression pass: cumulative review, playback rate, all reciters, translation popup, blind mode, recite mode audio/mic handoff.
+6. If hardware QA passes, mark Slice 5b done; Phase 2D is complete.
 
 After Slice 5b ships, Phase 2D is complete.
 
@@ -367,7 +366,7 @@ After Phase 2D, before TestFlight. User-requested:
 | Frontend (dev) | `http://localhost:5173` |
 | Database | Neon serverless Postgres (rotated Apr 26) |
 | Repo | `https://github.com/mothman0406/Quranic-Journey` |
-| Branches | Normal policy: `main` (deploy) + `feature/main-working-branch`; Session 3 synced, 5b code/docs should be pushed to both |
+| Branches | `main` (deploy) + `feature/main-working-branch`; both synced with Slice 5b code/docs |
 | Apple Developer | Approved Apr 26; Team ID `M7KJJDN537` |
 | iOS bundle identifier | `com.mothman.noorpath` |
 | EAS project | `@mothman123/noor-mobile` |
