@@ -1,27 +1,28 @@
 # NoorPath / Quranic Journey — Phase 2E Handoff
 
 **For: the next Codex/Claude Code conversation continuing this project**
-**Last updated: 2026-04-28 (Phase 2F target-setting UI committed; API client local-date/error hardening committed at `ce8b9f6` and typechecked; production dashboard for child L returns 200; hardware re-QA pending)**
+**Last updated: 2026-04-28 (Phase 2F target-setting UI and dashboard fallback committed; production dashboards for L/Joll return 200, but phone re-QA still saw a Joll 500; hardware re-QA pending)**
 
 This handoff supersedes earlier handoff drafts.
 
 ## Current work log — 2026-04-28
 
-- Active branch/SHA: `main`; Phase 2F target-setting UI commit is `fe83e97`; API client hardening commit is `ce8b9f6`; latest docs sync is current branch HEAD.
+- Active branch/SHA: `main`; Phase 2F target-setting UI commit is `fe83e97`; API client hardening commit is `ce8b9f6`; dashboard fallback commit is `8fa113a`; latest docs sync is current branch HEAD.
 - Remote sync status: `main`, `origin/main`, `feature/main-working-branch`, and `origin/feature/main-working-branch` are synced at the latest docs sync/current branch HEAD. `safe-cumulative` is intentionally behind and can be ignored.
-- QA status: `cd artifacts/noor-mobile && npx tsc --noEmit` passed clean after Phase 2F edits and again after the API client hardening hotfix. Production `/api/children/23/dashboard` returned 200 with the active Better Auth session after the user screenshot showed a transient API 500. Hardware re-QA is pending.
+- QA status: `cd artifacts/noor-mobile && npx tsc --noEmit` passed clean after Phase 2F edits, after the API client hardening hotfix, and after the dashboard fallback. Production `/api/children/23/dashboard` and `/api/children/22/dashboard` returned 200 with the active Better Auth session; Joll also returned 200 across local-date headers `2026-04-24` through `2026-04-30`. Hardware re-QA is pending because the phone still showed a Joll dashboard 500.
 - Dev-server note: starting Expo inside the sandbox fails with `ERR_SOCKET_BAD_PORT` because sandboxed Node cannot bind local ports (`EPERM` on 8081). Run the dev server outside the sandbox/escalated when using this environment.
 - Inspection notes: initial Phase 2E inspection found `app/child/[childId]/index.tsx` was a three-card skeleton; `src/lib/api.ts` is a thin authenticated fetch helper; `/api/children/:id/dashboard` exposes `todaysPlan.newMemorization`, `todayProgress`, `reviewsDueToday`, and `readingGoal`; `/api/children/:id/reviews` exposes detailed queue items with `reviewPriority`.
 - Implementation notes: mobile dashboard now fetches dashboard plus review queue data, the Memorization/Review/Reading cards show today's assigned work, review previews use shared red/orange/green priority styling, the review queue cards have matching priority rails/backgrounds, and the profile selector has richer child rows with age, streak, and points.
 - Diff-review notes: removed new dashboard letter spacing and fixed streak pluralization before final QA.
 - Phase 2F inspection notes: targets are stored on `children` as `memorizePagePerDay`, `reviewPagesPerDay`, and `readPagesPerDay`; `GET /api/children/:childId` returns them through `formatChild`; `PUT /api/children/:childId` accepts all three fields. Web reference options live in `artifacts/noor-path/src/pages/settings.tsx`.
 - Phase 2F implementation notes: added `app/child/[childId]/targets.tsx`, registered it in the child stack, added a dashboard `Targets` entry point, and made the dashboard refresh on focus after returning from target edits. The screen uses preset chips plus minus/plus fine tuning and saves directly through `apiFetch`.
-- Phase 2F hotfix notes: after a screenshot showed the dashboard rendering raw HTML from an API 500, production was checked directly and returned 200 for child L. `apiFetch` now sends `x-local-date` from the phone and normalizes JSON/plain-text/HTML failures into short readable error messages instead of showing full HTML documents.
+- Phase 2F hotfix notes: after screenshots showed the dashboard rendering API 500s for L and Joll, production was checked directly and returned 200 for both children. `apiFetch` now sends `x-local-date` from the phone and normalizes JSON/plain-text/HTML failures into short readable error messages instead of showing full HTML documents. The dashboard now retries `/dashboard` once and then falls back to child/profile plus review queue data, keeping Targets reachable if today's plan endpoint flakes.
 - Exact next checklist:
-  1. Ask Mohammad to tap Retry/reopen L's dashboard in the existing dev client.
-  2. Re-test `Targets`: change memorization, review, and reading targets; confirm saved indicators.
-  3. Return to the dashboard and verify the cards reflect the saved target values.
-  4. If approved, move to Phase 3 TestFlight polish or the planned web-app deep dive.
+  1. Ask Mohammad to reload the JS bundle and reopen Joll's dashboard in the existing dev client.
+  2. If the warning fallback appears, pull to refresh once; otherwise verify the full dashboard loads normally.
+  3. Re-test `Targets`: change memorization, review, and reading targets; confirm saved indicators.
+  4. Return to the dashboard and verify the cards reflect the saved target values.
+  5. If approved, move to Phase 3 TestFlight polish or the planned web-app deep dive.
 
 ---
 
@@ -62,7 +63,7 @@ You're working with a self-taught builder doing this project on weekends and eve
 
 ## 3. Where the project is right now
 
-**Phase 2D is complete through Slice 5b. Phase 2E is hardware-tested. Phase 2F target-setting UI is implemented, committed, and typechecked; hardware re-QA is next after a transient dashboard 500 screenshot.** Recite mode is at parity with web. Multi-reciter playback works for all 7 reciters. Word tracking works for all (true QDC for Husary, fractional fallback w/ 500ms lead for others). Audio plays through iPhone silent switch. Theme + reciter pickers in settings sheet. Profile vs session settings split. **Long-press translation popup works.** **Playback rate (0.75x–1.5x discrete pills) works.** **Cumulative review works from hardware QA.** **Real blur mode via `expo-blur` is built and hardware-tested.** **Tajweed coloring is wired but doesn't render** (likely API field shape — backlogged; do not tackle unless Mohammad explicitly asks).
+**Phase 2D is complete through Slice 5b. Phase 2E is hardware-tested. Phase 2F target-setting UI is implemented, committed, and typechecked; hardware re-QA is next after dashboard 500 screenshots for L and Joll.** Recite mode is at parity with web. Multi-reciter playback works for all 7 reciters. Word tracking works for all (true QDC for Husary, fractional fallback w/ 500ms lead for others). Audio plays through iPhone silent switch. Theme + reciter pickers in settings sheet. Profile vs session settings split. **Long-press translation popup works.** **Playback rate (0.75x–1.5x discrete pills) works.** **Cumulative review works from hardware QA.** **Real blur mode via `expo-blur` is built and hardware-tested.** **Tajweed coloring is wired but doesn't render** (likely API field shape — backlogged; do not tackle unless Mohammad explicitly asks).
 
 | Slice | Status | Commit | What |
 |---|---|---|---|
@@ -77,7 +78,7 @@ You're working with a self-taught builder doing this project on weekends and eve
 | 2D-Polish 5a Session 3 | ✅ hardware-tested enough to proceed; synced | `4599dff` + fixes through `b2b3186`; docs sync `7e56509` | Web-style cumulative review during memorization, review repeat count, pass labels, final-verse skip fixes |
 | **2D-Polish 5b** | ✅ tested; synced | `aa004ff` + docs | Real `expo-blur` overlay in page-mode blur. Tajweed explicitly deferred. |
 | **2E Dashboard polish** | ✅ hardware-tested | `3a19f2f` + docs | Today's-work dashboard cards, review priority colors, profile selector polish |
-| **2F Target-setting UI** | ✅ committed/typechecked; hardware re-QA pending | `fe83e97` + `ce8b9f6` | Mobile Targets screen for daily memorization/review/reading page targets; API helper sends local date and strips raw HTML errors |
+| **2F Target-setting UI** | ✅ committed/typechecked; hardware re-QA pending | `fe83e97` + `ce8b9f6` + `8fa113a` | Mobile Targets screen for daily memorization/review/reading page targets; API helper sends local date and strips raw HTML errors; dashboard retries/falls back on plan errors |
 
 `TODO.md` is current. Read it first.
 
@@ -242,7 +243,7 @@ Phase 2D is complete.
 
 Per user (confirmed Apr 27 evening): Option A — finish Slice 5 first, then do 2E + 2F before TestFlight.
 
-- **Phase 2F — hardware re-QA next** — Target-setting UI is implemented/typechecked; production dashboard for child L returned 200 after the screenshot; test Retry/reopen, target save flow, and dashboard refresh on iPhone.
+- **Phase 2F — hardware re-QA next** — Target-setting UI is implemented/typechecked; production dashboards for L and Joll returned 200 after the screenshots; test Joll reopen, fallback/refresh behavior, target save flow, and dashboard refresh on iPhone.
 - **Then Phase 3** — TestFlight (app icon, splash, EAS production build, App Store Connect, TestFlight beta)
 
 User also requested **deep-dive into web app's `noor-path/` for "lots of cool stuff that took a lot of work"** — to be done after Phase 2 completes. Consider during Phase 2F drafting.
@@ -324,7 +325,7 @@ User also requested **deep-dive into web app's `noor-path/` for "lots of cool st
 1. **Read `TODO.md` and this handoff.** This one supersedes earlier handoffs.
 2. **Check git state.** `main` and `feature/main-working-branch` should both contain the Phase 2E dashboard-polish commit. Start new work from `main`; `safe-cumulative` can be ignored unless needed for archaeology.
 3. **Hardware re-test Phase 2F on iPhone.** No new EAS build should be required because this slice is JS-only.
-4. **Reopen L's dashboard or tap Retry**, then verify target edits save and dashboard cards refresh after returning from the Targets screen.
+4. **Reopen Joll's dashboard**, then verify it loads normally or shows the warning fallback instead of a full-screen API 500. Verify target edits save and dashboard cards refresh after returning from the Targets screen.
 5. **If Mohammad approves Phase 2F, start Phase 3/TestFlight polish or the planned web-app deep dive.**
 6. **Keep future slices JS-only unless explicitly approved.** Do not touch tajweed. Do not add native dependencies unless Mohammad explicitly approves a rebuild.
 7. **Run `cd artifacts/noor-mobile && npx tsc --noEmit` after changes.**

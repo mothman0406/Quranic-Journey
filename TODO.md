@@ -1,6 +1,6 @@
 # NoorPath / Quranic Journey — Status & Next Steps
 
-_Last updated: April 28, 2026 (Phase 2F target-setting UI committed; API client local-date/error hardening committed at `ce8b9f6` and typechecked; production dashboard for child L returns 200; hardware re-QA pending)_
+_Last updated: April 28, 2026 (Phase 2F target-setting UI and dashboard fallback committed; production dashboards for L/Joll return 200, but phone re-QA still saw a Joll 500; hardware re-QA pending)_
 
 ---
 
@@ -16,21 +16,22 @@ After every meaningful action, update this file and `PHASE_2D_HANDOFF.md` before
 
 ## Current work log — April 28, 2026
 
-- Active branch/SHA: `main`; Phase 2F target-setting UI commit is `fe83e97`; API client hardening commit is `ce8b9f6`; latest docs sync is current branch HEAD.
+- Active branch/SHA: `main`; Phase 2F target-setting UI commit is `fe83e97`; API client hardening commit is `ce8b9f6`; dashboard fallback commit is `8fa113a`; latest docs sync is current branch HEAD.
 - Remote sync status: `main`, `origin/main`, `feature/main-working-branch`, and `origin/feature/main-working-branch` are synced at the latest docs sync/current branch HEAD. `safe-cumulative` is intentionally behind and can be ignored.
-- QA status: `cd artifacts/noor-mobile && npx tsc --noEmit` passed clean after Phase 2F edits and again after the API client hardening hotfix. Production `/api/children/23/dashboard` returned 200 with the active Better Auth session after the user screenshot showed a transient API 500. Hardware re-QA is pending.
+- QA status: `cd artifacts/noor-mobile && npx tsc --noEmit` passed clean after Phase 2F edits, after the API client hardening hotfix, and after the dashboard fallback. Production `/api/children/23/dashboard` and `/api/children/22/dashboard` returned 200 with the active Better Auth session; Joll also returned 200 across local-date headers `2026-04-24` through `2026-04-30`. Hardware re-QA is pending because the phone still showed a Joll dashboard 500.
 - Dev-server note: starting Expo inside the sandbox fails with `ERR_SOCKET_BAD_PORT` because sandboxed Node cannot bind local ports (`EPERM` on 8081). Run the dev server outside the sandbox/escalated when using this environment.
 - Inspection notes: initial Phase 2E inspection found `app/child/[childId]/index.tsx` was a three-card skeleton; `src/lib/api.ts` is a thin authenticated fetch helper; `/api/children/:id/dashboard` exposes `todaysPlan.newMemorization`, `todayProgress`, `reviewsDueToday`, and `readingGoal`; `/api/children/:id/reviews` exposes detailed queue items with `reviewPriority`.
 - Implementation notes: mobile dashboard now fetches dashboard plus review queue data, the Memorization/Review/Reading cards show today's assigned work, review previews use shared red/orange/green priority styling, the review queue cards have matching priority rails/backgrounds, and the profile selector has richer child rows with age, streak, and points.
 - Diff-review notes: removed new dashboard letter spacing and fixed streak pluralization before final QA.
 - Phase 2F inspection notes: targets are stored on `children` as `memorizePagePerDay`, `reviewPagesPerDay`, and `readPagesPerDay`; `GET /api/children/:childId` returns them through `formatChild`; `PUT /api/children/:childId` accepts all three fields. Web reference options live in `artifacts/noor-path/src/pages/settings.tsx`.
 - Phase 2F implementation notes: added `app/child/[childId]/targets.tsx`, registered it in the child stack, added a dashboard `Targets` entry point, and made the dashboard refresh on focus after returning from target edits. The screen uses preset chips plus minus/plus fine tuning and saves directly through `apiFetch`.
-- Phase 2F hotfix notes: after a screenshot showed the dashboard rendering raw HTML from an API 500, production was checked directly and returned 200 for child L. `apiFetch` now sends `x-local-date` from the phone and normalizes JSON/plain-text/HTML failures into short readable error messages instead of showing full HTML documents.
+- Phase 2F hotfix notes: after screenshots showed the dashboard rendering API 500s for L and Joll, production was checked directly and returned 200 for both children. `apiFetch` now sends `x-local-date` from the phone and normalizes JSON/plain-text/HTML failures into short readable error messages instead of showing full HTML documents. The dashboard now retries `/dashboard` once and then falls back to child/profile plus review queue data, keeping Targets reachable if today's plan endpoint flakes.
 - Exact next checklist:
-  1. Ask Mohammad to tap Retry/reopen L's dashboard in the existing dev client.
-  2. Re-test `Targets`: change memorization, review, and reading targets; confirm saved indicators.
-  3. Return to the dashboard and verify the cards reflect the saved target values.
-  4. If approved, move to Phase 3 TestFlight polish or the planned web-app deep dive.
+  1. Ask Mohammad to reload the JS bundle and reopen Joll's dashboard in the existing dev client.
+  2. If the warning fallback appears, pull to refresh once; otherwise verify the full dashboard loads normally.
+  3. Re-test `Targets`: change memorization, review, and reading targets; confirm saved indicators.
+  4. Return to the dashboard and verify the cards reflect the saved target values.
+  5. If approved, move to Phase 3 TestFlight polish or the planned web-app deep dive.
 
 ---
 
@@ -243,7 +244,7 @@ Implemented, typechecked, and hardware-tested Apr 28, 2026.
 
 ## ✅ DONE LOCALLY — Phase 2F — target-setting UI
 
-Implemented, committed, and typechecked Apr 28, 2026. Hardware re-QA is still pending after one transient dashboard 500 screenshot.
+Implemented, committed, and typechecked Apr 28, 2026. Hardware re-QA is still pending after dashboard 500 screenshots for L and Joll.
 
 - Added a mobile Targets screen at `app/child/[childId]/targets.tsx`.
 - Parents can set memorization, review, and reading pages-per-day per child.
@@ -251,15 +252,16 @@ Implemented, committed, and typechecked Apr 28, 2026. Hardware re-QA is still pe
 - Preset chips match the web reference; minus/plus controls allow fine tuning without keyboard input.
 - Child dashboard has a `Targets` header action and refreshes when returning from the Targets screen.
 - Shared mobile `apiFetch` now sends `x-local-date` and normalizes HTML API failures into readable messages, so transient server errors do not render raw HTML in-app.
+- Child dashboard retries `/api/children/:id/dashboard` once, then falls back to child/profile plus review queue data so the dashboard remains usable and Targets stays reachable if today's plan endpoint flakes.
 - No native dependencies added. Tajweed untouched.
-- Local QA: `cd artifacts/noor-mobile && npx tsc --noEmit` passed clean after the target UI and again after the API helper hotfix.
-- Production QA: authenticated production dashboard fetch for child L returned 200 after the screenshot, so the saved target values are not corrupting dashboard data.
+- Local QA: `cd artifacts/noor-mobile && npx tsc --noEmit` passed clean after the target UI, after the API helper hotfix, and after the dashboard fallback.
+- Production QA: authenticated production dashboard fetches for child L and Joll returned 200 after the screenshots, so the saved target values are not corrupting dashboard data.
 
 ## 🔜 NEXT — Phase 2F hardware QA
 
 1. Start Metro with `npx expo start --dev-client --clear --port 8081` outside the sandbox/escalated.
 2. Open the installed development build on iPhone.
-3. Reopen L's dashboard or tap `Retry`; confirm the dashboard loads.
+3. Reopen Joll's dashboard; confirm the dashboard loads normally or shows the temporary warning fallback instead of the full-screen API 500.
 4. From a child dashboard, tap `Targets`.
 5. Change memorization, review, and reading targets; confirm each save indicator appears.
 6. Return to the dashboard and verify reading/review/memorization cards reflect the updated target data after refresh.
