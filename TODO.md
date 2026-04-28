@@ -1,6 +1,6 @@
 # NoorPath / Quranic Journey — Status & Next Steps
 
-_Last updated: April 28, 2026 (temporary mobile dashboard diagnostics and deeper fallback hardening committed locally; mobile typecheck passed; remote sync pending)_
+_Last updated: April 28, 2026 (temporary mobile dashboard diagnostics and deeper fallback hardening synced; hardware re-QA pending)_
 
 ---
 
@@ -16,8 +16,8 @@ After every meaningful action, update this file and `PHASE_2D_HANDOFF.md` before
 
 ## Current work log — April 28, 2026
 
-- Active branch/SHA: `main` at local diagnostic fallback commit `ccbf1ec`; Phase 2F target-setting UI commit is `fe83e97`; API client hardening commit is `ce8b9f6`; dashboard fallback commit is `8fa113a`.
-- Remote sync status: local `main` is ahead of `origin/main` until the diagnostic fallback is pushed; `feature/main-working-branch` and `origin/feature/main-working-branch` were last confirmed at `1b73781`. `safe-cumulative` is intentionally behind and can be ignored.
+- Active branch/SHA: `main`; diagnostic fallback code commit is `ccbf1ec`, followed by docs sync `6c93673` and this final handoff refresh. Phase 2F target-setting UI commit is `fe83e97`; API client hardening commit is `ce8b9f6`; previous dashboard fallback commit is `8fa113a`.
+- Remote sync status: `main`, `origin/main`, `feature/main-working-branch`, and `origin/feature/main-working-branch` were synced at `6c93673` after the diagnostic fallback; this final docs refresh is being pushed next. `safe-cumulative` is intentionally behind and can be ignored.
 - QA status: `cd artifacts/noor-mobile && npx tsc --noEmit` passed clean after Phase 2F edits, after the API client hardening hotfix, after the dashboard fallback, and after the new diagnostic/fallback patch. Production `/api/children/23/dashboard` and `/api/children/22/dashboard` returned 200 with the active Better Auth session; Joll also returned 200 across local-date headers `2026-04-24` through `2026-04-30`. Hardware re-QA still showed a full-screen Joll dashboard `API 500: Internal Server Error`; the new mobile diagnostic/fallback patch is ready to commit.
 - Dev-server note: starting Expo inside the sandbox fails with `ERR_SOCKET_BAD_PORT` because sandboxed Node cannot bind local ports (`EPERM` on 8081). Run the dev server outside the sandbox/escalated when using this environment.
 - Inspection notes: initial Phase 2E inspection found `app/child/[childId]/index.tsx` was a three-card skeleton; `src/lib/api.ts` is a thin authenticated fetch helper; `/api/children/:id/dashboard` exposes `todaysPlan.newMemorization`, `todayProgress`, `reviewsDueToday`, and `readingGoal`; `/api/children/:id/reviews` exposes detailed queue items with `reviewPriority`.
@@ -28,9 +28,9 @@ After every meaningful action, update this file and `PHASE_2D_HANDOFF.md` before
 - Phase 2F hotfix notes: after screenshots showed the dashboard rendering API 500s for L and Joll, production was checked directly and returned 200 for both children. `apiFetch` now sends `x-local-date` from the phone and normalizes JSON/plain-text/HTML failures into short readable error messages instead of showing full HTML documents. The dashboard now retries `/dashboard` once and then falls back to child/profile plus review queue data, keeping Targets reachable if today's plan endpoint flakes. Fresh inspection found that if the fallback path itself fails, the full-screen error still only shows the original dashboard error, so the phone cannot distinguish stale JS, wrong API base, dashboard failure, review failure, or child fallback failure yet.
 - Phase 2F diagnostic implementation notes: added `ApiError`, `getApiRuntimeInfo`, console request/response logs, and diagnostic marker `dashboard-diag-2026-04-28a` in mobile `apiFetch`. The dashboard now tracks primary/retry/fallback review/fallback child stages, renders a compact diagnostic panel on fallback/error, and if the child fallback fetch fails it renders a degraded shell from route params instead of the original full-screen dashboard 500.
 - Exact next checklist:
-  1. Push `main`, fast-forward `feature/main-working-branch`, and push that branch too.
-  2. Ask Mohammad to reload the JS bundle and reopen Joll's dashboard; if the old full-screen error lacks diagnostic marker `dashboard-diag-2026-04-28a`, treat it as stale JS.
-  3. If the diagnostic panel appears, use its stage/path/status/base URL/cookie-presence details to decide the next fix.
+  1. Ask Mohammad to reload the JS bundle and reopen Joll's dashboard.
+  2. If the old full-screen error lacks diagnostic marker `dashboard-diag-2026-04-28a`, treat it as stale JS and restart/clear the dev client bundle.
+  3. If the diagnostic panel appears, capture its stage/path/status/base URL/cookie-presence details and fix the specific failed endpoint or environment.
   4. If the dashboard loads normally, re-test `Targets`: change memorization, review, and reading targets; confirm saved indicators.
   5. Return to the dashboard and verify the cards reflect the saved target values.
 
