@@ -1,6 +1,6 @@
 # NoorPath / Quranic Journey — Status & Next Steps
 
-_Last updated: April 27, 2026 (Phase 2D Slice 5a Session 1 + 4 hotfixes shipped + tested; Slice 5a Session 2 next)_
+_Last updated: April 27, 2026 (Phase 2D Slice 5a Session 2 shipped + tested except tajweed; Slice 5a Session 3 next)_
 
 ---
 
@@ -19,7 +19,7 @@ _Last updated: April 27, 2026 (Phase 2D Slice 5a Session 1 + 4 hotfixes shipped 
 - iOS distribution certificate generated (expires Apr 27 2027)
 - `eas.json` committed with `development` / `preview` / `production` profiles
 - `expo-dev-client` installed (auto-added by EAS during first dev build)
-- First EAS development build shipped Apr 27 2026 — installed on registered iPhone, used to validate Slice 4 + Slice 5a Session 1
+- First EAS development build shipped Apr 27 2026 — installed on registered iPhone, used to validate Slice 4 + Slice 5a Sessions 1+2
 
 ---
 
@@ -90,7 +90,7 @@ Review queue loads with red/orange/green priority pills; surah review session sh
 
 ---
 
-## ✅ DONE — Phase 2D — Memorization mode (Slices 1–4 + Slice 5a Session 1)
+## ✅ DONE — Phase 2D — Memorization mode (Slices 1–4 + Slice 5a Sessions 1–2)
 
 ### Phase 2D-Core (Slice 1) — `5650d9e` + `e752721`
 
@@ -141,30 +141,32 @@ JS-only ship over existing EAS dev build.
 - **5a v2 (diagnostic)** — Added logs at `[v4-fetch]`, `[timings-effect]`, `[play]`, `[tick]` to debug missing word tracking.
 - **5a v3 (`45d58a3`)** — Diagnostic logs revealed Quran.com v4 `by_ayah` endpoint returns `segments: undefined` for all non-Husary reciter IDs. Fix: fractional fallback in RAF tick (`Math.floor(frac * wordCount)`) when `segsRef.current` is empty. Mirrors web app's behavior. Plus `setVolumeAsync(1.0)` on every Sound (Afasy noticeably quieter than Husary on everyayah). Removed all diagnostic logs.
 - **5a v4 (`d5d5f1f`)** — `LEAD_MS = 300` constant time-shift in fractional-fallback branch so highlight runs slightly ahead of audio (matches Husary's anticipatory feel from QDC segment 1 starting at frac=0).
-- **5a v5 (latest)** — Bumped `LEAD_MS = 500` after 300ms still trailed Afasy. Confirmed working for short ayahs. Lag may reappear on longer verses (Al-Baqarah, Ayat al-Kursi) — accepted limitation; root cause is the equal-time-per-word approximation, not leading silence.
+- **5a v5** — Bumped `LEAD_MS = 500` after 300ms still trailed Afasy. Confirmed working for short ayahs. Lag may reappear on longer verses (Al-Baqarah, Ayat al-Kursi) — accepted limitation.
 
-**Slice 5a Session 1 status: works very well in real testing on iPhone.** All 7 reciters play; word tracking works for all (true QDC for Husary, fractional fallback for others); audio plays through iPhone silent switch; volumes normalized; theme + reciter pickers in settings sheet; profile vs session settings split.
+**Slice 5a Session 1 status: works very well on iPhone.** All 7 reciters play; word tracking works for all (true QDC for Husary, fractional fallback for others); audio plays through iPhone silent switch; volumes normalized; theme + reciter pickers in settings sheet; profile vs session settings split.
+
+### Phase 2D-Polish Slice 5a Session 2 — `18f054d`
+
+JS-only. Three features in one commit:
+
+- **Translation popup (working)** — `word_fields=translation` + `translations=131` (Sahih International) added to both `fetchSurahVerses` and `fetchVersesByPage`. `onLongPress` (delayLongPress=400) on in-scope words opens a centered fade Modal with Arabic + English. Inner `Pressable` with empty `onPress` absorbs tap so backdrop dismiss only fires outside the card. Short tap still triggers tap-to-seek.
+- **Playback rate (working)** — `PLAYBACK_RATES = [0.75, 0.85, 1.0, 1.15, 1.25, 1.5]` pill scroller in settings sheet (matches theme/reciter pattern). Skipped `@react-native-community/slider` since it has native code requiring a rebuild — discrete pill values are kid-friendlier anyway. `setRateAsync(rate, true)` (`shouldCorrectPitch=true`) called in `playVerse` after `createAsync`, plus a separate effect that pushes rate changes to the active sound mid-playback.
+- **Tajweed coloring (broken — backlogged)** — created `src/lib/tajweed.ts` with 21-class `TAJWEED_COLORS` map and `extractTajweedColor` helper, added `text_uthmani_tajweed?` to `ApiWord`, included it in `word_fields` of both fetchers, wired tajweed toggle into settings sheet, applied colors via `extractTajweedColor` in both ayah and page word renderers. End markers and out-of-scope words skip coloring. **Doesn't visually color anything on hardware.** Likely cause: Quran.com v4 doesn't actually populate `text_uthmani_tajweed` as a `word_field` despite docs (the web app uses verse-level `text_uthmani_tajweed` + `splitTajweedIntoWords` parser, suggesting it's only available at the verse level). Wiring is in place; investigation deferred.
 
 ---
 
-## 🔜 Phase 2D-Polish Slice 5a Session 2 — content polish (next)
+## 🔜 Phase 2D-Polish Slice 5a Session 3 — cumulative review (next)
 
-Still JS-only, hot-reloads over existing dev build.
-
-- **Tajweed highlighting toggle** — Quran.com v4 `text_uthmani_tajweed` field + CSS-class color map ported from `noor-path/components/mushaf/bayaan/bayaan-constants.ts`. Parse the inline tags into RN-compatible color spans (no `dangerouslySetInnerHTML`).
-- **Long-press word for translation popup** — Quran.com v4 `word_fields=translation`. RN Modal or absolute-positioned View. Long-press only; short tap stays tap-to-seek.
-- **Playback rate slider** — `expo-av` `setRateAsync(rate, true)`. Range 0.75x–1.5x in 0.05 steps. Likely needs `@react-native-community/slider` (JS-only).
-
-## 🔜 Phase 2D-Polish Slice 5a Session 3 — cumulative review
-
-The most behaviorally complex Session — interacts with auto-advance, repeat counts, and Mark Complete flow.
+Most behaviorally complex Session 5a item. JS-only.
 
 - **Cumulative review mode** — after Mark Complete, optionally play through `ayahStart..currentVerse` sequentially before showing the success alert. Reuse existing autoplay-through-range machinery. Settings toggle.
+- Watch for interaction with auto-advance, repeat counts, blind/blur modes, and existing Mark Complete flow. If it's fighting the state machine, split further.
 
 ## 🔜 Phase 2D-Polish Slice 5b — `expo-blur` (requires EAS rebuild)
 
 - Real blur via `expo-blur` (replaces opacity-0.35 fallback used by `blurMode`)
 - Possibly `expo-linear-gradient` for parchment shading if rebuild is happening anyway — judgment call
+- Tajweed fix (still JS-only — could ship before 5b if user wants it)
 
 After Slice 5b ships, Phase 2D is complete.
 
@@ -204,7 +206,8 @@ After Phase 2D, before TestFlight. User-requested:
 
 ## 🟡 Backlog
 
-- **Persistence bug** — Slice 5a Session 1 split profile vs session settings, but profile-level still doesn't persist across app close. User flagged as low priority. Likely a hydrate-effect ordering issue or `settingsLoaded` gate timing problem in `memorization.tsx`. Investigate before Session 2 if quick, defer otherwise.
+- **Tajweed coloring not rendering (Slice 5a Session 2)** — wiring is in place (`src/lib/tajweed.ts`, fetcher fields, toggle, both renderers) but no colors appear on hardware. Most likely Quran.com v4 doesn't expose `text_uthmani_tajweed` as a `word_field` — only as a verse-level field. Web app uses `splitTajweedIntoWords` to parse the verse-level HTML and split into per-word HTML chunks. Mobile fix path: (1) add `fields=text_uthmani_tajweed` (verse-level) to fetcher, (2) port `splitTajweedIntoWords` from `noor-path/src/components/mushaf/bayaan/bayaan-utils.ts` to mobile, (3) at fetch time, parse each verse's tajweed HTML into a `Map<wordIdx, color>` keyed by display index, (4) consult that map in the renderers instead of `word.text_uthmani_tajweed`. Lower priority — kid can memorize fine without it.
+- **Persistence bug** — Slice 5a Session 1 split profile vs session settings, but profile-level still doesn't persist across app close. Likely a hydrate-effect ordering issue or `settingsLoaded` gate timing problem in `memorization.tsx`. Low priority per user.
 - **Long-verse fractional lag** — `LEAD_MS = 500` works for short ayahs but trailing reappears on long verses (Al-Baqarah, Ayat al-Kursi). Root cause is equal-time-per-word approximation, not leading silence. Real fix requires per-word audio durations (Quran.com `wbw` endpoint or similar) — heavier work. Accepted limitation for now.
 - Update `noor-path/src/lib/auth-client.ts` to support env-switchable baseURL
 - Add Expo dev URL to `PROD_TRUSTED_ORIGINS` and `PROD_ALLOWED_ORIGINS` if RN dev needs LAN access
@@ -254,10 +257,10 @@ After Phase 2D, before TestFlight. User-requested:
 - DO NOT set `disableHierarchicalLookup: true` — pnpm's deeply nested `.pnpm/` requires hierarchical lookup ON.
 - After modifying `metro.config.js`, restart with `npx expo start --clear`.
 
-### Memorization screen architecture (2026-04-27, Phase 2D + Slice 5a Session 1)
-- One file: `app/child/[childId]/memorization.tsx`. ~1300 lines after Slice 5a Session 1.
+### Memorization screen architecture (2026-04-27, Phase 2D + Slice 5a)
+- One file: `app/child/[childId]/memorization.tsx`. ~1500 lines after Slice 5a Session 2.
 - Audio state lives in refs because `expo-av` status callback closes over stale state. Pattern: `const fooRef = useRef(foo); useEffect(() => { fooRef.current = foo; }, [foo]);`
-- All audio refs as of Slice 5a: `viewModeRef`, `currentVerseRef`, `ayahEndRef`, `isPlayingRef`, `isLoadingRef`, `pendingSeekPositionRef`, `repeatCountRef`, `autoAdvanceDelayRef`, `autoplayThroughRangeRef`, `reciteModeRef`, `reciteExpectedIdxRef`, `displayWordsMapRef`, `surahNumberRef`, `matchedWordCountRef`, `lastMatchedWordRef`, `lastMatchTimeRef`, `reciterRef`, `saveTimerRef`. Plus timer/raf/sound refs.
+- Audio refs as of Slice 5a Session 2: `viewModeRef`, `currentVerseRef`, `ayahEndRef`, `isPlayingRef`, `isLoadingRef`, `pendingSeekPositionRef`, `repeatCountRef`, `autoAdvanceDelayRef`, `autoplayThroughRangeRef`, `reciteModeRef`, `reciteExpectedIdxRef`, `displayWordsMapRef`, `surahNumberRef`, `matchedWordCountRef`, `lastMatchedWordRef`, `lastMatchTimeRef`, `reciterRef`, `saveTimerRef`, `playbackRateRef`. Plus timer/raf/sound refs.
 - Two render modes (`viewMode: "ayah" | "page"`). Two highlight states (`highlightedWord` for ayah, `highlightedPage: { verseKey, position }` for page).
 - QDC segments are 1-indexed and skip non-word tokens (filter `char_type_name === "word"` first).
 - Husary `qdcId: 6`, `quranComId: null`. Don't assume null `quranComId` means no timing data.
@@ -270,11 +273,22 @@ After Phase 2D, before TestFlight. User-requested:
 - Fractional fallback in `tick()`: `Math.floor(shiftedFrac * wordCount)` where `shiftedFrac = (pos + LEAD_MS) / dur, clamped to 1`. `LEAD_MS = 500` after tuning. Provides anticipatory feel similar to Husary's QDC segment 1 starting at frac=0.
 - iOS audio session: `Audio.setAudioModeAsync({ playsInSilentModeIOS: true })` mandatory — without it the silent switch silences playback through the speaker. AirPods always work because Bluetooth bypasses the switch.
 - everyayah recordings have wildly different mastered volumes. Afasy_128kbps is significantly quieter than Husary_128kbps. Compensate with `setVolumeAsync(1.0)` on every Sound after `createAsync`.
+- `setRateAsync(rate, /* shouldCorrectPitch */ true)` works on `expo-av` Sound. Range 0.75–1.5 is comfortable. `shouldCorrectPitch=true` keeps recitation pitch natural.
 
 ### Profile vs session settings (2026-04-27, Slice 5a Session 1)
 - `src/lib/settings.ts` exports `loadProfileSettings`/`saveProfileSettings` (themeKey, reciterId, viewMode — persisted to AsyncStorage) and `DEFAULT_SESSION_SETTINGS` constants (repeatCount, autoAdvanceDelayMs, autoplayThroughRange, blurMode, blindMode — reset each session).
 - Profile-level edited via future Profile Settings page (Phase 2E). For now, defaults hardcoded.
+- Session 2 added `playbackRate` and `tajweedEnabled` as plain inline `useState` defaults (not added to `DEFAULT_SESSION_SETTINGS`); they reset on screen mount.
 - Persistence currently buggy — profile settings don't survive app close. Likely hydrate-effect ordering. Low priority per user.
+
+### Tajweed (2026-04-27, Slice 5a Session 2 — partial)
+- `src/lib/tajweed.ts` has the 21-class `TAJWEED_COLORS` map (ported from `noor-path/src/components/mushaf/bayaan/bayaan-constants.ts` `TAJWEED_CSS`) plus `extractTajweedColor(html)` which extracts the first `class="..."` and looks up the hex.
+- Mobile assumed Quran.com v4 supports `text_uthmani_tajweed` as a `word_field`. On hardware no colors render. Likely the field isn't populated at the word level — only at verse level (web app fetches `text_uthmani_tajweed` on the verse and uses `splitTajweedIntoWords` from `bayaan-utils.ts` to chunk it). Fix path documented in backlog.
+
+### Translation popup (2026-04-27, Slice 5a Session 2)
+- Quran.com v4 `word_fields=translation` + `translations=131` (Sahih International) populates a `translation` field on each word. May come back as a `{ text, language_name }` object OR a plain string — handle both.
+- `onLongPress` with `delayLongPress={400}` is a comfortable threshold (short tap still fires `onPress`).
+- RN backdrop-dismiss pattern: outer `Pressable` is the backdrop with `onPress={close}`; inner card is also a `Pressable` with `onPress={() => {}}` (empty) to absorb taps so they don't bubble to the backdrop. Plain `<View>` for the card would let taps fall through.
 
 ### Arabic fuzzy matching for on-device speech recognition (2026-04-27, Slice 4 hotfixes)
 - iOS speech recognition returns plain Arabic — no hamza variants (أإآاٱ all collapse to ا), no ta-marbuta (ة → ه), no ya-with-hamza (ئ → ي), often without "ال" prefix.
@@ -308,4 +322,5 @@ After Phase 2D, before TestFlight. User-requested:
 | iOS bundle identifier | `com.mothman.noorpath` |
 | EAS project | `@mothman123/noor-mobile` |
 | Railway project | `humble-laughter` / `production` env |
-| Mobile app HEAD | Slice 5a Session 1 latest hotfix (LEAD_MS=500) |
+| Mobile app HEAD | `18f054d` (Slice 5a Session 2 — translations + playback rate working, tajweed wiring shipped but not coloring) |
+</content>
