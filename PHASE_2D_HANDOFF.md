@@ -1,7 +1,7 @@
 # NoorPath / Quranic Journey — Phase 2E Handoff
 
 **For: the next Codex/Claude Code conversation continuing this project**
-**Last updated: 2026-04-28 (malformed Targets navigation fix synced; mobile typecheck passed; hardware re-QA pending)**
+**Last updated: 2026-04-28 (Phase 2F Targets/dashboard hardware QA passed after route fix; docs sync pending)**
 
 This handoff supersedes earlier handoff drafts.
 
@@ -9,7 +9,7 @@ This handoff supersedes earlier handoff drafts.
 
 - Active branch/SHA: `main` at the latest docs sync/current branch HEAD; route fix commit is `0c1e088`; diagnostic fallback code commit is `ccbf1ec`. Phase 2F target-setting UI commit is `fe83e97`; API client hardening commit is `ce8b9f6`; previous dashboard fallback commit is `8fa113a`.
 - Remote sync status: `main`, `origin/main`, `feature/main-working-branch`, and `origin/feature/main-working-branch` are synced at the latest docs sync/current branch HEAD. `safe-cumulative` is intentionally behind and can be ignored.
-- QA status: `cd artifacts/noor-mobile && npx tsc --noEmit` passed clean after Phase 2F edits, after the API client hardening hotfix, after the dashboard fallback, after the diagnostic/fallback patch, and after the malformed Targets route fix. Production `/api/children/23/dashboard` and `/api/children/22/dashboard` returned 200 with the active Better Auth session; Joll also returned 200 across local-date headers `2026-04-24` through `2026-04-30`. Hardware screenshot from the diagnostic patch showed the real failure: the dashboard was mounted with `childId = "targets"` and called `/api/children/targets/dashboard`, `/reviews`, and child fetch.
+- QA status: `cd artifacts/noor-mobile && npx tsc --noEmit` passed clean after Phase 2F edits, after the API client hardening hotfix, after the dashboard fallback, after the diagnostic/fallback patch, and after the malformed Targets route fix. Production `/api/children/23/dashboard` and `/api/children/22/dashboard` returned 200 with the active Better Auth session; Joll also returned 200 across local-date headers `2026-04-24` through `2026-04-30`. Hardware screenshot from the diagnostic patch showed the real failure: the dashboard was mounted with `childId = "targets"` and called `/api/children/targets/dashboard`, `/reviews`, and child fetch. Hardware re-QA after the route fix passed.
 - Dev-server note: starting Expo inside the sandbox fails with `ERR_SOCKET_BAD_PORT` because sandboxed Node cannot bind local ports (`EPERM` on 8081). Run the dev server outside the sandbox/escalated when using this environment.
 - Inspection notes: initial Phase 2E inspection found `app/child/[childId]/index.tsx` was a three-card skeleton; `src/lib/api.ts` is a thin authenticated fetch helper; `/api/children/:id/dashboard` exposes `todaysPlan.newMemorization`, `todayProgress`, `reviewsDueToday`, and `readingGoal`; `/api/children/:id/reviews` exposes detailed queue items with `reviewPriority`.
 - Implementation notes: mobile dashboard now fetches dashboard plus review queue data, the Memorization/Review/Reading cards show today's assigned work, review previews use shared red/orange/green priority styling, the review queue cards have matching priority rails/backgrounds, and the profile selector has richer child rows with age, streak, and points.
@@ -20,12 +20,13 @@ This handoff supersedes earlier handoff drafts.
 - Phase 2F diagnostic implementation notes: added `ApiError`, `getApiRuntimeInfo`, console request/response logs, and diagnostic marker `dashboard-diag-2026-04-28a` in mobile `apiFetch`. The dashboard now tracks primary/retry/fallback review/fallback child stages, renders a compact diagnostic panel on fallback/error, and if the child fallback fetch fails it renders a degraded shell from route params instead of the original full-screen dashboard 500.
 - Phase 2F route bug diagnosis: dashboard `handleTargetsPress` used relative `pathname: "./targets"`, which Expo Router resolved as `/child/targets` instead of `/child/:childId/targets`. That made the dashboard route match `[childId] = "targets"` on return/reload, causing API calls to `/api/children/targets/*`.
 - Phase 2F route fix notes: dashboard Targets navigation now uses absolute `pathname: "/child/[childId]/targets"`, and dashboard loading now rejects non-numeric child IDs before making API calls.
+- Phase 2F hardware QA notes: Mohammad reported the QA check passed after the route fix. The child dashboard no longer gets stuck on `/api/children/targets/*`, and the Targets/dashboard flow is unblocked.
 - Exact next checklist:
-  1. Ask Mohammad to reload the JS bundle, go Back to the child picker if currently stuck on `/child/targets`, reopen L/Joll, then test Targets save and dashboard refresh.
-  2. Verify the diagnostic panel no longer reports `/api/children/targets/*`.
-  3. Verify Targets save for memorization, review, and reading targets.
-  4. Return to the dashboard and verify the cards reflect the saved target values.
-  5. If all good, remove or downgrade the temporary visible diagnostic panel in a follow-up.
+  1. Remove or downgrade the temporary visible diagnostic panel and noisy API console logs now that the route bug is confirmed fixed.
+  2. Run `cd artifacts/noor-mobile && npx tsc --noEmit` after diagnostic cleanup.
+  3. Hardware spot-check dashboard fallback still keeps Targets reachable if `/dashboard` ever fails.
+  4. Begin Phase 3 TestFlight polish: app icon, splash screen, production EAS build, App Store Connect/TestFlight setup.
+  5. After Phase 3 planning, schedule the requested web-app deep dive for mobile feature candidates.
 
 ---
 
