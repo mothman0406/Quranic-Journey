@@ -1271,7 +1271,15 @@ export default function MemorizationScreen() {
   const verseIndex = ayahStart !== null ? currentVerse - ayahStart + 1 : 1;
   const totalVerses = ayahStart !== null && ayahEnd !== null ? ayahEnd - ayahStart + 1 : 0;
   const canPrev = ayahStart !== null && currentVerse > ayahStart;
-  const canNext = internalPhase === "cumulative" || (ayahEnd !== null && currentVerse < ayahEnd);
+  const canEnterCumulativeFromSingle =
+    internalPhase === "single" &&
+    cumulativeReview &&
+    ayahStart !== null &&
+    currentVerse > ayahStart;
+  const canNext =
+    internalPhase === "cumulative" ||
+    canEnterCumulativeFromSingle ||
+    (ayahEnd !== null && currentVerse < ayahEnd);
 
   // ── Render ───────────────────────────────────────────────────────────────────
 
