@@ -4,20 +4,76 @@ const baseURL =
   process.env.EXPO_PUBLIC_API_URL ??
   "https://workspaceapi-server-production-cc25.up.railway.app";
 
+function localDateHeader() {
+  const date = new Date();
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function decodeBasicHtmlEntities(value: string) {
+  return value
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&amp;/g, "&")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'");
+}
+
+function stripHtmlError(text: string) {
+  const preMatch = text.match(/<pre[^>]*>([\s\S]*?)<\/pre>/i);
+  const titleMatch = text.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+  const source = preMatch?.[1] ?? titleMatch?.[1] ?? text;
+  return decodeBasicHtmlEntities(source.replace(/<[^>]+>/g, " "))
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function readableErrorText(text: string, contentType: string | null) {
+  const trimmed = text.trim();
+  if (!trimmed) return "Request failed.";
+
+  try {
+    const parsed = JSON.parse(trimmed) as {
+      error?: unknown;
+      message?: unknown;
+    };
+    const message = parsed.error ?? parsed.message;
+    if (typeof message === "string" && message.trim()) {
+      return message.trim();
+    }
+  } catch {
+    // Fall through to plain text / HTML handling.
+  }
+
+  const looksLikeHtml =
+    contentType?.toLowerCase().includes("text/html") ||
+    /^<!doctype html/i.test(trimmed) ||
+    /^<html/i.test(trimmed);
+  const readable = looksLikeHtml ? stripHtmlError(trimmed) : trimmed;
+  return readable.length > 240 ? `${readable.slice(0, 237)}...` : readable;
+}
+
 export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const cookies = authClient.getCookie();
+  const headers = new Headers(init?.headers);
+  if (!headers.has("Content-Type")) {
+    headers.set("Content-Type", "application/json");
+  }
+  headers.set("x-local-date", localDateHeader());
+  if (cookies) {
+    headers.set("Cookie", cookies);
+  }
+
   const res = await fetch(`${baseURL}${path}`, {
     ...init,
     credentials: "omit",
-    headers: {
-      "Content-Type": "application/json",
-      ...(cookies ? { Cookie: cookies } : {}),
-      ...init?.headers,
-    },
+    headers,
   });
   if (!res.ok) {
     const text = await res.text();
-    throw new Error(`API ${res.status}: ${text}`);
+    throw new Error(`API ${res.status}: ${readableErrorText(text, res.headers.get("Content-Type"))}`);
   }
   return res.json() as Promise<T>;
 }
