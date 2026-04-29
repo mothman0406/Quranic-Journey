@@ -342,6 +342,7 @@ export default function MemorizationScreen() {
   const [leaveSheetOpen, setLeaveSheetOpen] = useState(false);
   const [pauseSheetOpen, setPauseSheetOpen] = useState(false);
   const [pauseCompletedAyahEnd, setPauseCompletedAyahEnd] = useState<number | null>(null);
+  const [readyToReciteSheetOpen, setReadyToReciteSheetOpen] = useState(false);
   const [completionSheetOpen, setCompletionSheetOpen] = useState(false);
   const [selectedQuality, setSelectedQuality] = useState<QualityRatingValue | null>(null);
   const [ratingAyahEnd, setRatingAyahEnd] = useState<number | null>(null);
@@ -411,6 +412,8 @@ export default function MemorizationScreen() {
   const isPlayingRef = useRef(false);
   const pendingSeekPositionRef = useRef<number | null>(null);
   const reciterRef = useRef(reciter);
+  const readyToReciteSheetOpenRef = useRef(false);
+  const restoreReadyPromptAfterLeaveRef = useRef(false);
   const internalPhaseRef = useRef<InternalPhase>("single");
   const cumAyahIdxRef = useRef(0);
   const cumPassRef = useRef(1);
@@ -466,6 +469,7 @@ export default function MemorizationScreen() {
   useEffect(() => { autoAdvanceDelayRef.current = autoAdvanceDelayMs; }, [autoAdvanceDelayMs]);
   useEffect(() => { autoplayThroughRangeRef.current = autoplayThroughRange; }, [autoplayThroughRange]);
   useEffect(() => { playbackRateRef.current = playbackRate; }, [playbackRate]);
+  useEffect(() => { readyToReciteSheetOpenRef.current = readyToReciteSheetOpen; }, [readyToReciteSheetOpen]);
   useEffect(() => { completionSheetOpenRef.current = completionSheetOpen; }, [completionSheetOpen]);
 
   // Apply playback rate changes to the currently-playing sound
@@ -606,6 +610,7 @@ export default function MemorizationScreen() {
     setLeaveSheetOpen(false);
     setPauseSheetOpen(false);
     setPauseCompletedAyahEnd(null);
+    updateReadyToReciteSheet(false);
     setCompletionSheetOpen(false);
     setSelectedQuality(null);
     setRatingAyahEnd(null);
@@ -934,13 +939,21 @@ export default function MemorizationScreen() {
       advanceTimeoutRef.current = null;
     }
     void stopAudioCompletely();
-    if (!completionSheetOpenRef.current) {
-      openRecitationCheck({
-        completedToAyah: ayahEndRef.current ?? currentVerseRef.current,
-        source: "teacher",
-        score: null,
-      });
+    if (!completionSheetOpenRef.current && !readyToReciteSheetOpenRef.current) {
+      setPauseSheetOpen(false);
+      setLeaveSheetOpen(false);
+      setSelectedQuality(null);
+      setRatingAyahEnd(null);
+      setRecitationCheckSource("teacher");
+      setRecitationScore(null);
+      setSaveError(null);
+      updateReadyToReciteSheet(true);
     }
+  }
+
+  function updateReadyToReciteSheet(open: boolean) {
+    readyToReciteSheetOpenRef.current = open;
+    setReadyToReciteSheetOpen(open);
   }
 
   function setCurrentRepeat(nextRepeat: number) {
@@ -1355,6 +1368,7 @@ export default function MemorizationScreen() {
     setRecitationScore(score);
     setPauseSheetOpen(false);
     setLeaveSheetOpen(false);
+    updateReadyToReciteSheet(false);
     completionSheetOpenRef.current = true;
     setCompletionSheetOpen(true);
 
@@ -1374,6 +1388,7 @@ export default function MemorizationScreen() {
     if (!surahNumber || ayahStart === null || ayahEnd === null) return;
     setInternalPhase("single");
     internalPhaseRef.current = "single";
+    updateReadyToReciteSheet(false);
     void stopAudioCompletely();
     setSaveError(null);
     setSelectedQuality(null);
@@ -1390,20 +1405,33 @@ export default function MemorizationScreen() {
     }
     if (submitting) return;
     setSaveError(null);
+    restoreReadyPromptAfterLeaveRef.current = readyToReciteSheetOpenRef.current;
+    updateReadyToReciteSheet(false);
     setLeaveSheetOpen(true);
+  }
+
+  function closeLeaveSheet(restoreReadyPrompt: boolean) {
+    setLeaveSheetOpen(false);
+    if (restoreReadyPrompt && restoreReadyPromptAfterLeaveRef.current) {
+      restoreReadyPromptAfterLeaveRef.current = false;
+      updateReadyToReciteSheet(true);
+      return;
+    }
+    restoreReadyPromptAfterLeaveRef.current = false;
   }
 
   function handleSaveAndLeave() {
     if (submitting) return;
-    setLeaveSheetOpen(false);
+    closeLeaveSheet(false);
     void handlePauseAndSave();
   }
 
   async function handleLeaveWithoutSaving() {
     if (submitting) return;
-    setLeaveSheetOpen(false);
+    closeLeaveSheet(false);
     setPauseSheetOpen(false);
     setPauseCompletedAyahEnd(null);
+    updateReadyToReciteSheet(false);
     setCompletionSheetOpen(false);
     setSelectedQuality(null);
     setRatingAyahEnd(null);
@@ -1458,6 +1486,52 @@ export default function MemorizationScreen() {
       source: "teacher",
       score: null,
     });
+  }
+
+  function handleReciteToTeacher() {
+    if (ayahStart === null || ayahEnd === null) return;
+    openRecitationCheck({
+      completedToAyah: ayahEnd,
+      source: "teacher",
+      score: null,
+    });
+  }
+
+  async function enterReciteMode(startVerse: number) {
+    if (ayahStart === null || ayahEnd === null || surahNumberRef.current === null) return;
+    const boundedStart = Math.max(ayahStart, Math.min(startVerse, ayahEnd));
+
+    await stopAudioCompletely();
+    setInternalPhase("single");
+    internalPhaseRef.current = "single";
+    autoPlayRef.current = false;
+    pendingSeekPositionRef.current = null;
+    setCurrentRepeat(1);
+    setCurrentVerse(boundedStart);
+    currentVerseRef.current = boundedStart;
+    matchedWordCountRef.current = 0;
+    lastMatchedWordRef.current = "";
+    setReciteExpectedIdx(0);
+    reciteExpectedIdxRef.current = 0;
+    setReciteError(null);
+    setReciteListening(false);
+    setHighlightedWord(0);
+    setHighlightedPage({
+      verseKey: `${surahNumberRef.current}:${boundedStart}`,
+      position: 1,
+    });
+    setReciteMode(true);
+  }
+
+  async function handleReciteToNoorPath() {
+    if (ayahStart === null) return;
+    updateReadyToReciteSheet(false);
+    setSaveError(null);
+    setSelectedQuality(null);
+    setRatingAyahEnd(null);
+    setRecitationCheckSource("noorpath");
+    setRecitationScore(null);
+    await enterReciteMode(ayahStart);
   }
 
   async function handleSaveCompletion(qualityRating: QualityRatingValue) {
@@ -2112,22 +2186,7 @@ export default function MemorizationScreen() {
                 setReciteMode(false);
                 return;
               }
-              // Fully release the audio session so expo-speech-recognition can claim the mic.
-              // pauseAsync alone leaves iOS holding the session for expo-av, blocking mic access.
-              await stopAudioCompletely();
-              setInternalPhase("single");
-              internalPhaseRef.current = "single";
-              matchedWordCountRef.current = 0;
-              lastMatchedWordRef.current = "";
-              setReciteExpectedIdx(0);
-              setHighlightedWord(0);
-              if (surahNumberRef.current !== null) {
-                setHighlightedPage({
-                  verseKey: `${surahNumberRef.current}:${currentVerse}`,
-                  position: 1,
-                });
-              }
-              setReciteMode(true);
+              await enterReciteMode(currentVerseRef.current);
             }}
           >
             <Text style={[styles.modeButtonText, reciteMode && styles.modeButtonTextActive]}>
@@ -2185,13 +2244,13 @@ export default function MemorizationScreen() {
         transparent
         animationType="slide"
         onRequestClose={() => {
-          if (!submitting) setLeaveSheetOpen(false);
+          if (!submitting) closeLeaveSheet(true);
         }}
       >
         <Pressable
           style={styles.backdrop}
           onPress={() => {
-            if (!submitting) setLeaveSheetOpen(false);
+            if (!submitting) closeLeaveSheet(true);
           }}
         />
         <View style={styles.completionSheet}>
@@ -2230,10 +2289,51 @@ export default function MemorizationScreen() {
           </Pressable>
           <Pressable
             style={styles.completionCancelButton}
-            onPress={() => setLeaveSheetOpen(false)}
+            onPress={() => closeLeaveSheet(true)}
             disabled={submitting}
           >
             <Text style={styles.completionCancelText}>Keep Practicing</Text>
+          </Pressable>
+        </View>
+      </Modal>
+
+      {/* Ready to Recite sheet */}
+      <Modal
+        visible={readyToReciteSheetOpen}
+        transparent
+        animationType="slide"
+        onRequestClose={() => {}}
+      >
+        <View style={styles.backdrop} />
+        <View style={styles.completionSheet}>
+          <Text style={styles.sheetTitle}>Ready to Recite?</Text>
+          <Text style={styles.completionSubtitle}>
+            {chaptersMap.get(surahNumber ?? 0)?.name_simple ?? "Current surah"} ·{" "}
+            {formatAyahRange(ayahStart, ayahEnd)}
+          </Text>
+
+          <View style={styles.pauseSummaryCard}>
+            <Text style={styles.pauseSummaryTitle}>Choose the recitation check</Text>
+            <Text style={styles.pauseSummaryDetail}>
+              The session is complete. Pick whether the child will recite to a teacher now or recite to NoorPath first.
+            </Text>
+          </View>
+
+          <Pressable
+            style={[styles.readyTeacherButton, submitting && styles.completeButtonDisabled]}
+            onPress={handleReciteToTeacher}
+            disabled={submitting}
+          >
+            <Text style={styles.readyTeacherButtonText}>Recite to Teacher →</Text>
+          </Pressable>
+          <Pressable
+            style={[styles.readyNoorPathButton, submitting && styles.readyNoorPathButtonDisabled]}
+            onPress={() => {
+              void handleReciteToNoorPath();
+            }}
+            disabled={submitting}
+          >
+            <Text style={styles.readyNoorPathButtonText}>Recite to NoorPath →</Text>
           </Pressable>
         </View>
       </Modal>
@@ -2368,7 +2468,7 @@ export default function MemorizationScreen() {
           >
             <View style={styles.recitationCheckIntroCard}>
               <Text style={styles.recitationCheckKicker}>
-                {recitationCheckSource === "noorpath" ? "Recite to NoorPath" : "Parent rating"}
+                {recitationCheckSource === "noorpath" ? "Recite to NoorPath" : "Recite to Teacher"}
               </Text>
               <Text style={styles.recitationCheckTitle}>
                 {chaptersMap.get(surahNumber ?? 0)?.name_simple ?? "Current surah"}
@@ -4069,6 +4169,35 @@ const styles = StyleSheet.create({
     color: "#ffffff",
     fontSize: 16,
     fontWeight: "700",
+  },
+  readyTeacherButton: {
+    width: "100%",
+    backgroundColor: "#059669",
+    paddingVertical: 16,
+    borderRadius: 12,
+    alignItems: "center",
+  },
+  readyTeacherButtonText: {
+    color: "#ffffff",
+    fontSize: 16,
+    fontWeight: "800",
+  },
+  readyNoorPathButton: {
+    width: "100%",
+    backgroundColor: "#ffffff",
+    borderWidth: 1,
+    borderColor: "#a7f3d0",
+    paddingVertical: 16,
+    borderRadius: 12,
+    alignItems: "center",
+  },
+  readyNoorPathButtonDisabled: {
+    opacity: 0.55,
+  },
+  readyNoorPathButtonText: {
+    color: "#047857",
+    fontSize: 16,
+    fontWeight: "800",
   },
   errorText: {
     fontSize: 16,
