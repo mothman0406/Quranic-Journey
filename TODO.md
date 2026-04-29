@@ -1,6 +1,6 @@
 # NoorPath / Quranic Journey — Status & Next Steps
 
-_Last updated: April 29, 2026 (Phase 2G.1 hardware-tested; Phase 2G.2 mobile IA shell implemented locally; Phase 3/TestFlight deferred until Phase 2H must-have parity is triaged/completed)_
+_Last updated: April 29, 2026 (Phase 2G.2 hardware-tested; next is Phase 2G.3 shared screen primitives; Phase 3/TestFlight deferred until Phase 2H must-have parity is triaged/completed)_
 
 ---
 
@@ -16,9 +16,9 @@ After every meaningful action, update this file and `PHASE_2D_HANDOFF.md` before
 
 ## Current work log — April 29, 2026
 
-- Active branch/SHA at Phase 2G.2 start: `main` at `cf7b916`. Phase 2G.2 IA commit: current `main` HEAD containing this docs update.
-- Remote sync status at Phase 2G.2 start: `main`, `origin/main`, `feature/main-working-branch`, and `origin/feature/main-working-branch` were synced at `cf7b916`. After this Phase 2G.2 commit is pushed, both tracked branches must be synced to the current Phase 2G.2 HEAD. `safe-cumulative` was temporary archaeology and can be ignored.
-- QA status: Phase 2D memorization core through Slice 5b, Phase 2E dashboard polish, Phase 2F target-setting UI, and Phase 2G.1 diagnostic cleanup are hardware-tested. Mohammad reported Phase 2G.1 works on iPhone. Phase 2G.2 local validation passed with `cd artifacts/noor-mobile && npx tsc --noEmit` and `git diff --check`; no Expo server or hardware QA was run for 2G.2 in this pass.
+- Active branch/SHA at Phase 2G.2 hardware-QA docs start: `main` at `0af13be`. This docs update commit: current `main` HEAD containing this handoff update.
+- Remote sync status at Phase 2G.2 hardware-QA docs start: `main`, `origin/main`, `feature/main-working-branch`, and `origin/feature/main-working-branch` were synced at `0af13be`. After this docs update is pushed, both tracked branches must be synced to the current docs HEAD. `safe-cumulative` was temporary archaeology and can be ignored.
+- QA status: Phase 2D memorization core through Slice 5b, Phase 2E dashboard polish, Phase 2F target-setting UI, Phase 2G.1 diagnostic cleanup, and Phase 2G.2 mobile IA shell are hardware-tested. Mohammad reported Phase 2G.2 nav/More behavior passed on iPhone. This pass changed docs only, so no typecheck was run.
 - Dev-server note: starting Expo inside the sandbox fails with `ERR_SOCKET_BAD_PORT` because sandboxed Node cannot bind local ports (`EPERM` on 8081). Run the dev server outside the sandbox/escalated when using this environment.
 - TestFlight status: **Phase 3/TestFlight is deferred** until the web-app parity audit's must-have mobile items are triaged and the Phase 2H pre-TestFlight items are completed or explicitly moved to post-beta.
 - Inspection notes: initial Phase 2E inspection found `app/child/[childId]/index.tsx` was a three-card skeleton; `src/lib/api.ts` is a thin authenticated fetch helper; `/api/children/:id/dashboard` exposes `todaysPlan.newMemorization`, `todayProgress`, `reviewsDueToday`, and `readingGoal`; `/api/children/:id/reviews` exposes detailed queue items with `reviewPriority`.
@@ -34,12 +34,13 @@ After every meaningful action, update this file and `PHASE_2D_HANDOFF.md` before
 - Phase 2G.1 implementation notes: removed the temporary visible dashboard diagnostic panel, deleted the `[noor-api]` request/response/error console logs, and removed the temporary dashboard diagnostic marker/runtime helper. Preserved `ApiError`, readable API errors, `x-local-date`, Better Auth cookie handling, dashboard retry/fallback behavior, degraded fallback shell, and numeric route-param validation.
 - Phase 2G.1 hardware QA notes: Mohammad reported dashboard load/refresh, Targets navigation, and fallback behavior work after the cleanup.
 - Phase 2G.2 implementation notes: added a reusable `ChildBottomNav`, registered a new child `more` route, added bottom-nav access on dashboard and review, added a review-count badge where queue data is already loaded, and built a More screen exposing Full Quran, Targets, Profiles, plus planned Progress, Learning Plan, Stories, and Du'aas entries. Kept the memorization engine, review session, Mushaf controls, web app, tajweed, generated files, and native dependencies untouched.
+- Phase 2G.2 hardware QA notes: Mohammad reported the bottom nav and More screen passed on iPhone.
 - Exact next checklist:
-  1. Finish syncing this Phase 2G.2 commit to `main`, `origin/main`, `feature/main-working-branch`, and `origin/feature/main-working-branch`.
-  2. Mohammad hardware spot-check Phase 2G.2: bottom nav on dashboard/review/More, Home/Memorize/Review/More route switches, review badge, More links to Full Quran/Targets/Profiles, back behavior, and deep links to existing routes.
-  3. If hardware QA passes, mark Phase 2G.2 hardware-tested.
-  4. Implement Phase 2G.3 shared screen primitives or explicitly skip to Phase 2G.4 API parity checklist before Phase 2H.
-  5. Triage Phase 2H with Mohammad: either complete all 2H pre-TestFlight slices or explicitly mark any slice as post-beta before Phase 3 resumes.
+  1. Finish syncing this docs update to `main`, `origin/main`, `feature/main-working-branch`, and `origin/feature/main-working-branch`.
+  2. Implement Phase 2G.3 shared screen primitives: reusable mobile header, screen container/content wrapper, card/list row, empty/error state, and badge/pill primitives; adopt them only on a small safe surface such as More and possibly review/dashboard headers.
+  3. Validate Phase 2G.3 locally with `cd artifacts/noor-mobile && npx tsc --noEmit` and `git diff --check`.
+  4. Hardware spot-check Phase 2G.3 on dashboard, review, More, Targets, Full Quran, and Memorization to confirm layout, back/nav behavior, and no content overlap/regressions.
+  5. Then implement Phase 2G.4 API parity checklist before Phase 2H, unless Mohammad explicitly chooses to skip 2G.3/2G.4.
   6. Keep tajweed as documented backlog only; do not tighten recite matching; do not edit web app or generated files manually; keep future implementation JS-only unless a native rebuild is explicitly approved.
 
 ### Web-app parity audit summary
@@ -96,7 +97,7 @@ Pre-TestFlight: yes.
 | Slice | Goal | Likely files | Backend/API deps | Risk | QA |
 |---|---|---|---|---|---|
 | 2G.1 Diagnostic cleanup | Complete Apr 29: removed visible dashboard diagnostic panel and noisy `[noor-api]` logs while keeping readable errors/fallbacks. | `artifacts/noor-mobile/src/lib/api.ts`, `app/child/[childId]/index.tsx` | None | JS-only | Local typecheck + `git diff --check` passed; Mohammad hardware QA passed |
-| 2G.2 Mobile IA shell | Implemented locally Apr 29: first-pass bottom nav and More screen so existing and upcoming pages are discoverable. | `app/child/[childId]/_layout.tsx`, `index.tsx`, `review.tsx`, `more.tsx`, `src/components/child-bottom-nav.tsx` | `GET /children/:id`; existing review/dashboard queue data for badge | JS-only | Local typecheck + `git diff --check` passed; hardware nav/back/deep-link check pending |
+| 2G.2 Mobile IA shell | Complete Apr 29: first-pass bottom nav and More screen so existing and upcoming pages are discoverable. | `app/child/[childId]/_layout.tsx`, `index.tsx`, `review.tsx`, `more.tsx`, `src/components/child-bottom-nav.tsx` | `GET /children/:id`; existing review/dashboard queue data for badge | JS-only | Local typecheck + `git diff --check` passed; Mohammad hardware QA passed |
 | 2G.3 Shared screen primitives | Establish mobile header/card/empty/error/filter patterns to avoid one-off thin screens. | New `artifacts/noor-mobile/src/components/*`, touched route files as adopted | None | JS-only | Visual pass on iPhone small/large text, loading/error states |
 | 2G.4 API parity checklist | Align OpenAPI/backend assumptions before content pages. Document and then fix generated-client inputs through spec/codegen only. | `lib/api-spec/openapi.yaml`, route files if needed, generated output via Orval only | Dua status bug, `reviewedToday`, dashboard/reading fields | Mostly JS/TS; no native | API smoke tests; codegen/typecheck after actual implementation |
 
@@ -154,7 +155,7 @@ Pre-TestFlight: yes after 2H must-haves are triaged/completed.
 - `PROD_ALLOWED_ORIGINS` + `PROD_TRUSTED_ORIGINS` configured for CORS / Better Auth
 - `/api/healthz` returns `{"status":"ok"}` (public, mounted above `requireAuth`)
 - Three secrets rotated (Neon password, Better Auth secret, Hugging Face token)
-- Branch-sync note: `main` + `feature/main-working-branch` were synced at `cf7b916` before Phase 2G.2. After this IA commit, both branches should be synced to the current Phase 2G.2 HEAD. `safe-cumulative` was temporary archaeology and can be ignored.
+- Branch-sync note: `main` + `feature/main-working-branch` were synced at `0af13be` before this Phase 2G.2 hardware-QA docs update. After this docs commit, both branches should be synced to the current docs HEAD. `safe-cumulative` was temporary archaeology and can be ignored.
 - Typecheck baseline clean
 - iOS bundle identifier registered: `com.mothman.noorpath`
 - EAS project created at `@mothman123/noor-mobile`
@@ -371,10 +372,11 @@ Implemented, committed, typechecked, route-fixed, and hardware-tested Apr 28, 20
 
 ## 🔜 NEXT — Phase 2G web parity foundation
 
-1. Hardware spot-check Phase 2G.2 on iPhone: dashboard/review/More bottom nav, route switching, review badge, More links, back behavior, and deep links.
-2. Mark Phase 2G.2 hardware-tested after Mohammad confirms it.
-3. Implement Phase 2G.3 shared screen primitives or explicitly skip to Phase 2G.4 API parity checklist before Phase 2H.
-4. Start Phase 2H must-have mobile parity only after Phase 2G foundation lands.
+1. Implement Phase 2G.3 shared screen primitives: reusable header, container/content wrapper, card/list row, empty/error state, and badge/pill primitives.
+2. Adopt those primitives on a small safe surface first, ideally More and one existing list-like screen, without refactoring the memorization engine.
+3. Validate locally with `cd artifacts/noor-mobile && npx tsc --noEmit` and `git diff --check`.
+4. Hardware spot-check dashboard, review, More, Targets, Full Quran, and Memorization for layout/nav regressions.
+5. Start Phase 2H must-have mobile parity only after Phase 2G foundation lands or Mohammad explicitly skips remaining 2G foundation slices.
 
 ---
 
@@ -510,10 +512,10 @@ Phase 3/TestFlight is intentionally deferred until Phase 2H must-have mobile par
 | Frontend (dev) | `http://localhost:5173` |
 | Database | Neon serverless Postgres (rotated Apr 26) |
 | Repo | `https://github.com/mothman0406/Quranic-Journey` |
-| Branches | `main` (deploy) + `feature/main-working-branch`; both should be synced to the current Phase 2G.2 IA commit. `safe-cumulative` was temporary archaeology and can be ignored. |
+| Branches | `main` (deploy) + `feature/main-working-branch`; both should be synced to the current Phase 2G.2 hardware-QA docs commit. `safe-cumulative` was temporary archaeology and can be ignored. |
 | Apple Developer | Approved Apr 26; Team ID `M7KJJDN537` |
 | iOS bundle identifier | `com.mothman.noorpath` |
 | EAS project | `@mothman123/noor-mobile` |
 | Railway project | `humble-laughter` / `production` env |
-| Mobile app HEAD | Phase 2D complete through Slice 5b, Phase 2E dashboard polish complete, Phase 2F targets complete, web parity audit docs complete, Phase 2G.1 diagnostic cleanup hardware-tested, and Phase 2G.2 mobile IA shell implemented locally at current `main` HEAD. EAS dev build `cfb3f406-5fec-405a-a150-e525a96ecff2` finished and was hardware-tested by Mohammad; Phase 2G.2 hardware QA is pending. Next work should start from `main` with Phase 2G.3 or 2G.4 after QA. |
+| Mobile app HEAD | Phase 2D complete through Slice 5b, Phase 2E dashboard polish complete, Phase 2F targets complete, web parity audit docs complete, Phase 2G.1 diagnostic cleanup hardware-tested, and Phase 2G.2 mobile IA shell hardware-tested at current `main` HEAD. EAS dev build `cfb3f406-5fec-405a-a150-e525a96ecff2` finished and was hardware-tested by Mohammad. Next work should start from `main` with Phase 2G.3 shared screen primitives, or Phase 2G.4 if 2G.3 is explicitly skipped. |
 </content>
