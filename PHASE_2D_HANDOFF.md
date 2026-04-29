@@ -1,7 +1,7 @@
 # NoorPath / Quranic Journey — Phase 2G Web Parity Handoff
 
 **For: the next Codex/Claude Code conversation continuing this project**
-**Last updated: 2026-04-29 (Phase 2I.1 memorization overview cards are locally implemented; hardware QA pending; beta is still blocked by 2I/2J/2K parity before TestFlight readiness)**
+**Last updated: 2026-04-29 (Phase 2I.1 overview cards are implemented, but memorization save semantics/rating must be fixed before hardware QA; beta is still blocked by 2I/2J/2K parity before TestFlight readiness)**
 
 This handoff supersedes earlier handoff drafts.
 
@@ -60,12 +60,13 @@ This handoff supersedes earlier handoff drafts.
 - Phase 2H.6 correction/research notes: frozen web reference still has required mobile parity not covered by 2H.6. `artifacts/noor-path/src/pages/memorization.tsx` has a top three-card row for `Today's Work`, `Current Work`/`Recitation Focus`, and `Next Up`, wired to dashboard `todaysPlan.newMemorization`, `todayProgress`, and `upNextMemorization`. `artifacts/noor-path/src/pages/quran-memorize.tsx` has setup/session/check flow with ayah From/To, repeat count, auto-advance, cumulative review, review repeat count, bookmark resume, Pause & Save, Save & Leave, Leave without saving, Recite to Teacher/NoorPath, and View in Full Mushaf. `artifacts/noor-path/src/pages/settings.tsx` and `src/hooks/use-settings.ts` define global defaults for confetti, auto-advance, default repeat count, cumulative review, default review repeat count, blur intensity, reciter, Mushaf theme, and font size. `artifacts/noor-path/src/pages/review.tsx` has local active-day review behavior, completed-today/completed-day sections, and a Continue Reviewing path into the next open review set so the user is not stuck with nothing to review. `artifacts/noor-path/src/pages/mushaf-reader.tsx` is a Bayaan-style Mushaf tool with fitted text pages, surah/bookmark search, recent reads, bookmarks, highlights, notes, translation/tafseer/word-by-word sheets, audio range playback, reciter/rate/repeat/range-repeat settings, blind/select/recite modes, mark-selected-ayahs-memorized, memorization handoffs, and reading-progress persistence.
 - Phase 2I.1 implementation notes: added the web-style top three Memorize overview cards in the active mobile app: `Today's work`, `Current work`/`Recitation Focus`, and `Next up`. The cards read from dashboard `todaysPlan.newMemorization`, `todayProgress.memStatus`, and `upNextMemorization`; show understandable work labels, ayah ranges, page ranges, status, and actions; and route into the existing mobile memorization session engine. `Today's work` starts the full dashboard assignment range, while `Current work`/`Recitation Focus` starts the active current-work range. Dashboard Memorize entry behavior remains the existing overview route. No backend/spec/generated files, frozen web app files, tajweed implementation, recite matcher behavior, or native dependencies were touched.
 - Phase 2I.1 validation notes: `cd artifacts/noor-mobile && npx tsc --noEmit` and `git diff --check` passed locally. Hardware QA is pending.
+- Phase 2I.1 follow-up/save-semantics notes: Mohammad clarified the web behavior must be mirrored before hardware QA. Frozen web `artifacts/noor-path/src/pages/quran-memorize.tsx` does not advance today's card to the next day when saving today's work; after saving it posts `/api/children/:childId/daily-progress` so the same `todaysPlan.newMemorization` remains visible with `todayProgress.memStatus === "completed"` or `"in_progress"`. `upNextMemorization` may change as the child completes extra work beyond the required day, but the today's card should stay today's work and show done. The web check screen also requires a rating (`Needs Work` quality 2, `Good` quality 4, `Excellent` quality 5) before saving so the saved ayah strengths render red/yellow/green. Mobile currently misses this: `memorization.tsx` `handleMarkComplete` hardcodes `qualityRating: 5`, sends `status: "memorized"`, and does not update `/daily-progress`. This is not just a future nice-to-have; it is the immediate next fix before Phase 2I.1 hardware QA.
 - Exact next checklist:
-  1. Mohammad hardware-tests Phase 2I.1: open Memorize from dashboard; confirm `Today's work`, `Current work`/`Recitation Focus`, and `Next up`; start today's full assignment; start/resume current work; start next-up if available; return to dashboard and confirm refresh; smoke search/filter/resume/session flow.
-  2. If QA passes, record the hardware result in this file and `TODO.md`.
-  3. Then continue Phase 2I.2 Pause & Save/session action parity.
-  4. Do not start TestFlight readiness until Phase 2I, 2J, and 2K are complete and hardware-tested.
-  5. Do not tighten recite matcher behavior and do not touch tajweed implementation unless only documenting it as missing/backlogged.
+  1. Implement the Phase 2I.1 follow-up save fix in mobile memorization: add the web-style rating choice before save, save with the chosen quality rating, preserve existing memorized ayahs, set memorization status based on full-surah completion instead of always `"memorized"`, and post `/daily-progress` for today's assignment so today's work stays visible as done/in-progress.
+  2. Preserve the 2I.1 overview cards, dashboard Memorize entry behavior, and the existing session engine; do not implement Pause & Save yet except where needed to reach the rating/save screen.
+  3. Validate with `cd artifacts/noor-mobile && npx tsc --noEmit` and `git diff --check`.
+  4. Then Mohammad hardware-tests Phase 2I.1: open Memorize from dashboard; confirm the three cards; complete/rate/save today's work; confirm today's card remains the same assignment marked done; confirm `Next up` can change if extra work is completed; smoke search/filter/resume/session flow.
+  5. Do not start TestFlight readiness until Phase 2I, 2J, and 2K are complete and hardware-tested. Do not tighten recite matcher behavior and do not touch tajweed implementation unless only documenting it as missing/backlogged.
 
 ---
 
@@ -80,11 +81,11 @@ Mobile already has:
 - Auth, existing-child profile picker, dashboard work cards, Parent Settings, memorization session engine, Phase 2H.6 memorization discovery, review queue/session with Phase 2H.4 essentials, a Full Quran page-image reader with Phase 2H.5 jump/search/progress/bookmark essentials, a first-pass Dashboard/Memorize/Review/More nav shell, shared screen primitives adopted by More and Review, and Phase 2G.4 API/spec foundation for upcoming content and progress pages.
 - Memorization already includes ayah/page modes, cumulative review, repeats, reciters, themes, speed, blind/blur modes, translation popup, recite mode, and progress submission.
 - Memorization discovery is complete and hardware-tested: the Memorize route now shows current/today work, resume cards, surah search/filter, per-surah progress/strength, and starts the existing session engine.
-- Phase 2I.1 memorization overview cards are locally implemented: the Memorize route now has `Today's work`, `Current work`/`Recitation Focus`, and `Next up` cards backed by dashboard `todaysPlan.newMemorization`, `todayProgress`, and `upNextMemorization`. Hardware QA is pending.
+- Phase 2I.1 memorization overview cards are locally implemented: the Memorize route now has `Today's work`, `Current work`/`Recitation Focus`, and `Next up` cards backed by dashboard `todaysPlan.newMemorization`, `todayProgress`, and `upNextMemorization`. Hardware QA is pending until the save semantics/rating follow-up is fixed.
 - Review now has queue summary, due/upcoming/reviewed sections, no-due/completed/empty states, sticky session controls, reciter/speed controls, focus refresh, and SM-2 ratings; Reading resumes/saves a page target and now exposes page/surah/juz jump/search, target progress, and page bookmarks.
 
 Biggest mobile gaps from web:
-- Phase 2I.1 hardware validation: the mobile Memorize overview cards are locally implemented but still need Mohammad's iPhone QA before 2I.2 starts.
+- Phase 2I.1 save semantics/rating follow-up: mobile must mirror web save behavior before hardware QA. Saving today's assignment should write daily progress and keep today's card as the same assignment marked done/in-progress; it should not appear to simply advance today's card to tomorrow's work. The user must choose Needs Work/Good/Excellent so saved strengths can show red/yellow/green instead of every save being hardcoded green.
 - Memorization session/settings parity: mobile still needs the web's Pause & Save, Save & Leave, Leave without saving, View in Full Mushaf, bookmark/resume clarity, teacher/app recitation handoff, setup controls for ayah range/repeats/auto-advance/cumulative review/review repeat count, and a visible memorization settings page for defaults.
 - Review never-empty parity: mobile still needs the web behavior where the Review page shows completed-today/completed-day work and always offers a way to continue into the next open review set when today's queue is empty or complete.
 - Full Quran/Mushaf parity: mobile still lacks most Bayaan-derived reader tools: fitted Bayaan text pages or a mobile-equivalent tool layer, recent reads, highlights, notes, translation/tafsir/word-by-word sheets, audio range player, reciter/rate/repeat/range-repeat settings, select-to-mark-memorized, recite-from-page, memorization handoffs, and deeper page tools.
@@ -92,7 +93,7 @@ Biggest mobile gaps from web:
 - Visual system is functional but thin; port the web's dense, warm, kid-friendly but parent-usable working-app feel.
 
 Highest-risk gaps before TestFlight:
-- Phase 2I Memorization parity completion is required before TestFlight: 2I.1 overview cards need hardware QA, then Pause & Save/session leave flow, View in Full Mushaf, setup/session settings, and a visible memorization settings/defaults page still need implementation.
+- Phase 2I Memorization parity completion is required before TestFlight: 2I.1 overview cards are implemented but need the immediate save-semantics/rating follow-up and hardware QA; then Pause & Save/session leave flow, View in Full Mushaf, setup/session settings, and a visible memorization settings/defaults page still need implementation.
 - Phase 2J Review never-empty/ahead-day parity is required before TestFlight: the user should see completed-today work and should always be offered next-day/next-open work instead of an empty dead end.
 - Phase 2K Full Quran/Mushaf Bayaan parity is required before TestFlight: the current page-image reader is usable, but it lacks the main reader tools that came from Bayaan in the web app.
 - Phase 2G.4 fixed the child-du'a update bug and refreshed OpenAPI/generated clients for future mobile surfaces; authenticated production API smoke is still pending.
@@ -130,7 +131,7 @@ Pre-TestFlight: yes. This phase corrects the gap Mohammad called out after 2H.6 
 
 | Slice | Goal | Likely files | API deps | Risk | QA |
 |---|---|---|---|---|---|
-| 2I.1 | Implemented locally Apr 29: added the web-style top three mobile Memorize cards for `Today's work`, `Current work`/`Recitation Focus`, and `Next up`, with full/current/next assignment ranges, status, and existing session-engine routing. | `memorization.tsx` | Existing dashboard/memorization/surahs endpoints; no generated edits | JS-only | Local mobile typecheck + `git diff --check` passed; Mohammad hardware QA pending |
+| 2I.1 | Implemented locally Apr 29, but needs immediate save-semantics follow-up before hardware QA: added top three mobile cards for `Today's work`, `Current work`/`Recitation Focus`, and `Next up`; next fix must ensure save/rating marks today's work done via daily progress instead of visually advancing today's card. | `memorization.tsx`, `src/lib/memorization.ts` if needed | Existing dashboard/memorization/surahs, `POST /daily-progress`, `POST /memorization`; no generated edits expected | JS-only | Local mobile typecheck + `git diff --check` passed for cards; save/rating fix and hardware QA pending |
 | 2I.2 | Add web-style Pause & Save, Save & Leave, Leave without saving, review-only Finish Recitation handling, and View in Full Mushaf from the memorization session. Preserve ayah/page modes, audio highlighting, cumulative review, reciter/speed settings, blind/blur modes, translation popup, recite mode, and mark-complete persistence. | `memorization.tsx`, maybe `mushaf.tsx` route params | Existing progress/daily-progress routes | Medium session-state risk | Pause midway, choose completed-to ayah, go to recitation check/save, leave with/without saving, jump to Full Quran page and back |
 | 2I.3 | Add a visible settings surface for memorization defaults: ayah/range preference if useful, repeat count/multiplier, auto-advance, cumulative review, review repeat count, blind/blur defaults, reciter, playback speed, theme, and any existing JS-only defaults. Decide whether to extend current Parent Settings or add a dedicated child memorization settings route, but make it discoverable from Memorize/session. | `targets.tsx` or new memorization settings route, `src/lib/settings.ts`, `memorization.tsx`, More/dashboard links | Existing child target/profile updates plus AsyncStorage settings | JS-only | Change defaults, start a new memorization session, verify defaults hydrate and persist per child |
 
@@ -200,7 +201,7 @@ You're working with a self-taught builder doing this project on weekends and eve
 ### Repo
 - GitHub: `https://github.com/mothman0406/Quranic-Journey`
 - Local: `/Users/mothmanaurascape.ai/Desktop/Quranic-Journey/`
-- Normal branch policy: `main` (deploy) and `feature/main-working-branch` stay synced. `safe-cumulative` was temporary archaeology and can be ignored. At Phase 2I.1 start both tracked branches were synced at `561910d`; after this implementation/docs sync they should be synced to the current Phase 2I.1 local-validation HEAD.
+- Normal branch policy: `main` (deploy) and `feature/main-working-branch` stay synced. `safe-cumulative` was temporary archaeology and can be ignored. At Phase 2I.1 start both tracked branches were synced at `561910d`; after this save-semantics docs sync they should be synced to the current docs HEAD.
 
 ### Stack
 - **Monorepo:** pnpm 9.15.9 (NOT 10).
@@ -214,7 +215,7 @@ You're working with a self-taught builder doing this project on weekends and eve
 
 ## 3. Where the project is right now
 
-**Phase 2D is complete through Slice 5b. Phase 2E dashboard polish is hardware-tested. Phase 2F target-setting UI is route-fixed and hardware-tested. Phase 2G.1 diagnostic cleanup, 2G.2 mobile IA shell, and 2G.3 shared screen primitives are hardware-tested. Phase 2H.1 onboarding/profile management, 2H.2 dashboard parity content, 2H.3 settings/targets convergence, 2H.4 review essentials parity, 2H.5 reading essentials parity, and 2H.6 memorization discovery parity are hardware-tested. Phase 2I.1 memorization overview cards are locally implemented and awaiting hardware QA. Beta/TestFlight is still blocked by required web parity: Phase 2I memorization completion, Phase 2J review never-empty/ahead-day behavior, and Phase 2K Full Quran/Mushaf Bayaan parity.** Recite mode is at parity with web. Multi-reciter playback works for all 7 reciters. Word tracking works for all (true QDC for Husary, fractional fallback w/ 500ms lead for others). Audio plays through iPhone silent switch. Theme + reciter pickers in settings sheet. Profile vs session settings split. **Long-press translation popup works.** **Playback rate (0.75x–1.5x discrete pills) works.** **Cumulative review works from hardware QA.** **Real blur mode via `expo-blur` is built and hardware-tested.** **Tajweed coloring is wired but doesn't render** (likely API field shape — backlogged; do not tackle unless Mohammad explicitly asks).
+**Phase 2D is complete through Slice 5b. Phase 2E dashboard polish is hardware-tested. Phase 2F target-setting UI is route-fixed and hardware-tested. Phase 2G.1 diagnostic cleanup, 2G.2 mobile IA shell, and 2G.3 shared screen primitives are hardware-tested. Phase 2H.1 onboarding/profile management, 2H.2 dashboard parity content, 2H.3 settings/targets convergence, 2H.4 review essentials parity, 2H.5 reading essentials parity, and 2H.6 memorization discovery parity are hardware-tested. Phase 2I.1 memorization overview cards are locally implemented, but save semantics/rating must be fixed before hardware QA. Beta/TestFlight is still blocked by required web parity: Phase 2I memorization completion, Phase 2J review never-empty/ahead-day behavior, and Phase 2K Full Quran/Mushaf Bayaan parity.** Recite mode is at parity with web. Multi-reciter playback works for all 7 reciters. Word tracking works for all (true QDC for Husary, fractional fallback w/ 500ms lead for others). Audio plays through iPhone silent switch. Theme + reciter pickers in settings sheet. Profile vs session settings split. **Long-press translation popup works.** **Playback rate (0.75x–1.5x discrete pills) works.** **Cumulative review works from hardware QA.** **Real blur mode via `expo-blur` is built and hardware-tested.** **Tajweed coloring is wired but doesn't render** (likely API field shape — backlogged; do not tackle unless Mohammad explicitly asks).
 
 | Slice | Status | Commit | What |
 |---|---|---|---|
@@ -241,7 +242,7 @@ You're working with a self-taught builder doing this project on weekends and eve
 | **2H.4 Review essentials parity** | ✅ hardware-tested | `8873156` + docs | Queue summary, due/upcoming/reviewed/completed states, pull/focus refresh, sticky review-session controls, reciter/speed controls |
 | **2H.5 Reading essentials parity** | ✅ hardware-tested | `4ceab5b` + docs | Page/surah/juz jump/search, saved-page clarity, reading target progress, improved controls, JS-only bookmarks |
 | **2H.6 Memorization discovery parity** | ✅ hardware-tested | `1d187ad` + docs | Current/today work, resume cards, surah search/filter, progress/strength, starts existing session engine |
-| **2I.1 Memorization overview cards** | ✅ local validation; hardware QA pending | current Phase 2I.1 HEAD | Web-style `Today's work`, `Current work`/`Recitation Focus`, and `Next up` cards backed by dashboard work/progress/next fields |
+| **2I.1 Memorization overview cards** | ✅ cards local validation; save/rating follow-up pending before hardware QA | current Phase 2I.1 HEAD | Web-style `Today's work`, `Current work`/`Recitation Focus`, and `Next up` cards backed by dashboard work/progress/next fields; immediate next fix is daily-progress save semantics and rating |
 
 `TODO.md` is current. Read it first.
 
@@ -402,13 +403,13 @@ Phase 2D is complete.
 
 ---
 
-## 7. Next: Hardware QA for Phase 2I.1, then Phase 2I.2
+## 7. Next: Phase 2I.1 Save Semantics/Rating Follow-Up
 
-Phase 2D, 2E, 2F, 2G.1, 2G.2, 2G.3, and Phase 2H.1-2H.6 are complete and hardware-tested. Phase 2I.1 memorization overview cards are locally implemented and need Mohammad's iPhone QA. Mohammad confirmed after 2H.6 QA that beta is still blocked by explicit web parity gaps. Next recommended work is Phase 2I.1 hardware QA, then Phase 2I.2 Pause & Save/session action parity.
+Phase 2D, 2E, 2F, 2G.1, 2G.2, 2G.3, and Phase 2H.1-2H.6 are complete and hardware-tested. Phase 2I.1 memorization overview cards are locally implemented, but Mohammad clarified the save behavior must match web before hardware QA. Next recommended work is the Phase 2I.1 save-semantics/rating follow-up, then Phase 2I.1 hardware QA, then Phase 2I.2 Pause & Save/session action parity.
 
 - **Phase 2G foundation** — Diagnostic cleanup, IA shell, shared screen primitives, and API parity foundation are in place.
 - **Phase 2H** — First-pass dashboard/settings/review/reading/memorization discovery parity is hardware-tested, but it did not finish beta parity.
-- **Phase 2I next** — Memorization parity completion: hardware-test the locally implemented three cards, then build pause/save and leave flows, View in Full Mushaf, and a visible memorization settings/defaults page.
+- **Phase 2I next** — Memorization parity completion: fix save semantics/rating for the locally implemented three cards, hardware-test them, then build pause/save and leave flows, View in Full Mushaf, and a visible memorization settings/defaults page.
 - **Phase 2J after 2I** — Review never-empty/ahead-day behavior: completed-today/completed-day visibility and Continue Reviewing into the next open day.
 - **Phase 2K after 2J** — Full Quran/Mushaf Bayaan parity: reader tools, ayah sheets, annotations, audio range playback, recite/select modes, and memorization handoffs.
 - **Phase 2L/Phase 3 after 2K** — Polish, production EAS build readiness, App Store Connect, and TestFlight.
@@ -490,9 +491,9 @@ The old 2I/2J content/progress roadmap is now Phase 2M and deferred unless Moham
 ## 9. What to do first in the next session
 
 1. **Read `TODO.md` and this handoff.** This one supersedes earlier handoffs.
-2. **Check git state.** `main` and `feature/main-working-branch` should both contain the current Phase 2I.1 local-validation commit. Start new work from `main`; `safe-cumulative` can be ignored.
-3. **Hardware-test Phase 2I.1.** Open Memorize from dashboard; confirm `Today's work`, `Current work`/`Recitation Focus`, and `Next up`; verify each card shows understandable assignment/status/range; start today's work; start/resume current work; start next-up if available; return to dashboard and confirm refresh; smoke search/filter/resume/session flow.
-4. **If QA passes, start Phase 2I.2.** Add Pause & Save, Save & Leave, Leave without saving, review-only Finish Recitation handling, and View in Full Mushaf without rewriting the mobile memorization session engine.
+2. **Check git state.** `main` and `feature/main-working-branch` should both contain the current Phase 2I.1 save-semantics docs commit. Start new work from `main`; `safe-cumulative` can be ignored.
+3. **Implement Phase 2I.1 save semantics/rating follow-up.** Read frozen web `quran-memorize.tsx`, then make mobile save today's work with daily progress and a Needs Work/Good/Excellent quality rating before hardware QA.
+4. **Hardware-test Phase 2I.1 after the fix.** Open Memorize from dashboard; confirm the three cards; complete/rate/save today's work; confirm today's card remains the same assignment marked done; confirm `Next up` can change if extra work is completed; smoke search/filter/resume/session flow.
 5. **Preserve sensitive behavior.** Do not touch tajweed except to document it as backlogged, and do not tighten recite matcher behavior.
 6. **Run `cd artifacts/noor-mobile && npx tsc --noEmit` and `git diff --check` after future mobile/docs changes.**
 7. **Keep future slices JS-only unless explicitly approved.** Do not touch tajweed. Do not tighten recite matching. Do not add native dependencies unless Mohammad explicitly approves a rebuild.
