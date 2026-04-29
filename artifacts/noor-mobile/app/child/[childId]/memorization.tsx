@@ -35,6 +35,7 @@ import {
   type MemorizationStatus,
   type NewMemorization,
   type SurahSummary,
+  type TodayProgress,
   type WorkStatus,
 } from "@/src/lib/memorization";
 import {
@@ -2422,6 +2423,7 @@ function MemorizationDiscovery({
             todayWork={content.todayWork}
             upNext={content.upNext}
             todayStatus={content.todayStatus}
+            todayProgress={state.dashboard.todayProgress}
             onStart={onStart}
           />
 
@@ -2561,6 +2563,30 @@ function getTodayActionLabel(status: WorkStatus) {
   return "Start";
 }
 
+function getCurrentWorkStatus(
+  todayWork: NewMemorization | null,
+  todayProgress: TodayProgress | undefined,
+): WorkStatus {
+  if (!todayWork) return "not_started";
+  if (todayProgress?.memStatus === "completed") return "completed";
+
+  const currentSurah = todayWork.currentWorkSurahNumber ?? todayWork.surahNumber;
+  const currentEnd = todayWork.currentWorkAyahEnd ?? todayWork.ayahEnd;
+  const progressTargetSurah = todayProgress?.memTargetSurah ?? todayWork.surahNumber;
+  const completedEnd = todayProgress?.memCompletedAyahEnd;
+
+  if (
+    completedEnd != null &&
+    currentSurah === progressTargetSurah &&
+    completedEnd >= currentEnd
+  ) {
+    return "completed";
+  }
+
+  if (todayProgress?.memStatus === "in_progress") return "in_progress";
+  return "not_started";
+}
+
 function getWorkRangeDetail(work: NewMemorization, mode: "full" | "current") {
   const ayahStart = mode === "current" ? work.currentWorkAyahStart ?? work.ayahStart : work.ayahStart;
   const ayahEnd = mode === "current" ? work.currentWorkAyahEnd ?? work.ayahEnd : work.ayahEnd;
@@ -2574,11 +2600,13 @@ function MemorizationOverviewCards({
   todayWork,
   upNext,
   todayStatus,
+  todayProgress,
   onStart,
 }: {
   todayWork: NewMemorization | null;
   upNext: NewMemorization | null | undefined;
   todayStatus: WorkStatus;
+  todayProgress: TodayProgress | undefined;
   onStart: (target: SessionTarget) => void;
 }) {
   const todayTone: OverviewCardTone = todayWork
@@ -2587,6 +2615,25 @@ function MemorizationOverviewCards({
       : "today"
     : "empty";
   const currentTitle = todayWork?.isReviewOnly ? "Recitation Focus" : "Current work";
+  const currentStatus = getCurrentWorkStatus(todayWork, todayProgress);
+  const currentStatusLabel = todayWork
+    ? currentStatus === "completed"
+      ? "Complete"
+      : todayWork.isReviewOnly
+      ? "Review-only"
+      : currentStatus === "in_progress"
+      ? "In progress"
+      : "Active range"
+    : "Idle";
+  const currentActionLabel = todayWork
+    ? currentStatus === "completed"
+      ? "Practice"
+      : todayWork.isReviewOnly
+      ? "Recite"
+      : currentStatus === "in_progress"
+      ? "Continue"
+      : "Start"
+    : "Browse below";
 
   return (
     <View style={styles.overviewGrid}>
@@ -2614,9 +2661,9 @@ function MemorizationOverviewCards({
             ? getWorkRangeDetail(todayWork, "current")
             : "Start from today's work or the list below."
         }
-        status={todayWork?.isReviewOnly ? "Review-only" : todayWork ? "Active range" : "Idle"}
-        action={todayWork ? (todayWork.isReviewOnly ? "Recite" : "Start") : "Browse below"}
-        tone={todayWork ? "current" : "empty"}
+        status={currentStatusLabel}
+        action={currentActionLabel}
+        tone={todayWork ? (currentStatus === "completed" ? "todayDone" : "current") : "empty"}
         disabled={!todayWork}
         onPress={() => {
           if (todayWork) onStart(buildWorkTarget(todayWork));
