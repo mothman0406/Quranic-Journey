@@ -1207,7 +1207,11 @@ export default function MemorizationScreen() {
     setDiscoveryState({ status: "ready", dashboard, progress, surahs });
   }
 
-  async function submitTodayMemorizationProgress(dashboard: DashboardResponse) {
+  async function submitTodayMemorizationProgress(
+    dashboard: DashboardResponse,
+    progressBeforeSave: MemorizationProgress[],
+    savedStatus: "memorized" | "in_progress",
+  ) {
     if (!surahNumber || ayahStart === null || ayahEnd === null) return;
 
     const todayWork = dashboard.todaysPlan.newMemorization;
@@ -1232,8 +1236,29 @@ export default function MemorizationScreen() {
     if (!overlapsTodayTarget && !overlapsCurrentWork) return;
 
     const completedAyahEnd = Math.max(todayProgress?.memCompletedAyahEnd ?? 0, ayahEnd);
+    const isMultiSurahTarget = targetEndSurah !== targetSurah;
+    const completesMultiSurahTarget = (() => {
+      if (!isMultiSurahTarget) return false;
+
+      const start = Math.min(targetSurah, targetEndSurah);
+      const end = Math.max(targetSurah, targetEndSurah);
+      for (let n = start; n <= end; n += 1) {
+        if (n === surahNumber) {
+          if (savedStatus !== "memorized") return false;
+          continue;
+        }
+
+        const progress = progressBeforeSave.find((item) => item.surahNumber === n);
+        if (progress?.status !== "memorized") return false;
+      }
+
+      return true;
+    })();
     const completesTodayTarget =
-      todayWork.isReviewOnly || (targetEndSurah === surahNumber && ayahEnd >= targetAyahEnd);
+      todayWork.isReviewOnly ||
+      (isMultiSurahTarget
+        ? completesMultiSurahTarget
+        : targetEndSurah === surahNumber && ayahEnd >= targetAyahEnd);
 
     await submitDailyProgress(childId, {
       memStatus: completesTodayTarget ? "completed" : "in_progress",
@@ -1287,7 +1312,7 @@ export default function MemorizationScreen() {
         status,
       });
 
-      await submitTodayMemorizationProgress(dashboardBeforeSave);
+      await submitTodayMemorizationProgress(dashboardBeforeSave, latestProgress, status);
 
       try {
         await refreshDiscoverySnapshot();
@@ -2569,19 +2594,6 @@ function getCurrentWorkStatus(
 ): WorkStatus {
   if (!todayWork) return "not_started";
   if (todayProgress?.memStatus === "completed") return "completed";
-
-  const currentSurah = todayWork.currentWorkSurahNumber ?? todayWork.surahNumber;
-  const currentEnd = todayWork.currentWorkAyahEnd ?? todayWork.ayahEnd;
-  const progressTargetSurah = todayProgress?.memTargetSurah ?? todayWork.surahNumber;
-  const completedEnd = todayProgress?.memCompletedAyahEnd;
-
-  if (
-    completedEnd != null &&
-    currentSurah === progressTargetSurah &&
-    completedEnd >= currentEnd
-  ) {
-    return "completed";
-  }
 
   if (todayProgress?.memStatus === "in_progress") return "in_progress";
   return "not_started";
