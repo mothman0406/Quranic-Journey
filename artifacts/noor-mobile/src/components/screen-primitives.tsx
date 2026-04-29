@@ -6,6 +6,7 @@ import {
   StyleSheet,
   Text,
   View,
+  type ScrollViewProps,
   type StyleProp,
   type ViewStyle,
 } from "react-native";
@@ -44,14 +45,17 @@ export function ScreenHeader({
 export function ScreenScrollView({
   children,
   contentContainerStyle,
+  refreshControl,
 }: {
   children: ReactNode;
   contentContainerStyle?: StyleProp<ViewStyle>;
+  refreshControl?: ScrollViewProps["refreshControl"];
 }) {
   return (
     <ScrollView
       style={styles.scroll}
       contentContainerStyle={[styles.scrollContent, contentContainerStyle]}
+      refreshControl={refreshControl}
     >
       {children}
     </ScrollView>
