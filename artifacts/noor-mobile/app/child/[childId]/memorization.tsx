@@ -59,10 +59,14 @@ import {
 import { MUSHAF_SURAHS } from "@/src/lib/mushaf";
 import { findReciter, RECITERS } from "@/src/lib/reciters";
 import {
+  clearMemorizationSessionBookmark,
   DEFAULT_SESSION_SETTINGS,
+  loadMemorizationSessionBookmark,
   loadDefaultSessionSettings,
   loadProfileSettings,
+  saveMemorizationSessionBookmark,
   saveProfileSettings,
+  type MemorizationSessionBookmark,
 } from "@/src/lib/settings";
 import { extractTajweedColor } from "@/src/lib/tajweed";
 
@@ -84,6 +88,7 @@ type SessionTarget = {
   surahNumber: number;
   ayahStart: number;
   ayahEnd: number;
+  currentAyah?: number;
   pageStart?: number | null;
   pageEnd?: number | null;
   isReviewOnly?: boolean;
@@ -273,6 +278,35 @@ function buildFullWorkTarget(work: NewMemorization): SessionTarget {
   };
 }
 
+function buildBookmarkTarget(bookmark: MemorizationSessionBookmark): SessionTarget {
+  const pages =
+    typeof bookmark.pageStart === "number" && typeof bookmark.pageEnd === "number"
+      ? { pageStart: bookmark.pageStart, pageEnd: bookmark.pageEnd }
+      : estimatePageRange(bookmark.surahNumber, bookmark.fromAyah, bookmark.toAyah);
+  return {
+    surahNumber: bookmark.surahNumber,
+    ayahStart: bookmark.fromAyah,
+    ayahEnd: bookmark.toAyah,
+    currentAyah: bookmark.currentAyah,
+    pageStart: pages.pageStart,
+    pageEnd: pages.pageEnd,
+    isReviewOnly: bookmark.isReviewOnly,
+  };
+}
+
+function getBookmarkSurahName(
+  surahNumber: number,
+  chaptersMap: Map<number, ApiChapter>,
+  fallback?: string,
+) {
+  return (
+    fallback ??
+    chaptersMap.get(surahNumber)?.name_simple ??
+    MUSHAF_SURAHS.find((surah) => surah.number === surahNumber)?.name ??
+    `Surah ${surahNumber}`
+  );
+}
+
 function scoreProgress(progress: MemorizationProgress[]) {
   const total = progress.length;
   if (total === 0) return { memorized: 0, learning: 0, average: 0 };
@@ -333,6 +367,7 @@ export default function MemorizationScreen() {
   const [discoveryRefreshing, setDiscoveryRefreshing] = useState(false);
   const [discoveryQuery, setDiscoveryQuery] = useState("");
   const [discoveryFilter, setDiscoveryFilter] = useState<DiscoveryFilter>("all");
+  const [sessionBookmark, setSessionBookmark] = useState<MemorizationSessionBookmark | null>(null);
   const [displayWordsMap, setDisplayWordsMap] = useState<Map<number, ApiWord[]>>(new Map());
   const [chapterTimings, setChapterTimings] = useState<ChapterTimings | null>(null);
   const [pageWordsMap, setPageWordsMap] = useState<Map<number, ApiPageVerse[]>>(new Map());
@@ -586,12 +621,18 @@ export default function MemorizationScreen() {
     [childId, sessionRequested],
   );
 
+  const loadSessionBookmark = useCallback(async () => {
+    const bookmark = await loadMemorizationSessionBookmark(childId);
+    setSessionBookmark(bookmark);
+  }, [childId]);
+
   useFocusEffect(
     useCallback(() => {
       if (!sessionRequested) {
         void loadDiscovery();
+        void loadSessionBookmark();
       }
-    }, [loadDiscovery, sessionRequested]),
+    }, [loadDiscovery, loadSessionBookmark, sessionRequested]),
   );
 
   usePreventRemove(sessionRequested && !loading && !error && !submitting, () => {
@@ -609,9 +650,18 @@ export default function MemorizationScreen() {
     beginSession(target);
   }
 
+  function startBookmarkedSession(bookmark: MemorizationSessionBookmark) {
+    setRepeatCount(bookmark.repeatCount);
+    setAutoplayThroughRange(bookmark.autoAdvance);
+    setCumulativeReview(bookmark.cumulativeReview);
+    setReviewRepeatCount(bookmark.reviewRepeatCount);
+    startConfiguredSession(buildBookmarkTarget(bookmark));
+  }
+
   function beginSession(target: SessionTarget) {
     const nextStart = Math.max(1, target.ayahStart);
     const nextEnd = Math.max(nextStart, target.ayahEnd);
+    const nextCurrent = clampNumber(target.currentAyah ?? nextStart, nextStart, nextEnd);
     setSessionRequested(true);
     setSessionLoadId((value) => value + 1);
     setLoading(true);
@@ -645,10 +695,53 @@ export default function MemorizationScreen() {
     setSurahNumber(target.surahNumber);
     setAyahStart(nextStart);
     setAyahEnd(nextEnd);
-    setCurrentVerse(nextStart);
+    setCurrentVerse(nextCurrent);
+    currentVerseRef.current = nextCurrent;
     setPageStart(target.pageStart ?? null);
     setPageEnd(target.pageEnd ?? null);
   }
+
+  useEffect(() => {
+    if (!sessionRequested) return;
+    if (error) return;
+    if (surahNumber === null || ayahStart === null || ayahEnd === null) return;
+
+    const currentAyah = clampNumber(currentVerse, ayahStart, ayahEnd);
+    const bookmark: MemorizationSessionBookmark = {
+      surahNumber,
+      surahName: getBookmarkSurahName(surahNumber, chaptersMap),
+      fromAyah: ayahStart,
+      toAyah: ayahEnd,
+      currentAyah,
+      repeatCount,
+      autoAdvance: autoplayThroughRange,
+      cumulativeReview,
+      reviewRepeatCount,
+      isReviewOnly: sessionReviewOnly,
+      pageStart,
+      pageEnd,
+      savedAt: Date.now(),
+    };
+
+    setSessionBookmark(bookmark);
+    void saveMemorizationSessionBookmark(childId, bookmark);
+  }, [
+    childId,
+    sessionRequested,
+    error,
+    surahNumber,
+    ayahStart,
+    ayahEnd,
+    currentVerse,
+    repeatCount,
+    autoplayThroughRange,
+    cumulativeReview,
+    reviewRepeatCount,
+    sessionReviewOnly,
+    pageStart,
+    pageEnd,
+    chaptersMap,
+  ]);
 
   useEffect(() => {
     if (!startInRecitationCheck) return;
@@ -678,7 +771,7 @@ export default function MemorizationScreen() {
   useEffect(() => {
     if (!sessionRequested) return;
     if (surahNumber !== null && ayahStart !== null && ayahEnd !== null) {
-      setCurrentVerse(ayahStart);
+      setCurrentVerse((value) => clampNumber(value, ayahStart, ayahEnd));
       return;
     }
     (async () => {
@@ -1469,6 +1562,8 @@ export default function MemorizationScreen() {
   async function handleLeaveWithoutSaving() {
     if (submitting) return;
     closeLeaveSheet(false);
+    setSessionBookmark(null);
+    await clearMemorizationSessionBookmark(childId);
     setPauseSheetOpen(false);
     setPauseCompletedAyahEnd(null);
     updateReadyToReciteSheet(false);
@@ -1633,6 +1728,8 @@ export default function MemorizationScreen() {
       setRecitationCheckSource("teacher");
       setRecitationScore(null);
       setStartInRecitationCheck(false);
+      setSessionBookmark(null);
+      await clearMemorizationSessionBookmark(childId);
       setSessionRequested(false);
       setLoading(false);
       Alert.alert("Progress saved.", "The rating was saved for the selected ayah range.");
@@ -2089,16 +2186,21 @@ export default function MemorizationScreen() {
         childId={childId}
         name={params.name}
         state={discoveryState}
+        sessionBookmark={sessionBookmark}
         query={discoveryQuery}
         filter={discoveryFilter}
         refreshing={discoveryRefreshing}
         onQueryChange={setDiscoveryQuery}
         onFilterChange={setDiscoveryFilter}
-        onRefresh={() => loadDiscovery("refresh")}
+        onRefresh={() => {
+          void loadSessionBookmark();
+          void loadDiscovery("refresh");
+        }}
         onRetry={() => loadDiscovery()}
         onBack={() => router.back()}
         onStart={prepareSession}
         onStartDirect={startConfiguredSession}
+        onStartBookmark={startBookmarkedSession}
       />
     );
   }
@@ -2334,8 +2436,8 @@ export default function MemorizationScreen() {
             </Text>
             <Text style={styles.pauseSummaryDetail}>
               {sessionReviewOnly
-                ? "Save & Leave keeps this review all-or-nothing and opens the recitation rating. Leave without saving returns to Memorize without recording this attempt."
-                : "Save & Leave asks how far the child got, then opens the recitation rating. Leave without saving returns to Memorize without recording this attempt."}
+                ? "Save & Leave keeps this review all-or-nothing and opens the recitation rating. Leave without saving returns to Memorize and discards the resume bookmark."
+                : "Save & Leave asks how far the child got, then opens the recitation rating. Leave without saving returns to Memorize and discards the resume bookmark."}
             </Text>
           </View>
 
@@ -3322,6 +3424,7 @@ function MemorizationDiscovery({
   childId,
   name,
   state,
+  sessionBookmark,
   query,
   filter,
   refreshing,
@@ -3332,10 +3435,12 @@ function MemorizationDiscovery({
   onBack,
   onStart,
   onStartDirect,
+  onStartBookmark,
 }: {
   childId: string | undefined;
   name: string | undefined;
   state: DiscoveryState;
+  sessionBookmark: MemorizationSessionBookmark | null;
   query: string;
   filter: DiscoveryFilter;
   refreshing: boolean;
@@ -3346,6 +3451,7 @@ function MemorizationDiscovery({
   onBack: () => void;
   onStart: (target: SessionTarget) => void;
   onStartDirect: (target: SessionTarget) => void;
+  onStartBookmark: (bookmark: MemorizationSessionBookmark) => void;
 }) {
   const childName = state.status === "ready" ? state.dashboard.child?.name ?? name : name;
 
@@ -3497,6 +3603,13 @@ function MemorizationDiscovery({
               label={content.reviewCheckShortcut.label}
               work={content.reviewCheckShortcut.work}
               onPress={() => startReviewCheck(content.reviewCheckShortcut!.work)}
+            />
+          ) : null}
+
+          {sessionBookmark ? (
+            <SessionBookmarkCard
+              bookmark={sessionBookmark}
+              onPress={() => onStartBookmark(sessionBookmark)}
             />
           ) : null}
 
@@ -3842,6 +3955,41 @@ function OverviewWorkCard({
           {action}
         </Text>
       </View>
+    </Pressable>
+  );
+}
+
+function formatBookmarkSavedAt(savedAt: number) {
+  const date = new Date(savedAt);
+  if (Number.isNaN(date.getTime())) return "Saved recently";
+  return `Saved ${date.toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  })}`;
+}
+
+function SessionBookmarkCard({
+  bookmark,
+  onPress,
+}: {
+  bookmark: MemorizationSessionBookmark;
+  onPress: () => void;
+}) {
+  const title = bookmark.surahName ?? `Surah ${bookmark.surahNumber}`;
+  return (
+    <Pressable style={styles.discoverySavedSessionCard} onPress={onPress}>
+      <View style={styles.discoveryResumeText}>
+        <Text style={styles.discoverySavedSessionKicker}>Resume where you left off</Text>
+        <Text style={styles.discoveryResumeTitle}>{title}</Text>
+        <Text style={styles.discoveryResumeDetail}>
+          Ayah {bookmark.currentAyah} · Range {bookmark.fromAyah}-{bookmark.toAyah} ·{" "}
+          {bookmark.repeatCount}x
+        </Text>
+        <Text style={styles.discoverySavedSessionMeta}>{formatBookmarkSavedAt(bookmark.savedAt)}</Text>
+      </View>
+      <Text style={styles.discoveryResumeAction}>Resume</Text>
     </Pressable>
   );
 }
@@ -4629,8 +4777,25 @@ const styles = StyleSheet.create({
     backgroundColor: "#fffbeb",
     padding: 14,
   },
+  discoverySavedSessionCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#fbbf24",
+    backgroundColor: "#fffbeb",
+    padding: 14,
+  },
   discoveryResumeText: {
     flex: 1,
+  },
+  discoverySavedSessionKicker: {
+    marginBottom: 4,
+    fontSize: 12,
+    fontWeight: "900",
+    color: "#b45309",
   },
   discoveryResumeTitle: {
     fontSize: 15,
@@ -4642,6 +4807,12 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "600",
     color: "#6b7280",
+  },
+  discoverySavedSessionMeta: {
+    marginTop: 4,
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#92400e",
   },
   discoveryResumeAction: {
     fontSize: 13,

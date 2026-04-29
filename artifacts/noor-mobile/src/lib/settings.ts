@@ -125,3 +125,111 @@ export async function saveDefaultSessionSettings(
     // best-effort
   }
 }
+
+export type MemorizationSessionBookmark = {
+  surahNumber: number;
+  surahName?: string;
+  fromAyah: number;
+  toAyah: number;
+  currentAyah: number;
+  repeatCount: number;
+  autoAdvance: boolean;
+  cumulativeReview: boolean;
+  reviewRepeatCount: number;
+  isReviewOnly?: boolean;
+  pageStart?: number | null;
+  pageEnd?: number | null;
+  savedAt: number;
+};
+
+function memorizationBookmarkKey(childId: string): string {
+  return `noorpath:memorization-bookmark:${childId}`;
+}
+
+function normalizeBookmark(
+  bookmark: Partial<MemorizationSessionBookmark>,
+): MemorizationSessionBookmark | null {
+  const surahNumber = Math.round(bookmark.surahNumber ?? 0);
+  const fromAyah = Math.round(bookmark.fromAyah ?? 0);
+  const rawToAyah = Math.round(bookmark.toAyah ?? 0);
+  if (surahNumber < 1 || fromAyah < 1 || rawToAyah < 1) return null;
+
+  const toAyah = Math.max(fromAyah, rawToAyah);
+  const currentAyah = Math.round(
+    clamp(
+      typeof bookmark.currentAyah === "number" ? bookmark.currentAyah : fromAyah,
+      fromAyah,
+      toAyah,
+    ),
+  );
+  const repeatCount = Math.round(
+    clamp(
+      typeof bookmark.repeatCount === "number"
+        ? bookmark.repeatCount
+        : DEFAULT_SESSION_SETTINGS.repeatCount,
+      1,
+      10,
+    ),
+  );
+  const reviewRepeatCount = Math.round(
+    clamp(typeof bookmark.reviewRepeatCount === "number" ? bookmark.reviewRepeatCount : 3, 1, 10),
+  );
+  const savedAt =
+    typeof bookmark.savedAt === "number" && Number.isFinite(bookmark.savedAt)
+      ? bookmark.savedAt
+      : Date.now();
+
+  return {
+    surahNumber,
+    surahName: bookmark.surahName,
+    fromAyah,
+    toAyah,
+    currentAyah,
+    repeatCount,
+    autoAdvance:
+      typeof bookmark.autoAdvance === "boolean"
+        ? bookmark.autoAdvance
+        : DEFAULT_SESSION_SETTINGS.autoplayThroughRange,
+    cumulativeReview:
+      typeof bookmark.cumulativeReview === "boolean" ? bookmark.cumulativeReview : false,
+    reviewRepeatCount,
+    isReviewOnly:
+      typeof bookmark.isReviewOnly === "boolean" ? bookmark.isReviewOnly : undefined,
+    pageStart: typeof bookmark.pageStart === "number" ? bookmark.pageStart : null,
+    pageEnd: typeof bookmark.pageEnd === "number" ? bookmark.pageEnd : null,
+    savedAt,
+  };
+}
+
+export async function loadMemorizationSessionBookmark(
+  childId: string,
+): Promise<MemorizationSessionBookmark | null> {
+  try {
+    const raw = await AsyncStorage.getItem(memorizationBookmarkKey(childId));
+    if (!raw) return null;
+    return normalizeBookmark(JSON.parse(raw) as Partial<MemorizationSessionBookmark>);
+  } catch {
+    return null;
+  }
+}
+
+export async function saveMemorizationSessionBookmark(
+  childId: string,
+  bookmark: MemorizationSessionBookmark,
+): Promise<void> {
+  const normalized = normalizeBookmark(bookmark);
+  if (!normalized) return;
+  try {
+    await AsyncStorage.setItem(memorizationBookmarkKey(childId), JSON.stringify(normalized));
+  } catch {
+    // best-effort
+  }
+}
+
+export async function clearMemorizationSessionBookmark(childId: string): Promise<void> {
+  try {
+    await AsyncStorage.removeItem(memorizationBookmarkKey(childId));
+  } catch {
+    // best-effort
+  }
+}
