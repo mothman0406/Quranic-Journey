@@ -143,6 +143,10 @@ function formatAyahRange(start: number | undefined | null, end: number | undefin
   return start === end ? `Ayah ${start}` : `Ayahs ${start}-${end}`;
 }
 
+function clampNumber(value: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, value));
+}
+
 function formatPageRange(start: number | undefined | null, end: number | undefined | null) {
   if (start == null || end == null) return null;
   return start === end ? `Page ${start}` : `Pages ${start}-${end}`;
@@ -321,6 +325,7 @@ export default function MemorizationScreen() {
   const [sessionLoadId, setSessionLoadId] = useState(0);
   const [sessionReviewOnly, setSessionReviewOnly] = useState(false);
   const [startInRecitationCheck, setStartInRecitationCheck] = useState(false);
+  const [pendingSessionTarget, setPendingSessionTarget] = useState<SessionTarget | null>(null);
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -593,6 +598,16 @@ export default function MemorizationScreen() {
     setSaveError(null);
     setLeaveSheetOpen(true);
   });
+
+  function prepareSession(target: SessionTarget) {
+    Keyboard.dismiss();
+    setPendingSessionTarget(target);
+  }
+
+  function startConfiguredSession(target: SessionTarget) {
+    setPendingSessionTarget(null);
+    beginSession(target);
+  }
 
   function beginSession(target: SessionTarget) {
     const nextStart = Math.max(1, target.ayahStart);
@@ -1027,9 +1042,7 @@ export default function MemorizationScreen() {
       }
 
       if (cur < toA) {
-        const shouldAutoAdvance =
-          cumulativeReviewRef.current ||
-          (viewModeRef.current === "page" && autoplayThroughRangeRef.current);
+        const shouldAutoAdvance = cumulativeReviewRef.current || autoplayThroughRangeRef.current;
         setCurrentRepeat(1);
         if (shouldAutoAdvance) {
           scheduleNext(() => {
@@ -2046,6 +2059,31 @@ export default function MemorizationScreen() {
   // ── Render ───────────────────────────────────────────────────────────────────
 
   if (!sessionRequested) {
+    if (pendingSessionTarget) {
+      return (
+        <MemorizationSetup
+          childId={childId}
+          name={params.name}
+          target={pendingSessionTarget}
+          surahs={discoveryState.status === "ready" ? discoveryState.surahs : []}
+          chaptersMap={chaptersMap}
+          repeatCount={repeatCount}
+          autoAdvance={autoplayThroughRange}
+          cumulativeReview={cumulativeReview}
+          reviewRepeatCount={reviewRepeatCount}
+          onRepeatCountChange={setRepeatCount}
+          onAutoAdvanceChange={setAutoplayThroughRange}
+          onCumulativeReviewChange={setCumulativeReview}
+          onReviewRepeatCountChange={setReviewRepeatCount}
+          onCancel={() => setPendingSessionTarget(null)}
+          onStart={startConfiguredSession}
+          onJustGetTested={(target) =>
+            startConfiguredSession({ ...target, startInRecitationCheck: true })
+          }
+        />
+      );
+    }
+
     return (
       <MemorizationDiscovery
         childId={childId}
@@ -2059,7 +2097,8 @@ export default function MemorizationScreen() {
         onRefresh={() => loadDiscovery("refresh")}
         onRetry={() => loadDiscovery()}
         onBack={() => router.back()}
-        onStart={beginSession}
+        onStart={prepareSession}
+        onStartDirect={startConfiguredSession}
       />
     );
   }
@@ -2654,7 +2693,7 @@ export default function MemorizationScreen() {
           </View>
 
           <View style={styles.settingRow}>
-            <Text style={styles.settingLabel}>Autoplay through range (Full Mushaf)</Text>
+            <Text style={styles.settingLabel}>Auto-advance through range</Text>
             <Pressable
               onPress={() => setAutoplayThroughRange(!autoplayThroughRange)}
               style={[styles.toggleSwitch, autoplayThroughRange && styles.toggleSwitchOn]}
@@ -2827,6 +2866,458 @@ export default function MemorizationScreen() {
   );
 }
 
+type SetupSurahOption = {
+  number: number;
+  name: string;
+  translation: string;
+  arabic: string;
+  verseCount: number;
+};
+
+function fallbackSetupSurahOption(
+  surahNumber: number,
+  chaptersMap: Map<number, ApiChapter>,
+): SetupSurahOption {
+  const mushafSurah = MUSHAF_SURAHS.find((item) => item.number === surahNumber);
+  const chapter = chaptersMap.get(surahNumber);
+  return {
+    number: surahNumber,
+    name: chapter?.name_simple ?? mushafSurah?.name ?? `Surah ${surahNumber}`,
+    translation: mushafSurah?.translation ?? "",
+    arabic: chapter?.name_arabic ?? "",
+    verseCount: chapter?.verses_count ?? mushafSurah?.verseCount ?? 1,
+  };
+}
+
+function MemorizationSetup({
+  childId,
+  name,
+  target,
+  surahs,
+  chaptersMap,
+  repeatCount,
+  autoAdvance,
+  cumulativeReview,
+  reviewRepeatCount,
+  onRepeatCountChange,
+  onAutoAdvanceChange,
+  onCumulativeReviewChange,
+  onReviewRepeatCountChange,
+  onCancel,
+  onStart,
+  onJustGetTested,
+}: {
+  childId: string | undefined;
+  name: string | undefined;
+  target: SessionTarget;
+  surahs: SurahSummary[];
+  chaptersMap: Map<number, ApiChapter>;
+  repeatCount: number;
+  autoAdvance: boolean;
+  cumulativeReview: boolean;
+  reviewRepeatCount: number;
+  onRepeatCountChange: (value: number) => void;
+  onAutoAdvanceChange: (value: boolean) => void;
+  onCumulativeReviewChange: (value: boolean) => void;
+  onReviewRepeatCountChange: (value: number) => void;
+  onCancel: () => void;
+  onStart: (target: SessionTarget) => void;
+  onJustGetTested: (target: SessionTarget) => void;
+}) {
+  const [surahPickerOpen, setSurahPickerOpen] = useState(false);
+  const [selectedSurahNumber, setSelectedSurahNumber] = useState(target.surahNumber);
+  const [fromAyah, setFromAyah] = useState(target.ayahStart);
+  const [toAyah, setToAyah] = useState(target.ayahEnd);
+  const [fromInput, setFromInput] = useState(String(target.ayahStart));
+  const [toInput, setToInput] = useState(String(target.ayahEnd));
+  const rangeLocked = Boolean(target.isReviewOnly);
+
+  const options = useMemo(() => {
+    const source: SetupSurahOption[] =
+      surahs.length > 0
+        ? surahs.map((surah) => ({
+            number: surah.number,
+            name: surah.nameTransliteration,
+            translation: surah.nameTranslation,
+            arabic: surah.nameArabic,
+            verseCount: surah.verseCount,
+          }))
+        : MUSHAF_SURAHS.map((surah) => ({
+            number: surah.number,
+            name: surah.name,
+            translation: surah.translation,
+            arabic: chaptersMap.get(surah.number)?.name_arabic ?? "",
+            verseCount: surah.verseCount,
+          }));
+
+    const byNumber = new Map(source.map((surah) => [surah.number, surah]));
+    if (!byNumber.has(target.surahNumber)) {
+      byNumber.set(target.surahNumber, fallbackSetupSurahOption(target.surahNumber, chaptersMap));
+    }
+    return [...byNumber.values()].sort((a, b) => a.number - b.number);
+  }, [chaptersMap, surahs, target.surahNumber]);
+
+  const selectedSurah =
+    options.find((surah) => surah.number === selectedSurahNumber) ??
+    fallbackSetupSurahOption(selectedSurahNumber, chaptersMap);
+  const maxAyah = Math.max(1, selectedSurah.verseCount);
+  const selectedIndex = options.findIndex((surah) => surah.number === selectedSurahNumber);
+  const previousSurah = selectedIndex > 0 ? options[selectedIndex - 1] : null;
+  const nextSurah =
+    selectedIndex >= 0 && selectedIndex < options.length - 1 ? options[selectedIndex + 1] : null;
+
+  useEffect(() => {
+    const option =
+      options.find((surah) => surah.number === target.surahNumber) ??
+      fallbackSetupSurahOption(target.surahNumber, chaptersMap);
+    const nextFrom = clampNumber(target.ayahStart, 1, Math.max(1, option.verseCount));
+    const nextTo = clampNumber(
+      Math.max(target.ayahEnd, nextFrom),
+      nextFrom,
+      Math.max(1, option.verseCount),
+    );
+
+    setSelectedSurahNumber(target.surahNumber);
+    setFromAyah(nextFrom);
+    setToAyah(nextTo);
+    setFromInput(String(nextFrom));
+    setToInput(String(nextTo));
+  }, [chaptersMap, options, target]);
+
+  useEffect(() => {
+    const boundedFrom = clampNumber(fromAyah, 1, maxAyah);
+    const boundedTo = clampNumber(Math.max(toAyah, boundedFrom), boundedFrom, maxAyah);
+    if (boundedFrom !== fromAyah) setFromAyah(boundedFrom);
+    if (boundedTo !== toAyah) setToAyah(boundedTo);
+  }, [fromAyah, maxAyah, toAyah]);
+
+  useEffect(() => {
+    setFromInput(String(fromAyah));
+  }, [fromAyah]);
+
+  useEffect(() => {
+    setToInput(String(toAyah));
+  }, [toAyah]);
+
+  function commitFromInput() {
+    const parsed = Number.parseInt(fromInput, 10);
+    const nextFrom = clampNumber(Number.isNaN(parsed) ? fromAyah : parsed, 1, maxAyah);
+    setFromAyah(nextFrom);
+    if (nextFrom > toAyah) setToAyah(nextFrom);
+  }
+
+  function commitToInput() {
+    const parsed = Number.parseInt(toInput, 10);
+    const nextTo = clampNumber(Number.isNaN(parsed) ? toAyah : parsed, fromAyah, maxAyah);
+    setToAyah(nextTo);
+  }
+
+  function selectSurah(surah: SetupSurahOption) {
+    if (rangeLocked) return;
+    setSelectedSurahNumber(surah.number);
+    setFromAyah(1);
+    setToAyah(Math.max(1, surah.verseCount));
+    setFromInput("1");
+    setToInput(String(Math.max(1, surah.verseCount)));
+    setSurahPickerOpen(false);
+  }
+
+  function buildConfiguredTarget(): SessionTarget {
+    const pages = estimatePageRange(selectedSurahNumber, fromAyah, toAyah);
+    return {
+      surahNumber: selectedSurahNumber,
+      ayahStart: fromAyah,
+      ayahEnd: toAyah,
+      pageStart: pages.pageStart,
+      pageEnd: pages.pageEnd,
+      isReviewOnly: target.isReviewOnly,
+    };
+  }
+
+  const totalAyahs = toAyah - fromAyah + 1;
+  const pageRange = formatPageRange(
+    buildConfiguredTarget().pageStart,
+    buildConfiguredTarget().pageEnd,
+  );
+  const startLabel =
+    fromAyah === toAyah ? `Start - Ayah ${fromAyah}` : `Start - Ayah ${fromAyah} to ${toAyah}`;
+
+  return (
+    <View style={styles.setupContainer}>
+      <View style={styles.discoveryHeader}>
+        <Pressable onPress={onCancel} style={styles.discoveryBackButton}>
+          <Text style={styles.back}>← Back</Text>
+        </Pressable>
+        <View style={styles.discoveryHeaderText}>
+          <Text style={styles.discoveryTitle}>Session Setup</Text>
+          <Text style={styles.discoverySubtitle}>{name ? `${name}'s practice` : "Practice setup"}</Text>
+        </View>
+        <View style={styles.discoveryHeaderSpacer} />
+      </View>
+
+      <ScrollView
+        style={styles.setupScroll}
+        contentContainerStyle={styles.setupContent}
+        keyboardDismissMode="on-drag"
+        keyboardShouldPersistTaps="handled"
+      >
+        <View style={styles.setupHero}>
+          <View style={styles.setupHeroText}>
+            <Text style={styles.setupKicker}>Surah {selectedSurah.number}</Text>
+            <Text style={styles.setupTitle}>{selectedSurah.name}</Text>
+            <Text style={styles.setupDetail}>
+              {selectedSurah.translation} · {maxAyah} ayahs{pageRange ? ` · ${pageRange}` : ""}
+            </Text>
+          </View>
+          {selectedSurah.arabic ? (
+            <Text style={styles.setupArabic}>{selectedSurah.arabic}</Text>
+          ) : null}
+        </View>
+
+        <View style={styles.setupNavRow}>
+          <Pressable
+            style={[styles.setupNavButton, (!previousSurah || rangeLocked) && styles.setupNavButtonDisabled]}
+            onPress={() => {
+              if (previousSurah) selectSurah(previousSurah);
+            }}
+            disabled={!previousSurah || rangeLocked}
+          >
+            <Text style={styles.setupNavButtonText}>‹</Text>
+          </Pressable>
+          <Pressable
+            style={[styles.setupSelectButton, rangeLocked && styles.setupSelectButtonLocked]}
+            onPress={() => {
+              if (!rangeLocked) setSurahPickerOpen(true);
+            }}
+            disabled={rangeLocked}
+          >
+            <Text style={styles.setupSelectTitle} numberOfLines={1}>
+              {selectedSurah.number}. {selectedSurah.name}
+            </Text>
+            <Text style={styles.setupSelectMeta} numberOfLines={1}>
+              {rangeLocked ? "Review assignment locked" : "Change surah"}
+            </Text>
+          </Pressable>
+          <Pressable
+            style={[styles.setupNavButton, (!nextSurah || rangeLocked) && styles.setupNavButtonDisabled]}
+            onPress={() => {
+              if (nextSurah) selectSurah(nextSurah);
+            }}
+            disabled={!nextSurah || rangeLocked}
+          >
+            <Text style={styles.setupNavButtonText}>›</Text>
+          </Pressable>
+        </View>
+
+        <View style={styles.setupCard}>
+          <View>
+            <Text style={styles.setupCardTitle}>Ayah Range</Text>
+            <Text style={styles.setupCardDetail}>
+              {rangeLocked
+                ? "Review-only work saves the assigned range together."
+                : `${totalAyahs} ayah${totalAyahs === 1 ? "" : "s"} selected.`}
+            </Text>
+          </View>
+          <View style={styles.setupRangeRow}>
+            <View style={styles.setupInputBlock}>
+              <Text style={styles.setupInputLabel}>From</Text>
+              <View style={styles.setupStepperRow}>
+                <Pressable
+                  style={styles.setupMiniStepButton}
+                  onPress={() => setFromAyah((value) => clampNumber(value - 1, 1, maxAyah))}
+                  disabled={rangeLocked || fromAyah <= 1}
+                >
+                  <Text style={styles.stepperButtonText}>-</Text>
+                </Pressable>
+                <TextInput
+                  value={fromInput}
+                  onChangeText={setFromInput}
+                  onEndEditing={commitFromInput}
+                  onSubmitEditing={commitFromInput}
+                  editable={!rangeLocked}
+                  keyboardType="number-pad"
+                  returnKeyType="done"
+                  style={[styles.setupInput, rangeLocked && styles.setupInputDisabled]}
+                />
+                <Pressable
+                  style={styles.setupMiniStepButton}
+                  onPress={() => {
+                    const nextFrom = clampNumber(fromAyah + 1, 1, maxAyah);
+                    setFromAyah(nextFrom);
+                    if (nextFrom > toAyah) setToAyah(nextFrom);
+                  }}
+                  disabled={rangeLocked || fromAyah >= maxAyah}
+                >
+                  <Text style={styles.stepperButtonText}>+</Text>
+                </Pressable>
+              </View>
+            </View>
+
+            <View style={styles.setupInputBlock}>
+              <Text style={styles.setupInputLabel}>To</Text>
+              <View style={styles.setupStepperRow}>
+                <Pressable
+                  style={styles.setupMiniStepButton}
+                  onPress={() => setToAyah((value) => clampNumber(value - 1, fromAyah, maxAyah))}
+                  disabled={rangeLocked || toAyah <= fromAyah}
+                >
+                  <Text style={styles.stepperButtonText}>-</Text>
+                </Pressable>
+                <TextInput
+                  value={toInput}
+                  onChangeText={setToInput}
+                  onEndEditing={commitToInput}
+                  onSubmitEditing={commitToInput}
+                  editable={!rangeLocked}
+                  keyboardType="number-pad"
+                  returnKeyType="done"
+                  style={[styles.setupInput, rangeLocked && styles.setupInputDisabled]}
+                />
+                <Pressable
+                  style={styles.setupMiniStepButton}
+                  onPress={() => setToAyah((value) => clampNumber(value + 1, fromAyah, maxAyah))}
+                  disabled={rangeLocked || toAyah >= maxAyah}
+                >
+                  <Text style={styles.stepperButtonText}>+</Text>
+                </Pressable>
+              </View>
+            </View>
+          </View>
+        </View>
+
+        <View style={styles.setupCard}>
+          <View style={styles.settingRow}>
+            <View style={styles.setupSettingText}>
+              <Text style={styles.setupCardTitle}>Repeat Each Ayah</Text>
+              <Text style={styles.setupCardDetail}>Listening pass count</Text>
+            </View>
+            <View style={styles.stepper}>
+              <Pressable
+                style={styles.stepperButton}
+                onPress={() => onRepeatCountChange(clampNumber(repeatCount - 1, 1, 10))}
+              >
+                <Text style={styles.stepperButtonText}>-</Text>
+              </Pressable>
+              <Text style={styles.stepperValue}>{repeatCount}×</Text>
+              <Pressable
+                style={styles.stepperButton}
+                onPress={() => onRepeatCountChange(clampNumber(repeatCount + 1, 1, 10))}
+              >
+                <Text style={styles.stepperButtonText}>+</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+
+        <View style={styles.setupCard}>
+          <View style={styles.settingRow}>
+            <View style={styles.setupSettingText}>
+              <Text style={styles.setupCardTitle}>Auto-Advance</Text>
+              <Text style={styles.setupCardDetail}>Continue through the selected range</Text>
+            </View>
+            <Pressable
+              onPress={() => onAutoAdvanceChange(!autoAdvance)}
+              style={[styles.toggleSwitch, autoAdvance && styles.toggleSwitchOn]}
+            >
+              <View style={[styles.toggleKnob, autoAdvance && styles.toggleKnobOn]} />
+            </Pressable>
+          </View>
+        </View>
+
+        <View style={styles.setupCard}>
+          <View style={styles.settingRow}>
+            <View style={styles.setupSettingText}>
+              <Text style={styles.setupCardTitle}>Cumulative Review</Text>
+              <Text style={styles.setupCardDetail}>Replay from the start after each new ayah</Text>
+            </View>
+            <Pressable
+              onPress={() => onCumulativeReviewChange(!cumulativeReview)}
+              style={[styles.toggleSwitch, cumulativeReview && styles.toggleSwitchOn]}
+            >
+              <View style={[styles.toggleKnob, cumulativeReview && styles.toggleKnobOn]} />
+            </Pressable>
+          </View>
+          {cumulativeReview ? (
+            <View style={[styles.settingRow, styles.setupNestedSettingRow]}>
+              <View style={styles.setupSettingText}>
+                <Text style={styles.setupNestedTitle}>Review repeat count</Text>
+                <Text style={styles.setupCardDetail}>Cumulative loop count</Text>
+              </View>
+              <View style={styles.stepper}>
+                <Pressable
+                  style={styles.stepperButton}
+                  onPress={() =>
+                    onReviewRepeatCountChange(clampNumber(reviewRepeatCount - 1, 1, 10))
+                  }
+                >
+                  <Text style={styles.stepperButtonText}>-</Text>
+                </Pressable>
+                <Text style={styles.stepperValue}>{reviewRepeatCount}×</Text>
+                <Pressable
+                  style={styles.stepperButton}
+                  onPress={() =>
+                    onReviewRepeatCountChange(clampNumber(reviewRepeatCount + 1, 1, 10))
+                  }
+                >
+                  <Text style={styles.stepperButtonText}>+</Text>
+                </Pressable>
+              </View>
+            </View>
+          ) : null}
+        </View>
+
+        <Pressable style={styles.setupPrimaryButton} onPress={() => onStart(buildConfiguredTarget())}>
+          <Text style={styles.setupPrimaryButtonText}>{startLabel}</Text>
+        </Pressable>
+
+        {target.isReviewOnly ? (
+          <Pressable
+            style={styles.setupSecondaryButton}
+            onPress={() => onJustGetTested(buildConfiguredTarget())}
+          >
+            <Text style={styles.setupSecondaryButtonText}>Just Get Tested</Text>
+          </Pressable>
+        ) : null}
+      </ScrollView>
+
+      <ChildBottomNav active="memorization" childId={childId} name={name ?? ""} />
+
+      <Modal
+        visible={surahPickerOpen}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setSurahPickerOpen(false)}
+      >
+        <Pressable style={styles.backdrop} onPress={() => setSurahPickerOpen(false)} />
+        <View style={styles.setupPickerSheet}>
+          <Text style={styles.sheetTitle}>Choose Surah</Text>
+          <ScrollView style={styles.setupPickerList} contentContainerStyle={styles.setupPickerContent}>
+            {options.map((surah) => {
+              const selected = surah.number === selectedSurahNumber;
+              return (
+                <Pressable
+                  key={surah.number}
+                  style={[styles.setupPickerRow, selected && styles.setupPickerRowSelected]}
+                  onPress={() => selectSurah(surah)}
+                >
+                  <Text style={styles.setupPickerNumber}>{surah.number}</Text>
+                  <View style={styles.setupPickerText}>
+                    <Text style={styles.setupPickerTitle}>{surah.name}</Text>
+                    <Text style={styles.setupPickerDetail}>
+                      {surah.translation} · {surah.verseCount} ayahs
+                    </Text>
+                  </View>
+                  {surah.arabic ? <Text style={styles.setupPickerArabic}>{surah.arabic}</Text> : null}
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+        </View>
+      </Modal>
+    </View>
+  );
+}
+
 function MemorizationDiscovery({
   childId,
   name,
@@ -2840,6 +3331,7 @@ function MemorizationDiscovery({
   onRetry,
   onBack,
   onStart,
+  onStartDirect,
 }: {
   childId: string | undefined;
   name: string | undefined;
@@ -2853,6 +3345,7 @@ function MemorizationDiscovery({
   onRetry: () => void;
   onBack: () => void;
   onStart: (target: SessionTarget) => void;
+  onStartDirect: (target: SessionTarget) => void;
 }) {
   const childName = state.status === "ready" ? state.dashboard.child?.name ?? name : name;
 
@@ -2935,7 +3428,7 @@ function MemorizationDiscovery({
   }
 
   function startReviewCheck(work: NewMemorization) {
-    onStart({
+    onStartDirect({
       ...buildFullWorkTarget(work),
       startInRecitationCheck: true,
     });
@@ -3625,6 +4118,277 @@ const styles = StyleSheet.create({
     marginTop: 12,
     fontSize: 14,
     color: "#6b7280",
+  },
+  setupContainer: {
+    flex: 1,
+    backgroundColor: "#ffffff",
+  },
+  setupScroll: {
+    flex: 1,
+  },
+  setupContent: {
+    padding: 16,
+    paddingBottom: 28,
+    gap: 12,
+  },
+  setupHero: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 16,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#bfdbfe",
+    backgroundColor: "#f8fbff",
+    padding: 16,
+  },
+  setupHeroText: {
+    flex: 1,
+    minWidth: 0,
+  },
+  setupKicker: {
+    fontSize: 11,
+    fontWeight: "900",
+    color: "#2563eb",
+    textTransform: "uppercase",
+  },
+  setupTitle: {
+    marginTop: 4,
+    fontSize: 24,
+    lineHeight: 29,
+    fontWeight: "900",
+    color: "#111827",
+  },
+  setupDetail: {
+    marginTop: 4,
+    fontSize: 12,
+    lineHeight: 18,
+    fontWeight: "700",
+    color: "#4b5563",
+  },
+  setupArabic: {
+    fontFamily: "AmiriQuran",
+    fontSize: 34,
+    lineHeight: 48,
+    color: "#1d4ed8",
+  },
+  setupNavRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  setupNavButton: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#2563eb",
+  },
+  setupNavButtonDisabled: {
+    opacity: 0.35,
+  },
+  setupNavButtonText: {
+    fontSize: 24,
+    lineHeight: 28,
+    fontWeight: "700",
+    color: "#ffffff",
+  },
+  setupSelectButton: {
+    flex: 1,
+    minHeight: 52,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#d1d5db",
+    backgroundColor: "#ffffff",
+    justifyContent: "center",
+    paddingHorizontal: 14,
+  },
+  setupSelectButtonLocked: {
+    backgroundColor: "#f9fafb",
+  },
+  setupSelectTitle: {
+    fontSize: 14,
+    fontWeight: "900",
+    color: "#111827",
+  },
+  setupSelectMeta: {
+    marginTop: 2,
+    fontSize: 11,
+    fontWeight: "800",
+    color: "#6b7280",
+  },
+  setupCard: {
+    gap: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+    backgroundColor: "#ffffff",
+    padding: 14,
+  },
+  setupCardTitle: {
+    fontSize: 15,
+    fontWeight: "900",
+    color: "#111827",
+  },
+  setupCardDetail: {
+    marginTop: 3,
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: "600",
+    color: "#6b7280",
+  },
+  setupRangeRow: {
+    flexDirection: "row",
+    gap: 12,
+  },
+  setupInputBlock: {
+    flex: 1,
+    gap: 6,
+  },
+  setupInputLabel: {
+    fontSize: 11,
+    fontWeight: "900",
+    color: "#4b5563",
+    textTransform: "uppercase",
+  },
+  setupStepperRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  setupMiniStepButton: {
+    width: 34,
+    height: 42,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+    backgroundColor: "#f9fafb",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  setupInput: {
+    flex: 1,
+    minHeight: 42,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#bfdbfe",
+    backgroundColor: "#eff6ff",
+    textAlign: "center",
+    fontSize: 17,
+    fontWeight: "900",
+    color: "#111827",
+    paddingHorizontal: 8,
+  },
+  setupInputDisabled: {
+    borderColor: "#e5e7eb",
+    backgroundColor: "#f9fafb",
+    color: "#6b7280",
+  },
+  setupSettingText: {
+    flex: 1,
+    minWidth: 0,
+  },
+  setupNestedSettingRow: {
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: "#e5e7eb",
+  },
+  setupNestedTitle: {
+    fontSize: 13,
+    fontWeight: "900",
+    color: "#111827",
+  },
+  setupPrimaryButton: {
+    minHeight: 52,
+    borderRadius: 14,
+    backgroundColor: "#111827",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 16,
+  },
+  setupPrimaryButtonText: {
+    fontSize: 16,
+    fontWeight: "900",
+    color: "#ffffff",
+  },
+  setupSecondaryButton: {
+    minHeight: 52,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#c7d2fe",
+    backgroundColor: "#eef2ff",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 16,
+  },
+  setupSecondaryButtonText: {
+    fontSize: 16,
+    fontWeight: "900",
+    color: "#4f46e5",
+  },
+  setupPickerSheet: {
+    maxHeight: "78%",
+    backgroundColor: "#ffffff",
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    padding: 20,
+    paddingBottom: 34,
+    gap: 12,
+  },
+  setupPickerList: {
+    maxHeight: 430,
+  },
+  setupPickerContent: {
+    gap: 8,
+    paddingBottom: 4,
+  },
+  setupPickerRow: {
+    minHeight: 64,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+    backgroundColor: "#ffffff",
+    padding: 12,
+  },
+  setupPickerRowSelected: {
+    borderColor: "#bfdbfe",
+    backgroundColor: "#eff6ff",
+  },
+  setupPickerNumber: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    overflow: "hidden",
+    backgroundColor: "#f3f4f6",
+    textAlign: "center",
+    lineHeight: 34,
+    fontSize: 12,
+    fontWeight: "900",
+    color: "#111827",
+  },
+  setupPickerText: {
+    flex: 1,
+    minWidth: 0,
+  },
+  setupPickerTitle: {
+    fontSize: 14,
+    fontWeight: "900",
+    color: "#111827",
+  },
+  setupPickerDetail: {
+    marginTop: 3,
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#6b7280",
+  },
+  setupPickerArabic: {
+    fontFamily: "AmiriQuran",
+    fontSize: 22,
+    color: "#111827",
   },
   discoveryScroll: {
     flex: 1,

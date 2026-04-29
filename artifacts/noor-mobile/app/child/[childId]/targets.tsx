@@ -716,8 +716,8 @@ export default function TargetsScreen() {
           <View style={styles.toggleDivider} />
           <View style={styles.toggleRow}>
             <View style={styles.titleBlock}>
-              <Text style={styles.cardTitle}>Autoplay page range</Text>
-              <Text style={styles.cardDetail}>Continue through the assigned range in page mode.</Text>
+              <Text style={styles.cardTitle}>Auto-advance range</Text>
+              <Text style={styles.cardDetail}>Continue through the assigned range after each ayah.</Text>
             </View>
             <Switch
               value={sessionDefaults.autoplayThroughRange}
