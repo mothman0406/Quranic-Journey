@@ -6,13 +6,13 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { DailyPlanDua } from "./dailyPlanDua";
-import type { DailyPlanNewMemorization } from "./dailyPlanNewMemorization";
 import type { DailyPlanReviewSessionsItem } from "./dailyPlanReviewSessionsItem";
 import type { DailyPlanStory } from "./dailyPlanStory";
+import type { DashboardWorkItem } from "./dashboardWorkItem";
 
 export interface DailyPlan {
   date: Date;
-  newMemorization?: DailyPlanNewMemorization;
+  newMemorization?: DashboardWorkItem | null;
   reviewSessions: DailyPlanReviewSessionsItem[];
   story?: DailyPlanStory;
   dua?: DailyPlanDua;

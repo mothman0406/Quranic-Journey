@@ -6,6 +6,7 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { CreateChildRequestGender } from "./createChildRequestGender";
+import type { InitialSurahSetup } from "./initialSurahSetup";
 
 export interface CreateChildRequest {
   name: string;
@@ -16,4 +17,17 @@ export interface CreateChildRequest {
   age: number;
   gender: CreateChildRequestGender;
   avatarEmoji?: string;
+  /** Legacy onboarding input. Prefer initialSurahSetups for new clients. */
+  preMemorizedSurahIds?: number[];
+  /**
+   * Legacy initial memorization strength for pre-selected surahs.
+   * @minimum 1
+   * @maximum 5
+   */
+  memorationStrength?: number;
+  initialSurahSetups?: InitialSurahSetup[];
+  practiceMinutesPerDay?: number;
+  memorizePagePerDay?: number;
+  reviewPagesPerDay?: number;
+  readPagesPerDay?: number;
 }

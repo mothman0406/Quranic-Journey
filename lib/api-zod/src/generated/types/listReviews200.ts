@@ -6,8 +6,11 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { ReviewItem } from "./reviewItem";
+import type { ReviewTodayRange } from "./reviewTodayRange";
 
 export type ListReviews200 = {
   dueToday: ReviewItem[];
   upcoming: ReviewItem[];
+  todayRange: ReviewTodayRange | null;
+  reviewedToday: ReviewItem[];
 };

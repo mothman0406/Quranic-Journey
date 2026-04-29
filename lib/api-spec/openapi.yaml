@@ -115,6 +115,19 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Child"
+    delete:
+      operationId: deleteChild
+      tags: [children]
+      summary: Delete a child profile and related progress
+      parameters:
+        - name: childId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Child deleted
 
   /children/{childId}/dashboard:
     get:
@@ -134,6 +147,48 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ChildDashboard"
+
+  /children/{childId}/goals:
+    get:
+      operationId: getChildGoals
+      tags: [children]
+      summary: Get generated and custom goals for a child
+      parameters:
+        - name: childId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Goals for the child
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GoalsResponse"
+    put:
+      operationId: updateChildGoals
+      tags: [children]
+      summary: Update custom goals for a child
+      parameters:
+        - name: childId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateGoalsRequest"
+      responses:
+        "200":
+          description: Goals updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UpdateGoalsResponse"
 
   /children/{childId}/plan:
     get:
@@ -229,7 +284,14 @@ paths:
                     type: array
                     items:
                       $ref: "#/components/schemas/ReviewItem"
-                required: [dueToday, upcoming]
+                  todayRange:
+                    $ref: "#/components/schemas/ReviewTodayRange"
+                    nullable: true
+                  reviewedToday:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/ReviewItem"
+                required: [dueToday, upcoming, todayRange, reviewedToday]
     post:
       operationId: completeReview
       tags: [review]
@@ -306,6 +368,76 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/LearningSession"
+
+  /children/{childId}/daily-progress:
+    post:
+      operationId: updateDailyProgress
+      tags: [progress]
+      summary: Update today's memorization or review progress
+      parameters:
+        - name: childId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateDailyProgressRequest"
+      responses:
+        "200":
+          description: Daily progress row
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DailyProgress"
+                nullable: true
+
+  /children/{childId}/reading-progress:
+    post:
+      operationId: updateReadingProgress
+      tags: [progress]
+      summary: Save a child's current Quran reading page for today
+      parameters:
+        - name: childId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateReadingProgressRequest"
+      responses:
+        "200":
+          description: Updated reading progress
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReadingProgressResponse"
+
+  /children/{childId}/weekly-progress:
+    get:
+      operationId: getWeeklyProgress
+      tags: [progress]
+      summary: Get the last seven daily progress rows for a child
+      parameters:
+        - name: childId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Weekly progress rows
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WeeklyProgressResponse"
 
   /children/{childId}/duas:
     get:
@@ -502,6 +634,8 @@ components:
       properties:
         id:
           type: integer
+        parentId:
+          type: string
         name:
           type: string
         age:
@@ -520,14 +654,31 @@ components:
           type: integer
         juzCompleted:
           type: integer
+        lastActiveDate:
+          type: string
+          format: date
+          nullable: true
+        practiceMinutesPerDay:
+          type: integer
+        goals:
+          type: string
+          nullable: true
+        onboardingCompleted:
+          type: integer
         hideStories:
           type: boolean
         hideDuas:
           type: boolean
+        memorizePagePerDay:
+          type: number
+        reviewPagesPerDay:
+          type: number
+        readPagesPerDay:
+          type: number
         createdAt:
           type: string
           format: date-time
-      required: [id, name, age, ageGroup, gender, avatarEmoji, streakDays, totalPoints, juzCompleted, hideStories, hideDuas, createdAt]
+      required: [id, parentId, name, age, ageGroup, gender, avatarEmoji, streakDays, totalPoints, juzCompleted, lastActiveDate, practiceMinutesPerDay, goals, onboardingCompleted, hideStories, hideDuas, memorizePagePerDay, reviewPagesPerDay, readPagesPerDay, createdAt]
 
     CreateChildRequest:
       type: object
@@ -543,6 +694,28 @@ components:
           enum: [male, female]
         avatarEmoji:
           type: string
+        preMemorizedSurahIds:
+          type: array
+          items:
+            type: integer
+          description: Legacy onboarding input. Prefer initialSurahSetups for new clients.
+        memorationStrength:
+          type: integer
+          minimum: 1
+          maximum: 5
+          description: Legacy initial memorization strength for pre-selected surahs.
+        initialSurahSetups:
+          type: array
+          items:
+            $ref: "#/components/schemas/InitialSurahSetup"
+        practiceMinutesPerDay:
+          type: integer
+        memorizePagePerDay:
+          type: number
+        reviewPagesPerDay:
+          type: number
+        readPagesPerDay:
+          type: number
       required: [name, age, gender]
 
     UpdateChildRequest:
@@ -554,10 +727,35 @@ components:
           type: integer
         avatarEmoji:
           type: string
+        goals:
+          type: array
+          items:
+            $ref: "#/components/schemas/Goal"
+        practiceMinutesPerDay:
+          type: integer
+        memorizePagePerDay:
+          type: number
+        reviewPagesPerDay:
+          type: number
+        readPagesPerDay:
+          type: number
         hideStories:
           type: boolean
         hideDuas:
           type: boolean
+
+    InitialSurahSetup:
+      type: object
+      properties:
+        surahId:
+          type: integer
+        level:
+          type: string
+          enum: [very_strong, solid, learning, just_started]
+        knownAyahCount:
+          type: integer
+          nullable: true
+      required: [surahId, level]
 
     ChildDashboard:
       type: object
@@ -576,11 +774,23 @@ components:
           type: integer
         nextSurah:
           $ref: "#/components/schemas/Surah"
+          nullable: true
         achievements:
           type: array
           items:
             $ref: "#/components/schemas/Achievement"
-      required: [child, todaysPlan, memorizationStats, recentSessions, reviewsDueToday, achievements]
+        goals:
+          type: array
+          items:
+            $ref: "#/components/schemas/Goal"
+        todayProgress:
+          $ref: "#/components/schemas/TodayProgress"
+        readingGoal:
+          $ref: "#/components/schemas/ReadingGoal"
+        upNextMemorization:
+          $ref: "#/components/schemas/DashboardWorkItem"
+          nullable: true
+      required: [child, todaysPlan, memorizationStats, recentSessions, reviewsDueToday, achievements, goals, todayProgress, readingGoal, upNextMemorization]
 
     DailyPlan:
       type: object
@@ -589,19 +799,8 @@ components:
           type: string
           format: date
         newMemorization:
-          type: object
-          properties:
-            surahName:
-              type: string
-            surahNameArabic:
-              type: string
-            ayahStart:
-              type: integer
-            ayahEnd:
-              type: integer
-            estimatedMinutes:
-              type: integer
-          required: [surahName, surahNameArabic, ayahStart, ayahEnd, estimatedMinutes]
+          $ref: "#/components/schemas/DashboardWorkItem"
+          nullable: true
         reviewSessions:
           type: array
           items:
@@ -622,6 +821,7 @@ components:
             title:
               type: string
           required: [id, title]
+          nullable: true
         dua:
           type: object
           properties:
@@ -634,9 +834,263 @@ components:
             translation:
               type: string
           required: [id, arabic, transliteration, translation]
+          nullable: true
         totalEstimatedMinutes:
           type: integer
       required: [date, reviewSessions, totalEstimatedMinutes]
+
+    DashboardWorkItem:
+      type: object
+      properties:
+        surahName:
+          type: string
+        surahNumber:
+          type: integer
+        currentWorkSurahNumber:
+          type: integer
+        currentWorkSurahName:
+          type: string
+        currentWorkAyahStart:
+          type: integer
+        currentWorkAyahEnd:
+          type: integer
+        surahNameArabic:
+          type: string
+        ayahStart:
+          type: integer
+        ayahEnd:
+          type: integer
+        endSurahNumber:
+          type: integer
+        pageStart:
+          type: integer
+        pageEnd:
+          type: integer
+        workType:
+          type: string
+        workLabel:
+          type: string
+        isReviewOnly:
+          type: boolean
+        snapReason:
+          type: string
+        estimatedMinutes:
+          type: integer
+      required: [surahName, surahNumber, ayahStart, ayahEnd, pageStart, pageEnd, workType, workLabel, isReviewOnly]
+
+    Goal:
+      type: object
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        description:
+          type: string
+        targetDate:
+          type: string
+          format: date
+        targetSurahCount:
+          type: integer
+        currentCount:
+          type: integer
+        type:
+          type: string
+        autoGenerated:
+          type: boolean
+      required: [id, title, description, targetDate, targetSurahCount, currentCount, type]
+
+    GoalsResponse:
+      type: object
+      properties:
+        goals:
+          type: array
+          items:
+            $ref: "#/components/schemas/Goal"
+        autoGoals:
+          type: array
+          items:
+            $ref: "#/components/schemas/Goal"
+        practiceMinutesPerDay:
+          type: integer
+        memorizedCount:
+          type: integer
+      required: [goals, autoGoals, practiceMinutesPerDay, memorizedCount]
+
+    UpdateGoalsRequest:
+      type: object
+      properties:
+        goals:
+          type: array
+          items:
+            $ref: "#/components/schemas/Goal"
+      required: [goals]
+
+    UpdateGoalsResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        goals:
+          type: array
+          items:
+            $ref: "#/components/schemas/Goal"
+      required: [success, goals]
+
+    TodayProgress:
+      type: object
+      properties:
+        memStatus:
+          type: string
+          enum: [not_started, in_progress, completed]
+        memTargetSurah:
+          type: integer
+          nullable: true
+        memTargetAyahStart:
+          type: integer
+          nullable: true
+        memTargetAyahEnd:
+          type: integer
+          nullable: true
+        memCompletedAyahEnd:
+          type: integer
+          nullable: true
+        reviewStatus:
+          type: string
+          enum: [not_started, in_progress, completed]
+        reviewTargetCount:
+          type: integer
+          nullable: true
+        reviewCompletedCount:
+          type: integer
+      required: [memStatus, memTargetSurah, memTargetAyahStart, memTargetAyahEnd, memCompletedAyahEnd, reviewStatus, reviewTargetCount, reviewCompletedCount]
+
+    ReadingGoal:
+      type: object
+      properties:
+        targetPages:
+          type: number
+        completedPages:
+          type: number
+        lastPage:
+          type: integer
+          nullable: true
+        status:
+          type: string
+          enum: [not_started, in_progress, completed]
+        isEnabled:
+          type: boolean
+      required: [targetPages, completedPages, lastPage, status, isEnabled]
+
+    DailyProgress:
+      type: object
+      properties:
+        id:
+          type: integer
+        childId:
+          type: integer
+        date:
+          type: string
+          format: date
+        memTargetSurah:
+          type: integer
+          nullable: true
+        memTargetAyahStart:
+          type: integer
+          nullable: true
+        memTargetAyahEnd:
+          type: integer
+          nullable: true
+        memTargetEndSurah:
+          type: integer
+          nullable: true
+        memCompletedAyahEnd:
+          type: integer
+          nullable: true
+        memStatus:
+          type: string
+          enum: [not_started, in_progress, completed]
+        reviewTargetCount:
+          type: integer
+          nullable: true
+        reviewCompletedCount:
+          type: integer
+        reviewStatus:
+          type: string
+          enum: [not_started, in_progress, completed]
+        readingTargetPages:
+          type: number
+          nullable: true
+        readingCompletedPages:
+          type: number
+        readingLastPage:
+          type: integer
+          nullable: true
+        readingStatus:
+          type: string
+          enum: [not_started, in_progress, completed]
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required: [id, childId, date, memStatus, reviewCompletedCount, reviewStatus, readingCompletedPages, readingStatus, createdAt, updatedAt]
+
+    UpdateDailyProgressRequest:
+      type: object
+      properties:
+        memStatus:
+          type: string
+          enum: [not_started, in_progress, completed]
+        memCompletedAyahEnd:
+          type: integer
+        memTargetSurah:
+          type: integer
+        memTargetAyahStart:
+          type: integer
+        memTargetAyahEnd:
+          type: integer
+        memTargetEndSurah:
+          type: integer
+        reviewStatus:
+          type: string
+          enum: [not_started, in_progress, completed]
+        reviewCompletedCount:
+          type: integer
+        reviewTargetCount:
+          type: integer
+
+    UpdateReadingProgressRequest:
+      type: object
+      properties:
+        currentPage:
+          type: integer
+          minimum: 1
+          maximum: 604
+      required: [currentPage]
+
+    ReadingProgressResponse:
+      type: object
+      properties:
+        readingStatus:
+          type: string
+          enum: [not_started, in_progress, completed]
+        readingCompletedPages:
+          type: number
+        readingLastPage:
+          type: integer
+          nullable: true
+      required: [readingStatus, readingCompletedPages, readingLastPage]
+
+    WeeklyProgressResponse:
+      type: object
+      properties:
+        days:
+          type: array
+          items:
+            $ref: "#/components/schemas/DailyProgress"
+      required: [days]
 
     LearningPlan:
       type: object
@@ -685,7 +1139,17 @@ components:
               ageIntroduced:
                 type: integer
             required: [rule, description, ageIntroduced]
-      required: [ageGroup, description, weeklyGoal, currentPhase, milestones, tajweedRules]
+        goals:
+          type: array
+          items:
+            $ref: "#/components/schemas/Goal"
+        autoGoals:
+          type: array
+          items:
+            $ref: "#/components/schemas/Goal"
+        practiceMinutesPerDay:
+          type: integer
+      required: [ageGroup, description, weeklyGoal, currentPhase, milestones, tajweedRules, goals, autoGoals, practiceMinutesPerDay]
 
     MemorizationProgress:
       type: object
@@ -725,6 +1189,11 @@ components:
         strength:
           type: integer
           description: Memory strength 1-5
+        ayahStrengths:
+          type: object
+          additionalProperties:
+            type: integer
+          description: Per-ayah strength map keyed by 1-based ayah number
       required: [id, childId, surahId, surahName, surahNumber, status, versesMemorized, memorizedAyahs, totalVerses, percentComplete, reviewCount, strength]
 
     UpdateMemorizationRequest:
@@ -739,6 +1208,11 @@ components:
           items:
             type: integer
           description: Specific ayah numbers memorized (1-based). If provided, versesMemorized is derived from array length.
+        ratedAyahs:
+          type: array
+          items:
+            type: integer
+          description: Specific ayah numbers rated by the qualityRating.
         status:
           type: string
           enum: [not_started, in_progress, memorized, needs_review]
@@ -763,6 +1237,20 @@ components:
           nullable: true
         surahNumber:
           type: integer
+        ayahStart:
+          type: integer
+        ayahEnd:
+          type: integer
+        pageStart:
+          type: integer
+        pageEnd:
+          type: integer
+        chunkIndex:
+          type: integer
+        chunkCount:
+          type: integer
+        isPartialReview:
+          type: boolean
         dueDate:
           type: string
           format: date
@@ -780,7 +1268,25 @@ components:
           nullable: true
         isOverdue:
           type: boolean
+        isWeak:
+          type: boolean
+        reviewPriority:
+          type: string
+          enum: [red, orange, green]
       required: [id, childId, surahId, surahNumber, dueDate, interval, easeFactor, repetitionCount, isOverdue]
+
+    ReviewTodayRange:
+      type: object
+      properties:
+        fromSurah:
+          type: integer
+        fromAyah:
+          type: integer
+        toSurah:
+          type: integer
+        toAyah:
+          type: integer
+      required: [fromSurah, fromAyah, toSurah, toAyah]
 
     CompleteReviewRequest:
       type: object

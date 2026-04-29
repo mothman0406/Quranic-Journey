@@ -5,10 +5,9 @@
  * NoorPath - Muslim Parenting & Quran Learning App API
  * OpenAPI spec version: 0.1.0
  */
+import type { Goal } from "./goal";
 
-export type DailyPlanDua = {
-  id: number;
-  arabic: string;
-  transliteration: string;
-  translation: string;
-} | null;
+export interface UpdateGoalsResponse {
+  success: boolean;
+  goals: Goal[];
+}

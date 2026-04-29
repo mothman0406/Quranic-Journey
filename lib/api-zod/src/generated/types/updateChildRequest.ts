@@ -5,11 +5,17 @@
  * NoorPath - Muslim Parenting & Quran Learning App API
  * OpenAPI spec version: 0.1.0
  */
+import type { Goal } from "./goal";
 
 export interface UpdateChildRequest {
   name?: string;
   age?: number;
   avatarEmoji?: string;
+  goals?: Goal[];
+  practiceMinutesPerDay?: number;
+  memorizePagePerDay?: number;
+  reviewPagesPerDay?: number;
+  readPagesPerDay?: number;
   hideStories?: boolean;
   hideDuas?: boolean;
 }

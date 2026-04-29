@@ -5,6 +5,7 @@
  * NoorPath - Muslim Parenting & Quran Learning App API
  * OpenAPI spec version: 0.1.0
  */
+import type { MemorizationProgressAyahStrengths } from "./memorizationProgressAyahStrengths";
 import type { MemorizationProgressStatus } from "./memorizationProgressStatus";
 
 export interface MemorizationProgress {
@@ -24,4 +25,6 @@ export interface MemorizationProgress {
   reviewCount: number;
   /** Memory strength 1-5 */
   strength: number;
+  /** Per-ayah strength map keyed by 1-based ayah number */
+  ayahStrengths?: MemorizationProgressAyahStrengths;
 }

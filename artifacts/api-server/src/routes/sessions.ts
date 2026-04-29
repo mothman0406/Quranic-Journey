@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import { db } from "@workspace/db";
 import { learningSessionsTable, childrenTable, childDuasTable } from "@workspace/db/schema";
-import { eq, desc } from "drizzle-orm";
+import { and, eq, desc } from "drizzle-orm";
 import { DUAS } from "../data/duas.js";
 import { STORIES } from "../data/stories.js";
 
@@ -90,12 +90,13 @@ router.get("/children/:childId/duas", async (req, res) => {
 router.post("/children/:childId/duas", async (req, res) => {
   const childId = parseInt(req.params.childId);
   if (!await ownsChild(req.user.id, childId)) { res.status(403).json({ error: "Forbidden" }); return; }
-  const { duaId, learned } = req.body;
+  const duaId = Number(req.body.duaId);
+  const { learned } = req.body;
   const dua = DUAS.find(d => d.id === duaId);
   if (!dua) { res.status(404).json({ error: "Dua not found" }); return; }
 
   const [existing] = await db.select().from(childDuasTable)
-    .where(eq(childDuasTable.childId, childId));
+    .where(and(eq(childDuasTable.childId, childId), eq(childDuasTable.duaId, duaId)));
 
   const now = new Date();
   let record;

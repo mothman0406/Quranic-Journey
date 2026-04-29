@@ -8,9 +8,13 @@
 import type { Achievement } from "./achievement";
 import type { Child } from "./child";
 import type { DailyPlan } from "./dailyPlan";
+import type { DashboardWorkItem } from "./dashboardWorkItem";
+import type { Goal } from "./goal";
 import type { LearningSession } from "./learningSession";
 import type { MemorizationStats } from "./memorizationStats";
+import type { ReadingGoal } from "./readingGoal";
 import type { Surah } from "./surah";
+import type { TodayProgress } from "./todayProgress";
 
 export interface ChildDashboard {
   child: Child;
@@ -18,6 +22,10 @@ export interface ChildDashboard {
   memorizationStats: MemorizationStats;
   recentSessions: LearningSession[];
   reviewsDueToday: number;
-  nextSurah?: Surah;
+  nextSurah?: Surah | null;
   achievements: Achievement[];
+  goals: Goal[];
+  todayProgress: TodayProgress;
+  readingGoal: ReadingGoal;
+  upNextMemorization: DashboardWorkItem | null;
 }

@@ -6,10 +6,7 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export type DailyPlanNewMemorization = {
-  surahName: string;
-  surahNameArabic: string;
-  ayahStart: number;
-  ayahEnd: number;
-  estimatedMinutes: number;
-};
+/**
+ * Per-ayah strength map keyed by 1-based ayah number
+ */
+export type MemorizationProgressAyahStrengths = { [key: string]: number };

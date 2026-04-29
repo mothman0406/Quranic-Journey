@@ -6,9 +6,10 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export type DailyPlanDua = {
-  id: number;
-  arabic: string;
-  transliteration: string;
-  translation: string;
-} | null;
+export interface UpdateReadingProgressRequest {
+  /**
+   * @minimum 1
+   * @maximum 604
+   */
+  currentPage: number;
+}

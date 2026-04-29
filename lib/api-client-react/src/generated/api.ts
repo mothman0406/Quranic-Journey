@@ -23,6 +23,8 @@ import type {
   CompleteReviewRequest,
   CreateChildRequest,
   CreateSessionRequest,
+  DailyProgress,
+  GoalsResponse,
   HealthStatus,
   LearningPlan,
   LearningSession,
@@ -40,11 +42,17 @@ import type {
   ListSurahsParams,
   MarkDuaLearnedBody,
   MemorizationProgress,
+  ReadingProgressResponse,
   ReviewItem,
   StoryDetail,
   SurahDetail,
   UpdateChildRequest,
+  UpdateDailyProgressRequest,
+  UpdateGoalsRequest,
+  UpdateGoalsResponse,
   UpdateMemorizationRequest,
+  UpdateReadingProgressRequest,
+  WeeklyProgressResponse,
 } from "./api.schemas";
 
 import { customFetch } from "../custom-fetch";
@@ -465,6 +473,90 @@ export const useUpdateChild = <
 };
 
 /**
+ * @summary Delete a child profile and related progress
+ */
+export const getDeleteChildUrl = (childId: number) => {
+  return `/api/children/${childId}`;
+};
+
+export const deleteChild = async (
+  childId: number,
+  options?: RequestInit,
+): Promise<void> => {
+  return customFetch<void>(getDeleteChildUrl(childId), {
+    ...options,
+    method: "DELETE",
+  });
+};
+
+export const getDeleteChildMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteChild>>,
+    TError,
+    { childId: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deleteChild>>,
+  TError,
+  { childId: number },
+  TContext
+> => {
+  const mutationKey = ["deleteChild"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deleteChild>>,
+    { childId: number }
+  > = (props) => {
+    const { childId } = props ?? {};
+
+    return deleteChild(childId, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DeleteChildMutationResult = NonNullable<
+  Awaited<ReturnType<typeof deleteChild>>
+>;
+
+export type DeleteChildMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Delete a child profile and related progress
+ */
+export const useDeleteChild = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteChild>>,
+    TError,
+    { childId: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof deleteChild>>,
+  TError,
+  { childId: number },
+  TContext
+> => {
+  return useMutation(getDeleteChildMutationOptions(options));
+};
+
+/**
  * @summary Get complete dashboard for a child
  */
 export const getGetChildDashboardUrl = (childId: number) => {
@@ -551,6 +643,180 @@ export function useGetChildDashboard<
 
   return { ...query, queryKey: queryOptions.queryKey };
 }
+
+/**
+ * @summary Get generated and custom goals for a child
+ */
+export const getGetChildGoalsUrl = (childId: number) => {
+  return `/api/children/${childId}/goals`;
+};
+
+export const getChildGoals = async (
+  childId: number,
+  options?: RequestInit,
+): Promise<GoalsResponse> => {
+  return customFetch<GoalsResponse>(getGetChildGoalsUrl(childId), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetChildGoalsQueryKey = (childId: number) => {
+  return [`/api/children/${childId}/goals`] as const;
+};
+
+export const getGetChildGoalsQueryOptions = <
+  TData = Awaited<ReturnType<typeof getChildGoals>>,
+  TError = ErrorType<unknown>,
+>(
+  childId: number,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getChildGoals>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetChildGoalsQueryKey(childId);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getChildGoals>>> = ({
+    signal,
+  }) => getChildGoals(childId, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!childId,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getChildGoals>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetChildGoalsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getChildGoals>>
+>;
+export type GetChildGoalsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get generated and custom goals for a child
+ */
+
+export function useGetChildGoals<
+  TData = Awaited<ReturnType<typeof getChildGoals>>,
+  TError = ErrorType<unknown>,
+>(
+  childId: number,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getChildGoals>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetChildGoalsQueryOptions(childId, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Update custom goals for a child
+ */
+export const getUpdateChildGoalsUrl = (childId: number) => {
+  return `/api/children/${childId}/goals`;
+};
+
+export const updateChildGoals = async (
+  childId: number,
+  updateGoalsRequest: UpdateGoalsRequest,
+  options?: RequestInit,
+): Promise<UpdateGoalsResponse> => {
+  return customFetch<UpdateGoalsResponse>(getUpdateChildGoalsUrl(childId), {
+    ...options,
+    method: "PUT",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(updateGoalsRequest),
+  });
+};
+
+export const getUpdateChildGoalsMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateChildGoals>>,
+    TError,
+    { childId: number; data: BodyType<UpdateGoalsRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updateChildGoals>>,
+  TError,
+  { childId: number; data: BodyType<UpdateGoalsRequest> },
+  TContext
+> => {
+  const mutationKey = ["updateChildGoals"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateChildGoals>>,
+    { childId: number; data: BodyType<UpdateGoalsRequest> }
+  > = (props) => {
+    const { childId, data } = props ?? {};
+
+    return updateChildGoals(childId, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdateChildGoalsMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updateChildGoals>>
+>;
+export type UpdateChildGoalsMutationBody = BodyType<UpdateGoalsRequest>;
+export type UpdateChildGoalsMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Update custom goals for a child
+ */
+export const useUpdateChildGoals = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateChildGoals>>,
+    TError,
+    { childId: number; data: BodyType<UpdateGoalsRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updateChildGoals>>,
+  TError,
+  { childId: number; data: BodyType<UpdateGoalsRequest> },
+  TContext
+> => {
+  return useMutation(getUpdateChildGoalsMutationOptions(options));
+};
 
 /**
  * @summary Get the personalized learning plan for a child
@@ -1187,6 +1453,273 @@ export const useCreateSession = <
 > => {
   return useMutation(getCreateSessionMutationOptions(options));
 };
+
+/**
+ * @summary Update today's memorization or review progress
+ */
+export const getUpdateDailyProgressUrl = (childId: number) => {
+  return `/api/children/${childId}/daily-progress`;
+};
+
+export const updateDailyProgress = async (
+  childId: number,
+  updateDailyProgressRequest: UpdateDailyProgressRequest,
+  options?: RequestInit,
+): Promise<DailyProgress | null> => {
+  return customFetch<DailyProgress | null>(getUpdateDailyProgressUrl(childId), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(updateDailyProgressRequest),
+  });
+};
+
+export const getUpdateDailyProgressMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateDailyProgress>>,
+    TError,
+    { childId: number; data: BodyType<UpdateDailyProgressRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updateDailyProgress>>,
+  TError,
+  { childId: number; data: BodyType<UpdateDailyProgressRequest> },
+  TContext
+> => {
+  const mutationKey = ["updateDailyProgress"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateDailyProgress>>,
+    { childId: number; data: BodyType<UpdateDailyProgressRequest> }
+  > = (props) => {
+    const { childId, data } = props ?? {};
+
+    return updateDailyProgress(childId, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdateDailyProgressMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updateDailyProgress>>
+>;
+export type UpdateDailyProgressMutationBody =
+  BodyType<UpdateDailyProgressRequest>;
+export type UpdateDailyProgressMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Update today's memorization or review progress
+ */
+export const useUpdateDailyProgress = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateDailyProgress>>,
+    TError,
+    { childId: number; data: BodyType<UpdateDailyProgressRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updateDailyProgress>>,
+  TError,
+  { childId: number; data: BodyType<UpdateDailyProgressRequest> },
+  TContext
+> => {
+  return useMutation(getUpdateDailyProgressMutationOptions(options));
+};
+
+/**
+ * @summary Save a child's current Quran reading page for today
+ */
+export const getUpdateReadingProgressUrl = (childId: number) => {
+  return `/api/children/${childId}/reading-progress`;
+};
+
+export const updateReadingProgress = async (
+  childId: number,
+  updateReadingProgressRequest: UpdateReadingProgressRequest,
+  options?: RequestInit,
+): Promise<ReadingProgressResponse> => {
+  return customFetch<ReadingProgressResponse>(
+    getUpdateReadingProgressUrl(childId),
+    {
+      ...options,
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(updateReadingProgressRequest),
+    },
+  );
+};
+
+export const getUpdateReadingProgressMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateReadingProgress>>,
+    TError,
+    { childId: number; data: BodyType<UpdateReadingProgressRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updateReadingProgress>>,
+  TError,
+  { childId: number; data: BodyType<UpdateReadingProgressRequest> },
+  TContext
+> => {
+  const mutationKey = ["updateReadingProgress"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateReadingProgress>>,
+    { childId: number; data: BodyType<UpdateReadingProgressRequest> }
+  > = (props) => {
+    const { childId, data } = props ?? {};
+
+    return updateReadingProgress(childId, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdateReadingProgressMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updateReadingProgress>>
+>;
+export type UpdateReadingProgressMutationBody =
+  BodyType<UpdateReadingProgressRequest>;
+export type UpdateReadingProgressMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Save a child's current Quran reading page for today
+ */
+export const useUpdateReadingProgress = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateReadingProgress>>,
+    TError,
+    { childId: number; data: BodyType<UpdateReadingProgressRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updateReadingProgress>>,
+  TError,
+  { childId: number; data: BodyType<UpdateReadingProgressRequest> },
+  TContext
+> => {
+  return useMutation(getUpdateReadingProgressMutationOptions(options));
+};
+
+/**
+ * @summary Get the last seven daily progress rows for a child
+ */
+export const getGetWeeklyProgressUrl = (childId: number) => {
+  return `/api/children/${childId}/weekly-progress`;
+};
+
+export const getWeeklyProgress = async (
+  childId: number,
+  options?: RequestInit,
+): Promise<WeeklyProgressResponse> => {
+  return customFetch<WeeklyProgressResponse>(getGetWeeklyProgressUrl(childId), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetWeeklyProgressQueryKey = (childId: number) => {
+  return [`/api/children/${childId}/weekly-progress`] as const;
+};
+
+export const getGetWeeklyProgressQueryOptions = <
+  TData = Awaited<ReturnType<typeof getWeeklyProgress>>,
+  TError = ErrorType<unknown>,
+>(
+  childId: number,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getWeeklyProgress>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getGetWeeklyProgressQueryKey(childId);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getWeeklyProgress>>
+  > = ({ signal }) => getWeeklyProgress(childId, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!childId,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getWeeklyProgress>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetWeeklyProgressQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getWeeklyProgress>>
+>;
+export type GetWeeklyProgressQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get the last seven daily progress rows for a child
+ */
+
+export function useGetWeeklyProgress<
+  TData = Awaited<ReturnType<typeof getWeeklyProgress>>,
+  TError = ErrorType<unknown>,
+>(
+  childId: number,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getWeeklyProgress>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetWeeklyProgressQueryOptions(childId, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
 
 /**
  * @summary Get duaas assigned to a child

@@ -6,9 +6,9 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export type DailyPlanDua = {
-  id: number;
-  arabic: string;
-  transliteration: string;
-  translation: string;
-} | null;
+export interface ReviewTodayRange {
+  fromSurah: number;
+  fromAyah: number;
+  toSurah: number;
+  toAyah: number;
+}

@@ -10,6 +10,7 @@ import type { ChildGender } from "./childGender";
 
 export interface Child {
   id: number;
+  parentId: string;
   name: string;
   age: number;
   ageGroup: ChildAgeGroup;
@@ -18,7 +19,14 @@ export interface Child {
   streakDays: number;
   totalPoints: number;
   juzCompleted: number;
+  lastActiveDate: Date | null;
+  practiceMinutesPerDay: number;
+  goals: string | null;
+  onboardingCompleted: number;
   hideStories: boolean;
   hideDuas: boolean;
+  memorizePagePerDay: number;
+  reviewPagesPerDay: number;
+  readPagesPerDay: number;
   createdAt: Date;
 }

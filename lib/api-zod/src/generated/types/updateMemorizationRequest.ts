@@ -12,6 +12,8 @@ export interface UpdateMemorizationRequest {
   versesMemorized?: number;
   /** Specific ayah numbers memorized (1-based). If provided, versesMemorized is derived from array length. */
   memorizedAyahs?: number[];
+  /** Specific ayah numbers rated by the qualityRating. */
+  ratedAyahs?: number[];
   status?: UpdateMemorizationRequestStatus;
   /**
    * How well the child recited (for spaced repetition)

@@ -5,10 +5,8 @@
  * NoorPath - Muslim Parenting & Quran Learning App API
  * OpenAPI spec version: 0.1.0
  */
+import type { DailyProgress } from "./dailyProgress";
 
-export type DailyPlanDua = {
-  id: number;
-  arabic: string;
-  transliteration: string;
-  translation: string;
-} | null;
+export interface WeeklyProgressResponse {
+  days: DailyProgress[];
+}

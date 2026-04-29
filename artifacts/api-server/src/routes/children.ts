@@ -417,6 +417,7 @@ router.post("/children", async (req, res) => {
     practiceMinutesPerDay,
     memorizePagePerDay,
     reviewPagesPerDay,
+    readPagesPerDay,
   } = req.body;
   const ageGroup = getAgeGroup(age);
   const practiceMinutes = practiceMinutesPerDay || 20;
@@ -429,6 +430,7 @@ router.post("/children", async (req, res) => {
     practiceMinutesPerDay: practiceMinutes,
     memorizePagePerDay: memorizePagePerDay ?? 1.0,
     reviewPagesPerDay: reviewPagesPerDay ?? 2.0,
+    readPagesPerDay: readPagesPerDay ?? 0.0,
     onboardingCompleted: 1
   }).returning();
 

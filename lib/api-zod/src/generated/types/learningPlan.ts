@@ -5,6 +5,7 @@
  * NoorPath - Muslim Parenting & Quran Learning App API
  * OpenAPI spec version: 0.1.0
  */
+import type { Goal } from "./goal";
 import type { LearningPlanCurrentPhase } from "./learningPlanCurrentPhase";
 import type { LearningPlanTajweedRulesItem } from "./learningPlanTajweedRulesItem";
 import type { LearningPlanWeeklyGoal } from "./learningPlanWeeklyGoal";
@@ -17,4 +18,7 @@ export interface LearningPlan {
   currentPhase: LearningPlanCurrentPhase;
   milestones: Milestone[];
   tajweedRules: LearningPlanTajweedRulesItem[];
+  goals: Goal[];
+  autoGoals: Goal[];
+  practiceMinutesPerDay: number;
 }

@@ -5,6 +5,7 @@
  * NoorPath - Muslim Parenting & Quran Learning App API
  * OpenAPI spec version: 0.1.0
  */
+import type { ReviewItemReviewPriority } from "./reviewItemReviewPriority";
 
 export interface ReviewItem {
   id: number;
@@ -12,6 +13,13 @@ export interface ReviewItem {
   surahId: number;
   surahName?: string | null;
   surahNumber: number;
+  ayahStart?: number;
+  ayahEnd?: number;
+  pageStart?: number;
+  pageEnd?: number;
+  chunkIndex?: number;
+  chunkCount?: number;
+  isPartialReview?: boolean;
   dueDate: Date;
   /** Days until next review */
   interval: number;
@@ -20,4 +28,6 @@ export interface ReviewItem {
   repetitionCount: number;
   lastReviewed?: Date | null;
   isOverdue: boolean;
+  isWeak?: boolean;
+  reviewPriority?: ReviewItemReviewPriority;
 }
