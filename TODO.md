@@ -1,6 +1,6 @@
 # NoorPath / Quranic Journey — Status & Next Steps
 
-_Last updated: April 29, 2026 (Phase 2H.4 review essentials parity implemented locally; hardware QA pending; Phase 3/TestFlight deferred until Phase 2H must-have parity is triaged/completed)_
+_Last updated: April 29, 2026 (Phase 2H.4 review essentials parity complete and hardware-tested; Phase 3/TestFlight deferred until Phase 2H must-have parity is triaged/completed)_
 
 ---
 
@@ -22,7 +22,8 @@ After every meaningful action, update this file and `PHASE_2D_HANDOFF.md` before
 - Active branch/SHA at Phase 2H.3 start: `main` at `512d03c`. Phase 2H.3 settings/targets convergence is implemented locally in the active Expo app. Remote sync target after this implementation/docs commit: `main`, `origin/main`, `feature/main-working-branch`, and `origin/feature/main-working-branch` all synced to the final Phase 2H.3 local-validation HEAD.
 - Active branch/SHA after Phase 2H.3 implementation sync: `main` at `4f85482`. Mohammad hardware-tested Phase 2H.3 settings/targets convergence and reported it looks good. This docs update should be committed/synced as the next HEAD. Remote sync target after this docs sync: `main`, `origin/main`, `feature/main-working-branch`, and `origin/feature/main-working-branch` all synced to the final Phase 2H.3 complete HEAD.
 - Active branch/SHA at Phase 2H.4 start: `main` at `5872c58`. Phase 2H.4 review essentials parity is implemented locally in the active Expo app. Remote sync target after this implementation/docs commit: `main`, `origin/main`, `feature/main-working-branch`, and `origin/feature/main-working-branch` all synced to the final Phase 2H.4 local-validation HEAD.
-- QA status: Phase 2D memorization core through Slice 5b, Phase 2E dashboard polish, Phase 2F target-setting UI, Phase 2G.1 diagnostic cleanup, Phase 2G.2 mobile IA shell, Phase 2G.3 shared screen primitives, Phase 2H.1 mobile onboarding/profile management, Phase 2H.2 mobile dashboard parity content, and Phase 2H.3 settings/targets convergence are hardware-tested. Phase 2H.4 is locally validated and awaits Mohammad hardware QA. Phase 2G.4 local validation passed for API/codegen/mobile with `/Users/mothmanaurascape.ai/Library/pnpm/pnpm --filter @workspace/api-spec run codegen`, `/Users/mothmanaurascape.ai/Library/pnpm/pnpm run typecheck:libs`, `/Users/mothmanaurascape.ai/Library/pnpm/pnpm --filter @workspace/api-server run typecheck`, and `cd artifacts/noor-mobile && npx tsc --noEmit`. Phase 2H.1 local validation passed with `cd artifacts/noor-mobile && npx tsc --noEmit` and `git diff --check`; follow-up onboarding polish also passed the same two checks. Phase 2H.2 local validation passed with `cd artifacts/noor-mobile && npx tsc --noEmit` and `git diff --check`. Phase 2H.3 local validation passed with `cd artifacts/noor-mobile && npx tsc --noEmit` and `git diff --check`. Phase 2H.4 local validation passed with `cd artifacts/noor-mobile && npx tsc --noEmit` and `git diff --check`. Full root `/Users/mothmanaurascape.ai/Library/pnpm/pnpm run typecheck` was previously attempted, but it stops in unrelated frozen/reference UI areas (`artifacts/noor-path/src/components/ui/button-group.tsx`, `artifacts/noor-path/src/components/ui/calendar.tsx`, `artifacts/mockup-sandbox/src/components/ui/calendar.tsx`, `artifacts/mockup-sandbox/src/components/ui/spinner.tsx`) on React type/ref baseline errors.
+- Active branch/SHA after Phase 2H.4 implementation sync: `main` at `8873156`. Mohammad hardware-tested Phase 2H.4 review essentials parity and reported QA testing is good. This docs update should be committed/synced as the next HEAD. Remote sync target after this docs sync: `main`, `origin/main`, `feature/main-working-branch`, and `origin/feature/main-working-branch` all synced to the final Phase 2H.4 complete HEAD.
+- QA status: Phase 2D memorization core through Slice 5b, Phase 2E dashboard polish, Phase 2F target-setting UI, Phase 2G.1 diagnostic cleanup, Phase 2G.2 mobile IA shell, Phase 2G.3 shared screen primitives, Phase 2H.1 mobile onboarding/profile management, Phase 2H.2 mobile dashboard parity content, Phase 2H.3 settings/targets convergence, and Phase 2H.4 review essentials parity are hardware-tested. Phase 2G.4 local validation passed for API/codegen/mobile with `/Users/mothmanaurascape.ai/Library/pnpm/pnpm --filter @workspace/api-spec run codegen`, `/Users/mothmanaurascape.ai/Library/pnpm/pnpm run typecheck:libs`, `/Users/mothmanaurascape.ai/Library/pnpm/pnpm --filter @workspace/api-server run typecheck`, and `cd artifacts/noor-mobile && npx tsc --noEmit`. Phase 2H.1 local validation passed with `cd artifacts/noor-mobile && npx tsc --noEmit` and `git diff --check`; follow-up onboarding polish also passed the same two checks. Phase 2H.2 local validation passed with `cd artifacts/noor-mobile && npx tsc --noEmit` and `git diff --check`. Phase 2H.3 local validation passed with `cd artifacts/noor-mobile && npx tsc --noEmit` and `git diff --check`. Phase 2H.4 local validation passed with `cd artifacts/noor-mobile && npx tsc --noEmit` and `git diff --check`. Full root `/Users/mothmanaurascape.ai/Library/pnpm/pnpm run typecheck` was previously attempted, but it stops in unrelated frozen/reference UI areas (`artifacts/noor-path/src/components/ui/button-group.tsx`, `artifacts/noor-path/src/components/ui/calendar.tsx`, `artifacts/mockup-sandbox/src/components/ui/calendar.tsx`, `artifacts/mockup-sandbox/src/components/ui/spinner.tsx`) on React type/ref baseline errors.
 - Dev-server note: starting Expo inside the sandbox fails with `ERR_SOCKET_BAD_PORT` because sandboxed Node cannot bind local ports (`EPERM` on 8081). Run the dev server outside the sandbox/escalated when using this environment.
 - TestFlight status: **Phase 3/TestFlight is deferred** until the web-app parity audit's must-have mobile items are triaged and the Phase 2H pre-TestFlight items are completed or explicitly moved to post-beta.
 - Inspection notes: initial Phase 2E inspection found `app/child/[childId]/index.tsx` was a three-card skeleton; `src/lib/api.ts` is a thin authenticated fetch helper; `/api/children/:id/dashboard` exposes `todaysPlan.newMemorization`, `todayProgress`, `reviewsDueToday`, and `readingGoal`; `/api/children/:id/reviews` exposes detailed queue items with `reviewPriority`.
@@ -52,13 +53,13 @@ After every meaningful action, update this file and `PHASE_2D_HANDOFF.md` before
 - Phase 2H.3 hardware QA notes: Mohammad tested the settings/targets convergence on iPhone and reported it looks good.
 - Phase 2H.4 implementation notes: refreshed the active mobile Review screen with focus-refresh and pull-to-refresh, a dense queue summary, richer due-today cards, reviewed-today completed cards, no-due/completed/empty states, and an upcoming reviews section capped with overflow copy. The review session keeps the page-image review flow and 0-5 SM-2 submit path, adds a sticky bottom control bar, hydrates the child's memorization reciter preference as the review audio default, and adds JS-only reciter/playback-speed controls using existing mobile audio patterns. Submitting a rating returns to Review, whose focus refresh updates the queue; dashboard focus refresh continues to update the badge/count after returning. No backend/spec/generated files, frozen web app files, tajweed implementation, recite matcher behavior, or native dependencies were touched.
 - Phase 2H.4 validation notes: `cd artifacts/noor-mobile && npx tsc --noEmit` and `git diff --check` passed locally.
-- Phase 2H.4 hardware QA notes: pending Mohammad iPhone QA.
+- Phase 2H.4 hardware QA notes: Mohammad tested the review essentials parity on iPhone and reported QA testing is good.
 - Exact next checklist:
-  1. Mohammad hardware QA for Phase 2H.4: submit 0-5 ratings, confirm Review queue refreshes after returning from the session, confirm dashboard review count/badge updates after returning, test no-due state, upcoming queue visibility, reviewed/completed sections, reciter/speed controls, and pull-to-refresh.
-  2. Smoke the seeded-profile flows after Phase 2H.4: dashboard, settings/targets, memorization, review, More, Full Quran, profile picker, profile creation, profile settings, delete child, and pull-to-refresh.
-  3. If Phase 2H.4 passes hardware QA, update this file and `PHASE_2D_HANDOFF.md` to mark it complete/hardware-tested and sync both branches.
-  4. Start Phase 2H.5 reading essentials parity only after 2H.4 is accepted or explicitly moved forward: page/surah/juz jump/search, saved-page resume clarity, reading target progress, better footer/header controls, and optional JS-only bookmarks.
-  5. Keep Phase 3/TestFlight deferred until Phase 2H must-have parity is completed or explicitly moved to post-beta. Keep tajweed as documented backlog only; do not tighten recite matching; do not edit the frozen web app; do not edit generated files manually; keep future implementation JS-only unless a native rebuild is explicitly approved.
+  1. Start Phase 2H.5 reading essentials parity: add page/surah/juz jump/search, saved-page resume clarity, reading target progress, better footer/header controls, and optional JS-only bookmarks if they do not risk the current reader.
+  2. Preserve existing seeded-profile flows: dashboard, settings/targets, memorization, review, More, Full Quran, profile picker, profile creation, profile settings, delete child, and pull-to-refresh.
+  3. Keep Phase 2H.5 JS-only unless a native rebuild is explicitly approved; avoid backend/spec/generated changes unless truly necessary.
+  4. Validate Phase 2H.5 with `cd artifacts/noor-mobile && npx tsc --noEmit` and `git diff --check`.
+  5. Mohammad hardware QA for Phase 2H.5: save/resume reading, jump by page/surah/juz, confirm reading target progress, smoke core routes, and confirm dashboard reading state updates. Keep Phase 3/TestFlight deferred until Phase 2H must-have parity is completed or explicitly moved to post-beta.
 
 ### Web-app parity audit summary
 
@@ -94,7 +95,7 @@ Highest-risk missing items before TestFlight:
 - Major product surfaces are now visible in More, but Progress, Stories, Du'aas, Plan, achievements, and richer dedicated destination pages are still absent.
 - Stories, du'aas, progress, achievements, and plan pages are absent from mobile.
 - The reading screen is too bare for real use beyond sequential paging.
-- Phase 2H.4 review essentials parity is implemented locally and still needs Mohammad hardware QA before it is marked complete.
+- Phase 2H.4 review essentials parity is complete and hardware-tested.
 - Mobile du'a status UI is still absent; when it is built, test toggling multiple du'as independently against the Phase 2G.4 route fix.
 - Future API changes must keep `lib/api-spec/openapi.yaml` and Orval outputs in sync; never edit generated files manually.
 
@@ -133,7 +134,7 @@ Pre-TestFlight: yes, unless Mohammad explicitly narrows beta to existing seeded 
 | 2H.1 Mobile onboarding/profile management | Complete Apr 29: parents can create/edit/delete child profiles on mobile, including prior memorized surahs, From/To surah range selection, initial strength/known ayahs, daily targets, practice minutes, hide stories/duas, sticky save, and keyboard dismissal. | `app/index.tsx`, `app/profile/new.tsx`, `app/child/[childId]/profile.tsx`, `src/components/child-profile-form.tsx`, `src/lib/api.ts` | Existing `POST/PUT/DELETE /children`, `GET /surahs`; no generated edits | JS-only | Local mobile typecheck + `git diff --check` passed; Mohammad hardware QA passed |
 | 2H.2 Dashboard parity content | Complete Apr 29: mobile dashboard now shows API-backed stats, goals, achievements, story/du'a suggestions respecting visibility flags, next/up-next work, richer completed/empty states, and quick actions. | `app/child/[childId]/index.tsx` | Existing `GET /dashboard`; no backend/spec changes | JS-only | Mobile typecheck + `git diff --check` passed; Mohammad hardware QA passed |
 | 2H.3 Settings/targets convergence | Complete Apr 29: converged Targets into parent Settings with practice minutes, visibility toggles, child profile entry, daily target bundles/fine tuning, JS-only memorization defaults, and immediate profile preference persistence. | `targets.tsx`, `src/lib/settings.ts`, `memorization.tsx`, dashboard/More labels | Existing `PUT /children/:id`; AsyncStorage for session defaults | JS-only; no native | Mobile typecheck + `git diff --check` passed; Mohammad hardware QA passed |
-| 2H.4 Review essentials parity | Implemented locally Apr 29: added queue summary, upcoming/reviewed/completed/no-due states, pull/focus refresh, sticky review-session controls, reciter/speed controls, and queue/dashboard refresh path after submit. | `review.tsx`, `review-session.tsx`, `src/components/screen-primitives.tsx` | Existing reviews endpoints; no backend/spec/generated changes | JS-only | Local mobile typecheck + `git diff --check` passed; Mohammad hardware QA pending |
+| 2H.4 Review essentials parity | Complete Apr 29: added queue summary, upcoming/reviewed/completed/no-due states, pull/focus refresh, sticky review-session controls, reciter/speed controls, and queue/dashboard refresh path after submit. | `review.tsx`, `review-session.tsx`, `src/components/screen-primitives.tsx` | Existing reviews endpoints; no backend/spec/generated changes | JS-only | Local mobile typecheck + `git diff --check` passed; Mohammad hardware QA passed |
 | 2H.5 Reading essentials parity | Add page/surah/juz jump/search, saved-page resume clarity, reading target progress, better footer/header controls, and maybe simple bookmarks if still JS-only. | `mushaf.tsx`, `src/lib/mushaf.ts`, `src/lib/quran.ts`, possible static surah metadata helper | `POST /reading-progress`, `GET /dashboard`; no generated edits | JS-only | Swipe/save/resume, jump by page/surah/juz, reading goal completion |
 | 2H.6 Memorization discovery parity | Add a mobile memorization home/list so users can search/filter surahs, see progress/strength, start today's work, resume in-progress work, and enter the existing session engine. | Existing `memorization.tsx` may need split into home/session routes; `src/lib/memorization.ts`; new progress components | `GET /surahs`, `GET /children/:id/memorization`, `GET /dashboard` | JS-only; careful route migration | Start from dashboard and list; current assignment still works; mark-complete persists |
 
@@ -178,7 +179,7 @@ Pre-TestFlight: yes after 2H must-haves are triaged/completed.
 - `PROD_ALLOWED_ORIGINS` + `PROD_TRUSTED_ORIGINS` configured for CORS / Better Auth
 - `/api/healthz` returns `{"status":"ok"}` (public, mounted above `requireAuth`)
 - Three secrets rotated (Neon password, Better Auth secret, Hugging Face token)
-- Branch-sync note: `main` + `feature/main-working-branch` were synced at `5872c58` before Phase 2H.4. After this review essentials commit, both branches should be synced to the current Phase 2H.4 local-validation HEAD. `safe-cumulative` was temporary archaeology and can be ignored.
+- Branch-sync note: `main` + `feature/main-working-branch` were synced at `8873156` after Phase 2H.4 implementation. After this docs sync, both branches should be synced to the current Phase 2H.4 complete HEAD. `safe-cumulative` was temporary archaeology and can be ignored.
 - Validation note: Phase 2G.4 touched libs/API/mobile checks pass; full root typecheck currently stops in unrelated frozen/reference UI React type errors in `artifacts/noor-path` and `artifacts/mockup-sandbox`.
 - iOS bundle identifier registered: `com.mothman.noorpath`
 - EAS project created at `@mothman123/noor-mobile`
@@ -393,12 +394,13 @@ Implemented, committed, typechecked, route-fixed, and hardware-tested Apr 28, 20
 - Production QA: authenticated production dashboard fetches for child L and Joll returned 200 after the screenshots, so the saved target values are not corrupting dashboard data.
 - Hardware QA: Mohammad reported the Targets/dashboard route fix passed on iPhone; dashboard no longer gets stuck on `/api/children/targets/*`.
 
-## 🔜 NEXT — Phase 2H.4 hardware QA, then Phase 2H.5 reading essentials
+## 🔜 NEXT — Phase 2H.5 reading essentials
 
-1. Hardware-test Phase 2H.4 on iPhone: submit 0-5 review ratings, confirm Review queue refresh, confirm dashboard badge/count refresh, test no-due/upcoming/reviewed states, test reciter/speed controls, and smoke seeded-profile flows.
-2. If Phase 2H.4 passes, update `TODO.md` and `PHASE_2D_HANDOFF.md` to mark it complete/hardware-tested and sync both branches.
-3. Start Phase 2H.5 reading essentials after 2H.4 is accepted or explicitly moved forward.
-4. Keep the frozen web app read-only as reference; do not edit generated API clients manually.
+1. Add mobile Full Quran jump/search basics: page jump, surah jump, juz jump if metadata is already available or can be JS-only.
+2. Improve saved-page resume clarity and reading target progress so parents can tell what counted today.
+3. Improve reader header/footer controls without risking the current page-image reader.
+4. Optional: add JS-only bookmarks if the implementation stays scoped and does not require native rebuild or backend changes.
+5. Keep the frozen web app read-only as reference; do not edit generated API clients manually.
 
 ---
 
@@ -415,7 +417,7 @@ Phase 3/TestFlight is intentionally deferred until Phase 2H must-have mobile par
 - [ ] App Store submission
 - [ ] Push notifications for review reminders (Expo Notifications) — requires explicit native/build approval if new native config is needed
 - [ ] Native gestures + haptics only if already covered by installed dependencies or explicitly approved
-- [x] Make audio controls in `review-session` sticky / floating at bottom of screen (Phase 2H.4 local implementation; hardware QA pending)
+- [x] Make audio controls in `review-session` sticky / floating at bottom of screen (Phase 2H.4 complete and hardware-tested)
 - [ ] Add ayah-bounding-box overlay in `review-session`
 - [ ] Migrate from `expo-av` to `expo-audio`/`expo-video` later; do not block parity on this
 
@@ -534,10 +536,10 @@ Phase 3/TestFlight is intentionally deferred until Phase 2H must-have mobile par
 | Frontend (dev) | `http://localhost:5173` |
 | Database | Neon serverless Postgres (rotated Apr 26) |
 | Repo | `https://github.com/mothman0406/Quranic-Journey` |
-| Branches | `main` (deploy) + `feature/main-working-branch`; both should be synced to the current Phase 2H.4 local-validation commit after this handoff. `safe-cumulative` was temporary archaeology and can be ignored. |
+| Branches | `main` (deploy) + `feature/main-working-branch`; both should be synced to the current Phase 2H.4 complete commit after this handoff. `safe-cumulative` was temporary archaeology and can be ignored. |
 | Apple Developer | Approved Apr 26; Team ID `M7KJJDN537` |
 | iOS bundle identifier | `com.mothman.noorpath` |
 | EAS project | `@mothman123/noor-mobile` |
 | Railway project | `humble-laughter` / `production` env |
-| Mobile app HEAD | Phase 2D complete through Slice 5b, Phase 2E dashboard polish complete, Phase 2F targets complete, Phase 2G.1-2G.3 hardware-tested, Phase 2H.1-2H.3 hardware-tested, and Phase 2H.4 review essentials implemented locally with mobile typecheck and `git diff --check` passing. EAS dev build `cfb3f406-5fec-405a-a150-e525a96ecff2` finished and was hardware-tested by Mohammad for earlier slices. Next work should start from `main` with Phase 2H.4 hardware QA, then Phase 2H.5 reading essentials. |
+| Mobile app HEAD | Phase 2D complete through Slice 5b, Phase 2E dashboard polish complete, Phase 2F targets complete, Phase 2G.1-2G.3 hardware-tested, Phase 2H.1-2H.4 hardware-tested, with Phase 2H.4 review essentials complete. EAS dev build `cfb3f406-5fec-405a-a150-e525a96ecff2` finished and was hardware-tested by Mohammad for earlier slices. Next work should start from `main` with Phase 2H.5 reading essentials. |
 </content>
