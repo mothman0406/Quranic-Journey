@@ -1,6 +1,10 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   ActivityIndicator,
+  InputAccessoryView,
+  Keyboard,
+  KeyboardAvoidingView,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -53,6 +57,7 @@ type SelectedSurah = {
   knownAyahCount: number;
 };
 
+const INPUT_ACCESSORY_ID = "child-profile-form-inputs";
 const AVATARS = ["⭐", "🌙", "🌸", "🕌", "📖", "✨", "🦋", "🌿"];
 
 const STRENGTHS: Array<{
@@ -201,6 +206,8 @@ export function ChildProfileForm({
   const [practiceText, setPracticeText] = useState(String(defaults?.practiceMinutesPerDay ?? 20));
   const [surahs, setSurahs] = useState<SurahSummary[]>([]);
   const [selectedSurahs, setSelectedSurahs] = useState<Record<number, SelectedSurah>>({});
+  const [rangeFromId, setRangeFromId] = useState<number | null>(null);
+  const [rangeToId, setRangeToId] = useState<number | null>(null);
   const [loadingSurahs, setLoadingSurahs] = useState(mode === "create");
   const [loadError, setLoadError] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
@@ -221,6 +228,8 @@ export function ChildProfileForm({
       const data = await apiFetch<SurahsResponse>("/api/surahs");
       setSurahs(data.surahs);
       setSelectedSurahs(buildInitialSelected(defaults?.initialSurahSetups, data.surahs));
+      setRangeFromId(data.surahs[0]?.id ?? null);
+      setRangeToId(data.surahs[0]?.id ?? null);
     } catch (e) {
       setLoadError(e instanceof Error ? e.message : "Failed to load surahs.");
     } finally {
@@ -252,6 +261,7 @@ export function ChildProfileForm({
   }
 
   function toggleSurah(surah: SurahSummary) {
+    Keyboard.dismiss();
     setSelectedSurahs((current) => {
       const next = { ...current };
       if (next[surah.id]) {
@@ -267,6 +277,7 @@ export function ChildProfileForm({
   }
 
   function updateSelectedSurah(surah: SurahSummary, nextSetup: Partial<SelectedSurah>) {
+    Keyboard.dismiss();
     setSelectedSurahs((current) => {
       const existing = current[surah.id];
       if (!existing) return current;
@@ -285,7 +296,39 @@ export function ChildProfileForm({
     });
   }
 
+  function applyRangeSelection() {
+    Keyboard.dismiss();
+    if (rangeFromId == null || rangeToId == null) return;
+
+    const fromIndex = surahs.findIndex((surah) => surah.id === rangeFromId);
+    const toIndex = surahs.findIndex((surah) => surah.id === rangeToId);
+    if (fromIndex === -1 || toIndex === -1) return;
+
+    const start = Math.min(fromIndex, toIndex);
+    const end = Math.max(fromIndex, toIndex);
+    const inRange = surahs.slice(start, end + 1);
+
+    setSelectedSurahs((current) => {
+      const next = { ...current };
+      for (const surah of inRange) {
+        if (!next[surah.id]) {
+          next[surah.id] = {
+            level: "solid",
+            knownAyahCount: surah.verseCount,
+          };
+        }
+      }
+      return next;
+    });
+  }
+
+  function clearSelectedSurahs() {
+    Keyboard.dismiss();
+    setSelectedSurahs({});
+  }
+
   async function handleSubmit() {
+    Keyboard.dismiss();
     const age = Number(ageText);
     const practiceMinutes = Number(practiceText);
 
@@ -326,7 +369,15 @@ export function ChildProfileForm({
   }
 
   return (
-    <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+    <KeyboardAvoidingView
+      style={styles.formShell}
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
+    >
+    <ScrollView
+      contentContainerStyle={styles.content}
+      keyboardShouldPersistTaps="handled"
+      keyboardDismissMode="on-drag"
+    >
       {formError ? <InlineError message={formError} /> : null}
 
       <SectionLabel>Profile</SectionLabel>
@@ -339,6 +390,10 @@ export function ChildProfileForm({
           placeholderTextColor="#9ca3af"
           style={styles.input}
           autoCapitalize="words"
+          returnKeyType="done"
+          blurOnSubmit
+          onSubmitEditing={Keyboard.dismiss}
+          inputAccessoryViewID={Platform.OS === "ios" ? INPUT_ACCESSORY_ID : undefined}
         />
 
         <View style={styles.twoColumn}>
@@ -349,6 +404,10 @@ export function ChildProfileForm({
               onChangeText={setAgeText}
               keyboardType="number-pad"
               style={styles.input}
+              returnKeyType="done"
+              blurOnSubmit
+              onSubmitEditing={Keyboard.dismiss}
+              inputAccessoryViewID={Platform.OS === "ios" ? INPUT_ACCESSORY_ID : undefined}
             />
           </View>
           <View style={styles.flexField}>
@@ -425,6 +484,10 @@ export function ChildProfileForm({
             onChangeText={setPracticeText}
             keyboardType="number-pad"
             style={styles.minutesInput}
+            returnKeyType="done"
+            blurOnSubmit
+            onSubmitEditing={Keyboard.dismiss}
+            inputAccessoryViewID={Platform.OS === "ios" ? INPUT_ACCESSORY_ID : undefined}
           />
         </View>
         <View style={styles.chipRow}>
@@ -540,124 +603,208 @@ export function ChildProfileForm({
             ) : loadError ? (
               <InlineError message={loadError} onRetry={loadSurahs} />
             ) : (
-              <View style={styles.surahList}>
-                {surahs.map((surah) => {
-                  const selected = selectedSurahs[surah.id];
-                  const strength = selected
-                    ? STRENGTHS.find((item) => item.value === selected.level)
-                    : null;
-                  return (
-                    <View
-                      key={surah.id}
-                      style={[styles.surahCard, selected && styles.surahCardActive]}
-                    >
-                      <Pressable
-                        style={styles.surahTopRow}
-                        onPress={() => toggleSurah(surah)}
-                      >
-                        <View style={styles.checkBox}>
-                          <Text style={styles.checkMark}>{selected ? "✓" : ""}</Text>
-                        </View>
-                        <View style={styles.rowText}>
-                          <Text style={styles.surahName}>
-                            {surah.nameTransliteration}
-                          </Text>
-                          <Text style={styles.cardDetail}>
-                            Surah {surah.number} · {surah.verseCount} ayahs
-                          </Text>
-                        </View>
-                      </Pressable>
-
-                      {selected ? (
-                        <View style={styles.surahSetup}>
-                          <View style={styles.rowBetween}>
-                            <Text style={styles.cardTitle}>Known ayahs</Text>
-                            <Text style={styles.targetValue}>
-                              {selected.knownAyahCount}/{surah.verseCount}
-                            </Text>
-                          </View>
-                          <View style={styles.stepperRow}>
-                            <Pressable
-                              style={styles.stepButton}
-                              onPress={() =>
-                                updateSelectedSurah(surah, {
-                                  knownAyahCount: selected.knownAyahCount - 1,
-                                })
-                              }
-                            >
-                              <Text style={styles.stepButtonText}>-</Text>
-                            </Pressable>
-                            <Pressable
-                              style={styles.fullButton}
-                              onPress={() =>
-                                updateSelectedSurah(surah, {
-                                  knownAyahCount: surah.verseCount,
-                                })
-                              }
-                            >
-                              <Text style={styles.fullButtonText}>Full surah</Text>
-                            </Pressable>
-                            <Pressable
-                              style={styles.stepButton}
-                              onPress={() =>
-                                updateSelectedSurah(surah, {
-                                  knownAyahCount: selected.knownAyahCount + 1,
-                                })
-                              }
-                            >
-                              <Text style={styles.stepButtonText}>+</Text>
-                            </Pressable>
-                          </View>
-                          <View style={styles.strengthGrid}>
-                            {STRENGTHS.map((item) => {
-                              const active = selected.level === item.value;
-                              return (
-                                <Pressable
-                                  key={item.value}
-                                  style={[
-                                    styles.strengthChip,
-                                    active && {
-                                      backgroundColor: item.soft,
-                                      borderColor: item.color,
-                                    },
-                                  ]}
-                                  onPress={() =>
-                                    updateSelectedSurah(surah, { level: item.value })
-                                  }
-                                >
-                                  <Text
-                                    style={[
-                                      styles.strengthLabel,
-                                      active && { color: item.color },
-                                    ]}
-                                  >
-                                    {item.label}
-                                  </Text>
-                                  <Text style={styles.strengthDetail}>
-                                    {item.detail}
-                                  </Text>
-                                </Pressable>
-                              );
-                            })}
-                          </View>
-                          {strength ? (
-                            <Text style={[styles.setupHint, { color: strength.color }]}>
-                              Starts as {strength.label.toLowerCase()} with{" "}
-                              {selected.knownAyahCount} known ayah
-                              {selected.knownAyahCount === 1 ? "" : "s"}.
-                            </Text>
-                          ) : null}
-                        </View>
-                      ) : null}
+              <>
+                <View style={styles.rangeBox}>
+                  <View style={styles.rowBetween}>
+                    <View style={styles.rowText}>
+                      <Text style={styles.rangeTitle}>Range selection</Text>
+                      <Text style={styles.cardDetail}>
+                        Add every surah between two choices in learning order.
+                      </Text>
                     </View>
-                  );
-                })}
-              </View>
+                    <Pressable
+                      style={[
+                        styles.applyRangeButton,
+                        (rangeFromId == null || rangeToId == null) && styles.applyRangeButtonDisabled,
+                      ]}
+                      onPress={applyRangeSelection}
+                      disabled={rangeFromId == null || rangeToId == null}
+                    >
+                      <Text style={styles.applyRangeText}>Apply</Text>
+                    </Pressable>
+                  </View>
+
+                  <Text style={styles.rangeLabel}>From</Text>
+                  <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    keyboardShouldPersistTaps="handled"
+                    contentContainerStyle={styles.rangeChipRow}
+                  >
+                    {surahs.map((surah) => {
+                      const active = rangeFromId === surah.id;
+                      return (
+                        <Pressable
+                          key={`from-${surah.id}`}
+                          style={[styles.rangeChip, active && styles.rangeChipActive]}
+                          onPress={() => {
+                            Keyboard.dismiss();
+                            setRangeFromId(surah.id);
+                          }}
+                        >
+                          <Text style={[styles.rangeChipText, active && styles.rangeChipTextActive]}>
+                            {surah.number}. {surah.nameTransliteration}
+                          </Text>
+                        </Pressable>
+                      );
+                    })}
+                  </ScrollView>
+
+                  <Text style={styles.rangeLabel}>To</Text>
+                  <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    keyboardShouldPersistTaps="handled"
+                    contentContainerStyle={styles.rangeChipRow}
+                  >
+                    {surahs.map((surah) => {
+                      const active = rangeToId === surah.id;
+                      return (
+                        <Pressable
+                          key={`to-${surah.id}`}
+                          style={[styles.rangeChip, active && styles.rangeChipActive]}
+                          onPress={() => {
+                            Keyboard.dismiss();
+                            setRangeToId(surah.id);
+                          }}
+                        >
+                          <Text style={[styles.rangeChipText, active && styles.rangeChipTextActive]}>
+                            {surah.number}. {surah.nameTransliteration}
+                          </Text>
+                        </Pressable>
+                      );
+                    })}
+                  </ScrollView>
+
+                  {selectedCount > 0 ? (
+                    <Pressable style={styles.clearSelectionButton} onPress={clearSelectedSurahs}>
+                      <Text style={styles.clearSelectionText}>Clear all selected surahs</Text>
+                    </Pressable>
+                  ) : null}
+                </View>
+
+                <View style={styles.surahList}>
+                  {surahs.map((surah) => {
+                    const selected = selectedSurahs[surah.id];
+                    const strength = selected
+                      ? STRENGTHS.find((item) => item.value === selected.level)
+                      : null;
+                    return (
+                      <View
+                        key={surah.id}
+                        style={[styles.surahCard, selected && styles.surahCardActive]}
+                      >
+                        <Pressable
+                          style={styles.surahTopRow}
+                          onPress={() => toggleSurah(surah)}
+                        >
+                          <View style={styles.checkBox}>
+                            <Text style={styles.checkMark}>{selected ? "✓" : ""}</Text>
+                          </View>
+                          <View style={styles.rowText}>
+                            <Text style={styles.surahName}>
+                              {surah.nameTransliteration}
+                            </Text>
+                            <Text style={styles.cardDetail}>
+                              Surah {surah.number} · {surah.verseCount} ayahs
+                            </Text>
+                          </View>
+                        </Pressable>
+
+                        {selected ? (
+                          <View style={styles.surahSetup}>
+                            <View style={styles.rowBetween}>
+                              <Text style={styles.cardTitle}>Known ayahs</Text>
+                              <Text style={styles.targetValue}>
+                                {selected.knownAyahCount}/{surah.verseCount}
+                              </Text>
+                            </View>
+                            <View style={styles.stepperRow}>
+                              <Pressable
+                                style={styles.stepButton}
+                                onPress={() =>
+                                  updateSelectedSurah(surah, {
+                                    knownAyahCount: selected.knownAyahCount - 1,
+                                  })
+                                }
+                              >
+                                <Text style={styles.stepButtonText}>-</Text>
+                              </Pressable>
+                              <Pressable
+                                style={styles.fullButton}
+                                onPress={() =>
+                                  updateSelectedSurah(surah, {
+                                    knownAyahCount: surah.verseCount,
+                                  })
+                                }
+                              >
+                                <Text style={styles.fullButtonText}>Full surah</Text>
+                              </Pressable>
+                              <Pressable
+                                style={styles.stepButton}
+                                onPress={() =>
+                                  updateSelectedSurah(surah, {
+                                    knownAyahCount: selected.knownAyahCount + 1,
+                                  })
+                                }
+                              >
+                                <Text style={styles.stepButtonText}>+</Text>
+                              </Pressable>
+                            </View>
+                            <View style={styles.strengthGrid}>
+                              {STRENGTHS.map((item) => {
+                                const active = selected.level === item.value;
+                                return (
+                                  <Pressable
+                                    key={item.value}
+                                    style={[
+                                      styles.strengthChip,
+                                      active && {
+                                        backgroundColor: item.soft,
+                                        borderColor: item.color,
+                                      },
+                                    ]}
+                                    onPress={() =>
+                                      updateSelectedSurah(surah, { level: item.value })
+                                    }
+                                  >
+                                    <Text
+                                      style={[
+                                        styles.strengthLabel,
+                                        active && { color: item.color },
+                                      ]}
+                                    >
+                                      {item.label}
+                                    </Text>
+                                    <Text style={styles.strengthDetail}>
+                                      {item.detail}
+                                    </Text>
+                                  </Pressable>
+                                );
+                              })}
+                            </View>
+                            {strength ? (
+                              <Text style={[styles.setupHint, { color: strength.color }]}>
+                                Starts as {strength.label.toLowerCase()} with{" "}
+                                {selected.knownAyahCount} known ayah
+                                {selected.knownAyahCount === 1 ? "" : "s"}.
+                              </Text>
+                            ) : null}
+                          </View>
+                        ) : null}
+                      </View>
+                    );
+                  })}
+                </View>
+              </>
             )}
           </View>
         </>
       ) : null}
 
+      {footer}
+    </ScrollView>
+    <View style={styles.stickyFooter}>
       <Pressable
         style={[styles.submitButton, saving && styles.submitButtonDisabled]}
         onPress={handleSubmit}
@@ -667,16 +814,28 @@ export function ChildProfileForm({
           {saving ? "Saving..." : submitLabel}
         </Text>
       </Pressable>
-      {footer}
-    </ScrollView>
+    </View>
+    {Platform.OS === "ios" ? (
+      <InputAccessoryView nativeID={INPUT_ACCESSORY_ID}>
+        <View style={styles.keyboardAccessory}>
+          <Pressable style={styles.keyboardDoneButton} onPress={Keyboard.dismiss}>
+            <Text style={styles.keyboardDoneText}>Done</Text>
+          </Pressable>
+        </View>
+      </InputAccessoryView>
+    ) : null}
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
+  formShell: {
+    flex: 1,
+  },
   content: {
     padding: 20,
     gap: 14,
-    paddingBottom: 40,
+    paddingBottom: 126,
   },
   card: {
     backgroundColor: "#f9fafb",
@@ -863,6 +1022,72 @@ const styles = StyleSheet.create({
     color: "#2563eb",
     fontWeight: "800",
   },
+  rangeBox: {
+    backgroundColor: "#eff6ff",
+    borderWidth: 1,
+    borderColor: "#bfdbfe",
+    borderRadius: 12,
+    padding: 12,
+    gap: 8,
+  },
+  rangeTitle: {
+    color: "#1d4ed8",
+    fontSize: 14,
+    fontWeight: "800",
+  },
+  applyRangeButton: {
+    borderRadius: 10,
+    backgroundColor: "#2563eb",
+    paddingVertical: 9,
+    paddingHorizontal: 13,
+  },
+  applyRangeButtonDisabled: {
+    opacity: 0.45,
+  },
+  applyRangeText: {
+    color: "#ffffff",
+    fontSize: 13,
+    fontWeight: "800",
+  },
+  rangeLabel: {
+    color: "#1d4ed8",
+    fontSize: 12,
+    fontWeight: "800",
+  },
+  rangeChipRow: {
+    gap: 8,
+    paddingRight: 2,
+  },
+  rangeChip: {
+    backgroundColor: "#ffffff",
+    borderWidth: 1,
+    borderColor: "#bfdbfe",
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+  },
+  rangeChipActive: {
+    backgroundColor: "#2563eb",
+    borderColor: "#2563eb",
+  },
+  rangeChipText: {
+    color: "#1d4ed8",
+    fontSize: 12,
+    fontWeight: "800",
+  },
+  rangeChipTextActive: {
+    color: "#ffffff",
+  },
+  clearSelectionButton: {
+    alignSelf: "flex-start",
+    paddingVertical: 4,
+  },
+  clearSelectionText: {
+    color: "#1d4ed8",
+    fontSize: 12,
+    fontWeight: "800",
+    textDecorationLine: "underline",
+  },
   loadingRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -970,6 +1195,31 @@ const styles = StyleSheet.create({
   },
   submitButtonText: {
     color: "#ffffff",
+    fontSize: 16,
+    fontWeight: "800",
+  },
+  stickyFooter: {
+    borderTopWidth: 1,
+    borderTopColor: "#e5e7eb",
+    backgroundColor: "#ffffff",
+    paddingHorizontal: 20,
+    paddingTop: 12,
+    paddingBottom: 20,
+  },
+  keyboardAccessory: {
+    alignItems: "flex-end",
+    borderTopWidth: 1,
+    borderTopColor: "#d1d5db",
+    backgroundColor: "#f9fafb",
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+  },
+  keyboardDoneButton: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  keyboardDoneText: {
+    color: "#2563eb",
     fontSize: 16,
     fontWeight: "800",
   },
