@@ -254,10 +254,27 @@ export async function submitMemorization(
     memorizedAyahs: number[];
     ratedAyahs: number[];
     qualityRating: number;
-    status: "memorized";
+    status: "memorized" | "in_progress";
   },
 ): Promise<void> {
   await apiFetch(`/api/children/${childId}/memorization`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function submitDailyProgress(
+  childId: string,
+  payload: {
+    memStatus: WorkStatus;
+    memCompletedAyahEnd: number;
+    memTargetSurah?: number;
+    memTargetAyahStart?: number;
+    memTargetAyahEnd?: number;
+    memTargetEndSurah?: number;
+  },
+): Promise<void> {
+  await apiFetch(`/api/children/${childId}/daily-progress`, {
     method: "POST",
     body: JSON.stringify(payload),
   });

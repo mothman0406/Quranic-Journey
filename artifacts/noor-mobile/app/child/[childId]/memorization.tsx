@@ -26,6 +26,7 @@ import {
   fetchMemorizationProgress,
   fetchSurahs,
   fetchTimingsForReciter,
+  submitDailyProgress,
   submitMemorization,
   type Segment,
   type ChapterTimings,
@@ -94,6 +95,42 @@ const DISCOVERY_FILTERS: Array<{ key: DiscoveryFilter; label: string }> = [
 ];
 
 const DISCOVERY_CHUNK_AYAHS = 5;
+
+type QualityRatingValue = 2 | 4 | 5;
+
+const QUALITY_OPTIONS: Array<{
+  value: QualityRatingValue;
+  label: string;
+  detail: string;
+  color: string;
+  bg: string;
+  border: string;
+}> = [
+  {
+    value: 2,
+    label: "Needs Work",
+    detail: "Mark this range red for more practice.",
+    color: "#be123c",
+    bg: "#fff1f2",
+    border: "#fecdd3",
+  },
+  {
+    value: 4,
+    label: "Good",
+    detail: "Mark this range yellow while it settles.",
+    color: "#b45309",
+    bg: "#fffbeb",
+    border: "#fde68a",
+  },
+  {
+    value: 5,
+    label: "Excellent",
+    detail: "Mark this range green and strong.",
+    color: "#047857",
+    bg: "#ecfdf5",
+    border: "#a7f3d0",
+  },
+];
 
 function formatAyahRange(start: number | undefined | null, end: number | undefined | null) {
   if (start == null || end == null) return "Ayahs";
@@ -169,6 +206,29 @@ function estimatePageRange(surahNumber: number, ayahStart: number, ayahEnd: numb
     pageStart: Math.max(surah.startPage, estimate(ayahStart) - 1),
     pageEnd: Math.min(surah.endPage, estimate(ayahEnd) + 1),
   };
+}
+
+function buildAyahRange(start: number, end: number) {
+  const safeStart = Math.max(1, Math.min(start, end));
+  const safeEnd = Math.max(safeStart, Math.max(start, end));
+  return Array.from({ length: safeEnd - safeStart + 1 }, (_, index) => safeStart + index);
+}
+
+function mergeMemorizedAyahs(existingAyahs: number[] | undefined, sessionAyahs: number[], totalVerses: number) {
+  return Array.from(
+    new Set([...(existingAyahs ?? []), ...sessionAyahs])
+  )
+    .filter((ayah) => Number.isInteger(ayah) && ayah >= 1 && ayah <= totalVerses)
+    .sort((a, b) => a - b);
+}
+
+function hasFullSurahMemorized(memorizedAyahs: number[], totalVerses: number) {
+  if (totalVerses <= 0) return false;
+  const memorized = new Set(memorizedAyahs);
+  for (let ayah = 1; ayah <= totalVerses; ayah += 1) {
+    if (!memorized.has(ayah)) return false;
+  }
+  return true;
 }
 
 function buildWorkTarget(work: NewMemorization): SessionTarget {
@@ -263,6 +323,9 @@ export default function MemorizationScreen() {
     position: number;
   } | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [completionSheetOpen, setCompletionSheetOpen] = useState(false);
+  const [selectedQuality, setSelectedQuality] = useState<QualityRatingValue | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   // Session-level settings — initialized from parent defaults each session.
   const [repeatCount, setRepeatCount] = useState<number>(DEFAULT_SESSION_SETTINGS.repeatCount);
@@ -1134,27 +1197,118 @@ export default function MemorizationScreen() {
     setCurrentVerse((v) => v + 1);
   }
 
+  async function refreshDiscoverySnapshot() {
+    const [dashboard, progress, surahs] = await Promise.all([
+      fetchDashboard(childId),
+      fetchMemorizationProgress(childId),
+      fetchSurahs(),
+    ]);
+    setDiscoveryState({ status: "ready", dashboard, progress, surahs });
+  }
+
+  async function submitTodayMemorizationProgress(dashboard: DashboardResponse) {
+    if (!surahNumber || ayahStart === null || ayahEnd === null) return;
+
+    const todayWork = dashboard.todaysPlan.newMemorization;
+    if (!todayWork) return;
+
+    const todayProgress = dashboard.todayProgress;
+    const targetSurah = todayProgress?.memTargetSurah ?? todayWork.surahNumber;
+    const targetAyahStart = todayProgress?.memTargetAyahStart ?? todayWork.ayahStart;
+    const targetAyahEnd = todayProgress?.memTargetAyahEnd ?? todayWork.ayahEnd;
+    const targetEndSurah = todayWork.endSurahNumber ?? targetSurah;
+    const currentWorkSurah = todayWork.currentWorkSurahNumber ?? todayWork.surahNumber;
+    const currentWorkAyahStart = todayWork.currentWorkAyahStart ?? todayWork.ayahStart;
+    const currentWorkAyahEnd = todayWork.currentWorkAyahEnd ?? todayWork.ayahEnd;
+
+    if (targetAyahStart == null || targetAyahEnd == null) return;
+    const overlapsTodayTarget =
+      surahNumber === targetSurah && ayahStart <= targetAyahEnd && ayahEnd >= targetAyahStart;
+    const overlapsCurrentWork =
+      surahNumber === currentWorkSurah &&
+      ayahStart <= currentWorkAyahEnd &&
+      ayahEnd >= currentWorkAyahStart;
+    if (!overlapsTodayTarget && !overlapsCurrentWork) return;
+
+    const completedAyahEnd = Math.max(todayProgress?.memCompletedAyahEnd ?? 0, ayahEnd);
+    const completesTodayTarget =
+      todayWork.isReviewOnly || (targetEndSurah === surahNumber && ayahEnd >= targetAyahEnd);
+
+    await submitDailyProgress(childId, {
+      memStatus: completesTodayTarget ? "completed" : "in_progress",
+      memCompletedAyahEnd: completedAyahEnd,
+      memTargetSurah: targetSurah,
+      memTargetAyahStart: targetAyahStart,
+      memTargetAyahEnd: targetAyahEnd,
+      memTargetEndSurah: targetEndSurah,
+    });
+  }
+
   async function handleMarkComplete() {
     if (!surahNumber || ayahStart === null || ayahEnd === null) return;
     setInternalPhase("single");
     internalPhaseRef.current = "single";
     void stopAudioCompletely();
-    const ayahs = Array.from({ length: ayahEnd - ayahStart + 1 }, (_, i) => ayahStart + i);
+    setSaveError(null);
+    setSelectedQuality(null);
+    setCompletionSheetOpen(true);
+  }
+
+  async function handleSaveCompletion(qualityRating: QualityRatingValue) {
+    if (!surahNumber || ayahStart === null || ayahEnd === null) return;
+    const sessionAyahs = buildAyahRange(ayahStart, ayahEnd);
     setSubmitting(true);
+    setSaveError(null);
     try {
+      const [dashboardBeforeSave, latestProgress] = await Promise.all([
+        fetchDashboard(childId),
+        fetchMemorizationProgress(childId),
+      ]);
+      const existingProgress = latestProgress.find((item) => item.surahNumber === surahNumber);
+      const totalVerses =
+        existingProgress?.totalVerses ??
+        chaptersMap.get(surahNumber)?.verses_count ??
+        displayWordsMap.size;
+      const memorizedAyahs = mergeMemorizedAyahs(
+        existingProgress?.memorizedAyahs,
+        sessionAyahs,
+        totalVerses,
+      );
+      const status = hasFullSurahMemorized(memorizedAyahs, totalVerses)
+        ? "memorized"
+        : "in_progress";
+
       await submitMemorization(childId, {
         surahId: surahNumber,
-        memorizedAyahs: ayahs,
-        ratedAyahs: ayahs,
-        qualityRating: 5,
-        status: "memorized",
+        memorizedAyahs,
+        ratedAyahs: sessionAyahs,
+        qualityRating,
+        status,
       });
 
-      Alert.alert("Marked complete.", undefined, [
-        { text: "OK", onPress: () => router.back() },
-      ]);
+      await submitTodayMemorizationProgress(dashboardBeforeSave);
+
+      try {
+        await refreshDiscoverySnapshot();
+      } catch (refreshError) {
+        setDiscoveryState({
+          status: "error",
+          message:
+            refreshError instanceof Error
+              ? refreshError.message
+              : "Saved, but the memorization list could not refresh.",
+        });
+      }
+
+      setCompletionSheetOpen(false);
+      setSelectedQuality(null);
+      setSessionRequested(false);
+      setLoading(false);
+      Alert.alert("Progress saved.", "The rating was saved for this ayah range.");
     } catch (e) {
-      Alert.alert("Error", e instanceof Error ? e.message : "Failed to save.");
+      const message = e instanceof Error ? e.message : "Failed to save.";
+      setSaveError(message);
+      Alert.alert("Error", message);
     } finally {
       setSubmitting(false);
     }
@@ -1803,6 +1957,93 @@ export default function MemorizationScreen() {
       {reciteError && (
         <Text style={styles.errorText}>{reciteError}</Text>
       )}
+
+      {/* Completion rating sheet */}
+      <Modal
+        visible={completionSheetOpen}
+        transparent
+        animationType="slide"
+        onRequestClose={() => {
+          if (!submitting) setCompletionSheetOpen(false);
+        }}
+      >
+        <Pressable
+          style={styles.backdrop}
+          onPress={() => {
+            if (!submitting) setCompletionSheetOpen(false);
+          }}
+        />
+        <View style={styles.completionSheet}>
+          <Text style={styles.sheetTitle}>Rate this recitation</Text>
+          <Text style={styles.completionSubtitle}>
+            {chaptersMap.get(surahNumber ?? 0)?.name_simple ?? "Current surah"} ·{" "}
+            {formatAyahRange(ayahStart, ayahEnd)}
+          </Text>
+
+          <View style={styles.ratingOptionList}>
+            {QUALITY_OPTIONS.map((option) => {
+              const selected = selectedQuality === option.value;
+              return (
+                <Pressable
+                  key={option.value}
+                  style={[
+                    styles.ratingOption,
+                    {
+                      backgroundColor: selected ? option.bg : "#ffffff",
+                      borderColor: selected ? option.border : "#e5e7eb",
+                    },
+                  ]}
+                  onPress={() => setSelectedQuality(option.value)}
+                  disabled={submitting}
+                >
+                  <View style={styles.ratingOptionTextBlock}>
+                    <Text style={[styles.ratingOptionTitle, { color: selected ? option.color : "#111827" }]}>
+                      {option.label}
+                    </Text>
+                    <Text style={styles.ratingOptionDetail}>{option.detail}</Text>
+                  </View>
+                  <View
+                    style={[
+                      styles.ratingRadio,
+                      {
+                        borderColor: selected ? option.color : "#d1d5db",
+                        backgroundColor: selected ? option.color : "#ffffff",
+                      },
+                    ]}
+                  />
+                </Pressable>
+              );
+            })}
+          </View>
+
+          {saveError ? <Text style={styles.saveErrorText}>{saveError}</Text> : null}
+
+          <Pressable
+            style={[
+              styles.completeButton,
+              (!selectedQuality || submitting) && styles.completeButtonDisabled,
+            ]}
+            onPress={() => {
+              if (!selectedQuality) return;
+              void handleSaveCompletion(selectedQuality);
+            }}
+            disabled={!selectedQuality || submitting}
+          >
+            {submitting ? (
+              <ActivityIndicator color="#ffffff" />
+            ) : (
+              <Text style={styles.completeButtonText}>Save Progress</Text>
+            )}
+          </Pressable>
+          <Pressable
+            style={styles.completionCancelButton}
+            onPress={() => setCompletionSheetOpen(false)}
+            disabled={submitting}
+          >
+            <Text style={styles.completionCancelText}>Keep Practicing</Text>
+          </Pressable>
+        </View>
+      </Modal>
 
       {/* Settings bottom sheet */}
       <Modal
@@ -3386,6 +3627,72 @@ const styles = StyleSheet.create({
     color: "#111111",
     textAlign: "center",
     marginBottom: 4,
+  },
+  completionSheet: {
+    backgroundColor: "#ffffff",
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    padding: 24,
+    paddingBottom: 36,
+    gap: 14,
+  },
+  completionSubtitle: {
+    marginTop: -4,
+    marginBottom: 4,
+    fontSize: 13,
+    lineHeight: 19,
+    fontWeight: "600",
+    color: "#6b7280",
+    textAlign: "center",
+  },
+  ratingOptionList: {
+    gap: 10,
+  },
+  ratingOption: {
+    minHeight: 72,
+    borderRadius: 12,
+    borderWidth: 1,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  ratingOptionTextBlock: {
+    flex: 1,
+  },
+  ratingOptionTitle: {
+    fontSize: 15,
+    fontWeight: "900",
+  },
+  ratingOptionDetail: {
+    marginTop: 3,
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: "600",
+    color: "#6b7280",
+  },
+  ratingRadio: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    borderWidth: 2,
+  },
+  saveErrorText: {
+    fontSize: 13,
+    lineHeight: 18,
+    color: "#dc2626",
+    textAlign: "center",
+  },
+  completionCancelButton: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 12,
+  },
+  completionCancelText: {
+    fontSize: 15,
+    fontWeight: "800",
+    color: "#2563eb",
   },
   settingRow: {
     flexDirection: "row",
