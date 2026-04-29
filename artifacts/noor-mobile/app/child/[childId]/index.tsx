@@ -990,7 +990,7 @@ export default function ChildDashboard() {
           <>
             <SectionHeader
               title="Goals"
-              action="Targets"
+              action="Settings"
               onPress={handleTargetsPress}
             />
             <View style={styles.panel}>
@@ -1049,8 +1049,8 @@ export default function ChildDashboard() {
         <SectionHeader title="Quick Actions" />
         <View style={styles.quickGrid}>
           <QuickAction
-            title="Targets"
-            detail="Daily goals"
+            title="Settings"
+            detail="Targets"
             iconName="flag-outline"
             color="#2563eb"
             onPress={handleTargetsPress}
@@ -1089,7 +1089,7 @@ export default function ChildDashboard() {
         </Pressable>
         <Text style={styles.title}>{name ?? "Dashboard"}</Text>
         <Pressable style={styles.headerRight} onPress={handleTargetsPress}>
-          <Text style={styles.targetsText}>Targets</Text>
+          <Text style={styles.targetsText}>Settings</Text>
         </Pressable>
       </View>
 

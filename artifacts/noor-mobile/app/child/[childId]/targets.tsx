@@ -1,30 +1,60 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type ComponentProps } from "react";
 import {
-  ActivityIndicator,
   Pressable,
-  ScrollView,
   StyleSheet,
+  Switch,
   Text,
   View,
 } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
+import {
+  CardGroup,
+  ErrorState,
+  InlineError,
+  ListRow,
+  LoadingState,
+  ScreenContainer,
+  ScreenHeader,
+  ScreenScrollView,
+  SectionLabel,
+} from "@/src/components/screen-primitives";
 import { apiFetch } from "@/src/lib/api";
+import {
+  DEFAULT_SESSION_SETTINGS,
+  loadDefaultSessionSettings,
+  saveDefaultSessionSettings,
+  type DefaultSessionSettings,
+} from "@/src/lib/settings";
 
+type IconName = ComponentProps<typeof Ionicons>["name"];
 type TargetKey = "memorizePagePerDay" | "reviewPagesPerDay" | "readPagesPerDay";
+type ChildPatchKey =
+  | TargetKey
+  | "practiceMinutesPerDay"
+  | "hideStories"
+  | "hideDuas";
 
-type ChildTargets = {
+type ChildSettings = {
   id: number;
   name: string;
+  age: number;
   avatarEmoji: string;
+  streakDays: number;
+  totalPoints: number;
+  practiceMinutesPerDay: number;
   memorizePagePerDay: number;
   reviewPagesPerDay: number;
   readPagesPerDay: number;
+  hideStories: boolean;
+  hideDuas: boolean;
 };
 
 type TargetDefinition = {
   key: TargetKey;
   title: string;
   detail: string;
+  icon: IconName;
   color: string;
   soft: string;
   border: string;
@@ -34,11 +64,21 @@ type TargetDefinition = {
   options: Array<{ value: number; label: string }>;
 };
 
+type TargetPreset = {
+  label: string;
+  detail: string;
+  values: Pick<
+    ChildSettings,
+    "memorizePagePerDay" | "reviewPagesPerDay" | "readPagesPerDay"
+  >;
+};
+
 const TARGETS: TargetDefinition[] = [
   {
     key: "memorizePagePerDay",
-    title: "New Memorization",
+    title: "New memorization",
     detail: "How much new Quran to memorize each day.",
+    icon: "school-outline",
     color: "#2563eb",
     soft: "#eff6ff",
     border: "#bfdbfe",
@@ -46,16 +86,17 @@ const TARGETS: TargetDefinition[] = [
     max: 5,
     step: 0.25,
     options: [
-      { value: 0.25, label: "0.25 page" },
-      { value: 0.5, label: "0.5 page" },
+      { value: 0.25, label: "Quarter" },
+      { value: 0.5, label: "Half" },
       { value: 1, label: "1 page" },
       { value: 2, label: "2 pages" },
     ],
   },
   {
     key: "reviewPagesPerDay",
-    title: "Review Amount",
+    title: "Review amount",
     detail: "How much memorized Quran to review each day.",
+    icon: "refresh-outline",
     color: "#ea580c",
     soft: "#fff7ed",
     border: "#fed7aa",
@@ -72,8 +113,9 @@ const TARGETS: TargetDefinition[] = [
   },
   {
     key: "readPagesPerDay",
-    title: "Daily Reading",
+    title: "Daily reading",
     detail: "Pages to read from the Mushaf each day.",
+    icon: "reader-outline",
     color: "#0f766e",
     soft: "#f0fdfa",
     border: "#99f6e4",
@@ -82,15 +124,54 @@ const TARGETS: TargetDefinition[] = [
     step: 0.5,
     options: [
       { value: 0, label: "Off" },
-      { value: 0.5, label: "0.5 page" },
+      { value: 0.5, label: "Half" },
       { value: 1, label: "1 page" },
       { value: 2, label: "2 pages" },
-      { value: 3, label: "3 pages" },
-      { value: 4, label: "4 pages" },
       { value: 5, label: "5 pages" },
     ],
   },
 ];
+
+const TARGET_PRESETS: TargetPreset[] = [
+  {
+    label: "Gentle",
+    detail: "Short daily habit",
+    values: {
+      memorizePagePerDay: 0.25,
+      reviewPagesPerDay: 1,
+      readPagesPerDay: 0.5,
+    },
+  },
+  {
+    label: "Steady",
+    detail: "Balanced school-day pace",
+    values: {
+      memorizePagePerDay: 0.5,
+      reviewPagesPerDay: 2,
+      readPagesPerDay: 1,
+    },
+  },
+  {
+    label: "Focused",
+    detail: "Stronger hifz rhythm",
+    values: {
+      memorizePagePerDay: 1,
+      reviewPagesPerDay: 4,
+      readPagesPerDay: 2,
+    },
+  },
+  {
+    label: "Ambitious",
+    detail: "For heavier practice days",
+    values: {
+      memorizePagePerDay: 2,
+      reviewPagesPerDay: 10,
+      readPagesPerDay: 5,
+    },
+  },
+];
+
+const PRACTICE_PRESETS = [10, 15, 20, 30, 45, 60];
 
 function clamp(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, value));
@@ -102,12 +183,40 @@ function normalizeValue(value: number) {
 
 function formatPages(value: number) {
   if (value === 0) return "Off";
+  if (value === 0.25) return "Quarter page";
+  if (value === 0.5) return "Half page";
   const formatted = Number.isInteger(value) ? String(value) : String(value).replace(/\.0$/, "");
   return `${formatted} page${value === 1 ? "" : "s"}`;
 }
 
+function formatDayStreak(days: number) {
+  return `${days} day${days === 1 ? "" : "s"}`;
+}
+
 function isSameValue(a: number, b: number) {
   return Math.abs(a - b) < 0.001;
+}
+
+function isValidChildId(childId: string | undefined) {
+  return typeof childId === "string" && /^\d+$/.test(childId);
+}
+
+function normalizeSessionDefaults(settings: DefaultSessionSettings): DefaultSessionSettings {
+  return {
+    repeatCount: Math.round(clamp(settings.repeatCount, 1, 10)),
+    autoAdvanceDelayMs: Math.round(clamp(settings.autoAdvanceDelayMs, 0, 5000) / 500) * 500,
+    autoplayThroughRange: settings.autoplayThroughRange,
+    blurMode: settings.blurMode,
+    blindMode: settings.blindMode,
+  };
+}
+
+function targetPresetIsActive(child: ChildSettings, preset: TargetPreset) {
+  return (
+    isSameValue(child.memorizePagePerDay, preset.values.memorizePagePerDay) &&
+    isSameValue(child.reviewPagesPerDay, preset.values.reviewPagesPerDay) &&
+    isSameValue(child.readPagesPerDay, preset.values.readPagesPerDay)
+  );
 }
 
 function TargetSection({
@@ -130,13 +239,11 @@ function TargetSection({
     <View style={styles.card}>
       <View style={styles.cardHeader}>
         <View style={[styles.iconBadge, { backgroundColor: definition.soft }]}>
-          <Text style={[styles.iconText, { color: definition.color }]}>
-            {definition.title.charAt(0)}
-          </Text>
+          <Ionicons name={definition.icon} size={19} color={definition.color} />
         </View>
         <View style={styles.titleBlock}>
-          <Text style={styles.sectionTitle}>{definition.title}</Text>
-          <Text style={styles.sectionDetail}>{definition.detail}</Text>
+          <Text style={styles.cardTitle}>{definition.title}</Text>
+          <Text style={styles.cardDetail}>{definition.detail}</Text>
         </View>
         <Text
           style={[
@@ -193,9 +300,7 @@ function TargetSection({
         </Pressable>
         <View style={styles.stepValueWrap}>
           <Text style={styles.stepValue}>{formatPages(value)}</Text>
-          <Text style={styles.stepHint}>
-            {definition.step} page step
-          </Text>
+          <Text style={styles.stepHint}>{definition.step} page step</Text>
         </View>
         <Pressable
           style={[styles.stepButton, (!canIncrease || saving) && styles.stepButtonDisabled]}
@@ -217,142 +322,450 @@ function TargetSection({
 export default function TargetsScreen() {
   const { childId, name } = useLocalSearchParams<{ childId: string; name: string }>();
   const router = useRouter();
-  const [child, setChild] = useState<ChildTargets | null>(null);
+  const [child, setChild] = useState<ChildSettings | null>(null);
+  const [sessionDefaults, setSessionDefaults] =
+    useState<DefaultSessionSettings>(DEFAULT_SESSION_SETTINGS);
   const [error, setError] = useState<string | null>(null);
-  const [savingKey, setSavingKey] = useState<TargetKey | null>(null);
-  const [savedKey, setSavedKey] = useState<TargetKey | null>(null);
+  const [savingKey, setSavingKey] = useState<string | null>(null);
+  const [savedKey, setSavedKey] = useState<string | null>(null);
 
-  const loadChild = useCallback(async () => {
+  const loadSettings = useCallback(async () => {
+    if (!isValidChildId(childId)) {
+      setError("This settings route is missing a valid child id.");
+      return;
+    }
+
     setError(null);
     try {
-      const data = await apiFetch<ChildTargets>(`/api/children/${childId}`);
-      setChild(data);
+      const [childData, defaults] = await Promise.all([
+        apiFetch<ChildSettings>(`/api/children/${childId}`),
+        loadDefaultSessionSettings(childId),
+      ]);
+      setChild(childData);
+      setSessionDefaults(defaults);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to load targets.");
+      setError(e instanceof Error ? e.message : "Failed to load settings.");
     }
   }, [childId]);
 
   useEffect(() => {
-    loadChild();
-  }, [loadChild]);
+    loadSettings();
+  }, [loadSettings]);
 
-  async function updateTarget(definition: TargetDefinition, nextValue: number) {
-    const value = normalizeValue(clamp(nextValue, definition.min, definition.max));
-    setSavingKey(definition.key);
+  function markSaved(key: string) {
+    setSavedKey(key);
+    setTimeout(() => {
+      setSavedKey((current) => (current === key ? null : current));
+    }, 1800);
+  }
+
+  async function updateChildSettings(
+    patch: Partial<Pick<ChildSettings, ChildPatchKey>>,
+    key: string,
+  ) {
+    if (!isValidChildId(childId)) return;
+
+    setSavingKey(key);
     setSavedKey(null);
     setError(null);
     try {
-      const updated = await apiFetch<ChildTargets>(`/api/children/${childId}`, {
+      const updated = await apiFetch<ChildSettings>(`/api/children/${childId}`, {
         method: "PUT",
-        body: JSON.stringify({ [definition.key]: value }),
+        body: JSON.stringify(patch),
       });
       setChild(updated);
-      setSavedKey(definition.key);
-      setTimeout(() => {
-        setSavedKey((current) => (current === definition.key ? null : current));
-      }, 1800);
+      markSaved(key);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to save target.");
+      setError(e instanceof Error ? e.message : "Failed to save settings.");
     } finally {
       setSavingKey(null);
     }
   }
 
-  return (
-    <View style={styles.container}>
-      <View style={styles.header}>
-        <Pressable onPress={() => router.back()}>
-          <Text style={styles.back}>← Back</Text>
-        </Pressable>
-        <Text style={styles.title}>Targets</Text>
-        <View style={styles.headerSpacer} />
-      </View>
+  function updateTarget(definition: TargetDefinition, nextValue: number) {
+    const value = normalizeValue(clamp(nextValue, definition.min, definition.max));
+    void updateChildSettings({ [definition.key]: value }, definition.key);
+  }
 
-      {child === null && !error ? (
-        <View style={styles.center}>
-          <ActivityIndicator size="large" color="#2563eb" />
+  function applyTargetPreset(preset: TargetPreset) {
+    void updateChildSettings(preset.values, `preset:${preset.label}`);
+  }
+
+  function updatePracticeMinutes(nextValue: number) {
+    const value = Math.round(clamp(nextValue, 5, 120));
+    void updateChildSettings({ practiceMinutesPerDay: value }, "practiceMinutesPerDay");
+  }
+
+  function updateVisibility(key: "hideStories" | "hideDuas", visible: boolean) {
+    void updateChildSettings({ [key]: !visible }, key);
+  }
+
+  async function updateSessionDefaults(
+    patch: Partial<DefaultSessionSettings>,
+    key: string,
+  ) {
+    if (!isValidChildId(childId)) return;
+    const next = normalizeSessionDefaults({ ...sessionDefaults, ...patch });
+    setSessionDefaults(next);
+    setSavingKey(key);
+    setSavedKey(null);
+    setError(null);
+    try {
+      await saveDefaultSessionSettings(childId, next);
+      markSaved(key);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to save session defaults.");
+    } finally {
+      setSavingKey(null);
+    }
+  }
+
+  function openProfile() {
+    if (!isValidChildId(childId)) return;
+    router.push({
+      pathname: "/child/[childId]/profile",
+      params: { childId, name: child?.name ?? name ?? "" },
+    });
+  }
+
+  if (child === null && !error) {
+    return (
+      <ScreenContainer>
+        <ScreenHeader title="Settings" onBack={() => router.back()} />
+        <LoadingState label="Loading settings" />
+      </ScreenContainer>
+    );
+  }
+
+  if (child === null && error) {
+    return (
+      <ScreenContainer>
+        <ScreenHeader title="Settings" onBack={() => router.back()} />
+        <ErrorState message={error} onRetry={loadSettings} />
+      </ScreenContainer>
+    );
+  }
+
+  if (!child) return null;
+
+  const practiceSaving = savingKey === "practiceMinutesPerDay";
+  const sessionSaving = savingKey?.startsWith("session:");
+  const sessionSaved = savedKey?.startsWith("session:");
+
+  return (
+    <ScreenContainer>
+      <ScreenHeader title="Settings" onBack={() => router.back()} />
+      <ScreenScrollView>
+        <View style={styles.summaryBand}>
+          <Text style={styles.summaryAvatar}>{child.avatarEmoji}</Text>
+          <View style={styles.summaryText}>
+            <Text style={styles.summaryKicker}>Parent settings</Text>
+            <Text style={styles.summaryName}>{child.name || name || "Child"}</Text>
+            <Text style={styles.summarySubline}>
+              Age {child.age} - {formatDayStreak(child.streakDays)} - {child.totalPoints} pts
+            </Text>
+          </View>
         </View>
-      ) : error && child === null ? (
-        <View style={styles.center}>
-          <Text style={styles.errorText}>{error}</Text>
-          <Pressable style={styles.retryButton} onPress={loadChild}>
-            <Text style={styles.retryText}>Retry</Text>
-          </Pressable>
+
+        {error ? <InlineError message={error} /> : null}
+
+        <SectionLabel>Profile</SectionLabel>
+        <CardGroup>
+          <ListRow
+            title="Profile settings"
+            detail="Name, age, avatar, and delete flow"
+            iconName="person-circle-outline"
+            iconColor="#4f46e5"
+            onPress={openProfile}
+          />
+        </CardGroup>
+
+        <SectionLabel>Daily presets</SectionLabel>
+        <View style={styles.presetGrid}>
+          {TARGET_PRESETS.map((preset) => {
+            const active = targetPresetIsActive(child, preset);
+            const key = `preset:${preset.label}`;
+            const saving = savingKey === key;
+            const saved = savedKey === key;
+            return (
+              <Pressable
+                key={preset.label}
+                style={[styles.presetCard, active && styles.presetCardActive]}
+                onPress={() => applyTargetPreset(preset)}
+                disabled={savingKey !== null}
+              >
+                <View style={styles.presetTop}>
+                  <Text style={[styles.presetTitle, active && styles.presetTitleActive]}>
+                    {preset.label}
+                  </Text>
+                  {saving || saved ? (
+                    <Text style={[styles.presetStatus, saved && styles.statusSaved]}>
+                      {saving ? "Saving" : "Saved"}
+                    </Text>
+                  ) : null}
+                </View>
+                <Text style={styles.presetDetail}>{preset.detail}</Text>
+                <Text style={styles.presetMeta}>
+                  {formatPages(preset.values.memorizePagePerDay)} mem -{" "}
+                  {formatPages(preset.values.reviewPagesPerDay)} review -{" "}
+                  {formatPages(preset.values.readPagesPerDay)} read
+                </Text>
+              </Pressable>
+            );
+          })}
         </View>
-      ) : child ? (
-        <ScrollView contentContainerStyle={styles.content}>
-          <View style={styles.summaryBand}>
-            <Text style={styles.summaryAvatar}>{child.avatarEmoji}</Text>
-            <View style={styles.summaryText}>
-              <Text style={styles.summaryKicker}>Daily targets</Text>
-              <Text style={styles.summaryName}>{child.name || name || "Child"}</Text>
+
+        <SectionLabel>Daily rhythm</SectionLabel>
+        <View style={styles.card}>
+          <View style={styles.cardHeader}>
+            <View style={[styles.iconBadge, { backgroundColor: "#fef3c7" }]}>
+              <Ionicons name="time-outline" size={19} color="#b45309" />
+            </View>
+            <View style={styles.titleBlock}>
+              <Text style={styles.cardTitle}>Practice time</Text>
+              <Text style={styles.cardDetail}>Used for planning and goal estimates.</Text>
+            </View>
+            <Text
+              style={[
+                styles.statusText,
+                savedKey === "practiceMinutesPerDay" && styles.statusSaved,
+                practiceSaving && styles.statusSaving,
+              ]}
+            >
+              {practiceSaving
+                ? "Saving"
+                : savedKey === "practiceMinutesPerDay"
+                ? "Saved"
+                : `${child.practiceMinutesPerDay} min`}
+            </Text>
+          </View>
+
+          <View style={styles.optionGrid}>
+            {PRACTICE_PRESETS.map((minutes) => {
+              const active = child.practiceMinutesPerDay === minutes;
+              return (
+                <Pressable
+                  key={minutes}
+                  style={[styles.optionButton, active && styles.practiceOptionActive]}
+                  onPress={() => updatePracticeMinutes(minutes)}
+                  disabled={practiceSaving}
+                >
+                  <Text style={[styles.optionText, active && styles.practiceOptionTextActive]}>
+                    {minutes} min
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+
+          <View style={styles.stepperRow}>
+            <Pressable
+              style={[
+                styles.stepButton,
+                (child.practiceMinutesPerDay <= 5 || practiceSaving) && styles.stepButtonDisabled,
+              ]}
+              onPress={() => updatePracticeMinutes(child.practiceMinutesPerDay - 5)}
+              disabled={child.practiceMinutesPerDay <= 5 || practiceSaving}
+            >
+              <Text style={styles.stepButtonText}>-</Text>
+            </Pressable>
+            <View style={styles.stepValueWrap}>
+              <Text style={styles.stepValue}>{child.practiceMinutesPerDay} minutes</Text>
+              <Text style={styles.stepHint}>5 minute step</Text>
+            </View>
+            <Pressable
+              style={[
+                styles.stepButton,
+                (child.practiceMinutesPerDay >= 120 || practiceSaving) && styles.stepButtonDisabled,
+              ]}
+              onPress={() => updatePracticeMinutes(child.practiceMinutesPerDay + 5)}
+              disabled={child.practiceMinutesPerDay >= 120 || practiceSaving}
+            >
+              <Text style={styles.stepButtonText}>+</Text>
+            </Pressable>
+          </View>
+        </View>
+
+        {TARGETS.map((definition) => (
+          <TargetSection
+            key={definition.key}
+            definition={definition}
+            value={child[definition.key]}
+            saving={savingKey === definition.key}
+            saved={savedKey === definition.key}
+            onChange={updateTarget}
+          />
+        ))}
+
+        <SectionLabel>Content visibility</SectionLabel>
+        <View style={styles.card}>
+          <View style={styles.toggleRow}>
+            <View style={styles.titleBlock}>
+              <Text style={styles.cardTitle}>Stories</Text>
+              <Text style={styles.cardDetail}>Show story suggestions on the dashboard.</Text>
+            </View>
+            <Switch
+              value={!child.hideStories}
+              onValueChange={(enabled) => updateVisibility("hideStories", enabled)}
+              disabled={savingKey === "hideStories"}
+              trackColor={{ false: "#e5e7eb", true: "#bfdbfe" }}
+              thumbColor={!child.hideStories ? "#2563eb" : "#f9fafb"}
+            />
+          </View>
+          <View style={styles.toggleDivider} />
+          <View style={styles.toggleRow}>
+            <View style={styles.titleBlock}>
+              <Text style={styles.cardTitle}>Du'aas</Text>
+              <Text style={styles.cardDetail}>Show du'aa suggestions on the dashboard.</Text>
+            </View>
+            <Switch
+              value={!child.hideDuas}
+              onValueChange={(enabled) => updateVisibility("hideDuas", enabled)}
+              disabled={savingKey === "hideDuas"}
+              trackColor={{ false: "#e5e7eb", true: "#99f6e4" }}
+              thumbColor={!child.hideDuas ? "#0f766e" : "#f9fafb"}
+            />
+          </View>
+        </View>
+
+        <SectionLabel>Memorization defaults</SectionLabel>
+        <View style={styles.card}>
+          <View style={styles.cardHeader}>
+            <View style={[styles.iconBadge, { backgroundColor: "#f5f3ff" }]}>
+              <Ionicons name="options-outline" size={19} color="#7c3aed" />
+            </View>
+            <View style={styles.titleBlock}>
+              <Text style={styles.cardTitle}>Session start settings</Text>
+              <Text style={styles.cardDetail}>
+                Applied when a memorization session opens; in-session changes stay temporary.
+              </Text>
+            </View>
+            {sessionSaving || sessionSaved ? (
+              <Text style={[styles.statusText, sessionSaved && styles.statusSaved]}>
+                {sessionSaving ? "Saving" : "Saved"}
+              </Text>
+            ) : null}
+          </View>
+
+          <View style={styles.settingRow}>
+            <View style={styles.titleBlock}>
+              <Text style={styles.cardTitle}>Repeat each ayah</Text>
+              <Text style={styles.cardDetail}>Default listening repeats.</Text>
+            </View>
+            <View style={styles.compactStepper}>
+              <Pressable
+                style={styles.compactStepButton}
+                onPress={() =>
+                  updateSessionDefaults(
+                    { repeatCount: sessionDefaults.repeatCount - 1 },
+                    "session:repeatCount",
+                  )
+                }
+              >
+                <Text style={styles.compactStepText}>-</Text>
+              </Pressable>
+              <Text style={styles.compactValue}>{sessionDefaults.repeatCount}</Text>
+              <Pressable
+                style={styles.compactStepButton}
+                onPress={() =>
+                  updateSessionDefaults(
+                    { repeatCount: sessionDefaults.repeatCount + 1 },
+                    "session:repeatCount",
+                  )
+                }
+              >
+                <Text style={styles.compactStepText}>+</Text>
+              </Pressable>
             </View>
           </View>
 
-          {error && (
-            <View style={styles.errorBanner}>
-              <Text style={styles.errorBannerText}>{error}</Text>
+          <View style={styles.settingRow}>
+            <View style={styles.titleBlock}>
+              <Text style={styles.cardTitle}>Delay between ayahs</Text>
+              <Text style={styles.cardDetail}>Pause before moving to the next ayah.</Text>
             </View>
-          )}
+            <View style={styles.compactStepper}>
+              <Pressable
+                style={styles.compactStepButton}
+                onPress={() =>
+                  updateSessionDefaults(
+                    { autoAdvanceDelayMs: sessionDefaults.autoAdvanceDelayMs - 500 },
+                    "session:autoAdvanceDelayMs",
+                  )
+                }
+              >
+                <Text style={styles.compactStepText}>-</Text>
+              </Pressable>
+              <Text style={styles.compactValue}>
+                {(sessionDefaults.autoAdvanceDelayMs / 1000).toFixed(1)}s
+              </Text>
+              <Pressable
+                style={styles.compactStepButton}
+                onPress={() =>
+                  updateSessionDefaults(
+                    { autoAdvanceDelayMs: sessionDefaults.autoAdvanceDelayMs + 500 },
+                    "session:autoAdvanceDelayMs",
+                  )
+                }
+              >
+                <Text style={styles.compactStepText}>+</Text>
+              </Pressable>
+            </View>
+          </View>
 
-          {TARGETS.map((definition) => (
-            <TargetSection
-              key={definition.key}
-              definition={definition}
-              value={child[definition.key]}
-              saving={savingKey === definition.key}
-              saved={savedKey === definition.key}
-              onChange={updateTarget}
+          <View style={styles.toggleDivider} />
+          <View style={styles.toggleRow}>
+            <View style={styles.titleBlock}>
+              <Text style={styles.cardTitle}>Autoplay page range</Text>
+              <Text style={styles.cardDetail}>Continue through the assigned range in page mode.</Text>
+            </View>
+            <Switch
+              value={sessionDefaults.autoplayThroughRange}
+              onValueChange={(enabled) =>
+                updateSessionDefaults(
+                  { autoplayThroughRange: enabled },
+                  "session:autoplayThroughRange",
+                )
+              }
+              trackColor={{ false: "#e5e7eb", true: "#ddd6fe" }}
+              thumbColor={sessionDefaults.autoplayThroughRange ? "#7c3aed" : "#f9fafb"}
             />
-          ))}
-        </ScrollView>
-      ) : null}
-    </View>
+          </View>
+          <View style={styles.toggleRow}>
+            <View style={styles.titleBlock}>
+              <Text style={styles.cardTitle}>Start with blind mode</Text>
+              <Text style={styles.cardDetail}>Hide words until a verse is revealed.</Text>
+            </View>
+            <Switch
+              value={sessionDefaults.blindMode}
+              onValueChange={(enabled) =>
+                updateSessionDefaults({ blindMode: enabled }, "session:blindMode")
+              }
+              trackColor={{ false: "#e5e7eb", true: "#ddd6fe" }}
+              thumbColor={sessionDefaults.blindMode ? "#7c3aed" : "#f9fafb"}
+            />
+          </View>
+          <View style={styles.toggleRow}>
+            <View style={styles.titleBlock}>
+              <Text style={styles.cardTitle}>Start with blur mode</Text>
+              <Text style={styles.cardDetail}>Blur other verses during page-mode playback.</Text>
+            </View>
+            <Switch
+              value={sessionDefaults.blurMode}
+              onValueChange={(enabled) =>
+                updateSessionDefaults({ blurMode: enabled }, "session:blurMode")
+              }
+              trackColor={{ false: "#e5e7eb", true: "#ddd6fe" }}
+              thumbColor={sessionDefaults.blurMode ? "#7c3aed" : "#f9fafb"}
+            />
+          </View>
+        </View>
+      </ScreenScrollView>
+    </ScreenContainer>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#ffffff",
-  },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingTop: 60,
-    paddingHorizontal: 20,
-    paddingBottom: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: "#e5e7eb",
-  },
-  back: {
-    fontSize: 16,
-    color: "#2563eb",
-    fontWeight: "500",
-    width: 70,
-  },
-  title: {
-    flex: 1,
-    textAlign: "center",
-    fontSize: 20,
-    fontWeight: "700",
-    color: "#111111",
-  },
-  headerSpacer: {
-    width: 70,
-  },
-  center: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    padding: 24,
-    gap: 16,
-  },
-  content: {
-    padding: 20,
-    gap: 14,
-    paddingBottom: 32,
-  },
   summaryBand: {
     backgroundColor: "#111111",
     borderRadius: 12,
@@ -373,6 +786,7 @@ const styles = StyleSheet.create({
   },
   summaryText: {
     flex: 1,
+    minWidth: 0,
   },
   summaryKicker: {
     fontSize: 12,
@@ -385,6 +799,62 @@ const styles = StyleSheet.create({
     color: "#ffffff",
     fontWeight: "700",
     marginTop: 2,
+  },
+  summarySubline: {
+    fontSize: 12,
+    color: "#d1d5db",
+    fontWeight: "600",
+    marginTop: 3,
+  },
+  presetGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10,
+  },
+  presetCard: {
+    width: "48%",
+    minHeight: 122,
+    backgroundColor: "#ffffff",
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+    borderRadius: 12,
+    padding: 13,
+    gap: 7,
+  },
+  presetCardActive: {
+    backgroundColor: "#eff6ff",
+    borderColor: "#bfdbfe",
+  },
+  presetTop: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+  },
+  presetTitle: {
+    color: "#111111",
+    fontSize: 15,
+    fontWeight: "800",
+  },
+  presetTitleActive: {
+    color: "#2563eb",
+  },
+  presetStatus: {
+    color: "#666666",
+    fontSize: 11,
+    fontWeight: "800",
+  },
+  presetDetail: {
+    color: "#666666",
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: "600",
+  },
+  presetMeta: {
+    color: "#444444",
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: "700",
   },
   card: {
     backgroundColor: "#f9fafb",
@@ -406,20 +876,16 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  iconText: {
-    fontSize: 18,
-    fontWeight: "800",
-  },
   titleBlock: {
     flex: 1,
     minWidth: 0,
   },
-  sectionTitle: {
-    fontSize: 16,
+  cardTitle: {
+    fontSize: 15,
     color: "#111111",
-    fontWeight: "700",
+    fontWeight: "800",
   },
-  sectionDetail: {
+  cardDetail: {
     fontSize: 13,
     color: "#666666",
     marginTop: 2,
@@ -453,6 +919,13 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#444444",
     fontWeight: "700",
+  },
+  practiceOptionActive: {
+    backgroundColor: "#fffbeb",
+    borderColor: "#fde68a",
+  },
+  practiceOptionTextActive: {
+    color: "#b45309",
   },
   stepperRow: {
     flexDirection: "row",
@@ -493,32 +966,46 @@ const styles = StyleSheet.create({
     color: "#666666",
     marginTop: 2,
   },
-  errorBanner: {
-    backgroundColor: "#fef2f2",
+  toggleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  toggleDivider: {
+    height: 1,
+    backgroundColor: "#e5e7eb",
+  },
+  settingRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+  compactStepper: {
+    flexDirection: "row",
+    alignItems: "center",
     borderWidth: 1,
-    borderColor: "#fecaca",
+    borderColor: "#e5e7eb",
     borderRadius: 10,
-    padding: 12,
+    backgroundColor: "#ffffff",
+    overflow: "hidden",
   },
-  errorBannerText: {
-    fontSize: 13,
-    color: "#dc2626",
-    fontWeight: "600",
+  compactStepButton: {
+    width: 34,
+    height: 36,
+    alignItems: "center",
+    justifyContent: "center",
   },
-  errorText: {
-    fontSize: 15,
-    color: "#dc2626",
+  compactStepText: {
+    color: "#111111",
+    fontSize: 18,
+    fontWeight: "800",
+  },
+  compactValue: {
+    minWidth: 44,
     textAlign: "center",
-  },
-  retryButton: {
-    backgroundColor: "#2563eb",
-    paddingVertical: 10,
-    paddingHorizontal: 24,
-    borderRadius: 8,
-  },
-  retryText: {
-    color: "#ffffff",
-    fontSize: 15,
-    fontWeight: "600",
+    color: "#111111",
+    fontSize: 14,
+    fontWeight: "800",
   },
 });

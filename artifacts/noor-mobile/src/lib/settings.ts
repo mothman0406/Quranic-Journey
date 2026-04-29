@@ -1,8 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import type { ThemeKey } from "@/src/lib/mushaf-theme";
 
-// Profile-level settings — persist across sessions. Edit via a future Profile
-// Settings page (Phase 2E). For now, defaults are hardcoded.
+// Profile-level memorization preferences persisted across sessions.
 export type ProfileSettings = {
   themeKey: ThemeKey;
   reciterId: string;
@@ -38,12 +37,91 @@ export async function saveProfileSettings(childId: string, settings: ProfileSett
   }
 }
 
-// Session-level defaults — hardcoded constants, applied fresh each session.
-// Not persisted. Future Profile Settings page may let parents adjust these defaults.
-export const DEFAULT_SESSION_SETTINGS = {
+export type DefaultSessionSettings = {
+  repeatCount: number;
+  autoAdvanceDelayMs: number;
+  autoplayThroughRange: boolean;
+  blurMode: boolean;
+  blindMode: boolean;
+};
+
+// Session-level defaults applied fresh each memorization session.
+export const DEFAULT_SESSION_SETTINGS: DefaultSessionSettings = {
   repeatCount: 1,
   autoAdvanceDelayMs: 0,
   autoplayThroughRange: true,
   blurMode: false,
   blindMode: false,
-} as const;
+};
+
+function sessionDefaultsKey(childId: string): string {
+  return `noorpath:session-defaults:${childId}`;
+}
+
+function clamp(value: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, value));
+}
+
+function normalizeSessionSettings(
+  settings: Partial<DefaultSessionSettings>,
+): DefaultSessionSettings {
+  return {
+    repeatCount: Math.round(
+      clamp(
+        typeof settings.repeatCount === "number"
+          ? settings.repeatCount
+          : DEFAULT_SESSION_SETTINGS.repeatCount,
+        1,
+        10,
+      ),
+    ),
+    autoAdvanceDelayMs:
+      Math.round(
+        clamp(
+          typeof settings.autoAdvanceDelayMs === "number"
+            ? settings.autoAdvanceDelayMs
+            : DEFAULT_SESSION_SETTINGS.autoAdvanceDelayMs,
+          0,
+          5000,
+        ) / 500,
+      ) * 500,
+    autoplayThroughRange:
+      typeof settings.autoplayThroughRange === "boolean"
+        ? settings.autoplayThroughRange
+        : DEFAULT_SESSION_SETTINGS.autoplayThroughRange,
+    blurMode:
+      typeof settings.blurMode === "boolean"
+        ? settings.blurMode
+        : DEFAULT_SESSION_SETTINGS.blurMode,
+    blindMode:
+      typeof settings.blindMode === "boolean"
+        ? settings.blindMode
+        : DEFAULT_SESSION_SETTINGS.blindMode,
+  };
+}
+
+export async function loadDefaultSessionSettings(
+  childId: string,
+): Promise<DefaultSessionSettings> {
+  try {
+    const raw = await AsyncStorage.getItem(sessionDefaultsKey(childId));
+    if (!raw) return DEFAULT_SESSION_SETTINGS;
+    return normalizeSessionSettings(JSON.parse(raw) as Partial<DefaultSessionSettings>);
+  } catch {
+    return DEFAULT_SESSION_SETTINGS;
+  }
+}
+
+export async function saveDefaultSessionSettings(
+  childId: string,
+  settings: DefaultSessionSettings,
+): Promise<void> {
+  try {
+    await AsyncStorage.setItem(
+      sessionDefaultsKey(childId),
+      JSON.stringify(normalizeSessionSettings(settings)),
+    );
+  } catch {
+    // best-effort
+  }
+}

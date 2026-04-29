@@ -42,7 +42,12 @@ import {
   type MushafTheme,
 } from "@/src/lib/mushaf-theme";
 import { findReciter, RECITERS } from "@/src/lib/reciters";
-import { loadProfileSettings, saveProfileSettings, DEFAULT_SESSION_SETTINGS } from "@/src/lib/settings";
+import {
+  DEFAULT_SESSION_SETTINGS,
+  loadDefaultSessionSettings,
+  loadProfileSettings,
+  saveProfileSettings,
+} from "@/src/lib/settings";
 import { extractTajweedColor } from "@/src/lib/tajweed";
 
 const PLAYBACK_RATES = [0.75, 0.85, 1.0, 1.15, 1.25, 1.5] as const;
@@ -90,7 +95,7 @@ export default function MemorizationScreen() {
   } | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
-  // Session-level settings — reset to defaults each session (not persisted)
+  // Session-level settings — initialized from parent defaults each session.
   const [repeatCount, setRepeatCount] = useState<number>(DEFAULT_SESSION_SETTINGS.repeatCount);
   const [autoAdvanceDelayMs, setAutoAdvanceDelayMs] = useState<number>(DEFAULT_SESSION_SETTINGS.autoAdvanceDelayMs);
   const [autoplayThroughRange, setAutoplayThroughRange] = useState<boolean>(DEFAULT_SESSION_SETTINGS.autoplayThroughRange);
@@ -163,8 +168,6 @@ export default function MemorizationScreen() {
   const autoplayThroughRangeRef = useRef(autoplayThroughRange);
   const currentRepeatRef = useRef(1);
   const advanceTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
   // Layout refs for auto-scroll
   const scrollViewRef = useRef<ScrollView>(null);
   const lineLayoutMap = useRef<Map<string, number>>(new Map());
@@ -217,16 +220,40 @@ export default function MemorizationScreen() {
     }
   }, [playbackRate]);
 
-  // Hydrate profile settings from AsyncStorage on mount
+  // Hydrate profile settings from AsyncStorage.
   useEffect(() => {
+    let cancelled = false;
+    setSettingsLoaded(false);
     (async () => {
       const p = await loadProfileSettings(childId);
+      if (cancelled) return;
       setThemeKey(p.themeKey);
       setReciterId(p.reciterId);
       setViewMode(p.viewMode);
       setSettingsLoaded(true);
     })();
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+    return () => {
+      cancelled = true;
+    };
+  }, [childId]);
+
+  // Hydrate parent-chosen session defaults. These only set the starting state;
+  // changes made inside a memorization session remain temporary.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const defaults = await loadDefaultSessionSettings(childId);
+      if (cancelled) return;
+      setRepeatCount(defaults.repeatCount);
+      setAutoAdvanceDelayMs(defaults.autoAdvanceDelayMs);
+      setAutoplayThroughRange(defaults.autoplayThroughRange);
+      setBlindMode(defaults.blindMode);
+      setBlurMode(defaults.blurMode);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [childId]);
 
   // Configure iOS audio session so playback works through the speaker even
   // when the silent switch is on (AirPods always worked via Bluetooth).
@@ -240,16 +267,10 @@ export default function MemorizationScreen() {
     });
   }, []);
 
-  // Persist profile settings on change (300ms debounce, skip during initial hydration)
+  // Persist profile settings on change, skip during initial hydration.
   useEffect(() => {
     if (!settingsLoaded) return;
-    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-    saveTimerRef.current = setTimeout(() => {
-      void saveProfileSettings(childId, { themeKey, reciterId, viewMode });
-    }, 300);
-    return () => {
-      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-    };
+    void saveProfileSettings(childId, { themeKey, reciterId, viewMode });
   }, [childId, settingsLoaded, themeKey, reciterId, viewMode]);
 
   // Stop audio when reciter changes so next Play tap recreates sound with new URL

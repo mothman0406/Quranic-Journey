@@ -51,15 +51,15 @@ const OPEN_ITEMS: MoreItem[] = [
     route: "/child/[childId]/mushaf",
   },
   {
-    title: "Targets",
-    detail: "Daily page goals",
+    title: "Parent Settings",
+    detail: "Targets, visibility, session defaults",
     icon: "flag-outline",
     tone: "#2563eb",
     route: "/child/[childId]/targets",
   },
   {
     title: "Profile Settings",
-    detail: "Edit profile, visibility, or delete",
+    detail: "Edit profile or delete",
     icon: "settings-outline",
     tone: "#4f46e5",
     route: "/child/[childId]/profile",
