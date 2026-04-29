@@ -66,6 +66,8 @@ export type SurahMemorizationWorkflow = {
 };
 
 const WHOLE_SURAH_TEST_LABEL = "Whole Surah Test";
+const NEW_WORK_BLOCK_SIZE = 4;
+const BLOCKS_PER_FULL_CUMULATIVE = 2;
 
 function getWorkLabel(workType: MemorizationWorkType): string {
   switch (workType) {
@@ -156,50 +158,31 @@ export function buildSurahMemorizationWorkflow(
     });
   };
 
-  for (const chunk of chunks) {
-    pushWork("new_memorization", chunk.index, chunk.index);
-  }
-
   if (chunks.length > 1) {
-    schedule.length = 0;
+    // Four new-work days are followed by a block recitation; every second
+    // block also gets a full cumulative pass. The final whole-surah test
+    // always stays as its own last day.
+    for (let blockStart = 0; blockStart < chunks.length; blockStart += NEW_WORK_BLOCK_SIZE) {
+      const blockEnd = Math.min(blockStart + NEW_WORK_BLOCK_SIZE - 1, chunks.length - 1);
+      const blockLength = blockEnd - blockStart + 1;
 
-    const firstBlockEnd = Math.min(3, chunks.length - 1);
-    for (let index = 0; index <= firstBlockEnd; index += 1) {
-      pushWork("new_memorization", index, index);
-    }
-
-    if (chunks.length >= 4) {
-      pushWork("cumulative_full", 0, firstBlockEnd, chunks.length === 4 ? WHOLE_SURAH_TEST_LABEL : undefined);
-      if (chunks.length === 4) {
-        return { enabled: true, chunks, schedule };
+      for (let index = blockStart; index <= blockEnd; index += 1) {
+        pushWork("new_memorization", index, index);
       }
 
-      let cursor = 4;
-      while (cursor < chunks.length) {
-        const blockStart = cursor;
-        const blockEnd = Math.min(cursor + 3, chunks.length - 1);
-        for (let index = blockStart; index <= blockEnd; index += 1) {
-          pushWork("new_memorization", index, index);
-        }
-        cursor = blockEnd + 1;
-
-        // If the surah finishes at the same point as the next cumulative cycle,
-        // the final full cumulative day doubles as the whole-surah test.
-        if (cursor >= chunks.length) {
-          const finalBlockLength = blockEnd - blockStart + 1;
-          if (finalBlockLength > 1) {
-            pushWork("cumulative_block", blockStart, blockEnd);
-          }
-          pushWork("cumulative_full", 0, blockEnd, WHOLE_SURAH_TEST_LABEL);
-          return { enabled: true, chunks, schedule };
-        }
-
+      if (blockLength === NEW_WORK_BLOCK_SIZE) {
         pushWork("cumulative_block", blockStart, blockEnd);
-        pushWork("cumulative_full", 0, blockEnd);
+
+        const completedBlocks = (blockEnd + 1) / NEW_WORK_BLOCK_SIZE;
+        if (completedBlocks % BLOCKS_PER_FULL_CUMULATIVE === 0) {
+          pushWork("cumulative_full", 0, blockEnd);
+        }
+      } else if (blockLength > 1) {
+        pushWork("cumulative_block", blockStart, blockEnd);
       }
     }
 
-    pushWork("final_surah_test", 0, chunks.length - 1);
+    pushWork("final_surah_test", 0, chunks.length - 1, WHOLE_SURAH_TEST_LABEL);
     return { enabled: true, chunks, schedule };
   }
 
