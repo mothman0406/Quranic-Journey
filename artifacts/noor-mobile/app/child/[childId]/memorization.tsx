@@ -3,6 +3,7 @@ import { BlurView } from "expo-blur";
 import {
   ActivityIndicator,
   Alert,
+  Keyboard,
   Modal,
   Pressable,
   RefreshControl,
@@ -2424,6 +2425,8 @@ function MemorizationDiscovery({
         <ScrollView
           style={styles.discoveryScroll}
           contentContainerStyle={styles.discoveryContent}
+          keyboardDismissMode="on-drag"
+          keyboardShouldPersistTaps="handled"
           refreshControl={
             <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#2563eb" />
           }
@@ -2476,11 +2479,15 @@ function MemorizationDiscovery({
             placeholderTextColor="#9ca3af"
             autoCapitalize="none"
             autoCorrect={false}
+            returnKeyType="done"
+            blurOnSubmit
+            onSubmitEditing={Keyboard.dismiss}
             style={styles.discoverySearch}
           />
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
             contentContainerStyle={styles.discoveryFilterRow}
           >
             {DISCOVERY_FILTERS.map((item) => {
