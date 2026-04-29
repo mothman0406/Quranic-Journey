@@ -22,16 +22,89 @@ export type NewMemorization = {
   estimatedMinutes: number;
 };
 
+export type WorkStatus = "not_started" | "in_progress" | "completed";
+
+export type DashboardChild = {
+  name: string;
+  avatarEmoji?: string;
+  memorizePagePerDay?: number;
+  practiceMinutesPerDay?: number;
+};
+
+export type TodayProgress = {
+  memStatus: WorkStatus;
+  memTargetSurah: number | null;
+  memTargetAyahStart: number | null;
+  memTargetAyahEnd: number | null;
+  memCompletedAyahEnd: number | null;
+  reviewStatus: WorkStatus;
+  reviewTargetCount: number | null;
+  reviewCompletedCount: number;
+};
+
 export type DashboardResponse = {
+  child?: DashboardChild;
   todaysPlan: {
     newMemorization: NewMemorization | null;
+    totalEstimatedMinutes?: number;
   };
+  todayProgress?: TodayProgress;
+  upNextMemorization?: NewMemorization | null;
+  nextSurah?: SurahSummary | null;
+};
+
+export type MemorizationStatus = "not_started" | "in_progress" | "memorized" | "needs_review";
+
+export type MemorizationProgress = {
+  id: number;
+  childId: number;
+  surahId: number;
+  surahName: string;
+  surahNumber: number;
+  status: MemorizationStatus;
+  versesMemorized: number;
+  memorizedAyahs: number[];
+  totalVerses: number;
+  percentComplete: number;
+  lastPracticed?: string | null;
+  nextReviewDate?: string | null;
+  reviewCount: number;
+  strength: number;
+  ayahStrengths?: Record<string, number>;
+};
+
+export type SurahSummary = {
+  id: number;
+  number: number;
+  nameArabic: string;
+  nameTransliteration: string;
+  nameTranslation: string;
+  verseCount: number;
+  juzStart: number;
+  revelationType: "meccan" | "medinan";
+  difficulty: "beginner" | "intermediate" | "advanced";
+  ageGroup: "toddler" | "child" | "preteen" | "teen" | "all";
+  recommendedOrder: number;
 };
 
 const qdcCache = new Map<string, Promise<Map<string, Segment[]>>>();
 
 export async function fetchDashboard(childId: string): Promise<DashboardResponse> {
   return apiFetch<DashboardResponse>(`/api/children/${childId}/dashboard`);
+}
+
+export async function fetchMemorizationProgress(
+  childId: string,
+): Promise<MemorizationProgress[]> {
+  const response = await apiFetch<{ progress: MemorizationProgress[] }>(
+    `/api/children/${childId}/memorization`,
+  );
+  return response.progress;
+}
+
+export async function fetchSurahs(): Promise<SurahSummary[]> {
+  const response = await apiFetch<{ surahs: SurahSummary[] }>("/api/surahs");
+  return response.surahs;
 }
 
 export async function fetchQdcChapterTimings(

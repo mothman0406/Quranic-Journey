@@ -1,29 +1,39 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BlurView } from "expo-blur";
 import {
   ActivityIndicator,
   Alert,
   Modal,
   Pressable,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from "react-native";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { Audio } from "expo-av";
 import {
   ExpoSpeechRecognitionModule,
   useSpeechRecognitionEvent,
 } from "expo-speech-recognition";
+import { ChildBottomNav } from "@/src/components/child-bottom-nav";
 import { ayahAudioUrl } from "@/src/lib/audio";
 import { stripTashkeel, wordMatches, stripAlPrefix, tokenize, SKIP_CHARS } from "@/src/lib/recite";
 import {
   fetchDashboard,
+  fetchMemorizationProgress,
+  fetchSurahs,
   fetchTimingsForReciter,
   submitMemorization,
   type Segment,
   type ChapterTimings,
+  type DashboardResponse,
+  type MemorizationProgress,
+  type MemorizationStatus,
+  type NewMemorization,
+  type SurahSummary,
 } from "@/src/lib/memorization";
 import {
   fetchSurahVerses,
@@ -41,6 +51,7 @@ import {
   type ThemeKey,
   type MushafTheme,
 } from "@/src/lib/mushaf-theme";
+import { MUSHAF_SURAHS } from "@/src/lib/mushaf";
 import { findReciter, RECITERS } from "@/src/lib/reciters";
 import {
   DEFAULT_SESSION_SETTINGS,
@@ -52,6 +63,136 @@ import { extractTajweedColor } from "@/src/lib/tajweed";
 
 const PLAYBACK_RATES = [0.75, 0.85, 1.0, 1.15, 1.25, 1.5] as const;
 type InternalPhase = "single" | "cumulative";
+type DiscoveryFilter = "all" | "current" | "in_progress" | "not_started" | "memorized" | "needs_review";
+
+type DiscoveryState =
+  | { status: "loading" }
+  | { status: "error"; message: string }
+  | {
+      status: "ready";
+      dashboard: DashboardResponse;
+      progress: MemorizationProgress[];
+      surahs: SurahSummary[];
+    };
+
+type SessionTarget = {
+  surahNumber: number;
+  ayahStart: number;
+  ayahEnd: number;
+  pageStart?: number | null;
+  pageEnd?: number | null;
+};
+
+const DISCOVERY_FILTERS: Array<{ key: DiscoveryFilter; label: string }> = [
+  { key: "all", label: "All" },
+  { key: "current", label: "Current" },
+  { key: "in_progress", label: "Learning" },
+  { key: "not_started", label: "New" },
+  { key: "memorized", label: "Memorized" },
+  { key: "needs_review", label: "Review" },
+];
+
+const DISCOVERY_CHUNK_AYAHS = 5;
+
+function formatAyahRange(start: number | undefined | null, end: number | undefined | null) {
+  if (start == null || end == null) return "Ayahs";
+  return start === end ? `Ayah ${start}` : `Ayahs ${start}-${end}`;
+}
+
+function formatPageRange(start: number | undefined | null, end: number | undefined | null) {
+  if (start == null || end == null) return null;
+  return start === end ? `Page ${start}` : `Pages ${start}-${end}`;
+}
+
+function normalizeSearch(value: string) {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+}
+
+function clampStrength(value: number | undefined | null) {
+  return Math.max(1, Math.min(5, Math.round(value ?? 1)));
+}
+
+function getStatusCopy(status: MemorizationStatus) {
+  switch (status) {
+    case "memorized":
+      return { label: "Memorized", color: "#047857", bg: "#ecfdf5", border: "#a7f3d0" };
+    case "in_progress":
+      return { label: "Learning", color: "#b45309", bg: "#fffbeb", border: "#fde68a" };
+    case "needs_review":
+      return { label: "Needs review", color: "#be123c", bg: "#fff1f2", border: "#fecdd3" };
+    case "not_started":
+    default:
+      return { label: "New", color: "#2563eb", bg: "#eff6ff", border: "#bfdbfe" };
+  }
+}
+
+function getStrengthLabel(strength: number | undefined | null) {
+  const value = clampStrength(strength);
+  if (value >= 5) return "Very strong";
+  if (value === 4) return "Solid";
+  if (value === 3) return "Learning";
+  if (value === 2) return "Shaky";
+  return "Starting";
+}
+
+function firstUnmemorizedAyah(progress: MemorizationProgress) {
+  const memorized = new Set(progress.memorizedAyahs ?? []);
+  for (let ayah = 1; ayah <= progress.totalVerses; ayah += 1) {
+    if (!memorized.has(ayah)) return ayah;
+  }
+  return Math.min(progress.totalVerses, Math.max(1, progress.versesMemorized + 1));
+}
+
+function buildProgressTarget(progress: MemorizationProgress): SessionTarget {
+  const start = progress.status === "memorized" ? 1 : firstUnmemorizedAyah(progress);
+  const end = Math.min(progress.totalVerses, start + DISCOVERY_CHUNK_AYAHS - 1);
+  const fallbackPages = estimatePageRange(progress.surahNumber, start, end);
+  return {
+    surahNumber: progress.surahNumber,
+    ayahStart: start,
+    ayahEnd: end,
+    pageStart: fallbackPages.pageStart,
+    pageEnd: fallbackPages.pageEnd,
+  };
+}
+
+function estimatePageRange(surahNumber: number, ayahStart: number, ayahEnd: number) {
+  const surah = MUSHAF_SURAHS.find((item) => item.number === surahNumber);
+  if (!surah) return { pageStart: null, pageEnd: null };
+  const pageSpan = Math.max(1, surah.endPage - surah.startPage + 1);
+  const estimate = (ayah: number) => {
+    const fraction = Math.max(0, Math.min(1, (ayah - 1) / Math.max(1, surah.verseCount)));
+    return surah.startPage + Math.floor(fraction * pageSpan);
+  };
+  return {
+    pageStart: Math.max(surah.startPage, estimate(ayahStart) - 1),
+    pageEnd: Math.min(surah.endPage, estimate(ayahEnd) + 1),
+  };
+}
+
+function buildWorkTarget(work: NewMemorization): SessionTarget {
+  const surahNumber = work.currentWorkSurahNumber ?? work.surahNumber;
+  const ayahStart = work.currentWorkAyahStart ?? work.ayahStart;
+  const ayahEnd = work.currentWorkAyahEnd ?? work.ayahEnd;
+  return {
+    surahNumber,
+    ayahStart,
+    ayahEnd,
+    pageStart: work.pageStart,
+    pageEnd: work.pageEnd,
+  };
+}
+
+function scoreProgress(progress: MemorizationProgress[]) {
+  const total = progress.length;
+  if (total === 0) return { memorized: 0, learning: 0, average: 0 };
+  const memorized = progress.filter((item) => item.status === "memorized").length;
+  const learning = progress.filter((item) => item.status === "in_progress").length;
+  const average = Math.round(
+    progress.reduce((sum, item) => sum + clampStrength(item.strength), 0) / total,
+  );
+  return { memorized, learning, average };
+}
 
 export default function MemorizationScreen() {
   const router = useRouter();
@@ -61,8 +202,16 @@ export default function MemorizationScreen() {
     surahNumber?: string;
     ayahStart?: string;
     ayahEnd?: string;
+    pageStart?: string;
+    pageEnd?: string;
+    session?: string;
   }>();
   const childId = params.childId;
+  const initialSessionRequested =
+    params.session === "1" ||
+    (params.surahNumber !== undefined &&
+      params.ayahStart !== undefined &&
+      params.ayahEnd !== undefined);
 
   const [surahNumber, setSurahNumber] = useState<number | null>(
     params.surahNumber ? Number(params.surahNumber) : null,
@@ -76,11 +225,20 @@ export default function MemorizationScreen() {
   const [currentVerse, setCurrentVerse] = useState<number>(
     params.ayahStart ? Number(params.ayahStart) : 1,
   );
-  const [pageStart, setPageStart] = useState<number | null>(null);
-  const [pageEnd, setPageEnd] = useState<number | null>(null);
+  const [pageStart, setPageStart] = useState<number | null>(
+    params.pageStart ? Number(params.pageStart) : null,
+  );
+  const [pageEnd, setPageEnd] = useState<number | null>(
+    params.pageEnd ? Number(params.pageEnd) : null,
+  );
+  const [sessionRequested, setSessionRequested] = useState(initialSessionRequested);
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [discoveryState, setDiscoveryState] = useState<DiscoveryState>({ status: "loading" });
+  const [discoveryRefreshing, setDiscoveryRefreshing] = useState(false);
+  const [discoveryQuery, setDiscoveryQuery] = useState("");
+  const [discoveryFilter, setDiscoveryFilter] = useState<DiscoveryFilter>("all");
   const [displayWordsMap, setDisplayWordsMap] = useState<Map<number, ApiWord[]>>(new Map());
   const [chapterTimings, setChapterTimings] = useState<ChapterTimings | null>(null);
   const [pageWordsMap, setPageWordsMap] = useState<Map<number, ApiPageVerse[]>>(new Map());
@@ -291,8 +449,72 @@ export default function MemorizationScreen() {
       .catch(() => {});
   }, []);
 
+  const loadDiscovery = useCallback(
+    async (mode: "initial" | "refresh" = "initial") => {
+      if (sessionRequested) return;
+      if (mode === "refresh") {
+        setDiscoveryRefreshing(true);
+      } else {
+        setDiscoveryState({ status: "loading" });
+      }
+      try {
+        const [dashboard, progress, surahs] = await Promise.all([
+          fetchDashboard(childId),
+          fetchMemorizationProgress(childId),
+          fetchSurahs(),
+        ]);
+        setDiscoveryState({ status: "ready", dashboard, progress, surahs });
+      } catch (e) {
+        setDiscoveryState({
+          status: "error",
+          message: e instanceof Error ? e.message : "Failed to load memorization.",
+        });
+      } finally {
+        setDiscoveryRefreshing(false);
+      }
+    },
+    [childId, sessionRequested],
+  );
+
+  useFocusEffect(
+    useCallback(() => {
+      if (!sessionRequested) {
+        void loadDiscovery();
+      }
+    }, [loadDiscovery, sessionRequested]),
+  );
+
+  function beginSession(target: SessionTarget) {
+    const nextStart = Math.max(1, target.ayahStart);
+    const nextEnd = Math.max(nextStart, target.ayahEnd);
+    setSessionRequested(true);
+    setLoading(true);
+    setError(null);
+    setDisplayWordsMap(new Map());
+    setChapterTimings(null);
+    setPageWordsMap(new Map());
+    setHighlightedWord(-1);
+    setHighlightedPage(null);
+    setInternalPhase("single");
+    internalPhaseRef.current = "single";
+    setCumAyahIdx(0);
+    cumAyahIdxRef.current = 0;
+    setCumPass(1);
+    cumPassRef.current = 1;
+    setCumUpTo(nextStart);
+    cumUpToRef.current = nextStart;
+    setCurrentRepeat(1);
+    setSurahNumber(target.surahNumber);
+    setAyahStart(nextStart);
+    setAyahEnd(nextEnd);
+    setCurrentVerse(nextStart);
+    setPageStart(target.pageStart ?? null);
+    setPageEnd(target.pageEnd ?? null);
+  }
+
   // Step 1: if no params, fetch dashboard to get today's memorization target
   useEffect(() => {
+    if (!sessionRequested) return;
     if (surahNumber !== null && ayahStart !== null && ayahEnd !== null) {
       setCurrentVerse(ayahStart);
       return;
@@ -320,7 +542,7 @@ export default function MemorizationScreen() {
         setLoading(false);
       }
     })();
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [sessionRequested]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Step 2: once surahNumber + chapters are known, fetch verses + timings in parallel.
   // Gated on chaptersMap.size > 0 so chapter metadata (name_arabic etc.) is available.
@@ -342,6 +564,20 @@ export default function MemorizationScreen() {
             verse.words.filter((w) => w.char_type_name === "word"),
           );
         }
+        if (ayahStart !== null && ayahEnd !== null) {
+          const pages = verses
+            .filter(
+              (verse) =>
+                verse.verse_number >= ayahStart &&
+                verse.verse_number <= ayahEnd &&
+                typeof verse.page_number === "number",
+            )
+            .map((verse) => verse.page_number as number);
+          if (pages.length > 0) {
+            setPageStart(Math.min(...pages));
+            setPageEnd(Math.max(...pages));
+          }
+        }
         setDisplayWordsMap(map);
         setChapterTimings(timings);
         setLoading(false);
@@ -353,7 +589,7 @@ export default function MemorizationScreen() {
       }
     })();
     return () => { cancelled = true; };
-  }, [surahNumber, reciterId, chaptersMap]);
+  }, [surahNumber, reciterId, chaptersMap, ayahStart, ayahEnd]);
 
   // Fetch Mushaf page data when switching to Full Mushaf mode
   useEffect(() => {
@@ -1322,6 +1558,25 @@ export default function MemorizationScreen() {
 
   // ── Render ───────────────────────────────────────────────────────────────────
 
+  if (!sessionRequested) {
+    return (
+      <MemorizationDiscovery
+        childId={childId}
+        name={params.name}
+        state={discoveryState}
+        query={discoveryQuery}
+        filter={discoveryFilter}
+        refreshing={discoveryRefreshing}
+        onQueryChange={setDiscoveryQuery}
+        onFilterChange={setDiscoveryFilter}
+        onRefresh={() => loadDiscovery("refresh")}
+        onRetry={() => loadDiscovery()}
+        onBack={() => router.back()}
+        onStart={beginSession}
+      />
+    );
+  }
+
   if (loading) {
     return (
       <View style={[styles.container, styles.centered]}>
@@ -1761,6 +2016,431 @@ export default function MemorizationScreen() {
   );
 }
 
+function MemorizationDiscovery({
+  childId,
+  name,
+  state,
+  query,
+  filter,
+  refreshing,
+  onQueryChange,
+  onFilterChange,
+  onRefresh,
+  onRetry,
+  onBack,
+  onStart,
+}: {
+  childId: string | undefined;
+  name: string | undefined;
+  state: DiscoveryState;
+  query: string;
+  filter: DiscoveryFilter;
+  refreshing: boolean;
+  onQueryChange: (value: string) => void;
+  onFilterChange: (value: DiscoveryFilter) => void;
+  onRefresh: () => void;
+  onRetry: () => void;
+  onBack: () => void;
+  onStart: (target: SessionTarget) => void;
+}) {
+  const childName = state.status === "ready" ? state.dashboard.child?.name ?? name : name;
+
+  const content = useMemo(() => {
+    if (state.status !== "ready") return null;
+
+    const progressByNumber = new Map(state.progress.map((item) => [item.surahNumber, item]));
+    const todayWork = state.dashboard.todaysPlan.newMemorization;
+    const upNext = state.dashboard.upNextMemorization;
+    const currentSurahNumber = todayWork?.currentWorkSurahNumber ?? todayWork?.surahNumber ?? null;
+    const currentNumbers = new Set<number>();
+    if (currentSurahNumber !== null) currentNumbers.add(currentSurahNumber);
+    for (const item of state.progress) {
+      if (item.status === "in_progress") currentNumbers.add(item.surahNumber);
+    }
+
+    const normalizedQuery = normalizeSearch(query);
+    const rows = state.surahs
+      .map((surah) => ({
+        surah,
+        progress: progressByNumber.get(surah.number) ?? {
+          id: 0,
+          childId: Number(childId ?? 0),
+          surahId: surah.id,
+          surahName: surah.nameTransliteration,
+          surahNumber: surah.number,
+          status: "not_started" as MemorizationStatus,
+          versesMemorized: 0,
+          memorizedAyahs: [],
+          totalVerses: surah.verseCount,
+          percentComplete: 0,
+          reviewCount: 0,
+          strength: 1,
+          ayahStrengths: {},
+        },
+      }))
+      .filter(({ surah, progress }) => {
+        if (normalizedQuery) {
+          const haystack = normalizeSearch(
+            `${surah.number} ${surah.nameTransliteration} ${surah.nameTranslation} ${surah.nameArabic}`,
+          );
+          if (!haystack.includes(normalizedQuery)) return false;
+        }
+        if (filter === "all") return true;
+        if (filter === "current") return currentNumbers.has(surah.number);
+        return progress.status === filter;
+      });
+
+    const resumeItems = state.progress
+      .filter((item) => item.status === "in_progress" && item.percentComplete < 100)
+      .filter((item) => item.surahNumber !== currentSurahNumber)
+      .slice(0, 3);
+
+    return {
+      progressByNumber,
+      todayWork,
+      upNext,
+      todayStatus: state.dashboard.todayProgress?.memStatus ?? "not_started",
+      stats: scoreProgress(state.progress),
+      rows,
+      resumeItems,
+    };
+  }, [childId, filter, query, state]);
+
+  function startProgress(progress: MemorizationProgress) {
+    if (content?.todayWork) {
+      const workSurah = content.todayWork.currentWorkSurahNumber ?? content.todayWork.surahNumber;
+      if (workSurah === progress.surahNumber) {
+        onStart(buildWorkTarget(content.todayWork));
+        return;
+      }
+    }
+    onStart(buildProgressTarget(progress));
+  }
+
+  return (
+    <View style={styles.discoveryContainer}>
+      <View style={styles.discoveryHeader}>
+        <Pressable onPress={onBack} style={styles.discoveryBackButton}>
+          <Text style={styles.back}>← Back</Text>
+        </Pressable>
+        <View style={styles.discoveryHeaderText}>
+          <Text style={styles.discoveryTitle}>Memorization</Text>
+          <Text style={styles.discoverySubtitle}>{childName ? `${childName}'s hifz work` : "Hifz work"}</Text>
+        </View>
+        <View style={styles.discoveryHeaderSpacer} />
+      </View>
+
+      {state.status === "loading" ? (
+        <View style={styles.discoveryBodyCenter}>
+          <ActivityIndicator color="#2563eb" size="large" />
+          <Text style={styles.discoveryMuted}>Loading memorization...</Text>
+        </View>
+      ) : state.status === "error" ? (
+        <View style={styles.discoveryBodyCenter}>
+          <Text style={styles.errorText}>{state.message}</Text>
+          <Pressable style={styles.discoveryPrimaryButton} onPress={onRetry}>
+            <Text style={styles.discoveryPrimaryButtonText}>Retry</Text>
+          </Pressable>
+        </View>
+      ) : content ? (
+        <ScrollView
+          style={styles.discoveryScroll}
+          contentContainerStyle={styles.discoveryContent}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#2563eb" />
+          }
+        >
+          <View style={styles.discoverySummary}>
+            <View>
+              <Text style={styles.discoveryKicker}>Progress</Text>
+              <Text style={styles.discoverySummaryTitle}>
+                {content.stats.memorized} memorized · {content.stats.learning} learning
+              </Text>
+              <Text style={styles.discoverySummaryDetail}>
+                Average strength {content.stats.average || 1}/5
+              </Text>
+            </View>
+            <StrengthDots strength={content.stats.average || 1} />
+          </View>
+
+          <View style={styles.discoverySectionHeader}>
+            <Text style={styles.discoverySectionTitle}>Today</Text>
+          </View>
+          {content.todayWork ? (
+            <TodayWorkCard
+              work={content.todayWork}
+              status={content.todayStatus}
+              onPress={() => onStart(buildWorkTarget(content.todayWork!))}
+            />
+          ) : content.upNext ? (
+            <TodayWorkCard
+              work={content.upNext}
+              status="not_started"
+              title="Up next"
+              onPress={() => onStart(buildWorkTarget(content.upNext!))}
+            />
+          ) : (
+            <View style={styles.discoveryEmptyCard}>
+              <Text style={styles.discoveryEmptyTitle}>No memorization assigned today.</Text>
+              <Text style={styles.discoveryEmptyDetail}>Search the surah list below to start a practice session.</Text>
+            </View>
+          )}
+
+          {content.resumeItems.length > 0 && (
+            <>
+              <View style={styles.discoverySectionHeader}>
+                <Text style={styles.discoverySectionTitle}>Resume</Text>
+              </View>
+              <View style={styles.discoveryCardList}>
+                {content.resumeItems.map((item) => (
+                  <ResumeWorkCard key={item.surahNumber} progress={item} onPress={() => startProgress(item)} />
+                ))}
+              </View>
+            </>
+          )}
+
+          <View style={styles.discoverySectionHeader}>
+            <Text style={styles.discoverySectionTitle}>Surahs</Text>
+            <Text style={styles.discoverySectionMeta}>{content.rows.length} shown</Text>
+          </View>
+          <TextInput
+            value={query}
+            onChangeText={onQueryChange}
+            placeholder="Search surah name or number"
+            placeholderTextColor="#9ca3af"
+            autoCapitalize="none"
+            autoCorrect={false}
+            style={styles.discoverySearch}
+          />
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.discoveryFilterRow}
+          >
+            {DISCOVERY_FILTERS.map((item) => {
+              const selected = filter === item.key;
+              return (
+                <Pressable
+                  key={item.key}
+                  style={[styles.discoveryFilterPill, selected && styles.discoveryFilterPillSelected]}
+                  onPress={() => onFilterChange(item.key)}
+                >
+                  <Text
+                    style={[
+                      styles.discoveryFilterText,
+                      selected && styles.discoveryFilterTextSelected,
+                    ]}
+                  >
+                    {item.label}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+
+          <View style={styles.discoveryCardList}>
+            {content.rows.length === 0 ? (
+              <View style={styles.discoveryEmptyCard}>
+                <Text style={styles.discoveryEmptyTitle}>No surahs match that search.</Text>
+                <Text style={styles.discoveryEmptyDetail}>Try a name, number, or a different filter.</Text>
+              </View>
+            ) : (
+              content.rows.map(({ surah, progress }) => (
+                <SurahProgressRow
+                  key={surah.number}
+                  surah={surah}
+                  progress={progress}
+                  isCurrent={
+                    (content.todayWork?.currentWorkSurahNumber ?? content.todayWork?.surahNumber) ===
+                    surah.number
+                  }
+                  onPress={() => startProgress(progress)}
+                />
+              ))
+            )}
+          </View>
+        </ScrollView>
+      ) : null}
+
+      <ChildBottomNav active="memorization" childId={childId} name={childName ?? ""} />
+    </View>
+  );
+}
+
+function TodayWorkCard({
+  work,
+  status,
+  title = "Today's work",
+  onPress,
+}: {
+  work: NewMemorization;
+  status: "not_started" | "in_progress" | "completed";
+  title?: string;
+  onPress: () => void;
+}) {
+  const surahName = work.currentWorkSurahName ?? work.surahName;
+  const ayahStart = work.currentWorkAyahStart ?? work.ayahStart;
+  const ayahEnd = work.currentWorkAyahEnd ?? work.ayahEnd;
+  const pageRange = formatPageRange(work.pageStart, work.pageEnd);
+  const buttonLabel = status === "completed" ? "Practice Again" : status === "in_progress" ? "Continue" : "Start";
+
+  return (
+    <View style={styles.discoveryFeaturedCard}>
+      <View style={styles.discoveryFeaturedTop}>
+        <View>
+          <Text style={styles.discoveryKicker}>{title}</Text>
+          <Text style={styles.discoveryFeaturedTitle}>{surahName}</Text>
+          <Text style={styles.discoveryFeaturedDetail}>
+            {(work.workLabel ?? "Memorization")} · {formatAyahRange(ayahStart, ayahEnd)}
+            {pageRange ? ` · ${pageRange}` : ""}
+          </Text>
+        </View>
+        <View style={styles.discoveryNumberBadge}>
+          <Text style={styles.discoveryNumberText}>
+            {work.currentWorkSurahNumber ?? work.surahNumber}
+          </Text>
+        </View>
+      </View>
+      <Pressable style={styles.discoveryPrimaryButton} onPress={onPress}>
+        <Text style={styles.discoveryPrimaryButtonText}>{buttonLabel}</Text>
+      </Pressable>
+    </View>
+  );
+}
+
+function ResumeWorkCard({
+  progress,
+  onPress,
+}: {
+  progress: MemorizationProgress;
+  onPress: () => void;
+}) {
+  const nextAyah = firstUnmemorizedAyah(progress);
+  return (
+    <Pressable style={styles.discoveryResumeCard} onPress={onPress}>
+      <View style={styles.discoveryResumeText}>
+        <Text style={styles.discoveryResumeTitle}>{progress.surahName}</Text>
+        <Text style={styles.discoveryResumeDetail}>
+          Resume at Ayah {nextAyah} · {progress.versesMemorized}/{progress.totalVerses} memorized
+        </Text>
+      </View>
+      <Text style={styles.discoveryResumeAction}>Resume</Text>
+    </Pressable>
+  );
+}
+
+function SurahProgressRow({
+  surah,
+  progress,
+  isCurrent,
+  onPress,
+}: {
+  surah: SurahSummary;
+  progress: MemorizationProgress;
+  isCurrent: boolean;
+  onPress: () => void;
+}) {
+  const status = getStatusCopy(progress.status);
+  const percent = Math.max(0, Math.min(100, progress.percentComplete));
+  const actionLabel =
+    progress.status === "memorized" ? "Practice" : progress.status === "in_progress" ? "Resume" : "Start";
+
+  return (
+    <Pressable style={[styles.surahRow, isCurrent && styles.surahRowCurrent]} onPress={onPress}>
+      <View style={styles.surahRowTop}>
+        <View style={styles.surahNumber}>
+          <Text style={styles.surahNumberText}>{surah.number}</Text>
+        </View>
+        <View style={styles.surahTitleBlock}>
+          <View style={styles.surahTitleLine}>
+            <Text style={styles.surahTitle}>{surah.nameTransliteration}</Text>
+            {isCurrent ? <Text style={styles.currentPill}>Current</Text> : null}
+          </View>
+          <Text style={styles.surahSubtitle}>
+            {surah.nameTranslation} · {surah.verseCount} ayahs · Juz {surah.juzStart}
+          </Text>
+        </View>
+        <Text style={styles.surahArabic}>{surah.nameArabic}</Text>
+      </View>
+
+      <View style={styles.surahProgressLine}>
+        <View style={styles.surahProgressTrack}>
+          <View style={[styles.surahProgressFill, { width: `${percent}%` }]} />
+        </View>
+        <Text style={styles.surahProgressText}>{percent}%</Text>
+      </View>
+
+      <View style={styles.surahMetaRow}>
+        <View style={[styles.statusPill, { backgroundColor: status.bg, borderColor: status.border }]}>
+          <Text style={[styles.statusPillText, { color: status.color }]}>{status.label}</Text>
+        </View>
+        <Text style={styles.surahMetaText}>
+          {progress.versesMemorized}/{progress.totalVerses} ayahs
+        </Text>
+        <Text style={styles.surahMetaText}>{getStrengthLabel(progress.strength)}</Text>
+        <StrengthDots strength={progress.strength} />
+      </View>
+
+      <AyahStrengthStrip progress={progress} />
+
+      <View style={styles.surahActionRow}>
+        <Text style={styles.surahNextText}>
+          {progress.status === "memorized"
+            ? "Ready for a practice pass"
+            : `Next: ${formatAyahRange(
+                buildProgressTarget(progress).ayahStart,
+                buildProgressTarget(progress).ayahEnd,
+              )}`}
+        </Text>
+        <Text style={styles.surahActionText}>{actionLabel}</Text>
+      </View>
+    </Pressable>
+  );
+}
+
+function StrengthDots({ strength }: { strength: number | undefined | null }) {
+  const value = clampStrength(strength);
+  return (
+    <View style={styles.strengthDots}>
+      {Array.from({ length: 5 }, (_, index) => (
+        <View
+          key={index}
+          style={[
+            styles.strengthDot,
+            index < value ? styles.strengthDotFilled : styles.strengthDotEmpty,
+          ]}
+        />
+      ))}
+    </View>
+  );
+}
+
+function AyahStrengthStrip({ progress }: { progress: MemorizationProgress }) {
+  const total = Math.max(1, progress.totalVerses);
+  const count = Math.min(20, total);
+  const memorized = new Set(progress.memorizedAyahs ?? []);
+
+  return (
+    <View style={styles.ayahStrip}>
+      {Array.from({ length: count }, (_, index) => {
+        const ayah = Math.min(total, Math.max(1, Math.round(((index + 1) / count) * total)));
+        const rawStrength = progress.ayahStrengths?.[String(ayah)];
+        const fallback = memorized.has(ayah) || ayah <= progress.versesMemorized ? progress.strength : 0;
+        const strength = rawStrength ?? fallback;
+        return <View key={`${progress.surahNumber}-${ayah}-${index}`} style={[styles.ayahSegment, getAyahSegmentStyle(strength)]} />;
+      })}
+    </View>
+  );
+}
+
+function getAyahSegmentStyle(strength: number) {
+  if (strength >= 5) return styles.ayahStrong;
+  if (strength >= 4) return styles.ayahSolid;
+  if (strength >= 3) return styles.ayahLearning;
+  if (strength > 0) return styles.ayahWeak;
+  return styles.ayahEmpty;
+}
+
 // ── Themed styles factory ────────────────────────────────────────────────────
 // Called from useMemo inside the component; defined at module scope so the
 // StyleSheet.create call is not recreated on every render.
@@ -1854,6 +2534,412 @@ const styles = StyleSheet.create({
   centered: {
     justifyContent: "center",
     alignItems: "center",
+  },
+  discoveryContainer: {
+    flex: 1,
+    backgroundColor: "#ffffff",
+  },
+  discoveryHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingTop: 60,
+    paddingHorizontal: 20,
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: "#e5e7eb",
+    backgroundColor: "#ffffff",
+  },
+  discoveryBackButton: {
+    width: 70,
+  },
+  discoveryHeaderText: {
+    flex: 1,
+    alignItems: "center",
+  },
+  discoveryHeaderSpacer: {
+    width: 70,
+  },
+  discoveryTitle: {
+    fontSize: 17,
+    fontWeight: "800",
+    color: "#111827",
+  },
+  discoverySubtitle: {
+    marginTop: 2,
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#6b7280",
+  },
+  discoveryBodyCenter: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 24,
+  },
+  discoveryMuted: {
+    marginTop: 12,
+    fontSize: 14,
+    color: "#6b7280",
+  },
+  discoveryScroll: {
+    flex: 1,
+  },
+  discoveryContent: {
+    padding: 16,
+    paddingBottom: 24,
+    gap: 14,
+  },
+  discoverySummary: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 16,
+    backgroundColor: "#f8fbff",
+    borderWidth: 1,
+    borderColor: "#bfdbfe",
+    borderRadius: 14,
+    padding: 16,
+  },
+  discoveryKicker: {
+    fontSize: 11,
+    fontWeight: "800",
+    color: "#2563eb",
+    textTransform: "uppercase",
+  },
+  discoverySummaryTitle: {
+    marginTop: 4,
+    fontSize: 19,
+    fontWeight: "800",
+    color: "#111827",
+  },
+  discoverySummaryDetail: {
+    marginTop: 3,
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#4b5563",
+  },
+  discoverySectionHeader: {
+    marginTop: 8,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  discoverySectionTitle: {
+    fontSize: 15,
+    fontWeight: "800",
+    color: "#111827",
+  },
+  discoverySectionMeta: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#6b7280",
+  },
+  discoveryFeaturedCard: {
+    gap: 14,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#bfdbfe",
+    backgroundColor: "#eff6ff",
+    padding: 16,
+  },
+  discoveryFeaturedTop: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: 14,
+  },
+  discoveryFeaturedTitle: {
+    marginTop: 4,
+    fontSize: 22,
+    fontWeight: "800",
+    color: "#111827",
+  },
+  discoveryFeaturedDetail: {
+    marginTop: 4,
+    fontSize: 13,
+    lineHeight: 19,
+    fontWeight: "600",
+    color: "#374151",
+  },
+  discoveryNumberBadge: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#ffffff",
+    borderWidth: 1,
+    borderColor: "#bfdbfe",
+  },
+  discoveryNumberText: {
+    fontSize: 15,
+    fontWeight: "900",
+    color: "#2563eb",
+  },
+  discoveryPrimaryButton: {
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 12,
+    backgroundColor: "#2563eb",
+    paddingVertical: 13,
+    paddingHorizontal: 16,
+  },
+  discoveryPrimaryButtonText: {
+    fontSize: 15,
+    fontWeight: "800",
+    color: "#ffffff",
+  },
+  discoveryEmptyCard: {
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+    backgroundColor: "#f9fafb",
+    padding: 16,
+  },
+  discoveryEmptyTitle: {
+    fontSize: 15,
+    fontWeight: "800",
+    color: "#111827",
+  },
+  discoveryEmptyDetail: {
+    marginTop: 4,
+    fontSize: 13,
+    lineHeight: 19,
+    color: "#6b7280",
+  },
+  discoveryCardList: {
+    gap: 10,
+  },
+  discoveryResumeCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#fde68a",
+    backgroundColor: "#fffbeb",
+    padding: 14,
+  },
+  discoveryResumeText: {
+    flex: 1,
+  },
+  discoveryResumeTitle: {
+    fontSize: 15,
+    fontWeight: "800",
+    color: "#111827",
+  },
+  discoveryResumeDetail: {
+    marginTop: 4,
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#6b7280",
+  },
+  discoveryResumeAction: {
+    fontSize: 13,
+    fontWeight: "800",
+    color: "#b45309",
+  },
+  discoverySearch: {
+    minHeight: 46,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#d1d5db",
+    backgroundColor: "#ffffff",
+    paddingHorizontal: 14,
+    fontSize: 15,
+    color: "#111827",
+  },
+  discoveryFilterRow: {
+    gap: 8,
+    paddingVertical: 2,
+  },
+  discoveryFilterPill: {
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+    backgroundColor: "#f9fafb",
+    paddingVertical: 8,
+    paddingHorizontal: 13,
+  },
+  discoveryFilterPillSelected: {
+    borderColor: "#2563eb",
+    backgroundColor: "#2563eb",
+  },
+  discoveryFilterText: {
+    fontSize: 13,
+    fontWeight: "800",
+    color: "#4b5563",
+  },
+  discoveryFilterTextSelected: {
+    color: "#ffffff",
+  },
+  surahRow: {
+    gap: 10,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+    backgroundColor: "#ffffff",
+    padding: 14,
+  },
+  surahRowCurrent: {
+    borderColor: "#bfdbfe",
+    backgroundColor: "#f8fbff",
+  },
+  surahRowTop: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  surahNumber: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#f3f4f6",
+  },
+  surahNumberText: {
+    fontSize: 13,
+    fontWeight: "900",
+    color: "#111827",
+  },
+  surahTitleBlock: {
+    flex: 1,
+    minWidth: 0,
+  },
+  surahTitleLine: {
+    flexDirection: "row",
+    alignItems: "center",
+    flexWrap: "wrap",
+    gap: 6,
+  },
+  surahTitle: {
+    fontSize: 16,
+    fontWeight: "800",
+    color: "#111827",
+  },
+  currentPill: {
+    overflow: "hidden",
+    borderRadius: 999,
+    backgroundColor: "#dbeafe",
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    fontSize: 10,
+    fontWeight: "900",
+    color: "#2563eb",
+  },
+  surahSubtitle: {
+    marginTop: 3,
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#6b7280",
+  },
+  surahArabic: {
+    fontFamily: "AmiriQuran",
+    fontSize: 22,
+    color: "#111827",
+  },
+  surahProgressLine: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  surahProgressTrack: {
+    flex: 1,
+    height: 8,
+    borderRadius: 999,
+    backgroundColor: "#e5e7eb",
+    overflow: "hidden",
+  },
+  surahProgressFill: {
+    height: "100%",
+    borderRadius: 999,
+    backgroundColor: "#2563eb",
+  },
+  surahProgressText: {
+    width: 38,
+    textAlign: "right",
+    fontSize: 12,
+    fontWeight: "800",
+    color: "#374151",
+  },
+  surahMetaRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  statusPill: {
+    borderRadius: 999,
+    borderWidth: 1,
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+  },
+  statusPillText: {
+    fontSize: 11,
+    fontWeight: "900",
+  },
+  surahMetaText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#4b5563",
+  },
+  strengthDots: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+  },
+  strengthDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+  },
+  strengthDotFilled: {
+    backgroundColor: "#0f766e",
+  },
+  strengthDotEmpty: {
+    backgroundColor: "#d1d5db",
+  },
+  ayahStrip: {
+    flexDirection: "row",
+    gap: 2,
+  },
+  ayahSegment: {
+    flex: 1,
+    height: 6,
+    borderRadius: 999,
+  },
+  ayahStrong: {
+    backgroundColor: "#059669",
+  },
+  ayahSolid: {
+    backgroundColor: "#10b981",
+  },
+  ayahLearning: {
+    backgroundColor: "#f59e0b",
+  },
+  ayahWeak: {
+    backgroundColor: "#f97316",
+  },
+  ayahEmpty: {
+    backgroundColor: "#e5e7eb",
+  },
+  surahActionRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+  },
+  surahNextText: {
+    flex: 1,
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#6b7280",
+  },
+  surahActionText: {
+    fontSize: 13,
+    fontWeight: "900",
+    color: "#2563eb",
   },
   header: {
     flexDirection: "row",
