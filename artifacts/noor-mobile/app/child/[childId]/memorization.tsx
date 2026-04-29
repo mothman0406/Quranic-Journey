@@ -3142,7 +3142,7 @@ function getTodayStatusLabel(status: WorkStatus) {
 }
 
 function getTodayActionLabel(status: WorkStatus) {
-  if (status === "completed") return "Practice";
+  if (status === "completed") return "Done";
   if (status === "in_progress") return "Continue";
   return "Start";
 }
@@ -3198,13 +3198,15 @@ function MemorizationOverviewCards({
     : "Idle";
   const currentActionLabel = todayWork
     ? currentStatus === "completed"
-      ? "Practice"
+      ? "Done"
       : todayWork.isReviewOnly
       ? "Recite"
       : currentStatus === "in_progress"
       ? "Continue"
       : "Start"
     : "Browse below";
+  const todayDisabled = !todayWork || todayStatus === "completed";
+  const currentDisabled = !todayWork || currentStatus === "completed";
 
   return (
     <View style={styles.overviewGrid}>
@@ -3219,7 +3221,7 @@ function MemorizationOverviewCards({
         status={todayWork ? getTodayStatusLabel(todayStatus) : "Not scheduled"}
         action={todayWork ? getTodayActionLabel(todayStatus) : "Browse below"}
         tone={todayTone}
-        disabled={!todayWork}
+        disabled={todayDisabled}
         onPress={() => {
           if (todayWork) onStart(buildFullWorkTarget(todayWork));
         }}
@@ -3235,7 +3237,7 @@ function MemorizationOverviewCards({
         status={currentStatusLabel}
         action={currentActionLabel}
         tone={todayWork ? (currentStatus === "completed" ? "todayDone" : "current") : "empty"}
-        disabled={!todayWork}
+        disabled={currentDisabled}
         onPress={() => {
           if (todayWork) onStart(buildWorkTarget(todayWork));
         }}

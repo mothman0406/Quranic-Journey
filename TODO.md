@@ -1,6 +1,6 @@
 # NoorPath / Quranic Journey — Status & Next Steps
 
-_Last updated: April 29, 2026 (Today's/Current work freeze follow-up locally validated; hardware QA pending)_
+_Last updated: April 29, 2026 (Today's/Current work freeze correction locally validated; hardware QA pending)_
 
 ---
 
@@ -104,10 +104,12 @@ After every meaningful action, update this file and `PHASE_2D_HANDOFF.md` before
 - Phase 2I.2e implementation/QA notes: mobile `memorization.tsx` now exposes a `Just Get Tested` shortcut for review-only overview assignments. The shortcut starts the existing session data load with a direct-check flag, then opens the existing teacher Recitation Check for the full review-only assignment range as soon as the range is loaded, without starting audio playback. Review-only saves remain all-or-nothing because the existing Recitation Check save path still clamps review-only completion to the full `ayahEnd`. Local validation passed with `cd artifacts/noor-mobile && npx tsc --noEmit` and `git diff --check`; Mohammad hardware-tested it after commit `e654ceb` and confirmed it works.
 - Next up skip-gap implementation notes: backend dashboard scheduling now bases `Next up` and full-surah completion on the explicit contiguous memorized ayah prefix instead of raw `versesMemorized` counts, so a saved non-contiguous range cannot make ayahs 17-49 look complete after only ayahs 1-16 were learned. Dashboard daily-progress selection now prefers the earliest matching workflow row over newer duplicate same-day rows, `POST /daily-progress` reuses an existing same-day row instead of creating another memorization row for the same date, and `POST /memorization` daily-progress auto-updates select the row overlapping the just-saved session instead of blindly updating the newest row. Local validation passed with focused API typecheck, mobile typecheck, and `git diff --check`; implementation commit is `3f354f4`.
 - Today's/Current work freeze follow-up: Mohammad confirmed the `Next up` contiguous-gap behavior looked good, but then `Today's work` and `Current work` were updating to match the moving `Next up` target. The API dashboard now treats the first same-day memorization target row as the frozen daily assignment, no longer rewrites an existing `not_started` target just because the computed next target changes, and avoids falling back to the scheduled next workflow item when a frozen daily target already exists. `Next up` remains free to move from progress. Local validation passed with focused API typecheck, mobile typecheck, and `git diff --check`. Remote sync target after this implementation/docs commit: all four refs synced to the final freeze-follow-up HEAD.
+- Today's/Current work freeze correction: Mohammad clarified the intended behavior with examples: `Today's work` is the full daily envelope and must stay frozen all day; `Current work` moves within that envelope, then locks on the last completed item inside it; completed `Today's work` and `Current work` cards should be disabled; only `Next up` should keep moving after completion. The API dashboard now derives workflow `Next up` from the item after the frozen daily assignment instead of repeating the frozen item if progress data lags, and the non-workflow fallback excludes a completed same-day target from `Next up`. Mobile overview cards now show `Done` and are non-pressable once `Today's work`/`Current work` are complete. Local validation passed with focused API typecheck, mobile typecheck, and `git diff --check`.
 - Exact next checklist:
-  1. Hardware-test the three-card behavior: `Today's work` should not change for the whole day once assigned; `Current work` should show the same completed daily target after the last of today's work is done; `Next up` should still move to the next contiguous target.
-  2. Smoke 2I.2e Just Get Tested, 2I.2a completed-to saves, 2I.2b leave options, 2I.2c Recitation Check, and 2I.2d Ready to Recite after the backend follow-up.
-  3. Do not start 2I.2f, 2I.3/2I.4, 2J, 2K, or TestFlight readiness until this follow-up is hardware-tested or Mohammad explicitly reorders.
+  1. Hardware-test the three-card behavior: `Today's work` should not change for the whole day once assigned; `Current work` should advance inside today's envelope, then stay on the final completed daily item after the last of today's work is done; `Next up` should still move to the next contiguous target.
+  2. Confirm completed `Today's work` and `Current work` cards show `Done` and are disabled.
+  3. Smoke 2I.2e Just Get Tested, 2I.2a completed-to saves, 2I.2b leave options, 2I.2c Recitation Check, and 2I.2d Ready to Recite after the backend follow-up.
+  4. Do not start 2I.2f, 2I.3/2I.4, 2J, 2K, or TestFlight readiness until this follow-up is hardware-tested or Mohammad explicitly reorders.
 
 ### Web-app parity audit summary
 
@@ -480,11 +482,12 @@ Implemented, committed, typechecked, route-fixed, and hardware-tested Apr 28, 20
 - Production QA: authenticated production dashboard fetches for child L and Joll returned 200 after the screenshots, so the saved target values are not corrupting dashboard data.
 - Hardware QA: Mohammad reported the Targets/dashboard route fix passed on iPhone; dashboard no longer gets stuck on `/api/children/targets/*`.
 
-## 🔜 NEXT — Hardware QA Today's/Current Work Freeze
+## 🔜 NEXT — Hardware QA Today's/Current Work Freeze Correction
 
-1. Hardware-test the three-card behavior: `Today's work` should not change for the whole day once assigned; `Current work` should remain on the completed daily target after the last of today's work is done; `Next up` should still move to the next contiguous target.
-2. Smoke Just Get Tested plus 2I.2a/2I.2b/2I.2c/2I.2d behavior after the backend follow-up.
-3. Keep tajweed as backlog-only unless Mohammad explicitly reopens it, do not tighten recite matcher behavior, do not edit `artifacts/noor-path`, and do not add native dependencies.
+1. Hardware-test the three-card behavior: `Today's work` should not change for the whole day once assigned; `Current work` should advance inside the daily envelope, then remain on the final completed daily item after the last of today's work is done; `Next up` should still move to the next contiguous target.
+2. Confirm completed `Today's work` and `Current work` cards show `Done` and are disabled.
+3. Smoke Just Get Tested plus 2I.2a/2I.2b/2I.2c/2I.2d behavior after the backend follow-up.
+4. Keep tajweed as backlog-only unless Mohammad explicitly reopens it, do not tighten recite matcher behavior, do not edit `artifacts/noor-path`, and do not add native dependencies.
 
 ---
 

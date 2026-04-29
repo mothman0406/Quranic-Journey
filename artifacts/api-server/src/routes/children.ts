@@ -832,10 +832,7 @@ router.get("/children/:childId/dashboard", async (req, res) => {
           nextWorkflowAnchor.scheduleIndex,
         )
       : null;
-  const upcomingWorkflowItem =
-    memorizationWorkflow?.enabled && todayProgress.memStatus === "completed"
-      ? scheduledWorkItem
-      : nextWorkflowItem;
+  const upcomingWorkflowItem = memorizationWorkflow?.enabled ? nextWorkflowItem : null;
 
   const currentSurahName = activeWorkflowItem?.surahName ?? memorizationSurahData?.nameTransliteration ?? null;
 
@@ -1010,9 +1007,21 @@ router.get("/children/:childId/dashboard", async (req, res) => {
         };
       }
 
+      const completedTodayTargetNumbers = new Set<number>();
+      if (todayProgress.memStatus === "completed" && todayProgress.memTargetSurah != null) {
+        const endSurah = todayProgress.memTargetEndSurah ?? todayProgress.memTargetSurah;
+        const start = Math.min(todayProgress.memTargetSurah, endSurah);
+        const end = Math.max(todayProgress.memTargetSurah, endSurah);
+        for (let number = start; number <= end; number += 1) {
+          completedTodayTargetNumbers.add(number);
+        }
+      }
+      const isDoneOrCompletedToday = (surah: (typeof SURAHS_IN_ORDER)[number]) =>
+        doneSurahIds.has(surah.id) || completedTodayTargetNumbers.has(surah.number);
+
       const nextSurahExcludingCurrent =
         activeWorkflowItem && memorizationSurahData
-          ? SURAHS_IN_ORDER.find((surah) => !doneSurahIds.has(surah.id) && surah.id !== memorizationSurahData.id)
+          ? SURAHS_IN_ORDER.find((surah) => !isDoneOrCompletedToday(surah) && surah.id !== memorizationSurahData.id)
           : null;
       if (nextSurahExcludingCurrent) {
         const nextUpProgress = memProgress.find(m => m.surahId === nextSurahExcludingCurrent.id);
@@ -1035,7 +1044,7 @@ router.get("/children/:childId/dashboard", async (req, res) => {
         };
       }
 
-      const nextUp = SURAHS_IN_ORDER.find(s => !doneSurahIds.has(s.id));
+      const nextUp = SURAHS_IN_ORDER.find(s => !isDoneOrCompletedToday(s));
       if (!nextUp) return null;
 
       const nextUpProgress = memProgress.find(m => m.surahId === nextUp.id);
