@@ -14,6 +14,7 @@ import {
   View,
 } from "react-native";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
+import { usePreventRemove } from "@react-navigation/native";
 import { Audio } from "expo-av";
 import {
   ExpoSpeechRecognitionModule,
@@ -330,6 +331,7 @@ export default function MemorizationScreen() {
     position: number;
   } | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [leaveSheetOpen, setLeaveSheetOpen] = useState(false);
   const [pauseSheetOpen, setPauseSheetOpen] = useState(false);
   const [pauseCompletedAyahEnd, setPauseCompletedAyahEnd] = useState<number | null>(null);
   const [completionSheetOpen, setCompletionSheetOpen] = useState(false);
@@ -568,6 +570,11 @@ export default function MemorizationScreen() {
     }, [loadDiscovery, sessionRequested]),
   );
 
+  usePreventRemove(sessionRequested && !loading && !error && !submitting, () => {
+    setSaveError(null);
+    setLeaveSheetOpen(true);
+  });
+
   function beginSession(target: SessionTarget) {
     const nextStart = Math.max(1, target.ayahStart);
     const nextEnd = Math.max(nextStart, target.ayahEnd);
@@ -583,6 +590,7 @@ export default function MemorizationScreen() {
     setInternalPhase("single");
     internalPhaseRef.current = "single";
     setSessionReviewOnly(Boolean(target.isReviewOnly));
+    setLeaveSheetOpen(false);
     setPauseSheetOpen(false);
     setPauseCompletedAyahEnd(null);
     setCompletionSheetOpen(false);
@@ -1310,6 +1318,69 @@ export default function MemorizationScreen() {
     setPauseSheetOpen(true);
   }
 
+  function handleRequestSessionLeave() {
+    if (!sessionRequested || loading || error) {
+      router.back();
+      return;
+    }
+    if (submitting) return;
+    setSaveError(null);
+    setLeaveSheetOpen(true);
+  }
+
+  function handleSaveAndLeave() {
+    if (submitting) return;
+    setLeaveSheetOpen(false);
+    void handlePauseAndSave();
+  }
+
+  async function handleLeaveWithoutSaving() {
+    if (submitting) return;
+    setLeaveSheetOpen(false);
+    setPauseSheetOpen(false);
+    setPauseCompletedAyahEnd(null);
+    setCompletionSheetOpen(false);
+    setSelectedQuality(null);
+    setRatingAyahEnd(null);
+    setSaveError(null);
+    setSettingsOpen(false);
+    setTranslationPopup(null);
+    setInternalPhase("single");
+    internalPhaseRef.current = "single";
+    setCumAyahIdx(0);
+    cumAyahIdxRef.current = 0;
+    setCumPass(1);
+    cumPassRef.current = 1;
+    setCumUpTo(0);
+    cumUpToRef.current = 0;
+    setCurrentRepeat(1);
+    autoPlayRef.current = false;
+    pendingSeekPositionRef.current = null;
+    matchedWordCountRef.current = 0;
+    lastMatchedWordRef.current = "";
+    reciteModeRef.current = false;
+    setReciteMode(false);
+    setReciteListening(false);
+    setReciteError(null);
+    setReciteExpectedIdx(0);
+    ExpoSpeechRecognitionModule.stop();
+    await stopAudioCompletely();
+    setSessionReviewOnly(false);
+    setSurahNumber(null);
+    setAyahStart(null);
+    setAyahEnd(null);
+    setCurrentVerse(1);
+    setPageStart(null);
+    setPageEnd(null);
+    setDisplayWordsMap(new Map());
+    setChapterTimings(null);
+    setPageWordsMap(new Map());
+    setRevealedVerses(new Set());
+    setError(null);
+    setLoading(false);
+    setSessionRequested(false);
+  }
+
   function openRecitationCheckFromPause() {
     if (ayahStart === null || ayahEnd === null) return;
     const completedEnd = sessionReviewOnly
@@ -1841,7 +1912,7 @@ export default function MemorizationScreen() {
     <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <Pressable onPress={() => router.back()}>
+        <Pressable onPress={handleRequestSessionLeave}>
           <Text style={styles.back}>← Back</Text>
         </Pressable>
         <Text style={styles.headerTitle}>
@@ -2035,6 +2106,65 @@ export default function MemorizationScreen() {
       {reciteError && (
         <Text style={styles.errorText}>{reciteError}</Text>
       )}
+
+      {/* Leave confirmation sheet */}
+      <Modal
+        visible={leaveSheetOpen}
+        transparent
+        animationType="slide"
+        onRequestClose={() => {
+          if (!submitting) setLeaveSheetOpen(false);
+        }}
+      >
+        <Pressable
+          style={styles.backdrop}
+          onPress={() => {
+            if (!submitting) setLeaveSheetOpen(false);
+          }}
+        />
+        <View style={styles.completionSheet}>
+          <Text style={styles.sheetTitle}>Leave this session?</Text>
+          <Text style={styles.completionSubtitle}>
+            {chaptersMap.get(surahNumber ?? 0)?.name_simple ?? "Current surah"} ·{" "}
+            {formatAyahRange(ayahStart, ayahEnd)}
+          </Text>
+
+          <View style={[styles.pauseSummaryCard, styles.leaveWarningCard]}>
+            <Text style={styles.pauseSummaryTitle}>
+              {sessionReviewOnly ? "Review-only recitation" : "Save this practice first?"}
+            </Text>
+            <Text style={styles.pauseSummaryDetail}>
+              {sessionReviewOnly
+                ? "Save & Leave keeps this review all-or-nothing and opens the recitation rating. Leave without saving returns to Memorize without recording this attempt."
+                : "Save & Leave asks how far the child got, then opens the recitation rating. Leave without saving returns to Memorize without recording this attempt."}
+            </Text>
+          </View>
+
+          <Pressable
+            style={[styles.completeButton, submitting && styles.completeButtonDisabled]}
+            onPress={handleSaveAndLeave}
+            disabled={submitting}
+          >
+            <Text style={styles.completeButtonText}>Save & Leave</Text>
+          </Pressable>
+          <Pressable
+            style={styles.leaveDestructiveButton}
+            onPress={() => {
+              void handleLeaveWithoutSaving();
+            }}
+            disabled={submitting}
+          >
+            <Text style={styles.leaveDestructiveText}>Leave without saving</Text>
+          </Pressable>
+          <Pressable
+            style={styles.completionCancelButton}
+            onPress={() => setLeaveSheetOpen(false)}
+            disabled={submitting}
+          >
+            <Text style={styles.completionCancelText}>Keep Practicing</Text>
+          </Pressable>
+        </View>
+      </Modal>
 
       {/* Pause & Save sheet */}
       <Modal
@@ -3873,6 +4003,10 @@ const styles = StyleSheet.create({
     padding: 14,
     gap: 12,
   },
+  leaveWarningCard: {
+    backgroundColor: "#fff7ed",
+    borderColor: "#fed7aa",
+  },
   pauseSummaryTitle: {
     fontSize: 15,
     fontWeight: "900",
@@ -3979,6 +4113,20 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: "800",
     color: "#2563eb",
+  },
+  leaveDestructiveButton: {
+    width: "100%",
+    borderWidth: 1,
+    borderColor: "#fecdd3",
+    backgroundColor: "#fff1f2",
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: "center",
+  },
+  leaveDestructiveText: {
+    color: "#be123c",
+    fontSize: 15,
+    fontWeight: "900",
   },
   settingRow: {
     flexDirection: "row",
