@@ -305,6 +305,7 @@ export default function MemorizationScreen() {
     params.pageEnd ? Number(params.pageEnd) : null,
   );
   const [sessionRequested, setSessionRequested] = useState(initialSessionRequested);
+  const [sessionLoadId, setSessionLoadId] = useState(0);
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -564,6 +565,7 @@ export default function MemorizationScreen() {
     const nextStart = Math.max(1, target.ayahStart);
     const nextEnd = Math.max(nextStart, target.ayahEnd);
     setSessionRequested(true);
+    setSessionLoadId((value) => value + 1);
     setLoading(true);
     setError(null);
     setDisplayWordsMap(new Map());
@@ -623,6 +625,7 @@ export default function MemorizationScreen() {
   // Step 2: once surahNumber + chapters are known, fetch verses + timings in parallel.
   // Gated on chaptersMap.size > 0 so chapter metadata (name_arabic etc.) is available.
   useEffect(() => {
+    if (!sessionRequested) return;
     if (surahNumber === null) return;
     if (chaptersMap.size === 0) return;
     const currentReciter = findReciter(reciterId);
@@ -666,7 +669,7 @@ export default function MemorizationScreen() {
       }
     })();
     return () => { cancelled = true; };
-  }, [surahNumber, reciterId, chaptersMap, ayahStart, ayahEnd]);
+  }, [sessionRequested, sessionLoadId, surahNumber, reciterId, chaptersMap, ayahStart, ayahEnd]);
 
   // Fetch Mushaf page data when switching to Full Mushaf mode
   useEffect(() => {

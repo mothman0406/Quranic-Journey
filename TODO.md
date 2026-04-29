@@ -1,6 +1,6 @@
 # NoorPath / Quranic Journey — Status & Next Steps
 
-_Last updated: April 29, 2026 (Phase 2I.1 hardware QA pending; Bug A and Bug B hardware-tested/shipped; temporary Bug B diagnostics removed)_
+_Last updated: April 29, 2026 (Phase 2I.1 hardware QA pending; Bug A/B hardware-tested/shipped; Needs Work → Practice same-target loader fix locally validated, hardware QA pending)_
 
 ---
 
@@ -37,7 +37,8 @@ After every meaningful action, update this file and `PHASE_2D_HANDOFF.md` before
 - Active branch/SHA at Memorize search keyboard Bug A fix start: `main` at `97c62e5`. `feature/main-working-branch` was fast-forwarded to `main` before this work, so `main`, `origin/main`, `feature/main-working-branch`, and `origin/feature/main-working-branch` were all at `97c62e5`. The active mobile `MemorizationDiscovery` scroll surface now dismisses the iOS keyboard on drag, lets taps on filters/rows be handled while the keyboard is up, and makes the search return key dismiss the keyboard. Local validation passed with `cd artifacts/noor-mobile && npx tsc --noEmit` and `git diff --check`. Remote sync target after this fix/docs commit: all four refs synced to the final Bug A fix HEAD. Mohammad should hardware-test this keyboard fix in isolation before Bug B work starts.
 - Bug A hardware QA result: Mohammad hardware-tested the Memorize search keyboard fix after commit `6a9e70f` and reported it is shipped.
 - Bug B hardware QA/diagnostic cleanup result: Mohammad confirmed the Memorize `Next up` loading death spiral is fixed. Cleanup started on `main` at `4ce3585`, with `main`, `origin/main`, `feature/main-working-branch`, and `origin/feature/main-working-branch` all synced. The temporary Noor memorization diagnostic console logs were removed from `artifacts/noor-mobile/app/child/[childId]/memorization.tsx` with no behavior changes. Local validation passed with `cd artifacts/noor-mobile && npx tsc --noEmit` and `git diff --check`. Remote sync target after this cleanup/docs commit: all four refs synced to the final Bug B cleanup HEAD.
-- QA status: Phase 2D memorization core through Slice 5b, Phase 2E dashboard polish, Phase 2F target-setting UI, Phase 2G.1 diagnostic cleanup, Phase 2G.2 mobile IA shell, Phase 2G.3 shared screen primitives, Phase 2H.1 mobile onboarding/profile management, Phase 2H.2 mobile dashboard parity content, Phase 2H.3 settings/targets convergence, Phase 2H.4 review essentials parity, Phase 2H.5 reading essentials parity, Phase 2H.6 memorization discovery parity, and the Apr 29 Memorize Bug A/B fixes are hardware-tested. Phase 2G.4 local validation passed for API/codegen/mobile with `/Users/mothmanaurascape.ai/Library/pnpm/pnpm --filter @workspace/api-spec run codegen`, `/Users/mothmanaurascape.ai/Library/pnpm/pnpm run typecheck:libs`, `/Users/mothmanaurascape.ai/Library/pnpm/pnpm --filter @workspace/api-server run typecheck`, and `cd artifacts/noor-mobile && npx tsc --noEmit`. Phase 2H.1 local validation passed with `cd artifacts/noor-mobile && npx tsc --noEmit` and `git diff --check`; follow-up onboarding polish also passed the same two checks. Phase 2H.2 local validation passed with `cd artifacts/noor-mobile && npx tsc --noEmit` and `git diff --check`. Phase 2H.3 local validation passed with `cd artifacts/noor-mobile && npx tsc --noEmit` and `git diff --check`. Phase 2H.4 local validation passed with `cd artifacts/noor-mobile && npx tsc --noEmit` and `git diff --check`. Phase 2H.5 local validation passed with `cd artifacts/noor-mobile && npx tsc --noEmit` and `git diff --check`. Phase 2H.6 local validation passed with `cd artifacts/noor-mobile && npx tsc --noEmit` and `git diff --check`. Phase 2I.1 overview-card validation, save-semantics follow-up validation, and Bug B diagnostic cleanup validation passed with `cd artifacts/noor-mobile && npx tsc --noEmit` and `git diff --check`; full Phase 2I.1 hardware QA is pending. Full root `/Users/mothmanaurascape.ai/Library/pnpm/pnpm run typecheck` was previously attempted, but it stops in unrelated frozen/reference UI areas (`artifacts/noor-path/src/components/ui/button-group.tsx`, `artifacts/noor-path/src/components/ui/calendar.tsx`, `artifacts/mockup-sandbox/src/components/ui/calendar.tsx`, `artifacts/mockup-sandbox/src/components/ui/spinner.tsx`) on React type/ref baseline errors.
+- Bug C local fix result: Mohammad found that after saving a surah/range as Needs Work, tapping `Practice` for extra practice could land on the loading spinner forever. Root cause: `beginSession` cleared loaded verse/timing maps and set `loading`, but if the new practice target had the same surah/range/reciter values as the previous session, the verse/timing fetch effect did not re-run. Mobile now increments a `sessionLoadId` on every explicit session start and gates the fetch effect on `sessionRequested`, so same-target practice sessions reload cleanly. Local validation passed with `cd artifacts/noor-mobile && npx tsc --noEmit` and `git diff --check`. Hardware QA pending. Remote sync target after this fix/docs commit: all four refs synced to the final Bug C local-validation HEAD.
+- QA status: Phase 2D memorization core through Slice 5b, Phase 2E dashboard polish, Phase 2F target-setting UI, Phase 2G.1 diagnostic cleanup, Phase 2G.2 mobile IA shell, Phase 2G.3 shared screen primitives, Phase 2H.1 mobile onboarding/profile management, Phase 2H.2 mobile dashboard parity content, Phase 2H.3 settings/targets convergence, Phase 2H.4 review essentials parity, Phase 2H.5 reading essentials parity, Phase 2H.6 memorization discovery parity, and the Apr 29 Memorize Bug A/B fixes are hardware-tested. Phase 2G.4 local validation passed for API/codegen/mobile with `/Users/mothmanaurascape.ai/Library/pnpm/pnpm --filter @workspace/api-spec run codegen`, `/Users/mothmanaurascape.ai/Library/pnpm/pnpm run typecheck:libs`, `/Users/mothmanaurascape.ai/Library/pnpm/pnpm --filter @workspace/api-server run typecheck`, and `cd artifacts/noor-mobile && npx tsc --noEmit`. Phase 2H.1 local validation passed with `cd artifacts/noor-mobile && npx tsc --noEmit` and `git diff --check`; follow-up onboarding polish also passed the same two checks. Phase 2H.2 local validation passed with `cd artifacts/noor-mobile && npx tsc --noEmit` and `git diff --check`. Phase 2H.3 local validation passed with `cd artifacts/noor-mobile && npx tsc --noEmit` and `git diff --check`. Phase 2H.4 local validation passed with `cd artifacts/noor-mobile && npx tsc --noEmit` and `git diff --check`. Phase 2H.5 local validation passed with `cd artifacts/noor-mobile && npx tsc --noEmit` and `git diff --check`. Phase 2H.6 local validation passed with `cd artifacts/noor-mobile && npx tsc --noEmit` and `git diff --check`. Phase 2I.1 overview-card validation, save-semantics follow-up validation, Bug B diagnostic cleanup validation, and Bug C same-target practice validation passed with `cd artifacts/noor-mobile && npx tsc --noEmit` and `git diff --check`; Bug C hardware QA and full Phase 2I.1 hardware QA are pending. Full root `/Users/mothmanaurascape.ai/Library/pnpm/pnpm run typecheck` was previously attempted, but it stops in unrelated frozen/reference UI areas (`artifacts/noor-path/src/components/ui/button-group.tsx`, `artifacts/noor-path/src/components/ui/calendar.tsx`, `artifacts/mockup-sandbox/src/components/ui/calendar.tsx`, `artifacts/mockup-sandbox/src/components/ui/spinner.tsx`) on React type/ref baseline errors.
 - Dev-server note: starting Expo inside the sandbox fails with `ERR_SOCKET_BAD_PORT` because sandboxed Node cannot bind local ports (`EPERM` on 8081). Run the dev server outside the sandbox/escalated when using this environment.
 - TestFlight status: deferred. Do not start TestFlight readiness until the new pre-TestFlight parity blockers are complete and hardware-tested: Phase 2I Memorization parity completion, Phase 2J Review never-empty/ahead-day parity, and Phase 2K Full Quran/Mushaf Bayaan parity.
 - Inspection notes: initial Phase 2E inspection found `app/child/[childId]/index.tsx` was a three-card skeleton; `src/lib/api.ts` is a thin authenticated fetch helper; `/api/children/:id/dashboard` exposes `todaysPlan.newMemorization`, `todayProgress`, `reviewsDueToday`, and `readingGoal`; `/api/children/:id/reviews` exposes detailed queue items with `reviewPriority`.
@@ -81,20 +82,21 @@ After every meaningful action, update this file and `PHASE_2D_HANDOFF.md` before
 - Phase 2I.1 current-work status follow-up: the `Current work`/`Recitation Focus` overview card now treats current work as a moving pointer within the full daily assignment. If today's assignment spans multiple surahs/ranges, the card should advance to the next unfinished item as progress is saved and should not show `Complete` until all of `Today's work` is complete. The green completed card tone/action only appears when daily progress is completed.
 - Intra-surah review clarification/fix: `buildSurahMemorizationWorkflow` now splits a long surah into page-target chunks and schedules cumulative recitation with the cadence Mohammad requested during Phase 2I.1 QA. The pattern is: Day 1-4 new work, Day 5 cumulative recitation of Days 1-4; Day 6-9 new work, Day 10 cumulative recitation of Days 6-9; Day 11 full cumulative recitation of all work so far; then repeat. The final full-surah test is always a separate final day. If 2+ new-work sessions happen after the last cumulative review before the final test, the second-to-last day becomes a partial cumulative recitation for those leftover sessions; if only one new-work session happened, the app goes straight to the final full-surah test. The dashboard returns these review-only items as `todaysPlan.newMemorization` with `isReviewOnly: true`, and mobile 2I.1 shows them as `Recitation Focus`/`Recitation` in the overview cards. What remains for 2I.2 is the richer web-style session UX around those review-only days: explicit Pause & Save / Save & Leave / Leave without saving, a clearer Finish Recitation affordance, and View in Full Mushaf.
 - Exact next checklist:
-  1. Open Memorize from dashboard.
-  2. Confirm the three overview cards: `Today's work`, `Current work`/`Recitation Focus`, and `Next up`.
-  3. Complete today's/current work.
-  4. Choose Needs Work / Good / Excellent and save.
-  5. Confirm `Today's work` stays the same assignment and shows done/in-progress.
-  6. Confirm `Current work`/`Recitation Focus` advances through unfinished items inside today's assignment and only shows Complete when the last item in today's work is done.
-  7. Confirm saved ayah strength shows red/yellow/green where applicable.
-  8. Complete extra work if possible and confirm `Next up` can change while today/current remain frozen correctly.
-  9. Return to dashboard and confirm dashboard refresh.
-  10. Smoke search/filter/resume/session flow.
-  11. After Phase 2I.1 hardware QA passes, document the result, then continue Phase 2I.2 Pause/save and session action parity, working through the 2I.2a-2I.2o sub-rows.
-  12. After 2I.2 ships and is hardware-tested, do Phase 2I.3 (memorization defaults parity) and Phase 2I.4 (discovery polish: tajweed notes accordion, ayah-strength review tone on surah rows).
-  13. Then Phase 2J Review never-empty/ahead-day parity, then Phase 2K Full Quran/Mushaf Bayaan parity. Do not start TestFlight readiness until 2I, 2J, and 2K are all complete and hardware-tested.
-  14. Do not tighten recite matcher behavior. Do not touch tajweed implementation unless only documenting it as missing/backlogged.
+  1. First hardware-test the Apr 29 Bug C fix: save a memorization range as Needs Work, return to Memorize, tap `Practice` for extra practice on that same surah/range, and confirm the session loads instead of spinning forever.
+  2. Open Memorize from dashboard.
+  3. Confirm the three overview cards: `Today's work`, `Current work`/`Recitation Focus`, and `Next up`.
+  4. Complete today's/current work.
+  5. Choose Needs Work / Good / Excellent and save.
+  6. Confirm `Today's work` stays the same assignment and shows done/in-progress.
+  7. Confirm `Current work`/`Recitation Focus` advances through unfinished items inside today's assignment and only shows Complete when the last item in today's work is done.
+  8. Confirm saved ayah strength shows red/yellow/green where applicable.
+  9. Complete extra work if possible and confirm `Next up` can change while today/current remain frozen correctly.
+  10. Return to dashboard and confirm dashboard refresh.
+  11. Smoke search/filter/resume/session flow.
+  12. After Phase 2I.1 hardware QA passes, document the result, then continue Phase 2I.2 Pause/save and session action parity, working through the 2I.2a-2I.2o sub-rows.
+  13. After 2I.2 ships and is hardware-tested, do Phase 2I.3 (memorization defaults parity) and Phase 2I.4 (discovery polish: tajweed notes accordion, ayah-strength review tone on surah rows).
+  14. Then Phase 2J Review never-empty/ahead-day parity, then Phase 2K Full Quran/Mushaf Bayaan parity. Do not start TestFlight readiness until 2I, 2J, and 2K are all complete and hardware-tested.
+  15. Do not tighten recite matcher behavior. Do not touch tajweed implementation unless only documenting it as missing/backlogged.
 
 ### Web-app parity audit summary
 
@@ -469,16 +471,17 @@ Implemented, committed, typechecked, route-fixed, and hardware-tested Apr 28, 20
 
 ## 🔜 NEXT — Phase 2I.1 Hardware QA
 
-1. Open Memorize from dashboard and confirm `Today's work`, `Current work`/`Recitation Focus`, and `Next up`.
-2. Complete today's/current work.
-3. Choose Needs Work / Good / Excellent and save.
-4. Confirm `Today's work` stays the same assignment and shows done/in-progress.
-5. Confirm `Current work`/`Recitation Focus` advances through unfinished items inside today's assignment and only shows Complete when the last item in today's work is done.
-6. Confirm saved ayah strength shows red/yellow/green where applicable.
-7. Complete extra work if possible and confirm `Next up` can change while today/current remain frozen correctly.
-8. Return to dashboard and confirm dashboard refresh.
-9. Smoke search/filter/resume/session flow.
-10. Keep tajweed as backlog-only unless Mohammad explicitly reopens it, and do not tighten recite matcher behavior.
+1. First hardware-test the Apr 29 Bug C fix: save a memorization range as Needs Work, return to Memorize, tap `Practice` for extra practice on that same surah/range, and confirm the session loads instead of spinning forever.
+2. Open Memorize from dashboard and confirm `Today's work`, `Current work`/`Recitation Focus`, and `Next up`.
+3. Complete today's/current work.
+4. Choose Needs Work / Good / Excellent and save.
+5. Confirm `Today's work` stays the same assignment and shows done/in-progress.
+6. Confirm `Current work`/`Recitation Focus` advances through unfinished items inside today's assignment and only shows Complete when the last item in today's work is done.
+7. Confirm saved ayah strength shows red/yellow/green where applicable.
+8. Complete extra work if possible and confirm `Next up` can change while today/current remain frozen correctly.
+9. Return to dashboard and confirm dashboard refresh.
+10. Smoke search/filter/resume/session flow.
+11. Keep tajweed as backlog-only unless Mohammad explicitly reopens it, and do not tighten recite matcher behavior.
 
 ---
 
@@ -501,12 +504,13 @@ Phase 2H.6 is hardware-tested, but beta parity is not complete. Do not resume Te
 
 ---
 
-## ✅ Hardware bugs — found Apr 29, 2026 and cleared before Phase 2I.1 hardware QA
+## 🐞 Hardware bugs — found Apr 29, 2026 during Phase 2I.1 QA
 
-These were reported during the Apr 29 web→mobile parity audit conversation. Both are now hardware-tested/shipped by Mohammad, so Phase 2I.1 hardware QA can resume.
+These were reported during the Apr 29 web→mobile parity audit / hardware QA cycle.
 
 - **Memorize `Next up` card → loading death spiral.** Hardware-confirmed fixed by Mohammad. Temporary diagnostic logs were removed from `artifacts/noor-mobile/app/child/[childId]/memorization.tsx`; the cleanup made no behavior changes. JS-only. Local validation passed with `cd artifacts/noor-mobile && npx tsc --noEmit` and `git diff --check`.
 - **Memorize surah search keyboard sticks open.** Implemented Apr 29 in `artifacts/noor-mobile/app/child/[childId]/memorization.tsx` and hardware-tested/shipped by Mohammad after commit `6a9e70f`: the discovery `ScrollView` uses `keyboardDismissMode="on-drag"` and `keyboardShouldPersistTaps="handled"`, the horizontal filter scroller also preserves handled taps, and the search `TextInput` uses an explicit Done return key that dismisses the keyboard. JS-only. Local validation passed with `cd artifacts/noor-mobile && npx tsc --noEmit` and `git diff --check`.
+- **Needs Work → Practice same-target loader.** Implemented locally Apr 29 in `artifacts/noor-mobile/app/child/[childId]/memorization.tsx`: every explicit `beginSession` bumps a `sessionLoadId`, and the verse/timing fetch effect now depends on that ID and only runs when `sessionRequested` is true. This fixes the circle of death when a just-saved Needs Work range is practiced again with the same surah/range values. JS-only. Local validation passed with `cd artifacts/noor-mobile && npx tsc --noEmit` and `git diff --check`; hardware QA pending.
 
 ---
 
