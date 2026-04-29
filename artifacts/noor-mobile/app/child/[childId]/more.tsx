@@ -1,15 +1,19 @@
-import { useCallback, useEffect, type ComponentProps, type ReactNode, useState } from "react";
-import {
-  ActivityIndicator,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
+import { useCallback, useEffect, type ComponentProps, useState } from "react";
+import { StyleSheet, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { ChildBottomNav } from "@/src/components/child-bottom-nav";
+import {
+  BadgePill,
+  CardGroup,
+  InlineError,
+  ListRow,
+  LoadingState,
+  ScreenContainer,
+  ScreenHeader,
+  ScreenScrollView,
+  SectionLabel,
+} from "@/src/components/screen-primitives";
 import { apiFetch } from "@/src/lib/api";
 
 type IconName = ComponentProps<typeof Ionicons>["name"];
@@ -100,42 +104,6 @@ function formatDayStreak(days: number) {
   return `${days} day${days === 1 ? "" : "s"}`;
 }
 
-function MoreRow({
-  item,
-  disabled,
-  onPress,
-  children,
-}: {
-  item: MoreItem;
-  disabled?: boolean;
-  onPress?: () => void;
-  children?: ReactNode;
-}) {
-  return (
-    <Pressable
-      style={[styles.row, disabled && styles.rowDisabled]}
-      disabled={disabled || !onPress}
-      onPress={onPress}
-    >
-      <View style={[styles.rowIcon, { backgroundColor: `${item.tone}14` }]}>
-        <Ionicons name={item.icon} size={21} color={item.tone} />
-      </View>
-      <View style={styles.rowText}>
-        <Text style={styles.rowTitle}>{item.title}</Text>
-        <Text style={styles.rowDetail}>{item.detail}</Text>
-      </View>
-      {children}
-      {item.badge ? (
-        <View style={styles.badge}>
-          <Text style={styles.badgeText}>{item.badge}</Text>
-        </View>
-      ) : (
-        <Ionicons name="chevron-forward" size={18} color="#9ca3af" />
-      )}
-    </Pressable>
-  );
-}
-
 export default function MoreScreen() {
   const { childId, name } = useLocalSearchParams<{ childId: string; name: string }>();
   const router = useRouter();
@@ -177,21 +145,13 @@ export default function MoreScreen() {
   const displayName = child?.name ?? name ?? "Child";
 
   return (
-    <View style={styles.container}>
-      <View style={styles.header}>
-        <Pressable onPress={() => router.back()}>
-          <Text style={styles.back}>← Back</Text>
-        </Pressable>
-        <Text style={styles.title}>More</Text>
-        <View style={styles.headerSpacer} />
-      </View>
+    <ScreenContainer>
+      <ScreenHeader title="More" onBack={() => router.back()} />
 
       {child === null && !error ? (
-        <View style={styles.center}>
-          <ActivityIndicator size="large" color="#2563eb" />
-        </View>
+        <LoadingState />
       ) : (
-        <ScrollView style={styles.scroll} contentContainerStyle={styles.content}>
+        <ScreenScrollView>
           <View style={styles.summaryBand}>
             <Text style={styles.summaryAvatar}>{child?.avatarEmoji ?? "?"}</Text>
             <View style={styles.summaryText}>
@@ -205,35 +165,42 @@ export default function MoreScreen() {
           </View>
 
           {error && (
-            <View style={styles.errorBanner}>
-              <Text style={styles.errorBannerText}>{error}</Text>
-              <Pressable style={styles.inlineRetry} onPress={loadChild}>
-                <Text style={styles.inlineRetryText}>Retry</Text>
-              </Pressable>
-            </View>
+            <InlineError message={error} onRetry={loadChild} />
           )}
 
-          <Text style={styles.sectionHeader}>Open now</Text>
-          <View style={styles.card}>
+          <SectionLabel>Open now</SectionLabel>
+          <CardGroup>
             {OPEN_ITEMS.map((item) => {
               const route = item.route;
               return (
-                <MoreRow
+                <ListRow
                   key={item.title}
-                  item={item}
+                  title={item.title}
+                  detail={item.detail}
+                  iconName={item.icon}
+                  iconColor={item.tone}
                   onPress={route ? () => openRoute(route) : undefined}
                 />
               );
             })}
-          </View>
+          </CardGroup>
 
-          <Text style={styles.sectionHeader}>Next</Text>
-          <View style={styles.card}>
+          <SectionLabel>Next</SectionLabel>
+          <CardGroup>
             {PLANNED_ITEMS.map((item) => (
-              <MoreRow key={item.title} item={item} disabled />
+              <ListRow
+                key={item.title}
+                title={item.title}
+                detail={item.detail}
+                iconName={item.icon}
+                iconColor={item.tone}
+                disabled
+                trailing={item.badge ? <BadgePill label={item.badge} /> : undefined}
+                showChevron={!item.badge}
+              />
             ))}
-          </View>
-        </ScrollView>
+          </CardGroup>
+        </ScreenScrollView>
       )}
 
       <ChildBottomNav
@@ -241,54 +208,11 @@ export default function MoreScreen() {
         childId={childId}
         name={child?.name ?? name ?? ""}
       />
-    </View>
+    </ScreenContainer>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#ffffff",
-  },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingTop: 60,
-    paddingHorizontal: 20,
-    paddingBottom: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: "#e5e7eb",
-  },
-  back: {
-    fontSize: 16,
-    color: "#2563eb",
-    fontWeight: "500",
-    width: 70,
-  },
-  title: {
-    flex: 1,
-    textAlign: "center",
-    fontSize: 20,
-    fontWeight: "700",
-    color: "#111111",
-  },
-  headerSpacer: {
-    width: 70,
-  },
-  center: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    padding: 24,
-  },
-  scroll: {
-    flex: 1,
-  },
-  content: {
-    padding: 20,
-    gap: 14,
-    paddingBottom: 32,
-  },
   summaryBand: {
     backgroundColor: "#111111",
     borderRadius: 12,
@@ -336,90 +260,5 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: "#d1d5db",
     fontWeight: "600",
-  },
-  sectionHeader: {
-    color: "#666666",
-    fontSize: 12,
-    fontWeight: "800",
-    textTransform: "uppercase",
-  },
-  card: {
-    backgroundColor: "#ffffff",
-    borderWidth: 1,
-    borderColor: "#e5e7eb",
-    borderRadius: 12,
-    overflow: "hidden",
-  },
-  row: {
-    minHeight: 68,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    paddingVertical: 12,
-    paddingHorizontal: 14,
-    borderBottomWidth: 1,
-    borderBottomColor: "#f3f4f6",
-  },
-  rowDisabled: {
-    opacity: 0.62,
-  },
-  rowIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 10,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  rowText: {
-    flex: 1,
-    minWidth: 0,
-  },
-  rowTitle: {
-    fontSize: 15,
-    fontWeight: "800",
-    color: "#111111",
-  },
-  rowDetail: {
-    fontSize: 13,
-    color: "#666666",
-    marginTop: 2,
-  },
-  badge: {
-    borderWidth: 1,
-    borderColor: "#e5e7eb",
-    backgroundColor: "#f9fafb",
-    borderRadius: 999,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-  },
-  badgeText: {
-    color: "#666666",
-    fontSize: 11,
-    fontWeight: "800",
-  },
-  errorBanner: {
-    backgroundColor: "#fef2f2",
-    borderWidth: 1,
-    borderColor: "#fecaca",
-    borderRadius: 10,
-    padding: 12,
-    gap: 10,
-  },
-  errorBannerText: {
-    color: "#dc2626",
-    fontSize: 13,
-    fontWeight: "600",
-  },
-  inlineRetry: {
-    alignSelf: "flex-start",
-    backgroundColor: "#dc2626",
-    borderRadius: 8,
-    paddingVertical: 8,
-    paddingHorizontal: 14,
-  },
-  inlineRetryText: {
-    color: "#ffffff",
-    fontSize: 13,
-    fontWeight: "800",
   },
 });

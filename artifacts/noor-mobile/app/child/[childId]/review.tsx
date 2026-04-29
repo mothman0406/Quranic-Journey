@@ -1,34 +1,35 @@
 import React, { useCallback, useEffect, useState } from "react";
 import {
-  ActivityIndicator,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   View,
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { ChildBottomNav } from "@/src/components/child-bottom-nav";
+import {
+  BadgePill,
+  EmptyState,
+  ErrorState,
+  LoadingState,
+  ScreenContainer,
+  ScreenHeader,
+  ScreenScrollView,
+  SectionLabel,
+} from "@/src/components/screen-primitives";
 import { fetchReviewQueue, ReviewQueueItem, ReviewQueueResponse } from "@/src/lib/reviews";
 import { getReviewPriorityStyle } from "@/src/lib/review-priority";
 
 function PriorityPill({ priority }: { priority: string }) {
   const priorityStyle = getReviewPriorityStyle(priority);
   return (
-    <View
-      style={[
-        styles.pill,
-        {
-          backgroundColor: priorityStyle.bg,
-          borderColor: priorityStyle.border,
-        },
-      ]}
-    >
-      <View style={[styles.pillDot, { backgroundColor: priorityStyle.text }]} />
-      <Text style={[styles.pillText, { color: priorityStyle.text }]}>
-        {priorityStyle.label}
-      </Text>
-    </View>
+    <BadgePill
+      label={priorityStyle.label}
+      color={priorityStyle.text}
+      backgroundColor={priorityStyle.bg}
+      borderColor={priorityStyle.border}
+      dotColor={priorityStyle.text}
+    />
   );
 }
 
@@ -122,41 +123,26 @@ export default function ReviewScreen() {
   }
 
   return (
-    <View style={styles.container}>
-      <View style={styles.header}>
-        <Pressable onPress={() => router.back()}>
-          <Text style={styles.back}>← Back</Text>
-        </Pressable>
-        <Text style={styles.title}>Reviews</Text>
-        <View style={styles.headerSpacer} />
-      </View>
+    <ScreenContainer>
+      <ScreenHeader title="Reviews" onBack={() => router.back()} sideWidth={60} />
 
       {state.status === "loading" && (
-        <View style={styles.center}>
-          <ActivityIndicator size="large" color="#2563eb" />
-        </View>
+        <LoadingState />
       )}
 
       {state.status === "error" && (
-        <View style={styles.center}>
-          <Text style={styles.errorText}>{state.message}</Text>
-          <Pressable style={styles.retryButton} onPress={load}>
-            <Text style={styles.retryText}>Retry</Text>
-          </Pressable>
-        </View>
+        <ErrorState message={state.message} onRetry={load} />
       )}
 
       {state.status === "ok" && (
-        <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent}>
+        <ScreenScrollView contentContainerStyle={styles.reviewContent}>
           {state.data.dueToday.length === 0 && state.data.reviewedToday.length === 0 ? (
-            <View style={styles.empty}>
-              <Text style={styles.emptyText}>No reviews due today</Text>
-            </View>
+            <EmptyState title="No reviews due today" />
           ) : (
             <>
               {state.data.dueToday.length > 0 && (
                 <>
-                  <Text style={styles.sectionHeader}>Due Today</Text>
+                  <SectionLabel>Due Today</SectionLabel>
                   {state.data.dueToday.map((item) => (
                     <ReviewCard
                       key={item.id}
@@ -169,9 +155,15 @@ export default function ReviewScreen() {
 
               {state.data.reviewedToday.length > 0 && (
                 <>
-                  <Text style={[styles.sectionHeader, styles.sectionHeaderSpaced]}>
-                    Reviewed Today
-                  </Text>
+                  <View
+                    style={
+                      state.data.dueToday.length > 0
+                        ? styles.reviewedSectionLabel
+                        : undefined
+                    }
+                  >
+                    <SectionLabel>Reviewed Today</SectionLabel>
+                  </View>
                   {state.data.reviewedToday.map((item) => (
                     <View key={item.id} style={styles.doneCard}>
                       <Text style={styles.doneCheck}>✓</Text>
@@ -189,7 +181,7 @@ export default function ReviewScreen() {
               )}
             </>
           )}
-        </ScrollView>
+        </ScreenScrollView>
       )}
 
       <ChildBottomNav
@@ -198,91 +190,15 @@ export default function ReviewScreen() {
         name={navName}
         reviewCount={navReviewCount}
       />
-    </View>
+    </ScreenContainer>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#ffffff",
-  },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingTop: 60,
-    paddingHorizontal: 20,
-    paddingBottom: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: "#e5e7eb",
-  },
-  back: {
-    fontSize: 16,
-    color: "#2563eb",
-    fontWeight: "500",
-    width: 60,
-  },
-  title: {
-    flex: 1,
-    textAlign: "center",
-    fontSize: 20,
-    fontWeight: "700",
-    color: "#111111",
-  },
-  headerSpacer: {
-    width: 60,
-  },
-  center: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    padding: 24,
-  },
-  errorText: {
-    fontSize: 15,
-    color: "#dc2626",
-    textAlign: "center",
-    marginBottom: 16,
-  },
-  retryButton: {
-    backgroundColor: "#2563eb",
-    paddingVertical: 10,
-    paddingHorizontal: 24,
-    borderRadius: 8,
-  },
-  retryText: {
-    color: "#ffffff",
-    fontWeight: "600",
-    fontSize: 15,
-  },
-  scroll: {
-    flex: 1,
-  },
-  scrollContent: {
-    padding: 20,
+  reviewContent: {
     gap: 10,
-    paddingBottom: 32,
   },
-  empty: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    paddingTop: 80,
-  },
-  emptyText: {
-    fontSize: 17,
-    color: "#666666",
-    textAlign: "center",
-  },
-  sectionHeader: {
-    fontSize: 13,
-    fontWeight: "700",
-    color: "#666666",
-    textTransform: "uppercase",
-    letterSpacing: 0.8,
-    marginBottom: 4,
-  },
-  sectionHeaderSpaced: {
+  reviewedSectionLabel: {
     marginTop: 20,
   },
   card: {
@@ -306,24 +222,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-  },
-  pill: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 99,
-    borderWidth: 1,
-  },
-  pillDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-  },
-  pillText: {
-    fontSize: 12,
-    fontWeight: "600",
   },
   surahName: {
     flex: 1,
