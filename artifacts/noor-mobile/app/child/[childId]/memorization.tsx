@@ -87,6 +87,7 @@ type SessionTarget = {
   pageStart?: number | null;
   pageEnd?: number | null;
   isReviewOnly?: boolean;
+  startInRecitationCheck?: boolean;
 };
 
 const DISCOVERY_FILTERS: Array<{ key: DiscoveryFilter; label: string }> = [
@@ -319,6 +320,7 @@ export default function MemorizationScreen() {
   const [sessionRequested, setSessionRequested] = useState(initialSessionRequested);
   const [sessionLoadId, setSessionLoadId] = useState(0);
   const [sessionReviewOnly, setSessionReviewOnly] = useState(false);
+  const [startInRecitationCheck, setStartInRecitationCheck] = useState(false);
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -607,6 +609,7 @@ export default function MemorizationScreen() {
     setInternalPhase("single");
     internalPhaseRef.current = "single";
     setSessionReviewOnly(Boolean(target.isReviewOnly));
+    setStartInRecitationCheck(Boolean(target.isReviewOnly && target.startInRecitationCheck));
     setLeaveSheetOpen(false);
     setPauseSheetOpen(false);
     setPauseCompletedAyahEnd(null);
@@ -631,6 +634,30 @@ export default function MemorizationScreen() {
     setPageStart(target.pageStart ?? null);
     setPageEnd(target.pageEnd ?? null);
   }
+
+  useEffect(() => {
+    if (!startInRecitationCheck) return;
+    if (!sessionRequested || loading || error) return;
+    if (!sessionReviewOnly || ayahStart === null || ayahEnd === null) {
+      setStartInRecitationCheck(false);
+      return;
+    }
+
+    setStartInRecitationCheck(false);
+    openRecitationCheck({
+      completedToAyah: ayahEnd,
+      source: "teacher",
+      score: null,
+    });
+  }, [
+    startInRecitationCheck,
+    sessionRequested,
+    loading,
+    error,
+    sessionReviewOnly,
+    ayahStart,
+    ayahEnd,
+  ]);
 
   // Step 1: if no params, fetch dashboard to get today's memorization target
   useEffect(() => {
@@ -1438,6 +1465,7 @@ export default function MemorizationScreen() {
     setRecitationCheckSource("teacher");
     setRecitationScore(null);
     setSaveError(null);
+    setStartInRecitationCheck(false);
     setSettingsOpen(false);
     setTranslationPopup(null);
     setInternalPhase("single");
@@ -1591,6 +1619,7 @@ export default function MemorizationScreen() {
       setRatingAyahEnd(null);
       setRecitationCheckSource("teacher");
       setRecitationScore(null);
+      setStartInRecitationCheck(false);
       setSessionRequested(false);
       setLoading(false);
       Alert.alert("Progress saved.", "The rating was saved for the selected ayah range.");
@@ -2876,6 +2905,11 @@ function MemorizationDiscovery({
       .filter((item) => item.status === "in_progress" && item.percentComplete < 100)
       .filter((item) => item.surahNumber !== currentSurahNumber)
       .slice(0, 3);
+    const reviewCheckShortcut = todayWork?.isReviewOnly
+      ? { label: "Today's review", work: todayWork }
+      : upNext?.isReviewOnly
+        ? { label: "Next review", work: upNext }
+        : null;
 
     return {
       progressByNumber,
@@ -2885,6 +2919,7 @@ function MemorizationDiscovery({
       stats: scoreProgress(state.progress),
       rows,
       resumeItems,
+      reviewCheckShortcut,
     };
   }, [childId, filter, query, state]);
 
@@ -2897,6 +2932,13 @@ function MemorizationDiscovery({
       }
     }
     onStart(buildProgressTarget(progress));
+  }
+
+  function startReviewCheck(work: NewMemorization) {
+    onStart({
+      ...buildFullWorkTarget(work),
+      startInRecitationCheck: true,
+    });
   }
 
   return (
@@ -2957,6 +2999,13 @@ function MemorizationDiscovery({
             todayProgress={state.dashboard.todayProgress}
             onStart={onStart}
           />
+          {content.reviewCheckShortcut ? (
+            <JustGetTestedShortcut
+              label={content.reviewCheckShortcut.label}
+              work={content.reviewCheckShortcut.work}
+              onPress={() => startReviewCheck(content.reviewCheckShortcut!.work)}
+            />
+          ) : null}
 
           {content.resumeItems.length > 0 && (
             <>
@@ -3207,6 +3256,40 @@ function MemorizationOverviewCards({
           if (upNext) onStart(buildFullWorkTarget(upNext));
         }}
       />
+    </View>
+  );
+}
+
+function JustGetTestedShortcut({
+  label,
+  work,
+  onPress,
+}: {
+  label: string;
+  work: NewMemorization;
+  onPress: () => void;
+}) {
+  const pageRange = formatPageRange(work.pageStart, work.pageEnd);
+
+  return (
+    <View style={styles.reviewShortcutCard}>
+      <View style={styles.reviewShortcutText}>
+        <Text style={styles.reviewShortcutKicker} numberOfLines={1}>
+          {label}
+        </Text>
+        <Text style={styles.reviewShortcutTitle} numberOfLines={1}>
+          Just Get Tested
+        </Text>
+        <Text style={styles.reviewShortcutDetail} numberOfLines={2}>
+          {work.surahName} · {formatAyahRange(work.ayahStart, work.ayahEnd)}
+          {pageRange ? ` · ${pageRange}` : ""}
+        </Text>
+      </View>
+      <Pressable style={styles.reviewShortcutButton} onPress={onPress}>
+        <Text style={styles.reviewShortcutButtonText} numberOfLines={1}>
+          Start Check
+        </Text>
+      </Pressable>
     </View>
   );
 }
@@ -3629,6 +3712,54 @@ const styles = StyleSheet.create({
   overviewActionText: {
     fontSize: 10,
     fontWeight: "900",
+  },
+  reviewShortcutCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#c7d2fe",
+    backgroundColor: "#eef2ff",
+    padding: 14,
+  },
+  reviewShortcutText: {
+    flex: 1,
+    minWidth: 0,
+  },
+  reviewShortcutKicker: {
+    fontSize: 11,
+    fontWeight: "900",
+    color: "#4f46e5",
+    textTransform: "uppercase",
+  },
+  reviewShortcutTitle: {
+    marginTop: 4,
+    fontSize: 17,
+    fontWeight: "900",
+    color: "#111827",
+  },
+  reviewShortcutDetail: {
+    marginTop: 3,
+    fontSize: 12,
+    lineHeight: 18,
+    fontWeight: "700",
+    color: "#4b5563",
+  },
+  reviewShortcutButton: {
+    minWidth: 104,
+    minHeight: 44,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 12,
+    backgroundColor: "#4f46e5",
+    paddingHorizontal: 14,
+  },
+  reviewShortcutButtonText: {
+    fontSize: 13,
+    fontWeight: "900",
+    color: "#ffffff",
   },
   discoverySectionHeader: {
     marginTop: 8,
