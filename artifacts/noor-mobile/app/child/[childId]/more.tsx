@@ -30,6 +30,7 @@ type MoreRoute =
   | "/"
   | "/child/[childId]"
   | "/child/[childId]/mushaf"
+  | "/child/[childId]/profile"
   | "/child/[childId]/targets";
 
 type MoreItem = {
@@ -55,6 +56,13 @@ const OPEN_ITEMS: MoreItem[] = [
     icon: "flag-outline",
     tone: "#2563eb",
     route: "/child/[childId]/targets",
+  },
+  {
+    title: "Profile Settings",
+    detail: "Edit profile, visibility, or delete",
+    icon: "settings-outline",
+    tone: "#4f46e5",
+    route: "/child/[childId]/profile",
   },
   {
     title: "Profiles",

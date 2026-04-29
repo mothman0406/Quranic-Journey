@@ -55,6 +55,10 @@ export default function HomeScreen() {
     }
   }, [session?.user]);
 
+  function openCreateProfile() {
+    router.push("/profile/new");
+  }
+
   if (sessionPending) {
     return (
       <View style={styles.center}>
@@ -89,9 +93,13 @@ export default function HomeScreen() {
         </View>
       ) : children!.length === 0 ? (
         <View style={styles.center}>
+          <Text style={styles.emptyTitle}>Add your first child</Text>
           <Text style={styles.emptyText}>
-            No children yet — add one in the web app
+            Create a profile here, then choose any surahs they already know.
           </Text>
+          <Pressable style={styles.primaryButton} onPress={openCreateProfile}>
+            <Text style={styles.primaryButtonText}>Add Child</Text>
+          </Pressable>
         </View>
       ) : (
         <ScrollView contentContainerStyle={styles.list}>
@@ -102,6 +110,9 @@ export default function HomeScreen() {
                 {children!.length} profile{children!.length === 1 ? "" : "s"}
               </Text>
             </View>
+            <Pressable style={styles.addButton} onPress={openCreateProfile}>
+              <Text style={styles.addButtonText}>Add</Text>
+            </Pressable>
           </View>
           {children!.map((child) => (
             <Pressable
@@ -195,6 +206,24 @@ const styles = StyleSheet.create({
     fontSize: 15,
     textAlign: "center",
     paddingHorizontal: 32,
+    lineHeight: 21,
+  },
+  emptyTitle: {
+    color: "#111111",
+    fontSize: 20,
+    fontWeight: "800",
+    textAlign: "center",
+  },
+  primaryButton: {
+    backgroundColor: "#111111",
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 22,
+  },
+  primaryButtonText: {
+    color: "#ffffff",
+    fontSize: 15,
+    fontWeight: "800",
   },
   list: {
     padding: 20,
@@ -206,6 +235,17 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     marginBottom: 2,
+  },
+  addButton: {
+    backgroundColor: "#111111",
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+  },
+  addButtonText: {
+    color: "#ffffff",
+    fontSize: 14,
+    fontWeight: "800",
   },
   subtitle: {
     fontSize: 20,
