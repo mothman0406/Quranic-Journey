@@ -85,6 +85,7 @@ type SessionTarget = {
   ayahEnd: number;
   pageStart?: number | null;
   pageEnd?: number | null;
+  isReviewOnly?: boolean;
 };
 
 const DISCOVERY_FILTERS: Array<{ key: DiscoveryFilter; label: string }> = [
@@ -243,6 +244,7 @@ function buildWorkTarget(work: NewMemorization): SessionTarget {
     ayahEnd,
     pageStart: work.pageStart,
     pageEnd: work.pageEnd,
+    isReviewOnly: work.isReviewOnly,
   };
 }
 
@@ -253,6 +255,7 @@ function buildFullWorkTarget(work: NewMemorization): SessionTarget {
     ayahEnd: work.ayahEnd,
     pageStart: work.pageStart,
     pageEnd: work.pageEnd,
+    isReviewOnly: work.isReviewOnly,
   };
 }
 
@@ -306,6 +309,7 @@ export default function MemorizationScreen() {
   );
   const [sessionRequested, setSessionRequested] = useState(initialSessionRequested);
   const [sessionLoadId, setSessionLoadId] = useState(0);
+  const [sessionReviewOnly, setSessionReviewOnly] = useState(false);
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -326,8 +330,11 @@ export default function MemorizationScreen() {
     position: number;
   } | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [pauseSheetOpen, setPauseSheetOpen] = useState(false);
+  const [pauseCompletedAyahEnd, setPauseCompletedAyahEnd] = useState<number | null>(null);
   const [completionSheetOpen, setCompletionSheetOpen] = useState(false);
   const [selectedQuality, setSelectedQuality] = useState<QualityRatingValue | null>(null);
+  const [ratingAyahEnd, setRatingAyahEnd] = useState<number | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
 
   // Session-level settings — initialized from parent defaults each session.
@@ -575,6 +582,13 @@ export default function MemorizationScreen() {
     setHighlightedPage(null);
     setInternalPhase("single");
     internalPhaseRef.current = "single";
+    setSessionReviewOnly(Boolean(target.isReviewOnly));
+    setPauseSheetOpen(false);
+    setPauseCompletedAyahEnd(null);
+    setCompletionSheetOpen(false);
+    setSelectedQuality(null);
+    setRatingAyahEnd(null);
+    setSaveError(null);
     setCumAyahIdx(0);
     cumAyahIdxRef.current = 0;
     setCumPass(1);
@@ -612,6 +626,7 @@ export default function MemorizationScreen() {
         setSurahNumber(sn);
         setAyahStart(as);
         setAyahEnd(ae);
+        setSessionReviewOnly(Boolean(nm.isReviewOnly));
         setCurrentVerse(as);
         setPageStart(nm.pageStart);
         setPageEnd(nm.pageEnd);
@@ -1216,6 +1231,7 @@ export default function MemorizationScreen() {
     dashboard: DashboardResponse,
     progressBeforeSave: MemorizationProgress[],
     savedStatus: "memorized" | "in_progress",
+    completedThroughAyah: number,
   ) {
     if (!surahNumber || ayahStart === null || ayahEnd === null) return;
 
@@ -1232,15 +1248,16 @@ export default function MemorizationScreen() {
     const currentWorkAyahEnd = todayWork.currentWorkAyahEnd ?? todayWork.ayahEnd;
 
     if (targetAyahStart == null || targetAyahEnd == null) return;
+    const savedAyahEnd = Math.max(ayahStart, Math.min(completedThroughAyah, ayahEnd));
     const overlapsTodayTarget =
-      surahNumber === targetSurah && ayahStart <= targetAyahEnd && ayahEnd >= targetAyahStart;
+      surahNumber === targetSurah && ayahStart <= targetAyahEnd && savedAyahEnd >= targetAyahStart;
     const overlapsCurrentWork =
       surahNumber === currentWorkSurah &&
       ayahStart <= currentWorkAyahEnd &&
-      ayahEnd >= currentWorkAyahStart;
+      savedAyahEnd >= currentWorkAyahStart;
     if (!overlapsTodayTarget && !overlapsCurrentWork) return;
 
-    const completedAyahEnd = Math.max(todayProgress?.memCompletedAyahEnd ?? 0, ayahEnd);
+    const completedAyahEnd = Math.max(todayProgress?.memCompletedAyahEnd ?? 0, savedAyahEnd);
     const isMultiSurahTarget = targetEndSurah !== targetSurah;
     const completesMultiSurahTarget = (() => {
       if (!isMultiSurahTarget) return false;
@@ -1263,7 +1280,7 @@ export default function MemorizationScreen() {
       todayWork.isReviewOnly ||
       (isMultiSurahTarget
         ? completesMultiSurahTarget
-        : targetEndSurah === surahNumber && ayahEnd >= targetAyahEnd);
+        : targetEndSurah === surahNumber && savedAyahEnd >= targetAyahEnd);
 
     await submitDailyProgress(childId, {
       memStatus: completesTodayTarget ? "completed" : "in_progress",
@@ -1275,19 +1292,41 @@ export default function MemorizationScreen() {
     });
   }
 
-  async function handleMarkComplete() {
+  function clampCompletedAyahEnd(value: number) {
+    if (ayahStart === null || ayahEnd === null) return value;
+    return Math.max(ayahStart, Math.min(value, ayahEnd));
+  }
+
+  async function handlePauseAndSave() {
     if (!surahNumber || ayahStart === null || ayahEnd === null) return;
     setInternalPhase("single");
     internalPhaseRef.current = "single";
     void stopAudioCompletely();
     setSaveError(null);
     setSelectedQuality(null);
+    setRatingAyahEnd(null);
+    const defaultCompletedEnd = sessionReviewOnly ? ayahEnd : clampCompletedAyahEnd(currentVerseRef.current);
+    setPauseCompletedAyahEnd(defaultCompletedEnd);
+    setPauseSheetOpen(true);
+  }
+
+  function openRecitationCheckFromPause() {
+    if (ayahStart === null || ayahEnd === null) return;
+    const completedEnd = sessionReviewOnly
+      ? ayahEnd
+      : clampCompletedAyahEnd(pauseCompletedAyahEnd ?? currentVerseRef.current);
+    setPauseCompletedAyahEnd(completedEnd);
+    setRatingAyahEnd(completedEnd);
+    setSelectedQuality(null);
+    setSaveError(null);
+    setPauseSheetOpen(false);
     setCompletionSheetOpen(true);
   }
 
   async function handleSaveCompletion(qualityRating: QualityRatingValue) {
     if (!surahNumber || ayahStart === null || ayahEnd === null) return;
-    const sessionAyahs = buildAyahRange(ayahStart, ayahEnd);
+    const completedThroughAyah = clampCompletedAyahEnd(ratingAyahEnd ?? ayahEnd);
+    const sessionAyahs = buildAyahRange(ayahStart, completedThroughAyah);
     setSubmitting(true);
     setSaveError(null);
     try {
@@ -1317,7 +1356,12 @@ export default function MemorizationScreen() {
         status,
       });
 
-      await submitTodayMemorizationProgress(dashboardBeforeSave, latestProgress, status);
+      await submitTodayMemorizationProgress(
+        dashboardBeforeSave,
+        latestProgress,
+        status,
+        completedThroughAyah,
+      );
 
       try {
         await refreshDiscoverySnapshot();
@@ -1333,9 +1377,10 @@ export default function MemorizationScreen() {
 
       setCompletionSheetOpen(false);
       setSelectedQuality(null);
+      setRatingAyahEnd(null);
       setSessionRequested(false);
       setLoading(false);
-      Alert.alert("Progress saved.", "The rating was saved for this ayah range.");
+      Alert.alert("Progress saved.", "The rating was saved for the selected ayah range.");
     } catch (e) {
       const message = e instanceof Error ? e.message : "Failed to save.";
       setSaveError(message);
@@ -1973,13 +2018,15 @@ export default function MemorizationScreen() {
 
         <Pressable
           style={[styles.completeButton, submitting && styles.completeButtonDisabled]}
-          onPress={handleMarkComplete}
+          onPress={handlePauseAndSave}
           disabled={submitting}
         >
           {submitting ? (
             <ActivityIndicator color="#ffffff" />
           ) : (
-            <Text style={styles.completeButtonText}>Mark Complete</Text>
+            <Text style={styles.completeButtonText}>
+              {sessionReviewOnly ? "Finish Recitation" : "Pause & Save"}
+            </Text>
           )}
         </Pressable>
       </View>
@@ -1988,6 +2035,109 @@ export default function MemorizationScreen() {
       {reciteError && (
         <Text style={styles.errorText}>{reciteError}</Text>
       )}
+
+      {/* Pause & Save sheet */}
+      <Modal
+        visible={pauseSheetOpen}
+        transparent
+        animationType="slide"
+        onRequestClose={() => {
+          if (!submitting) setPauseSheetOpen(false);
+        }}
+      >
+        <Pressable
+          style={styles.backdrop}
+          onPress={() => {
+            if (!submitting) setPauseSheetOpen(false);
+          }}
+        />
+        <View style={styles.completionSheet}>
+          <Text style={styles.sheetTitle}>
+            {sessionReviewOnly ? "Finish recitation" : "Pause & Save"}
+          </Text>
+          <Text style={styles.completionSubtitle}>
+            {chaptersMap.get(surahNumber ?? 0)?.name_simple ?? "Current surah"} ·{" "}
+            {formatAyahRange(ayahStart, ayahEnd)}
+          </Text>
+
+          {sessionReviewOnly ? (
+            <View style={styles.pauseSummaryCard}>
+              <Text style={styles.pauseSummaryTitle}>Review-only assignment</Text>
+              <Text style={styles.pauseSummaryDetail}>
+                This recitation check saves the full assigned range together.
+              </Text>
+            </View>
+          ) : (
+            <View style={styles.pauseSummaryCard}>
+              <Text style={styles.pauseSummaryTitle}>How far did you get?</Text>
+              <Text style={styles.pauseSummaryDetail}>
+                Pick the last ayah completed. Only ayahs through this point will be rated.
+              </Text>
+              <View style={styles.pauseStepperRow}>
+                <Pressable
+                  style={styles.stepperButton}
+                  onPress={() => {
+                    const current = pauseCompletedAyahEnd ?? ayahStart ?? 1;
+                    setPauseCompletedAyahEnd(clampCompletedAyahEnd(current - 1));
+                  }}
+                  disabled={submitting || pauseCompletedAyahEnd === ayahStart}
+                >
+                  <Text style={styles.stepperButtonText}>-</Text>
+                </Pressable>
+                <View style={styles.pauseAyahValue}>
+                  <Text style={styles.pauseAyahKicker}>Completed to</Text>
+                  <Text style={styles.pauseAyahNumber}>
+                    Ayah {pauseCompletedAyahEnd ?? ayahStart ?? 1}
+                  </Text>
+                </View>
+                <Pressable
+                  style={styles.stepperButton}
+                  onPress={() => {
+                    const current = pauseCompletedAyahEnd ?? ayahStart ?? 1;
+                    setPauseCompletedAyahEnd(clampCompletedAyahEnd(current + 1));
+                  }}
+                  disabled={submitting || pauseCompletedAyahEnd === ayahEnd}
+                >
+                  <Text style={styles.stepperButtonText}>+</Text>
+                </Pressable>
+              </View>
+              <View style={styles.pauseQuickRow}>
+                <Pressable
+                  style={styles.pauseQuickButton}
+                  onPress={() => setPauseCompletedAyahEnd(clampCompletedAyahEnd(currentVerseRef.current))}
+                  disabled={submitting}
+                >
+                  <Text style={styles.pauseQuickText}>Current ayah</Text>
+                </Pressable>
+                <Pressable
+                  style={styles.pauseQuickButton}
+                  onPress={() => setPauseCompletedAyahEnd(ayahEnd)}
+                  disabled={submitting}
+                >
+                  <Text style={styles.pauseQuickText}>Full range</Text>
+                </Pressable>
+              </View>
+            </View>
+          )}
+
+          <Pressable
+            style={[styles.completeButton, submitting && styles.completeButtonDisabled]}
+            onPress={openRecitationCheckFromPause}
+            disabled={submitting}
+          >
+            <Text style={styles.completeButtonText}>
+              {sessionReviewOnly ? "Go to Recitation Check" : "Continue to Rating"}
+            </Text>
+          </Pressable>
+          <Pressable
+            style={styles.completionCancelButton}
+            onPress={() => setPauseSheetOpen(false)}
+            disabled={submitting}
+          >
+            <Text style={styles.completionCancelText}>Keep Practicing</Text>
+          </Pressable>
+        </View>
+      </Modal>
 
       {/* Completion rating sheet */}
       <Modal
@@ -2008,7 +2158,7 @@ export default function MemorizationScreen() {
           <Text style={styles.sheetTitle}>Rate this recitation</Text>
           <Text style={styles.completionSubtitle}>
             {chaptersMap.get(surahNumber ?? 0)?.name_simple ?? "Current surah"} ·{" "}
-            {formatAyahRange(ayahStart, ayahEnd)}
+            {formatAyahRange(ayahStart, ratingAyahEnd ?? ayahEnd)}
           </Text>
 
           <View style={styles.ratingOptionList}>
@@ -3714,6 +3864,72 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: "#6b7280",
     textAlign: "center",
+  },
+  pauseSummaryCard: {
+    backgroundColor: "#f9fafb",
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+    borderRadius: 12,
+    padding: 14,
+    gap: 12,
+  },
+  pauseSummaryTitle: {
+    fontSize: 15,
+    fontWeight: "900",
+    color: "#111827",
+  },
+  pauseSummaryDetail: {
+    fontSize: 13,
+    lineHeight: 19,
+    fontWeight: "600",
+    color: "#6b7280",
+  },
+  pauseStepperRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+  pauseAyahValue: {
+    flex: 1,
+    minHeight: 64,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#bfdbfe",
+    backgroundColor: "#eff6ff",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 12,
+  },
+  pauseAyahKicker: {
+    fontSize: 11,
+    fontWeight: "800",
+    color: "#2563eb",
+    textTransform: "uppercase",
+  },
+  pauseAyahNumber: {
+    marginTop: 3,
+    fontSize: 18,
+    fontWeight: "900",
+    color: "#111827",
+  },
+  pauseQuickRow: {
+    flexDirection: "row",
+    gap: 10,
+  },
+  pauseQuickButton: {
+    flex: 1,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#d1d5db",
+    backgroundColor: "#ffffff",
+    paddingVertical: 10,
+    alignItems: "center",
+  },
+  pauseQuickText: {
+    fontSize: 13,
+    fontWeight: "800",
+    color: "#2563eb",
   },
   ratingOptionList: {
     gap: 10,
