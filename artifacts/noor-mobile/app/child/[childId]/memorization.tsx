@@ -101,6 +101,7 @@ const DISCOVERY_FILTERS: Array<{ key: DiscoveryFilter; label: string }> = [
 const DISCOVERY_CHUNK_AYAHS = 5;
 
 type QualityRatingValue = 2 | 4 | 5;
+type RecitationCheckSource = "teacher" | "noorpath";
 
 const QUALITY_OPTIONS: Array<{
   value: QualityRatingValue;
@@ -152,6 +153,13 @@ function normalizeSearch(value: string) {
 
 function clampStrength(value: number | undefined | null) {
   return Math.max(1, Math.min(5, Math.round(value ?? 1)));
+}
+
+function getRecitationScoreLabel(score: number) {
+  if (score >= 90) return "Excellent";
+  if (score >= 70) return "Good";
+  if (score >= 50) return "Needs Work";
+  return "Keep Practicing";
 }
 
 function getStatusCopy(status: MemorizationStatus) {
@@ -337,6 +345,9 @@ export default function MemorizationScreen() {
   const [completionSheetOpen, setCompletionSheetOpen] = useState(false);
   const [selectedQuality, setSelectedQuality] = useState<QualityRatingValue | null>(null);
   const [ratingAyahEnd, setRatingAyahEnd] = useState<number | null>(null);
+  const [recitationCheckSource, setRecitationCheckSource] =
+    useState<RecitationCheckSource>("teacher");
+  const [recitationScore, setRecitationScore] = useState<number | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
 
   // Session-level settings — initialized from parent defaults each session.
@@ -389,6 +400,7 @@ export default function MemorizationScreen() {
   const segsRef = useRef<Segment[]>([]);
   const autoPlayRef = useRef(false);
   const isLoadingRef = useRef(false);
+  const completionSheetOpenRef = useRef(false);
 
   // Refs readable inside async callbacks and RAF ticks (avoid stale closures)
   const viewModeRef = useRef<"ayah" | "page">(viewMode);
@@ -454,6 +466,7 @@ export default function MemorizationScreen() {
   useEffect(() => { autoAdvanceDelayRef.current = autoAdvanceDelayMs; }, [autoAdvanceDelayMs]);
   useEffect(() => { autoplayThroughRangeRef.current = autoplayThroughRange; }, [autoplayThroughRange]);
   useEffect(() => { playbackRateRef.current = playbackRate; }, [playbackRate]);
+  useEffect(() => { completionSheetOpenRef.current = completionSheetOpen; }, [completionSheetOpen]);
 
   // Apply playback rate changes to the currently-playing sound
   useEffect(() => {
@@ -596,6 +609,8 @@ export default function MemorizationScreen() {
     setCompletionSheetOpen(false);
     setSelectedQuality(null);
     setRatingAyahEnd(null);
+    setRecitationCheckSource("teacher");
+    setRecitationScore(null);
     setSaveError(null);
     setCumAyahIdx(0);
     cumAyahIdxRef.current = 0;
@@ -913,6 +928,19 @@ export default function MemorizationScreen() {
     cancelAnimationFrame(rafIdRef.current);
     setHighlightedWord(-1);
     setHighlightedPage(null);
+    autoPlayRef.current = false;
+    if (advanceTimeoutRef.current) {
+      clearTimeout(advanceTimeoutRef.current);
+      advanceTimeoutRef.current = null;
+    }
+    void stopAudioCompletely();
+    if (!completionSheetOpenRef.current) {
+      openRecitationCheck({
+        completedToAyah: ayahEndRef.current ?? currentVerseRef.current,
+        source: "teacher",
+        score: null,
+      });
+    }
   }
 
   function setCurrentRepeat(nextRepeat: number) {
@@ -1305,6 +1333,43 @@ export default function MemorizationScreen() {
     return Math.max(ayahStart, Math.min(value, ayahEnd));
   }
 
+  function openRecitationCheck({
+    completedToAyah,
+    source,
+    score = null,
+  }: {
+    completedToAyah: number;
+    source: RecitationCheckSource;
+    score?: number | null;
+  }) {
+    if (ayahStart === null || ayahEnd === null) return;
+    const completedEnd = sessionReviewOnly
+      ? ayahEnd
+      : clampCompletedAyahEnd(completedToAyah);
+
+    setPauseCompletedAyahEnd(completedEnd);
+    setRatingAyahEnd(completedEnd);
+    setSelectedQuality(null);
+    setSaveError(null);
+    setRecitationCheckSource(source);
+    setRecitationScore(score);
+    setPauseSheetOpen(false);
+    setLeaveSheetOpen(false);
+    completionSheetOpenRef.current = true;
+    setCompletionSheetOpen(true);
+
+    if (source === "noorpath" || reciteModeRef.current) {
+      reciteModeRef.current = false;
+      setReciteMode(false);
+      setReciteListening(false);
+      setReciteError(null);
+      setReciteExpectedIdx(0);
+      matchedWordCountRef.current = 0;
+      lastMatchedWordRef.current = "";
+      ExpoSpeechRecognitionModule.stop();
+    }
+  }
+
   async function handlePauseAndSave() {
     if (!surahNumber || ayahStart === null || ayahEnd === null) return;
     setInternalPhase("single");
@@ -1342,6 +1407,8 @@ export default function MemorizationScreen() {
     setCompletionSheetOpen(false);
     setSelectedQuality(null);
     setRatingAyahEnd(null);
+    setRecitationCheckSource("teacher");
+    setRecitationScore(null);
     setSaveError(null);
     setSettingsOpen(false);
     setTranslationPopup(null);
@@ -1386,12 +1453,11 @@ export default function MemorizationScreen() {
     const completedEnd = sessionReviewOnly
       ? ayahEnd
       : clampCompletedAyahEnd(pauseCompletedAyahEnd ?? currentVerseRef.current);
-    setPauseCompletedAyahEnd(completedEnd);
-    setRatingAyahEnd(completedEnd);
-    setSelectedQuality(null);
-    setSaveError(null);
-    setPauseSheetOpen(false);
-    setCompletionSheetOpen(true);
+    openRecitationCheck({
+      completedToAyah: completedEnd,
+      source: "teacher",
+      score: null,
+    });
   }
 
   async function handleSaveCompletion(qualityRating: QualityRatingValue) {
@@ -1449,6 +1515,8 @@ export default function MemorizationScreen() {
       setCompletionSheetOpen(false);
       setSelectedQuality(null);
       setRatingAyahEnd(null);
+      setRecitationCheckSource("teacher");
+      setRecitationScore(null);
       setSessionRequested(false);
       setLoading(false);
       Alert.alert("Progress saved.", "The rating was saved for the selected ayah range.");
@@ -1571,7 +1639,11 @@ export default function MemorizationScreen() {
         } else {
           setReciteListening(false);
           ExpoSpeechRecognitionModule.stop();
-          Alert.alert("MashaAllah!", "You recited the whole range.");
+          openRecitationCheck({
+            completedToAyah: ayahEndRef.current ?? currentVerseRef.current,
+            source: "noorpath",
+            score: 100,
+          });
         }
       } else {
         setReciteExpectedIdx(expectedIdx);
@@ -2256,7 +2328,7 @@ export default function MemorizationScreen() {
             disabled={submitting}
           >
             <Text style={styles.completeButtonText}>
-              {sessionReviewOnly ? "Go to Recitation Check" : "Continue to Rating"}
+              Go to Recitation Check
             </Text>
           </Pressable>
           <Pressable
@@ -2269,90 +2341,137 @@ export default function MemorizationScreen() {
         </View>
       </Modal>
 
-      {/* Completion rating sheet */}
+      {/* Recitation Check phase */}
       <Modal
         visible={completionSheetOpen}
-        transparent
         animationType="slide"
         onRequestClose={() => {
           if (!submitting) setCompletionSheetOpen(false);
         }}
       >
-        <Pressable
-          style={styles.backdrop}
-          onPress={() => {
-            if (!submitting) setCompletionSheetOpen(false);
-          }}
-        />
-        <View style={styles.completionSheet}>
-          <Text style={styles.sheetTitle}>Rate this recitation</Text>
-          <Text style={styles.completionSubtitle}>
-            {chaptersMap.get(surahNumber ?? 0)?.name_simple ?? "Current surah"} ·{" "}
-            {formatAyahRange(ayahStart, ratingAyahEnd ?? ayahEnd)}
-          </Text>
-
-          <View style={styles.ratingOptionList}>
-            {QUALITY_OPTIONS.map((option) => {
-              const selected = selectedQuality === option.value;
-              return (
-                <Pressable
-                  key={option.value}
-                  style={[
-                    styles.ratingOption,
-                    {
-                      backgroundColor: selected ? option.bg : "#ffffff",
-                      borderColor: selected ? option.border : "#e5e7eb",
-                    },
-                  ]}
-                  onPress={() => setSelectedQuality(option.value)}
-                  disabled={submitting}
-                >
-                  <View style={styles.ratingOptionTextBlock}>
-                    <Text style={[styles.ratingOptionTitle, { color: selected ? option.color : "#111827" }]}>
-                      {option.label}
-                    </Text>
-                    <Text style={styles.ratingOptionDetail}>{option.detail}</Text>
-                  </View>
-                  <View
-                    style={[
-                      styles.ratingRadio,
-                      {
-                        borderColor: selected ? option.color : "#d1d5db",
-                        backgroundColor: selected ? option.color : "#ffffff",
-                      },
-                    ]}
-                  />
-                </Pressable>
-              );
-            })}
+        <View style={styles.recitationCheckContainer}>
+          <View style={styles.header}>
+            <Pressable
+              onPress={() => {
+                if (!submitting) setCompletionSheetOpen(false);
+              }}
+            >
+              <Text style={styles.back}>← Back</Text>
+            </Pressable>
+            <Text style={styles.headerTitle}>Recitation Check</Text>
+            <View style={styles.headerButton} />
           </View>
 
-          {saveError ? <Text style={styles.saveErrorText}>{saveError}</Text> : null}
+          <ScrollView
+            style={styles.scrollFlex}
+            contentContainerStyle={styles.recitationCheckContent}
+          >
+            <View style={styles.recitationCheckIntroCard}>
+              <Text style={styles.recitationCheckKicker}>
+                {recitationCheckSource === "noorpath" ? "Recite to NoorPath" : "Parent rating"}
+              </Text>
+              <Text style={styles.recitationCheckTitle}>
+                {chaptersMap.get(surahNumber ?? 0)?.name_simple ?? "Current surah"}
+              </Text>
+              <Text style={styles.recitationCheckRange}>
+                {formatAyahRange(ayahStart, ratingAyahEnd ?? ayahEnd)}
+              </Text>
+            </View>
 
-          <Pressable
-            style={[
-              styles.completeButton,
-              (!selectedQuality || submitting) && styles.completeButtonDisabled,
-            ]}
-            onPress={() => {
-              if (!selectedQuality) return;
-              void handleSaveCompletion(selectedQuality);
-            }}
-            disabled={!selectedQuality || submitting}
-          >
-            {submitting ? (
-              <ActivityIndicator color="#ffffff" />
-            ) : (
-              <Text style={styles.completeButtonText}>Save Progress</Text>
-            )}
-          </Pressable>
-          <Pressable
-            style={styles.completionCancelButton}
-            onPress={() => setCompletionSheetOpen(false)}
-            disabled={submitting}
-          >
-            <Text style={styles.completionCancelText}>Keep Practicing</Text>
-          </Pressable>
+            {recitationCheckSource === "noorpath" && recitationScore !== null ? (
+              <View style={styles.recitationScoreCard}>
+                <Text style={styles.recitationScoreKicker}>Score</Text>
+                <Text style={styles.recitationScoreNumber}>{recitationScore}%</Text>
+                <Text style={styles.recitationScoreLabel}>
+                  {getRecitationScoreLabel(recitationScore)}
+                </Text>
+                <Text style={styles.recitationScoreDetail}>
+                  NoorPath matched the recitation with the current speech checker. The honest rating below still sets review strength.
+                </Text>
+              </View>
+            ) : null}
+
+            <View style={styles.pauseSummaryCard}>
+              <Text style={styles.pauseSummaryTitle}>
+                {recitationCheckSource === "noorpath"
+                  ? "How did the recitation feel?"
+                  : "Listen, then rate"}
+              </Text>
+              <Text style={styles.pauseSummaryDetail}>
+                {recitationCheckSource === "noorpath"
+                  ? "Use the score as a guide, then choose the rating that best reflects fluency and confidence."
+                  : "Ask the child to recite this range from memory, then choose the rating that best reflects fluency and confidence."}
+              </Text>
+            </View>
+
+            <View style={styles.recitationRatingCard}>
+              <Text style={styles.recitationRatingTitle}>
+                {recitationCheckSource === "noorpath" ? "How did you do?" : "How did they do?"}
+              </Text>
+              <View style={styles.ratingOptionList}>
+                {QUALITY_OPTIONS.map((option) => {
+                  const selected = selectedQuality === option.value;
+                  return (
+                    <Pressable
+                      key={option.value}
+                      style={[
+                        styles.ratingOption,
+                        {
+                          backgroundColor: selected ? option.bg : "#ffffff",
+                          borderColor: selected ? option.border : "#e5e7eb",
+                        },
+                      ]}
+                      onPress={() => setSelectedQuality(option.value)}
+                      disabled={submitting}
+                    >
+                      <View style={styles.ratingOptionTextBlock}>
+                        <Text style={[styles.ratingOptionTitle, { color: selected ? option.color : "#111827" }]}>
+                          {option.label}
+                        </Text>
+                        <Text style={styles.ratingOptionDetail}>{option.detail}</Text>
+                      </View>
+                      <View
+                        style={[
+                          styles.ratingRadio,
+                          {
+                            borderColor: selected ? option.color : "#d1d5db",
+                            backgroundColor: selected ? option.color : "#ffffff",
+                          },
+                        ]}
+                      />
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </View>
+
+            {saveError ? <Text style={styles.saveErrorText}>{saveError}</Text> : null}
+
+            <Pressable
+              style={[
+                styles.completeButton,
+                (!selectedQuality || submitting) && styles.completeButtonDisabled,
+              ]}
+              onPress={() => {
+                if (!selectedQuality) return;
+                void handleSaveCompletion(selectedQuality);
+              }}
+              disabled={!selectedQuality || submitting}
+            >
+              {submitting ? (
+                <ActivityIndicator color="#ffffff" />
+              ) : (
+                <Text style={styles.completeButtonText}>Save Progress</Text>
+              )}
+            </Pressable>
+            <Pressable
+              style={styles.completionCancelButton}
+              onPress={() => setCompletionSheetOpen(false)}
+              disabled={submitting}
+            >
+              <Text style={styles.completionCancelText}>Keep Practicing</Text>
+            </Pressable>
+          </ScrollView>
         </View>
       </Modal>
 
@@ -3994,6 +4113,88 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: "#6b7280",
     textAlign: "center",
+  },
+  recitationCheckContainer: {
+    flex: 1,
+    backgroundColor: "#ffffff",
+  },
+  recitationCheckContent: {
+    padding: 16,
+    paddingBottom: 40,
+    gap: 14,
+  },
+  recitationCheckIntroCard: {
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#bfdbfe",
+    backgroundColor: "#eff6ff",
+    padding: 16,
+  },
+  recitationCheckKicker: {
+    fontSize: 11,
+    fontWeight: "900",
+    color: "#2563eb",
+    textTransform: "uppercase",
+  },
+  recitationCheckTitle: {
+    marginTop: 5,
+    fontSize: 22,
+    fontWeight: "900",
+    color: "#111827",
+  },
+  recitationCheckRange: {
+    marginTop: 4,
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#374151",
+  },
+  recitationScoreCard: {
+    alignItems: "center",
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#a7f3d0",
+    backgroundColor: "#ecfdf5",
+    padding: 20,
+  },
+  recitationScoreKicker: {
+    fontSize: 11,
+    fontWeight: "900",
+    color: "#047857",
+    textTransform: "uppercase",
+  },
+  recitationScoreNumber: {
+    marginTop: 6,
+    fontSize: 56,
+    lineHeight: 62,
+    fontWeight: "900",
+    color: "#064e3b",
+  },
+  recitationScoreLabel: {
+    marginTop: 2,
+    fontSize: 16,
+    fontWeight: "900",
+    color: "#047857",
+  },
+  recitationScoreDetail: {
+    marginTop: 8,
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: "600",
+    color: "#047857",
+    textAlign: "center",
+  },
+  recitationRatingCard: {
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+    backgroundColor: "#f9fafb",
+    padding: 14,
+    gap: 12,
+  },
+  recitationRatingTitle: {
+    fontSize: 15,
+    fontWeight: "900",
+    color: "#111827",
   },
   pauseSummaryCard: {
     backgroundColor: "#f9fafb",
