@@ -12,6 +12,7 @@ import {
   buildSurahMemorizationWorkflow,
   findMatchingWorkItem,
   findPendingWorkItem,
+  getConsecutiveMemorizedAyahEnd,
   hasPendingIntraSurahWork,
   hasStartedIntraSurahWorkflow,
 } from "../lib/memorization-workflow.js";
@@ -36,7 +37,17 @@ function isFullyMemorizedSurah(
 ): boolean {
   if (!progress) return false;
 
-  return progress.versesMemorized >= surah.verseCount;
+  return getConsecutiveMemorizedAyahEnd(progress, surah.verseCount) >= surah.verseCount;
+}
+
+function getNextContiguousAyahStart(
+  progress: typeof memorizationProgressTable.$inferSelect | undefined,
+  verseCount: number,
+): number {
+  return Math.min(
+    getConsecutiveMemorizedAyahEnd(progress, verseCount) + 1,
+    verseCount,
+  );
 }
 
 function isMemorizationModuleDone(
@@ -692,7 +703,7 @@ router.get("/children/:childId/dashboard", async (req, res) => {
     : undefined;
 
   if (memorizationSurahData && inProgressSurah && inProgressSurah.versesMemorized < memorizationSurahData.verseCount) {
-    nextStartAyah = inProgressSurah.versesMemorized + 1;
+    nextStartAyah = getNextContiguousAyahStart(inProgressSurah, memorizationSurahData.verseCount);
   }
 
   let memorizationWorkflow = memorizationSurahData
@@ -731,7 +742,9 @@ router.get("/children/:childId/dashboard", async (req, res) => {
         const bestSurahData = SURAHS.find(ss => ss.number === bestStartSurah)!;
         const earlyInProg = memProgress.find(m => m.surahId === bestSurahData.id && m.status === 'in_progress');
         nextStartSurah = bestStartSurah;
-        nextStartAyah = earlyInProg ? earlyInProg.versesMemorized + 1 : 1;
+        nextStartAyah = earlyInProg
+          ? getNextContiguousAyahStart(earlyInProg, bestSurahData.verseCount)
+          : 1;
         memorizationSurahData = bestSurahData;
         inProgressSurah = earlyInProg;
       }
@@ -768,7 +781,21 @@ router.get("/children/:childId/dashboard", async (req, res) => {
   const desiredMemTargetAyahEnd = scheduledWorkItem?.ayahEnd ?? memTarget?.endAyah ?? null;
   const desiredMemTargetEndSurah = scheduledWorkItem?.surahNumber ?? memTarget?.endSurah ?? nextStartSurah;
 
-  let todayProgress = dailyProgressRows.find((row) => row.date === today);
+  const todayRows = dailyProgressRows.filter((row) => row.date === today);
+  const getTodayWorkflowIndex = (row: typeof dailyProgressTable.$inferSelect) => {
+    if (!memorizationWorkflow?.enabled) return Number.MAX_SAFE_INTEGER;
+    return findMatchingWorkItem(memorizationWorkflow, row)?.scheduleIndex ?? Number.MAX_SAFE_INTEGER;
+  };
+  let todayProgress =
+    [...todayRows]
+      .filter((row) => row.memTargetSurah != null)
+      .sort((a, b) => {
+        const workflowDelta = getTodayWorkflowIndex(a) - getTodayWorkflowIndex(b);
+        if (workflowDelta !== 0) return workflowDelta;
+        return a.id - b.id;
+      })[0] ??
+    todayRows[0] ??
+    null;
 
   if (!todayProgress) {
     [todayProgress] = await db.insert(dailyProgressTable).values({
@@ -1000,7 +1027,7 @@ router.get("/children/:childId/dashboard", async (req, res) => {
       if (nextSurahExcludingCurrent) {
         const nextUpProgress = memProgress.find(m => m.surahId === nextSurahExcludingCurrent.id);
         const ayahStart = nextUpProgress && nextUpProgress.status === "in_progress"
-          ? Math.min(nextUpProgress.versesMemorized + 1, nextSurahExcludingCurrent.verseCount)
+          ? getNextContiguousAyahStart(nextUpProgress, nextSurahExcludingCurrent.verseCount)
           : 1;
         const nextUpTarget = resolveStrictSurahScopedPageTarget(nextSurahExcludingCurrent.number, ayahStart, child.memorizePagePerDay);
         const ayahEnd = Math.min(nextUpTarget.endAyah, nextSurahExcludingCurrent.verseCount);
@@ -1023,7 +1050,7 @@ router.get("/children/:childId/dashboard", async (req, res) => {
 
       const nextUpProgress = memProgress.find(m => m.surahId === nextUp.id);
       const ayahStart = nextUpProgress && nextUpProgress.status === "in_progress"
-        ? Math.min(nextUpProgress.versesMemorized + 1, nextUp.verseCount)
+        ? getNextContiguousAyahStart(nextUpProgress, nextUp.verseCount)
         : 1;
       const nextUpTarget = resolveStrictSurahScopedPageTarget(nextUp.number, ayahStart, child.memorizePagePerDay);
       const ayahEnd = Math.min(nextUpTarget.endAyah, nextUp.verseCount);
@@ -1179,7 +1206,7 @@ router.post("/children/:childId/daily-progress", async (req, res) => {
   const todayRows = await db.select().from(dailyProgressTable)
     .where(and(eq(dailyProgressTable.childId, childId), eq(dailyProgressTable.date, today)))
     .orderBy(desc(dailyProgressTable.id));
-  let row =
+  const exactMemTargetRow =
     memTargetSurah != null
       ? (todayRows.find((candidate) =>
           candidate.memTargetSurah === memTargetSurah &&
@@ -1188,8 +1215,22 @@ router.post("/children/:childId/daily-progress", async (req, res) => {
           (candidate.memTargetEndSurah ?? candidate.memTargetSurah) ===
             (memTargetEndSurah ?? memTargetSurah)
         ) ?? null)
+      : null;
+  const existingMemRow =
+    [...todayRows]
+      .sort((a, b) => a.id - b.id)
+      .find((candidate) => candidate.memTargetSurah != null) ?? null;
+  let row =
+    memTargetSurah != null
+      ? (exactMemTargetRow ?? existingMemRow ?? todayRows[0] ?? null)
       : (todayRows[0] ?? null);
   const updates: Record<string, unknown> = { updatedAt: new Date() };
+  if (row && row.memTargetSurah == null && memTargetSurah != null) {
+    updates.memTargetSurah = memTargetSurah;
+    updates.memTargetAyahStart = memTargetAyahStart ?? null;
+    updates.memTargetAyahEnd = memTargetAyahEnd ?? null;
+    updates.memTargetEndSurah = memTargetEndSurah ?? memTargetSurah;
+  }
   // Never downgrade a completed status — the /memorization route sets it authoritatively
   if (memStatus && !(row?.memStatus === 'completed' && memStatus !== 'completed')) updates.memStatus = memStatus;
   if (memCompletedAyahEnd != null) updates.memCompletedAyahEnd = memCompletedAyahEnd;

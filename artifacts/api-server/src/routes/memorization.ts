@@ -658,11 +658,41 @@ router.post("/children/:childId/memorization", async (req, res) => {
 
   // Auto-advance daily progress status so the assignment freezes once the session starts
   try {
-    const _dd = new Date();
-    const todayStr = `${_dd.getFullYear()}-${String(_dd.getMonth()+1).padStart(2,'0')}-${String(_dd.getDate()).padStart(2,'0')}`;
-    const [todayProg] = await db.select().from(dailyProgressTable)
+    const todayStr = getRequestLocalDate(req);
+    const todayRows = await db.select().from(dailyProgressTable)
       .where(and(eq(dailyProgressTable.childId, childId), eq(dailyProgressTable.date, todayStr)))
       .orderBy(desc(dailyProgressTable.id));
+    const sortedTodayRows = [...todayRows].sort((a, b) => a.id - b.id);
+    const savedAyahStart = ratedAyahs[0] ?? newMemoizedAyahs[0] ?? null;
+    const savedAyahEnd =
+      ratedAyahs[ratedAyahs.length - 1] ??
+      newMemoizedAyahs[newMemoizedAyahs.length - 1] ??
+      null;
+    const todayProg =
+      sortedTodayRows.find((candidate) => {
+        const targetNum = candidate.memTargetSurah;
+        const endNum = candidate.memTargetEndSurah ?? targetNum;
+        if (!targetNum || !endNum) return false;
+
+        const rangeMin = Math.min(targetNum, endNum);
+        const rangeMax = Math.max(targetNum, endNum);
+        if (surah.number < rangeMin || surah.number > rangeMax) return false;
+
+        if (
+          targetNum === endNum &&
+          targetNum === surah.number &&
+          savedAyahStart != null &&
+          savedAyahEnd != null &&
+          candidate.memTargetAyahStart != null &&
+          candidate.memTargetAyahEnd != null
+        ) {
+          return savedAyahStart <= candidate.memTargetAyahEnd && savedAyahEnd >= candidate.memTargetAyahStart;
+        }
+
+        return true;
+      }) ??
+      sortedTodayRows.find((candidate) => candidate.memTargetSurah != null) ??
+      sortedTodayRows[0];
 
     if (todayProg) {
       if (todayProg.memStatus === 'not_started') {
