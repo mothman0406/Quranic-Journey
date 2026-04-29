@@ -34,6 +34,7 @@ import {
   type MemorizationStatus,
   type NewMemorization,
   type SurahSummary,
+  type WorkStatus,
 } from "@/src/lib/memorization";
 import {
   fetchSurahVerses,
@@ -178,6 +179,16 @@ function buildWorkTarget(work: NewMemorization): SessionTarget {
     surahNumber,
     ayahStart,
     ayahEnd,
+    pageStart: work.pageStart,
+    pageEnd: work.pageEnd,
+  };
+}
+
+function buildFullWorkTarget(work: NewMemorization): SessionTarget {
+  return {
+    surahNumber: work.surahNumber,
+    ayahStart: work.ayahStart,
+    ayahEnd: work.ayahEnd,
     pageStart: work.pageStart,
     pageEnd: work.pageEnd,
   };
@@ -2166,25 +2177,12 @@ function MemorizationDiscovery({
           <View style={styles.discoverySectionHeader}>
             <Text style={styles.discoverySectionTitle}>Today</Text>
           </View>
-          {content.todayWork ? (
-            <TodayWorkCard
-              work={content.todayWork}
-              status={content.todayStatus}
-              onPress={() => onStart(buildWorkTarget(content.todayWork!))}
-            />
-          ) : content.upNext ? (
-            <TodayWorkCard
-              work={content.upNext}
-              status="not_started"
-              title="Up next"
-              onPress={() => onStart(buildWorkTarget(content.upNext!))}
-            />
-          ) : (
-            <View style={styles.discoveryEmptyCard}>
-              <Text style={styles.discoveryEmptyTitle}>No memorization assigned today.</Text>
-              <Text style={styles.discoveryEmptyDetail}>Search the surah list below to start a practice session.</Text>
-            </View>
-          )}
+          <MemorizationOverviewCards
+            todayWork={content.todayWork}
+            upNext={content.upNext}
+            todayStatus={content.todayStatus}
+            onStart={onStart}
+          />
 
           {content.resumeItems.length > 0 && (
             <>
@@ -2267,44 +2265,196 @@ function MemorizationDiscovery({
   );
 }
 
-function TodayWorkCard({
-  work,
-  status,
-  title = "Today's work",
-  onPress,
-}: {
-  work: NewMemorization;
-  status: "not_started" | "in_progress" | "completed";
-  title?: string;
-  onPress: () => void;
-}) {
-  const surahName = work.currentWorkSurahName ?? work.surahName;
-  const ayahStart = work.currentWorkAyahStart ?? work.ayahStart;
-  const ayahEnd = work.currentWorkAyahEnd ?? work.ayahEnd;
+type OverviewCardTone = "today" | "todayDone" | "current" | "next" | "empty";
+
+const OVERVIEW_CARD_TONES: Record<
+  OverviewCardTone,
+  { bg: string; border: string; accent: string; actionBg: string; actionBorder: string }
+> = {
+  today: {
+    bg: "#f8fbff",
+    border: "#bfdbfe",
+    accent: "#2563eb",
+    actionBg: "#dbeafe",
+    actionBorder: "#bfdbfe",
+  },
+  todayDone: {
+    bg: "#ecfdf5",
+    border: "#a7f3d0",
+    accent: "#047857",
+    actionBg: "#d1fae5",
+    actionBorder: "#a7f3d0",
+  },
+  current: {
+    bg: "#fffbeb",
+    border: "#fde68a",
+    accent: "#b45309",
+    actionBg: "#fef3c7",
+    actionBorder: "#fde68a",
+  },
+  next: {
+    bg: "#f9fafb",
+    border: "#e5e7eb",
+    accent: "#4b5563",
+    actionBg: "#f3f4f6",
+    actionBorder: "#d1d5db",
+  },
+  empty: {
+    bg: "#f9fafb",
+    border: "#e5e7eb",
+    accent: "#6b7280",
+    actionBg: "#ffffff",
+    actionBorder: "#e5e7eb",
+  },
+};
+
+function getTodayStatusLabel(status: WorkStatus) {
+  if (status === "completed") return "Complete";
+  if (status === "in_progress") return "In progress";
+  return "Ready";
+}
+
+function getTodayActionLabel(status: WorkStatus) {
+  if (status === "completed") return "Practice";
+  if (status === "in_progress") return "Continue";
+  return "Start";
+}
+
+function getWorkRangeDetail(work: NewMemorization, mode: "full" | "current") {
+  const ayahStart = mode === "current" ? work.currentWorkAyahStart ?? work.ayahStart : work.ayahStart;
+  const ayahEnd = mode === "current" ? work.currentWorkAyahEnd ?? work.ayahEnd : work.ayahEnd;
   const pageRange = formatPageRange(work.pageStart, work.pageEnd);
-  const buttonLabel = status === "completed" ? "Practice Again" : status === "in_progress" ? "Continue" : "Start";
+  return `${work.workLabel ?? "Memorization"} · ${formatAyahRange(ayahStart, ayahEnd)}${
+    pageRange ? ` · ${pageRange}` : ""
+  }`;
+}
+
+function MemorizationOverviewCards({
+  todayWork,
+  upNext,
+  todayStatus,
+  onStart,
+}: {
+  todayWork: NewMemorization | null;
+  upNext: NewMemorization | null | undefined;
+  todayStatus: WorkStatus;
+  onStart: (target: SessionTarget) => void;
+}) {
+  const todayTone: OverviewCardTone = todayWork
+    ? todayStatus === "completed"
+      ? "todayDone"
+      : "today"
+    : "empty";
+  const currentTitle = todayWork?.isReviewOnly ? "Recitation Focus" : "Current work";
 
   return (
-    <View style={styles.discoveryFeaturedCard}>
-      <View style={styles.discoveryFeaturedTop}>
-        <View>
-          <Text style={styles.discoveryKicker}>{title}</Text>
-          <Text style={styles.discoveryFeaturedTitle}>{surahName}</Text>
-          <Text style={styles.discoveryFeaturedDetail}>
-            {(work.workLabel ?? "Memorization")} · {formatAyahRange(ayahStart, ayahEnd)}
-            {pageRange ? ` · ${pageRange}` : ""}
-          </Text>
-        </View>
-        <View style={styles.discoveryNumberBadge}>
-          <Text style={styles.discoveryNumberText}>
-            {work.currentWorkSurahNumber ?? work.surahNumber}
-          </Text>
-        </View>
-      </View>
-      <Pressable style={styles.discoveryPrimaryButton} onPress={onPress}>
-        <Text style={styles.discoveryPrimaryButtonText}>{buttonLabel}</Text>
-      </Pressable>
+    <View style={styles.overviewGrid}>
+      <OverviewWorkCard
+        title="Today's work"
+        heading={todayWork?.surahName ?? "No assignment"}
+        detail={
+          todayWork
+            ? getWorkRangeDetail(todayWork, "full")
+            : "Search below to choose a surah."
+        }
+        status={todayWork ? getTodayStatusLabel(todayStatus) : "Not scheduled"}
+        action={todayWork ? getTodayActionLabel(todayStatus) : "Browse below"}
+        tone={todayTone}
+        disabled={!todayWork}
+        onPress={() => {
+          if (todayWork) onStart(buildFullWorkTarget(todayWork));
+        }}
+      />
+      <OverviewWorkCard
+        title={currentTitle}
+        heading={todayWork?.currentWorkSurahName ?? todayWork?.surahName ?? "Nothing active"}
+        detail={
+          todayWork
+            ? getWorkRangeDetail(todayWork, "current")
+            : "Start from today's work or the list below."
+        }
+        status={todayWork?.isReviewOnly ? "Review-only" : todayWork ? "Active range" : "Idle"}
+        action={todayWork ? (todayWork.isReviewOnly ? "Recite" : "Start") : "Browse below"}
+        tone={todayWork ? "current" : "empty"}
+        disabled={!todayWork}
+        onPress={() => {
+          if (todayWork) onStart(buildWorkTarget(todayWork));
+        }}
+      />
+      <OverviewWorkCard
+        title="Next up"
+        heading={upNext?.surahName ?? "All done"}
+        detail={
+          upNext
+            ? getWorkRangeDetail(upNext, "full")
+            : "No next assignment is queued yet."
+        }
+        status={upNext?.isReviewOnly ? "Recitation" : upNext ? "Tomorrow" : "Clear"}
+        action={upNext ? (upNext.isReviewOnly ? "Recite" : "Start") : "Clear"}
+        tone={upNext ? "next" : "empty"}
+        disabled={!upNext}
+        onPress={() => {
+          if (upNext) onStart(buildFullWorkTarget(upNext));
+        }}
+      />
     </View>
+  );
+}
+
+function OverviewWorkCard({
+  title,
+  heading,
+  detail,
+  status,
+  action,
+  tone,
+  disabled,
+  onPress,
+}: {
+  title: string;
+  heading: string;
+  detail: string;
+  status: string;
+  action: string;
+  tone: OverviewCardTone;
+  disabled?: boolean;
+  onPress: () => void;
+}) {
+  const colors = OVERVIEW_CARD_TONES[tone];
+
+  return (
+    <Pressable
+      style={[
+        styles.overviewCard,
+        { backgroundColor: colors.bg, borderColor: colors.border },
+        disabled ? styles.overviewCardDisabled : null,
+      ]}
+      disabled={disabled}
+      onPress={onPress}
+    >
+      <Text style={[styles.overviewCardKicker, { color: colors.accent }]} numberOfLines={1}>
+        {title}
+      </Text>
+      <Text style={styles.overviewCardTitle} numberOfLines={2}>
+        {heading}
+      </Text>
+      <Text style={styles.overviewCardDetail} numberOfLines={3}>
+        {detail}
+      </Text>
+      <Text style={[styles.overviewCardStatus, { color: colors.accent }]} numberOfLines={1}>
+        {status}
+      </Text>
+      <View
+        style={[
+          styles.overviewActionPill,
+          { backgroundColor: colors.actionBg, borderColor: colors.actionBorder },
+        ]}
+      >
+        <Text style={[styles.overviewActionText, { color: colors.accent }]} numberOfLines={1}>
+          {action}
+        </Text>
+      </View>
+    </Pressable>
   );
 }
 
@@ -2617,6 +2767,58 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "600",
     color: "#4b5563",
+  },
+  overviewGrid: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  overviewCard: {
+    flex: 1,
+    minHeight: 154,
+    borderRadius: 12,
+    borderWidth: 1,
+    padding: 10,
+  },
+  overviewCardDisabled: {
+    opacity: 0.72,
+  },
+  overviewCardKicker: {
+    fontSize: 10,
+    fontWeight: "900",
+  },
+  overviewCardTitle: {
+    marginTop: 6,
+    minHeight: 34,
+    fontSize: 13,
+    lineHeight: 17,
+    fontWeight: "900",
+    color: "#111827",
+  },
+  overviewCardDetail: {
+    marginTop: 4,
+    minHeight: 48,
+    fontSize: 10,
+    lineHeight: 16,
+    fontWeight: "700",
+    color: "#4b5563",
+  },
+  overviewCardStatus: {
+    marginTop: 5,
+    fontSize: 10,
+    fontWeight: "900",
+  },
+  overviewActionPill: {
+    marginTop: "auto",
+    alignItems: "center",
+    justifyContent: "center",
+    minHeight: 28,
+    borderRadius: 999,
+    borderWidth: 1,
+    paddingHorizontal: 6,
+  },
+  overviewActionText: {
+    fontSize: 10,
+    fontWeight: "900",
   },
   discoverySectionHeader: {
     marginTop: 8,
