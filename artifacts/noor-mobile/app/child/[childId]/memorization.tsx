@@ -563,6 +563,24 @@ export default function MemorizationScreen() {
   function beginSession(target: SessionTarget) {
     const nextStart = Math.max(1, target.ayahStart);
     const nextEnd = Math.max(nextStart, target.ayahEnd);
+    console.log("[noor-mem] beginSession", {
+      target: {
+        surahNumber: target.surahNumber,
+        ayahStart: target.ayahStart,
+        ayahEnd: target.ayahEnd,
+        pageStart: target.pageStart,
+        pageEnd: target.pageEnd,
+      },
+      current: {
+        surahNumber,
+        ayahStart,
+        ayahEnd,
+        displayWordsMapSize: displayWordsMap.size,
+        hasChapterTimings: chapterTimings !== null,
+      },
+      autoPlayRef: autoPlayRef.current,
+      isLoadingRef: isLoadingRef.current,
+    });
     setSessionRequested(true);
     setLoading(true);
     setError(null);
@@ -590,15 +608,52 @@ export default function MemorizationScreen() {
 
   // Step 1: if no params, fetch dashboard to get today's memorization target
   useEffect(() => {
+    const branch =
+      !sessionRequested
+        ? "early-return-session-not-requested"
+        : surahNumber !== null && ayahStart !== null && ayahEnd !== null
+          ? "early-return-with-setCurrentVerse"
+          : "dashboard-fetch";
+    console.log("[noor-mem] step1 entry", {
+      sessionRequested,
+      surahNumber,
+      ayahStart,
+      ayahEnd,
+      branch,
+    });
     if (!sessionRequested) return;
     if (surahNumber !== null && ayahStart !== null && ayahEnd !== null) {
+      console.log("[noor-mem] step1 early-return-with-setCurrentVerse", {
+        sessionRequested,
+        surahNumber,
+        ayahStart,
+        ayahEnd,
+      });
       setCurrentVerse(ayahStart);
       return;
     }
+    console.log("[noor-mem] step1 UNEXPECTED dashboard-fetch path", {
+      sessionRequested,
+      surahNumber,
+      ayahStart,
+      ayahEnd,
+    });
     (async () => {
       try {
         const dash = await fetchDashboard(childId);
         const nm = dash.todaysPlan.newMemorization;
+        console.log("[noor-mem] step1 dashboard-fetch resolved", {
+          hasNewMemorization: Boolean(nm),
+          surahNumber: nm?.surahNumber,
+          currentWorkSurahNumber: nm?.currentWorkSurahNumber,
+          ayahStart: nm?.ayahStart,
+          ayahEnd: nm?.ayahEnd,
+          currentWorkAyahStart: nm?.currentWorkAyahStart,
+          currentWorkAyahEnd: nm?.currentWorkAyahEnd,
+          pageStart: nm?.pageStart,
+          pageEnd: nm?.pageEnd,
+          isReviewOnly: nm?.isReviewOnly,
+        });
         if (!nm) {
           setError("No memorization assigned for today.");
           setLoading(false);
@@ -614,6 +669,9 @@ export default function MemorizationScreen() {
         setPageStart(nm.pageStart);
         setPageEnd(nm.pageEnd);
       } catch (e) {
+        console.log("[noor-mem] step1 dashboard-fetch catch", {
+          message: e instanceof Error ? e.message : "Failed to load today's plan.",
+        });
         setError(e instanceof Error ? e.message : "Failed to load today's plan.");
         setLoading(false);
       }
@@ -623,15 +681,54 @@ export default function MemorizationScreen() {
   // Step 2: once surahNumber + chapters are known, fetch verses + timings in parallel.
   // Gated on chaptersMap.size > 0 so chapter metadata (name_arabic etc.) is available.
   useEffect(() => {
-    if (surahNumber === null || chaptersMap.size === 0) return;
+    console.log("[noor-mem] step2 entry", {
+      surahNumber,
+      ayahStart,
+      ayahEnd,
+      reciterId,
+      chaptersMapSize: chaptersMap.size,
+    });
+    if (surahNumber === null) {
+      console.log("[noor-mem] step2 early-return surahNumber-null", {
+        ayahStart,
+        ayahEnd,
+        reciterId,
+        chaptersMapSize: chaptersMap.size,
+      });
+      return;
+    }
+    if (chaptersMap.size === 0) {
+      console.log("[noor-mem] step2 early-return chaptersMap-empty", {
+        surahNumber,
+        ayahStart,
+        ayahEnd,
+        reciterId,
+      });
+      return;
+    }
     const currentReciter = findReciter(reciterId);
     let cancelled = false;
     (async () => {
       try {
+        console.log("[noor-mem] step2 fetch-start", {
+          surahNumber,
+          ayahStart,
+          ayahEnd,
+          reciterId,
+          reciter: currentReciter.id,
+        });
         const [verses, timings] = await Promise.all([
           fetchSurahVerses(surahNumber),
           fetchTimingsForReciter(currentReciter, surahNumber),
         ]);
+        console.log("[noor-mem] step2 fetch-resolved", {
+          surahNumber,
+          ayahStart,
+          ayahEnd,
+          versesCount: verses.length,
+          timingsKind: timings.kind,
+          cancelled,
+        });
         if (cancelled) return;
         const map = new Map<number, ApiWord[]>();
         for (const verse of verses) {
@@ -656,8 +753,22 @@ export default function MemorizationScreen() {
         }
         setDisplayWordsMap(map);
         setChapterTimings(timings);
+        console.log("[noor-mem] step2 setLoading false", {
+          surahNumber,
+          ayahStart,
+          ayahEnd,
+          displayWordsMapSize: map.size,
+          timingsKind: timings.kind,
+        });
         setLoading(false);
       } catch (e) {
+        console.log("[noor-mem] step2 catch", {
+          surahNumber,
+          ayahStart,
+          ayahEnd,
+          message: e instanceof Error ? e.message : "Failed to load verses.",
+          cancelled,
+        });
         if (!cancelled) {
           setError(e instanceof Error ? e.message : "Failed to load verses.");
           setLoading(false);
@@ -745,6 +856,11 @@ export default function MemorizationScreen() {
 
   // Cleanup + optional auto-play on verse change
   useEffect(() => {
+    console.log("[noor-mem] verse-effect entry", {
+      playingVerseNumber,
+      autoPlayRef: autoPlayRef.current,
+      surahNumber,
+    });
     setCurrentRepeat(1);
     if (advanceTimeoutRef.current) {
       clearTimeout(advanceTimeoutRef.current);
@@ -783,6 +899,11 @@ export default function MemorizationScreen() {
       isPlayingRef.current = false;
       setIsPlaying(false);
       if (autoPlayRef.current) {
+        console.log("[noor-mem] verse-effect autoplay-fire", {
+          playingVerseNumber,
+          playingVerseNumberRef: playingVerseNumberRef.current,
+          surahNumber,
+        });
         autoPlayRef.current = false;
         await playVerse(playingVerseNumberRef.current);
         // Seek to tapped word position after new verse starts
@@ -791,6 +912,13 @@ export default function MemorizationScreen() {
           pendingSeekPositionRef.current = null;
           await seekToWordPosition(pos);
         }
+      } else {
+        console.log("[noor-mem] verse-effect autoplay-skip", {
+          playingVerseNumber,
+          playingVerseNumberRef: playingVerseNumberRef.current,
+          surahNumber,
+          autoPlayRef: autoPlayRef.current,
+        });
       }
     };
     doChange();
@@ -984,9 +1112,33 @@ export default function MemorizationScreen() {
   }
 
   async function playVerse(verseNum: number) {
-    if (reciteModeRef.current) return;
-    if (!surahNumber) return;
-    if (isLoadingRef.current) return;
+    console.log("[noor-mem] playVerse entry", {
+      verseNum,
+      surahNumber,
+      reciteModeRef: reciteModeRef.current,
+      isLoadingRef: isLoadingRef.current,
+    });
+    if (reciteModeRef.current) {
+      console.log("[noor-mem] playVerse early-return recite-mode", {
+        verseNum,
+        surahNumber,
+      });
+      return;
+    }
+    if (!surahNumber) {
+      console.log("[noor-mem] playVerse early-return surahNumber-missing", {
+        verseNum,
+        surahNumber,
+      });
+      return;
+    }
+    if (isLoadingRef.current) {
+      console.log("[noor-mem] playVerse early-return isLoading", {
+        verseNum,
+        surahNumber,
+      });
+      return;
+    }
     isLoadingRef.current = true;
     try {
       if (soundRef.current) {
@@ -994,6 +1146,12 @@ export default function MemorizationScreen() {
         soundRef.current = null;
       }
       const url = ayahAudioUrl(reciter, surahNumber, verseNum);
+      console.log("[noor-mem] playVerse createAsync start", {
+        verseNum,
+        surahNumber,
+        reciterId: reciter.id,
+        url,
+      });
       const { sound } = await Audio.Sound.createAsync(
         { uri: url },
         { shouldPlay: true },
@@ -1036,6 +1194,11 @@ export default function MemorizationScreen() {
           }
         },
       );
+      console.log("[noor-mem] playVerse createAsync resolved", {
+        verseNum,
+        surahNumber,
+        reciterId: reciter.id,
+      });
       soundRef.current = sound;
       // Ensure max volume — different everyayah recordings have very different
       // mastered loudness levels (Afasy is significantly quieter than Husary).
