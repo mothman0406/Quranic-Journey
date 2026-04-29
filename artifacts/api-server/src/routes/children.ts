@@ -782,18 +782,10 @@ router.get("/children/:childId/dashboard", async (req, res) => {
   const desiredMemTargetEndSurah = scheduledWorkItem?.surahNumber ?? memTarget?.endSurah ?? nextStartSurah;
 
   const todayRows = dailyProgressRows.filter((row) => row.date === today);
-  const getTodayWorkflowIndex = (row: typeof dailyProgressTable.$inferSelect) => {
-    if (!memorizationWorkflow?.enabled) return Number.MAX_SAFE_INTEGER;
-    return findMatchingWorkItem(memorizationWorkflow, row)?.scheduleIndex ?? Number.MAX_SAFE_INTEGER;
-  };
   let todayProgress =
     [...todayRows]
       .filter((row) => row.memTargetSurah != null)
-      .sort((a, b) => {
-        const workflowDelta = getTodayWorkflowIndex(a) - getTodayWorkflowIndex(b);
-        if (workflowDelta !== 0) return workflowDelta;
-        return a.id - b.id;
-      })[0] ??
+      .sort((a, b) => a.id - b.id)[0] ??
     todayRows[0] ??
     null;
 
@@ -812,12 +804,7 @@ router.get("/children/:childId/dashboard", async (req, res) => {
     }).returning();
   } else if (
     todayProgress.memStatus === "not_started" &&
-    (
-      todayProgress.memTargetSurah !== desiredMemTargetSurah ||
-      todayProgress.memTargetAyahStart !== desiredMemTargetAyahStart ||
-      todayProgress.memTargetAyahEnd !== desiredMemTargetAyahEnd ||
-      todayProgress.memTargetEndSurah !== desiredMemTargetEndSurah
-    )
+    todayProgress.memTargetSurah == null
   ) {
     [todayProgress] = await db.update(dailyProgressTable).set({
       memTargetSurah: desiredMemTargetSurah,
@@ -828,19 +815,21 @@ router.get("/children/:childId/dashboard", async (req, res) => {
     }).where(eq(dailyProgressTable.id, todayProgress.id)).returning();
   }
 
+  const hasFrozenTodayMemTarget = todayProgress.memTargetSurah != null;
   const frozenWorkflowItem =
-    memorizationSurahData && memorizationWorkflow?.enabled && todayProgress.memStatus !== "not_started"
+    memorizationSurahData && memorizationWorkflow?.enabled && hasFrozenTodayMemTarget
       ? findMatchingWorkItem(memorizationWorkflow, todayProgress)
       : null;
-  const activeWorkflowItem = frozenWorkflowItem ?? scheduledWorkItem;
+  const activeWorkflowItem = hasFrozenTodayMemTarget ? frozenWorkflowItem : scheduledWorkItem;
+  const nextWorkflowAnchor = frozenWorkflowItem ?? scheduledWorkItem;
   const nextWorkflowItem =
-    memorizationSurahData && memorizationWorkflow?.enabled && activeWorkflowItem
+    memorizationSurahData && memorizationWorkflow?.enabled && nextWorkflowAnchor
       ? findPendingWorkItem(
           memorizationWorkflow,
           activeMemorizationProgress,
           memorizationSurahData.verseCount,
           completedMemDailyRows,
-          activeWorkflowItem.scheduleIndex,
+          nextWorkflowAnchor.scheduleIndex,
         )
       : null;
   const upcomingWorkflowItem =
@@ -850,13 +839,14 @@ router.get("/children/:childId/dashboard", async (req, res) => {
 
   const currentSurahName = activeWorkflowItem?.surahName ?? memorizationSurahData?.nameTransliteration ?? null;
 
-  // Serve frozen daily_progress target when in_progress or completed
+  // Serve the first daily_progress target assigned for the date. Next up may
+  // move as progress changes, but today's assignment should not.
   let displaySurahNumber = nextStartSurah;
   let displayAyahStart = nextStartAyah;
   let displayAyahEnd = memTarget?.endAyah ?? nextStartAyah;
   let displaySurahData = memorizationSurahData;
 
-  if (todayProgress.memStatus !== 'not_started' && todayProgress.memTargetSurah) {
+  if (todayProgress.memTargetSurah) {
     displaySurahNumber = todayProgress.memTargetSurah;
     displayAyahStart = todayProgress.memTargetAyahStart ?? 1;
     displayAyahEnd = todayProgress.memTargetAyahEnd ?? displayAyahEnd;
@@ -885,7 +875,7 @@ router.get("/children/:childId/dashboard", async (req, res) => {
       isReviewOnly: activeWorkflowItem.isReviewOnly,
       estimatedMinutes: activeWorkflowItem.estimatedMinutes,
     } : displaySurahDataFinal ? (() => {
-      const frozen = todayProgress.memStatus !== 'not_started' && !!todayProgress.memTargetSurah;
+      const frozen = hasFrozenTodayMemTarget;
       const endSurah = frozen
         ? (todayProgress.memTargetEndSurah ?? displaySurahNumber)
         : (memTarget?.endSurah ?? displaySurahNumber);
