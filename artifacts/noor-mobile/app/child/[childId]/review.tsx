@@ -8,6 +8,7 @@ import {
   View,
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
+import { ChildBottomNav } from "@/src/components/child-bottom-nav";
 import { fetchReviewQueue, ReviewQueueItem, ReviewQueueResponse } from "@/src/lib/reviews";
 import { getReviewPriorityStyle } from "@/src/lib/review-priority";
 
@@ -83,6 +84,9 @@ export default function ReviewScreen() {
     | { status: "error"; message: string }
     | { status: "ok"; data: ReviewQueueResponse }
   >({ status: "loading" });
+  const navChildId = typeof childId === "string" ? childId : undefined;
+  const navName = typeof name === "string" ? name : "";
+  const navReviewCount = state.status === "ok" ? state.data.dueToday.length : undefined;
 
   const load = useCallback(async () => {
     setState({ status: "loading" });
@@ -143,7 +147,7 @@ export default function ReviewScreen() {
       )}
 
       {state.status === "ok" && (
-        <ScrollView contentContainerStyle={styles.scrollContent}>
+        <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent}>
           {state.data.dueToday.length === 0 && state.data.reviewedToday.length === 0 ? (
             <View style={styles.empty}>
               <Text style={styles.emptyText}>No reviews due today</Text>
@@ -187,6 +191,13 @@ export default function ReviewScreen() {
           )}
         </ScrollView>
       )}
+
+      <ChildBottomNav
+        active="review"
+        childId={navChildId}
+        name={navName}
+        reviewCount={navReviewCount}
+      />
     </View>
   );
 }
@@ -244,9 +255,13 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     fontSize: 15,
   },
+  scroll: {
+    flex: 1,
+  },
   scrollContent: {
     padding: 20,
     gap: 10,
+    paddingBottom: 32,
   },
   empty: {
     flex: 1,

@@ -9,6 +9,7 @@ import {
   View,
 } from "react-native";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
+import { ChildBottomNav } from "@/src/components/child-bottom-nav";
 import { ApiError, apiFetch } from "@/src/lib/api";
 import { fetchReviewQueue, type ReviewQueueItem, type ReviewQueueResponse } from "@/src/lib/reviews";
 import { getReviewPriorityStyle } from "@/src/lib/review-priority";
@@ -264,6 +265,12 @@ export default function ChildDashboard() {
   const router = useRouter();
   const [state, setState] = useState<DashboardState>({ status: "loading" });
   const [refreshing, setRefreshing] = useState(false);
+  const navChildId = typeof childId === "string" ? childId : undefined;
+  const navName = typeof name === "string" ? name : "";
+  const navReviewCount =
+    state.status === "ok"
+      ? state.reviews?.dueToday.length ?? state.dashboard.reviewsDueToday
+      : undefined;
 
   const loadDashboard = useCallback(
     async (mode: "initial" | "refresh" = "initial") => {
@@ -473,6 +480,7 @@ export default function ChildDashboard() {
 
     return (
       <ScrollView
+        style={styles.scroll}
         contentContainerStyle={styles.list}
         refreshControl={
           <RefreshControl
@@ -556,6 +564,12 @@ export default function ChildDashboard() {
       </View>
 
       {renderContent()}
+      <ChildBottomNav
+        active="dashboard"
+        childId={navChildId}
+        name={navName}
+        reviewCount={navReviewCount}
+      />
     </View>
   );
 }
@@ -623,6 +637,9 @@ const styles = StyleSheet.create({
     color: "#ffffff",
     fontSize: 15,
     fontWeight: "600",
+  },
+  scroll: {
+    flex: 1,
   },
   summaryBand: {
     backgroundColor: "#111111",
