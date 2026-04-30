@@ -71,6 +71,7 @@ import {
   type MemorizationSessionBookmark,
 } from "@/src/lib/settings";
 import { extractTajweedColor } from "@/src/lib/tajweed";
+import { CelebrationOverlay } from "@/src/components/celebration-overlay";
 
 const PLAYBACK_RATES = [0.75, 0.85, 1.0, 1.15, 1.25, 1.5] as const;
 type InternalPhase = "single" | "cumulative";
@@ -127,6 +128,10 @@ const DISCOVERY_CHUNK_AYAHS = 5;
 
 type QualityRatingValue = 2 | 4 | 5;
 type RecitationCheckSource = "teacher" | "noorpath";
+type CompletionCelebration = {
+  message: string;
+  subMessage?: string;
+};
 
 const QUALITY_OPTIONS: Array<{
   value: QualityRatingValue;
@@ -413,6 +418,7 @@ export default function MemorizationScreen() {
     useState<RecitationCheckSource>("teacher");
   const [recitationScore, setRecitationScore] = useState<number | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [celebration, setCelebration] = useState<CompletionCelebration | null>(null);
 
   // Session-level settings — initialized from parent defaults each session.
   const [repeatCount, setRepeatCount] = useState<number>(DEFAULT_SESSION_SETTINGS.repeatCount);
@@ -735,6 +741,7 @@ export default function MemorizationScreen() {
     setRecitationCheckSource("teacher");
     setRecitationScore(null);
     setSaveError(null);
+    setCelebration(null);
     setCumAyahIdx(0);
     cumAyahIdxRef.current = 0;
     setCumPass(1);
@@ -1772,6 +1779,7 @@ export default function MemorizationScreen() {
     setSaveError(null);
     setRecitationCheckSource(source);
     setRecitationScore(score);
+    setCelebration(null);
     setPauseSheetOpen(false);
     setLeaveSheetOpen(false);
     updateReadyToReciteSheet(false);
@@ -1923,6 +1931,7 @@ export default function MemorizationScreen() {
     setRecitationCheckSource("teacher");
     setRecitationScore(null);
     setSaveError(null);
+    setCelebration(null);
     setStartInRecitationCheck(false);
     setSettingsOpen(false);
     setTranslationPopup(null);
@@ -2025,6 +2034,54 @@ export default function MemorizationScreen() {
     await enterReciteMode(ayahStart);
   }
 
+  function buildCompletionCelebration({
+    completedThroughAyah,
+    totalVerses,
+    status,
+    hadFullSurahBeforeSave,
+  }: {
+    completedThroughAyah: number;
+    totalVerses: number;
+    status: "memorized" | "in_progress";
+    hadFullSurahBeforeSave: boolean;
+  }): CompletionCelebration | null {
+    if (ayahStart === null || ayahEnd === null || surahNumber === null) return null;
+
+    const surahName =
+      chaptersMap.get(surahNumber)?.name_simple ??
+      MUSHAF_SURAHS.find((surah) => surah.number === surahNumber)?.name ??
+      `Surah ${surahNumber}`;
+    const savedRange = formatAyahRange(ayahStart, completedThroughAyah);
+
+    if (sessionReviewOnly) {
+      const wholeSurahReview = ayahStart === 1 && completedThroughAyah >= totalVerses;
+      return {
+        message: wholeSurahReview ? "Whole Surah Complete!" : "Cumulative Recitation Complete!",
+        subMessage: wholeSurahReview
+          ? `${surahName} is ready to move into the separate review cycle.`
+          : `${surahName} ${savedRange} has been checked and saved.`,
+      };
+    }
+
+    const completedFullSurah =
+      status === "memorized" && completedThroughAyah >= totalVerses && !hadFullSurahBeforeSave;
+    if (completedFullSurah) {
+      return {
+        message: "Surah Complete!",
+        subMessage: `${surahName} is fully memorized. Beautiful work.`,
+      };
+    }
+
+    if (completedThroughAyah >= ayahEnd) {
+      return {
+        message: "Session Complete!",
+        subMessage: `${surahName} ${savedRange} has been saved for review.`,
+      };
+    }
+
+    return null;
+  }
+
   async function handleSaveCompletion(qualityRating: QualityRatingValue) {
     if (!surahNumber || ayahStart === null || ayahEnd === null) return;
     const completedThroughAyah = clampCompletedAyahEnd(ratingAyahEnd ?? ayahEnd);
@@ -2041,6 +2098,10 @@ export default function MemorizationScreen() {
         existingProgress?.totalVerses ??
         chaptersMap.get(surahNumber)?.verses_count ??
         displayWordsMap.size;
+      const hadFullSurahBeforeSave = hasFullSurahMemorized(
+        existingProgress?.memorizedAyahs ?? [],
+        totalVerses,
+      );
       const memorizedAyahs = mergeMemorizedAyahs(
         existingProgress?.memorizedAyahs,
         sessionAyahs,
@@ -2064,6 +2125,12 @@ export default function MemorizationScreen() {
         status,
         completedThroughAyah,
       );
+      const nextCelebration = buildCompletionCelebration({
+        completedThroughAyah,
+        totalVerses,
+        status,
+        hadFullSurahBeforeSave,
+      });
 
       try {
         await refreshDiscoverySnapshot();
@@ -2087,7 +2154,11 @@ export default function MemorizationScreen() {
       await clearMemorizationSessionBookmark(childId);
       setSessionRequested(false);
       setLoading(false);
-      Alert.alert("Progress saved.", "The rating was saved for the selected ayah range.");
+      if (nextCelebration) {
+        setCelebration(nextCelebration);
+      } else {
+        Alert.alert("Progress saved.", "The rating was saved for the selected ayah range.");
+      }
     } catch (e) {
       const message = e instanceof Error ? e.message : "Failed to save.";
       setSaveError(message);
@@ -3942,6 +4013,13 @@ export default function MemorizationScreen() {
           </Pressable>
         </View>
       </Modal>
+
+      <CelebrationOverlay
+        show={celebration !== null}
+        message={celebration?.message ?? ""}
+        subMessage={celebration?.subMessage}
+        onDone={() => setCelebration(null)}
+      />
 
       <Modal
         visible={tappedWord !== null}
