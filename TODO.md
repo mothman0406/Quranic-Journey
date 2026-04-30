@@ -1,6 +1,6 @@
 # NoorPath / Quranic Journey — Status & Next Steps
 
-_Last updated: April 30, 2026 (Phase 2J.1 review completed-today and continue-next hardware QA passed; next action is Phase 2J.2 ahead-day local session behavior)_
+_Last updated: April 30, 2026 (Phase 2J.2 ahead-day local session behavior implemented and locally validated; sync/hardware QA pending)_
 
 ---
 
@@ -502,13 +502,14 @@ Implemented, committed, typechecked, route-fixed, and hardware-tested Apr 28, 20
 
 ## 🟡 CURRENT — Phase 2J.2 Ahead-Day Local Session Behavior
 
-Phase 2J.1 hardware QA passed after commit `949fa3b`. The next action item is Phase 2J.2: ahead-day local session behavior. Do not start Phase 2K or TestFlight readiness until Phase 2J is fully implemented, documented, validated, synced, and hardware-tested.
+Phase 2J.1 hardware QA passed after commit `949fa3b`. Phase 2J.2 local implementation started from `main` at `ce6a381b9fbab4d3f8af73653ee043d062c9e1e1`, with `main`, `origin/main`, `feature/main-working-branch`, and `origin/feature/main-working-branch` synced at start. Local validation has passed; sync and hardware QA are still pending. Do not start Phase 2K or TestFlight readiness until Phase 2J is fully implemented, documented, validated, synced, and hardware-tested.
 
-1. Start Phase 2J.2 from the synced Phase 2J.1 hardware-confirmed docs HEAD on `main`.
-2. Use `artifacts/noor-path/src/pages/review.tsx` as the frozen web reference for active local review date/session persistence, completed prior-day grouping, `loadSession`/`saveSession` behavior, and `completedDaySections`.
-3. Add mobile persistence so if a child reviews ahead, the active review day stays understandable after navigation/refresh, and completed prior review days are grouped rather than disappearing or flattening into today.
-4. Keep the existing review-session route and SM-2 submission behavior intact. Preserve 2J.1 completed-today visibility and `Continue Reviewing`, plus existing due/upcoming/reviewed sections and dashboard/review refresh behavior.
-5. Validation target: `cd artifacts/noor-mobile && npx tsc --noEmit` and `git diff --check`; if backend/API is touched, also run `/Users/mothmanaurascape.ai/Library/pnpm/pnpm --filter @workspace/api-server run typecheck`.
+1. ✅ Started Phase 2J.2 from the synced Phase 2J.1 hardware-confirmed docs HEAD on `main`.
+2. ✅ Used `artifacts/noor-path/src/pages/review.tsx` as the frozen web reference for active local review date/session persistence, completed prior-day grouping, `loadSession`/`saveSession` behavior, and `completedDaySections`.
+3. ✅ Implemented mobile `AsyncStorage` persistence in `artifacts/noor-mobile/app/child/[childId]/review.tsx`: per-child active review date, date-keyed local review sessions, restored completed items, next-open review day resolution, and grouped completed prior review days.
+4. ✅ Kept `artifacts/noor-mobile/app/child/[childId]/review-session.tsx`, backend/API code, generated files, tajweed, recite matcher behavior, and native dependencies untouched. Existing `reviewDate` route params and SM-2 submission behavior remain intact.
+5. ✅ Local validation passed: `cd artifacts/noor-mobile && npx tsc --noEmit` and `git diff --check`. Backend/API was not touched, so API-server typecheck was not required.
+6. Next: commit on `main`, push `origin main`, fast-forward `feature/main-working-branch` onto `main`, push `origin feature/main-working-branch`, switch back to `main`, and leave the working tree clean. Mohammad still needs to hardware-test Phase 2J.2 after sync.
 
 ---
 

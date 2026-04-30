@@ -1,4 +1,4 @@
-import React, { useCallback, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   Pressable,
   RefreshControl,
@@ -7,6 +7,7 @@ import {
   View,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { ChildBottomNav } from "@/src/components/child-bottom-nav";
 import {
@@ -21,6 +22,34 @@ import {
 } from "@/src/components/screen-primitives";
 import { fetchReviewQueue, ReviewQueueItem, ReviewQueueResponse } from "@/src/lib/reviews";
 import { getReviewPriorityStyle } from "@/src/lib/review-priority";
+
+type CompletedReviewItem = {
+  surahId: number;
+  surahName?: string | null;
+  surahNumber: number;
+  ayahStart?: number;
+  ayahEnd?: number;
+  pageStart?: number;
+  pageEnd?: number;
+  chunkIndex?: number;
+  chunkCount?: number;
+};
+
+type StoredReviewSession = {
+  date?: string;
+  sessionDone?: boolean;
+  completedItemsData?: CompletedReviewItem[];
+  sessionTotal?: number;
+  updatedAt?: number;
+};
+
+type CompletedDaySection = {
+  date: string;
+  items: CompletedReviewItem[];
+  sessionTotal: number;
+};
+
+const REVIEW_LOOKAHEAD_DAYS = 45;
 
 function formatAyahRange(item: ReviewQueueItem) {
   return item.ayahStart === item.ayahEnd
@@ -51,6 +80,10 @@ function getLocalDateHeaderValue(date = new Date()) {
   const month = String(date.getMonth() + 1).padStart(2, "0");
   const day = String(date.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
+}
+
+function isLocalDateValue(value: unknown): value is string {
+  return typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value);
 }
 
 function addDaysToLocalDate(value: string, days: number) {
@@ -98,16 +131,307 @@ function itemKey(prefix: string, item: ReviewQueueItem, index: number) {
   return `${prefix}-${item.id}-${item.surahId}-${item.ayahStart}-${index}`;
 }
 
-function findNextOpenReviewDate(activeLocalDate: string, upcoming: ReviewQueueItem[]) {
-  if (upcoming.length === 0) return null;
+function activeReviewDateKey(childId: string) {
+  return `noorpath:review-active-date:${childId}`;
+}
 
-  const nextScheduledDate =
+function reviewSessionKey(childId: string, reviewDate: string) {
+  return `noorpath:review-session:${childId}:${reviewDate}`;
+}
+
+function numberOrUndefined(value: unknown) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+function normalizeCompletedReviewItem(
+  item: Partial<CompletedReviewItem>,
+): CompletedReviewItem | null {
+  const surahId = numberOrUndefined(item.surahId);
+  const surahNumber = numberOrUndefined(item.surahNumber);
+  if (!surahId || !surahNumber) return null;
+
+  return {
+    surahId,
+    surahName: typeof item.surahName === "string" ? item.surahName : null,
+    surahNumber,
+    ayahStart: numberOrUndefined(item.ayahStart),
+    ayahEnd: numberOrUndefined(item.ayahEnd),
+    pageStart: numberOrUndefined(item.pageStart),
+    pageEnd: numberOrUndefined(item.pageEnd),
+    chunkIndex: numberOrUndefined(item.chunkIndex),
+    chunkCount: numberOrUndefined(item.chunkCount),
+  };
+}
+
+function completedFromQueueItem(item: ReviewQueueItem): CompletedReviewItem {
+  return {
+    surahId: item.surahId,
+    surahName: item.surahName,
+    surahNumber: item.surahNumber,
+    ayahStart: item.ayahStart,
+    ayahEnd: item.ayahEnd,
+    pageStart: item.pageStart,
+    pageEnd: item.pageEnd,
+    chunkIndex: item.chunkIndex,
+    chunkCount: item.chunkCount,
+  };
+}
+
+function mergeCompletedReviewItems(
+  localItems: CompletedReviewItem[],
+  backendItems: CompletedReviewItem[],
+): CompletedReviewItem[] {
+  const merged = new Map<number, CompletedReviewItem>();
+
+  for (const item of backendItems) {
+    merged.set(item.surahId, item);
+  }
+  for (const item of localItems) {
+    merged.set(item.surahId, {
+      ...merged.get(item.surahId),
+      ...item,
+    });
+  }
+
+  return Array.from(merged.values()).sort((a, b) => a.surahNumber - b.surahNumber);
+}
+
+function isStoredReviewSessionComplete(session: StoredReviewSession | null | undefined) {
+  if (!session) return false;
+
+  const completedCount = session.completedItemsData?.length ?? 0;
+  const sessionTotal = Number(session.sessionTotal ?? completedCount);
+
+  return (
+    completedCount > 0 &&
+    (session.sessionDone === true ||
+      (sessionTotal > 0 && completedCount >= sessionTotal))
+  );
+}
+
+async function loadStoredReviewSession(
+  childId: string,
+  reviewDate: string,
+): Promise<StoredReviewSession | null> {
+  try {
+    const raw = await AsyncStorage.getItem(reviewSessionKey(childId, reviewDate));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as StoredReviewSession;
+    if (parsed.date && parsed.date !== reviewDate) return null;
+    const completedItemsData = Array.isArray(parsed.completedItemsData)
+      ? parsed.completedItemsData
+          .map((item) => normalizeCompletedReviewItem(item))
+          .filter((item): item is CompletedReviewItem => !!item)
+      : [];
+    const sessionTotal = Number(parsed.sessionTotal ?? completedItemsData.length);
+
+    return {
+      date: reviewDate,
+      sessionDone: parsed.sessionDone === true,
+      completedItemsData,
+      sessionTotal: Number.isFinite(sessionTotal)
+        ? Math.max(0, Math.round(sessionTotal))
+        : completedItemsData.length,
+      updatedAt: numberOrUndefined(parsed.updatedAt),
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function saveStoredReviewSession(
+  childId: string,
+  reviewDate: string,
+  updates: {
+    sessionDone?: boolean;
+    completedItemsData?: CompletedReviewItem[];
+    sessionTotal?: number;
+  },
+): Promise<StoredReviewSession | null> {
+  try {
+    const current = await loadStoredReviewSession(childId, reviewDate);
+    const completedItemsData = updates.completedItemsData
+      ? mergeCompletedReviewItems(
+          current?.completedItemsData ?? [],
+          updates.completedItemsData,
+        )
+      : current?.completedItemsData ?? [];
+    const sessionTotal = Math.max(
+      current?.sessionTotal ?? 0,
+      updates.sessionTotal ?? 0,
+      completedItemsData.length,
+    );
+    const next: StoredReviewSession = {
+      ...current,
+      date: reviewDate,
+      sessionDone: updates.sessionDone ?? current?.sessionDone ?? false,
+      completedItemsData,
+      sessionTotal,
+      updatedAt: Date.now(),
+    };
+
+    await AsyncStorage.setItem(reviewSessionKey(childId, reviewDate), JSON.stringify(next));
+    return next;
+  } catch {
+    return null;
+  }
+}
+
+async function loadStoredActiveReviewDate(childId: string, todayLocal: string) {
+  try {
+    const storedDate = await AsyncStorage.getItem(activeReviewDateKey(childId));
+    if (!isLocalDateValue(storedDate) || storedDate < todayLocal) return todayLocal;
+    return storedDate;
+  } catch {
+    return todayLocal;
+  }
+}
+
+async function saveStoredActiveReviewDate(childId: string, reviewDate: string) {
+  try {
+    await AsyncStorage.setItem(activeReviewDateKey(childId), reviewDate);
+  } catch {
+    // best-effort persistence only
+  }
+}
+
+function nextScheduledReviewDate(activeLocalDate: string, upcoming: ReviewQueueItem[]) {
+  return (
     upcoming
       .map((item) => item.dueDate)
       .filter((dueDate) => dueDate > activeLocalDate)
-      .sort()[0] ?? null;
+      .sort()[0] ?? null
+  );
+}
 
-  return nextScheduledDate ?? addDaysToLocalDate(activeLocalDate, 1);
+async function resolveNextOpenReviewDate(
+  childId: string,
+  activeLocalDate: string,
+  upcoming: ReviewQueueItem[],
+) {
+  const nextScheduledDate = nextScheduledReviewDate(activeLocalDate, upcoming);
+  if (nextScheduledDate) return nextScheduledDate;
+
+  let candidate = addDaysToLocalDate(activeLocalDate, 1);
+  for (let offset = 0; offset < REVIEW_LOOKAHEAD_DAYS; offset += 1) {
+    const session = await loadStoredReviewSession(childId, candidate);
+    if (!isStoredReviewSessionComplete(session)) return candidate;
+    candidate = addDaysToLocalDate(candidate, 1);
+  }
+
+  return candidate;
+}
+
+async function loadCompletedDaySections(
+  childId: string,
+  todayLocal: string,
+  activeLocalDate: string,
+): Promise<CompletedDaySection[]> {
+  if (activeLocalDate <= todayLocal) return [];
+
+  const sections: CompletedDaySection[] = [];
+  let candidate = todayLocal;
+
+  for (
+    let offset = 0;
+    offset < REVIEW_LOOKAHEAD_DAYS && candidate < activeLocalDate;
+    offset += 1
+  ) {
+    const session = await loadStoredReviewSession(childId, candidate);
+    const items = session?.completedItemsData ?? [];
+
+    if (isStoredReviewSessionComplete(session) && items.length > 0) {
+      sections.push({
+        date: candidate,
+        items,
+        sessionTotal: Number(session?.sessionTotal ?? items.length),
+      });
+    }
+
+    candidate = addDaysToLocalDate(candidate, 1);
+  }
+
+  return sections;
+}
+
+async function saveReviewSessionFromQueue(
+  childId: string,
+  reviewDate: string,
+  data: ReviewQueueResponse,
+) {
+  const storedSession = await loadStoredReviewSession(childId, reviewDate);
+  const backendItems = (data.reviewedToday ?? []).map(completedFromQueueItem);
+  const completedItemsData = mergeCompletedReviewItems(
+    storedSession?.completedItemsData ?? [],
+    backendItems,
+  );
+  const sessionTotal = Math.max(
+    storedSession?.sessionTotal ?? 0,
+    completedItemsData.length + (data.dueToday?.length ?? 0),
+  );
+  const sessionDone =
+    completedItemsData.length > 0 &&
+    (data.dueToday?.length ?? 0) === 0 &&
+    completedItemsData.length >= sessionTotal;
+
+  return saveStoredReviewSession(childId, reviewDate, {
+    completedItemsData,
+    sessionDone: sessionDone || storedSession?.sessionDone === true,
+    sessionTotal,
+  });
+}
+
+function completedItemToReviewQueueItem(
+  item: CompletedReviewItem,
+  reviewDate: string,
+  index: number,
+): ReviewQueueItem {
+  const ayahStart = item.ayahStart ?? 1;
+  const ayahEnd = item.ayahEnd ?? ayahStart;
+  const pageStart = item.pageStart ?? 1;
+  const pageEnd = item.pageEnd ?? pageStart;
+  const chunkCount = item.chunkCount ?? 1;
+
+  return {
+    id: -(index + 1),
+    surahId: item.surahId,
+    surahName: item.surahName ?? `Surah ${item.surahNumber}`,
+    surahNumber: item.surahNumber,
+    ayahStart,
+    ayahEnd,
+    pageStart,
+    pageEnd,
+    chunkIndex: item.chunkIndex ?? 1,
+    chunkCount,
+    isPartialReview: chunkCount > 1,
+    dueDate: reviewDate,
+    isOverdue: false,
+    isWeak: false,
+    reviewPriority: "green",
+  };
+}
+
+function mergeReviewedQueueItems(
+  localItems: CompletedReviewItem[],
+  backendItems: ReviewQueueItem[],
+  reviewDate: string,
+): ReviewQueueItem[] {
+  const merged = new Map<number, ReviewQueueItem>();
+
+  for (const item of backendItems) {
+    merged.set(item.surahId, item);
+  }
+  for (const item of localItems) {
+    if (!merged.has(item.surahId)) {
+      merged.set(
+        item.surahId,
+        completedItemToReviewQueueItem(item, reviewDate, merged.size),
+      );
+    }
+  }
+
+  return Array.from(merged.values()).sort((a, b) => a.surahNumber - b.surahNumber);
 }
 
 function PriorityPill({ priority }: { priority: string }) {
@@ -222,6 +546,61 @@ function DayStateCard({
   );
 }
 
+function CompletedDaySectionsCard({ sections }: { sections: CompletedDaySection[] }) {
+  if (sections.length === 0) return null;
+
+  return (
+    <View style={styles.completedDaysCard}>
+      <View style={styles.completedDaysHeader}>
+        <View style={styles.completedDaysTitleWrap}>
+          <Text style={styles.completedDaysTitle}>Completed Review Days</Text>
+          <Text style={styles.completedDaysDetail}>
+            Ahead-day work stays grouped by the day it belonged to.
+          </Text>
+        </View>
+        <View style={styles.completedDaysBadge}>
+          <Text style={styles.completedDaysBadgeText}>
+            {sections.length} {sections.length === 1 ? "day" : "days"}
+          </Text>
+        </View>
+      </View>
+
+      {sections.map((section) => (
+        <View key={section.date} style={styles.completedDayGroup}>
+          <View style={styles.completedDayGroupHeader}>
+            <View>
+              <Text style={styles.completedDayGroupTitle}>
+                {formatReviewDayLabel(section.date)}
+              </Text>
+              <Text style={styles.completedDayGroupDate}>{section.date}</Text>
+            </View>
+            <Text style={styles.completedDayGroupCount}>
+              {section.items.length}/{section.sessionTotal} done
+            </Text>
+          </View>
+          {section.items.map((item) => (
+            <View
+              key={`${section.date}-${item.surahId}-${item.ayahStart ?? 0}`}
+              style={styles.completedDayRow}
+            >
+              <Ionicons name="checkmark-circle" size={17} color="#16a34a" />
+              <View style={styles.completedDayRowText}>
+                <Text style={styles.completedDayRowTitle} numberOfLines={1}>
+                  {item.surahName ?? `Surah ${item.surahNumber}`}
+                </Text>
+                <Text style={styles.completedDayRowDetail}>
+                  {formatAyahRange(completedItemToReviewQueueItem(item, section.date, 0))}
+                </Text>
+              </View>
+              <Text style={styles.completedDayRowStatus}>Reviewed</Text>
+            </View>
+          ))}
+        </View>
+      ))}
+    </View>
+  );
+}
+
 function ReviewCard({
   item,
   onPress,
@@ -297,6 +676,12 @@ export default function ReviewScreen() {
   const router = useRouter();
   const todayLocal = getLocalDateHeaderValue();
   const [activeLocalDate, setActiveLocalDate] = useState(todayLocal);
+  const [currentStoredSession, setCurrentStoredSession] =
+    useState<StoredReviewSession | null>(null);
+  const [completedDaySections, setCompletedDaySections] = useState<
+    CompletedDaySection[]
+  >([]);
+  const [nextOpenReviewDate, setNextOpenReviewDate] = useState<string | null>(null);
 
   const [state, setState] = useState<
     | { status: "loading" }
@@ -305,32 +690,80 @@ export default function ReviewScreen() {
   >({ status: "loading" });
   const [refreshing, setRefreshing] = useState(false);
   const hasLoadedRef = useRef(false);
+  const activeDateRef = useRef(todayLocal);
+  const loadRequestRef = useRef(0);
   const navChildId = typeof childId === "string" ? childId : undefined;
   const navName = typeof name === "string" ? name : "";
   const navReviewCount = state.status === "ok" ? state.data.dueToday.length : undefined;
 
-  const load = useCallback(async (mode: "initial" | "refresh" = "initial") => {
-    if (mode === "initial") {
-      setState({ status: "loading" });
-    } else {
-      setRefreshing(true);
-    }
-    try {
-      const data = await fetchReviewQueue(childId, activeLocalDate);
-      setState({ status: "ok", data });
-    } catch (e) {
-      setState({ status: "error", message: e instanceof Error ? e.message : "Failed to load" });
-    } finally {
-      setRefreshing(false);
-    }
-  }, [activeLocalDate, childId]);
+  useEffect(() => {
+    activeDateRef.current = activeLocalDate;
+  }, [activeLocalDate]);
+
+  const load = useCallback(
+    async (
+      mode: "initial" | "refresh" = "initial",
+      reviewDate = activeDateRef.current,
+    ) => {
+      const requestId = loadRequestRef.current + 1;
+      loadRequestRef.current = requestId;
+
+      if (mode === "initial") {
+        setState({ status: "loading" });
+      } else {
+        setRefreshing(true);
+      }
+      try {
+        await saveStoredActiveReviewDate(childId, reviewDate);
+        const data = await fetchReviewQueue(childId, reviewDate);
+        const storedSession = await saveReviewSessionFromQueue(childId, reviewDate, data);
+        const [sections, nextDate] = await Promise.all([
+          loadCompletedDaySections(childId, todayLocal, reviewDate),
+          resolveNextOpenReviewDate(childId, reviewDate, data.upcoming ?? []),
+        ]);
+
+        if (loadRequestRef.current !== requestId) return;
+
+        setCurrentStoredSession(storedSession);
+        setCompletedDaySections(sections);
+        setNextOpenReviewDate(nextDate);
+        setState({ status: "ok", data });
+      } catch (e) {
+        if (loadRequestRef.current !== requestId) return;
+        setState({
+          status: "error",
+          message: e instanceof Error ? e.message : "Failed to load",
+        });
+      } finally {
+        if (loadRequestRef.current === requestId) {
+          setRefreshing(false);
+        }
+      }
+    },
+    [childId, todayLocal],
+  );
 
   useFocusEffect(
     useCallback(() => {
       const mode = hasLoadedRef.current ? "refresh" : "initial";
       hasLoadedRef.current = true;
-      void load(mode);
-    }, [load]),
+      let cancelled = false;
+
+      void (async () => {
+        const storedActiveDate = await loadStoredActiveReviewDate(childId, todayLocal);
+        if (cancelled) return;
+
+        if (storedActiveDate !== activeDateRef.current) {
+          activeDateRef.current = storedActiveDate;
+          setActiveLocalDate(storedActiveDate);
+        }
+        await load(mode, storedActiveDate);
+      })();
+
+      return () => {
+        cancelled = true;
+      };
+    }, [childId, load, todayLocal]),
   );
 
   function handleCardPress(item: ReviewQueueItem) {
@@ -354,8 +787,9 @@ export default function ReviewScreen() {
   }
 
   function handleContinueReviewing(nextDate: string) {
-    setState({ status: "loading" });
+    activeDateRef.current = nextDate;
     setActiveLocalDate(nextDate);
+    void load("initial", nextDate);
   }
 
   return (
@@ -369,7 +803,7 @@ export default function ReviewScreen() {
       {state.status === "error" && (
         <ErrorState
           message={`Review queue could not load. ${state.message}`}
-          onRetry={() => load()}
+          onRetry={() => load("initial", activeLocalDate)}
         />
       )}
 
@@ -379,17 +813,27 @@ export default function ReviewScreen() {
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
-              onRefresh={() => load("refresh")}
+              onRefresh={() => load("refresh", activeLocalDate)}
               tintColor="#2563eb"
             />
           }
         >
           {(() => {
-            const dueToday = state.data.dueToday ?? [];
+            const storedCompletedItems =
+              currentStoredSession?.date === activeLocalDate
+                ? currentStoredSession.completedItemsData ?? []
+                : [];
+            const reviewedToday = mergeReviewedQueueItems(
+              storedCompletedItems,
+              state.data.reviewedToday ?? [],
+              activeLocalDate,
+            );
+            const reviewedSurahIds = new Set(reviewedToday.map((item) => item.surahId));
+            const dueToday = (state.data.dueToday ?? []).filter(
+              (item) => !reviewedSurahIds.has(item.surahId),
+            );
             const upcoming = state.data.upcoming ?? [];
-            const reviewedToday = state.data.reviewedToday ?? [];
             const activeDateLabel = formatReviewDayLabel(activeLocalDate);
-            const nextOpenReviewDate = findNextOpenReviewDate(activeLocalDate, upcoming);
             const nextOpenReviewLabel = nextOpenReviewDate
               ? formatReviewDayLabel(nextOpenReviewDate)
               : null;
@@ -405,6 +849,8 @@ export default function ReviewScreen() {
                   upcomingCount={upcoming.length}
                   activeDateLabel={activeDateLabel}
                 />
+
+                <CompletedDaySectionsCard sections={completedDaySections} />
 
                 {dueToday.length > 0 && (
                   <>
@@ -639,6 +1085,106 @@ const styles = StyleSheet.create({
   dayStateActionText: {
     color: "#ffffff",
     fontSize: 12,
+    fontWeight: "800",
+  },
+  completedDaysCard: {
+    backgroundColor: "#ecfdf5",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#a7f3d0",
+    padding: 14,
+    gap: 12,
+  },
+  completedDaysHeader: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    gap: 10,
+  },
+  completedDaysTitleWrap: {
+    flex: 1,
+    gap: 2,
+  },
+  completedDaysTitle: {
+    color: "#064e3b",
+    fontSize: 14,
+    fontWeight: "800",
+  },
+  completedDaysDetail: {
+    color: "#047857",
+    fontSize: 12,
+    fontWeight: "600",
+    lineHeight: 16,
+  },
+  completedDaysBadge: {
+    backgroundColor: "#ffffff",
+    borderColor: "#a7f3d0",
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingVertical: 5,
+    paddingHorizontal: 9,
+  },
+  completedDaysBadgeText: {
+    color: "#047857",
+    fontSize: 11,
+    fontWeight: "800",
+  },
+  completedDayGroup: {
+    backgroundColor: "#ffffff",
+    borderRadius: 11,
+    borderWidth: 1,
+    borderColor: "#bbf7d0",
+    padding: 11,
+    gap: 9,
+  },
+  completedDayGroupHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+  },
+  completedDayGroupTitle: {
+    color: "#064e3b",
+    fontSize: 13,
+    fontWeight: "800",
+  },
+  completedDayGroupDate: {
+    color: "#047857",
+    fontSize: 11,
+    fontWeight: "600",
+    marginTop: 1,
+  },
+  completedDayGroupCount: {
+    color: "#047857",
+    fontSize: 12,
+    fontWeight: "800",
+  },
+  completedDayRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 9,
+    backgroundColor: "#f0fdf4",
+    borderRadius: 9,
+    paddingVertical: 9,
+    paddingHorizontal: 10,
+  },
+  completedDayRowText: {
+    flex: 1,
+    gap: 1,
+  },
+  completedDayRowTitle: {
+    color: "#064e3b",
+    fontSize: 13,
+    fontWeight: "700",
+  },
+  completedDayRowDetail: {
+    color: "#047857",
+    fontSize: 11,
+    fontWeight: "600",
+  },
+  completedDayRowStatus: {
+    color: "#16a34a",
+    fontSize: 11,
     fontWeight: "800",
   },
   card: {
