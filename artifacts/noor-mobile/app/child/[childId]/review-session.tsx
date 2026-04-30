@@ -621,7 +621,7 @@ export default function ReviewSession() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#ffffff",
+    backgroundColor: "#f8fafc",
   },
   header: {
     flexDirection: "row",
@@ -630,7 +630,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingBottom: 16,
     borderBottomWidth: 1,
-    borderBottomColor: "#e5e7eb",
+    borderBottomColor: "#e2e8f0",
+    backgroundColor: "#ffffff",
   },
   back: {
     fontSize: 16,
@@ -642,8 +643,8 @@ const styles = StyleSheet.create({
     flex: 1,
     textAlign: "center",
     fontSize: 15,
-    fontWeight: "600",
-    color: "#111111",
+    fontWeight: "800",
+    color: "#111827",
   },
   headerQueue: {
     width: 60,
@@ -669,11 +670,16 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
-    backgroundColor: "#eff6ff",
+    backgroundColor: "#ffffff",
     borderColor: "#bfdbfe",
     borderWidth: 1,
     borderRadius: 12,
     padding: 12,
+    shadowColor: "#0f172a",
+    shadowOpacity: 0.04,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 1,
   },
   sessionIcon: {
     width: 42,
@@ -695,8 +701,8 @@ const styles = StyleSheet.create({
   },
   sessionTitle: {
     fontSize: 16,
-    color: "#111111",
-    fontWeight: "800",
+    color: "#111827",
+    fontWeight: "900",
   },
   sessionDetail: {
     fontSize: 12,
@@ -741,15 +747,22 @@ const styles = StyleSheet.create({
   pageImage: {
     borderRadius: 8,
     backgroundColor: "#f9fafb",
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
   },
   stickyControls: {
     borderTopWidth: 1,
-    borderTopColor: "#e5e7eb",
+    borderTopColor: "#e2e8f0",
     backgroundColor: "#ffffff",
     paddingTop: 12,
     paddingHorizontal: 16,
     paddingBottom: 24,
     gap: 10,
+    shadowColor: "#0f172a",
+    shadowOpacity: 0.08,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: -4 },
+    elevation: 8,
   },
   controlStatus: {
     flexDirection: "row",
@@ -759,7 +772,7 @@ const styles = StyleSheet.create({
   },
   verseCounter: {
     fontSize: 14,
-    color: "#111111",
+    color: "#111827",
     fontWeight: "800",
   },
   audioMeta: {
@@ -805,7 +818,7 @@ const styles = StyleSheet.create({
   finishButton: {
     flex: 1,
     minHeight: 48,
-    backgroundColor: "#111111",
+    backgroundColor: "#111827",
     paddingVertical: 13,
     paddingHorizontal: 16,
     borderRadius: 11,
@@ -823,16 +836,16 @@ const styles = StyleSheet.create({
   },
   sheet: {
     backgroundColor: "#ffffff",
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
+    borderTopLeftRadius: 18,
+    borderTopRightRadius: 18,
     padding: 24,
     paddingBottom: 40,
     gap: 10,
   },
   sheetTitle: {
     fontSize: 18,
-    fontWeight: "700",
-    color: "#111111",
+    fontWeight: "900",
+    color: "#111827",
     marginBottom: 6,
     textAlign: "center",
   },
@@ -846,8 +859,8 @@ const styles = StyleSheet.create({
   },
   settingLabel: {
     fontSize: 15,
-    color: "#111111",
-    fontWeight: "700",
+    color: "#111827",
+    fontWeight: "900",
     marginTop: 4,
   },
   pillScroller: {
@@ -855,10 +868,10 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   ratePill: {
-    backgroundColor: "#f9fafb",
+    backgroundColor: "#ffffff",
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: "#e5e7eb",
+    borderColor: "#e2e8f0",
     paddingVertical: 8,
     paddingHorizontal: 14,
     minWidth: 56,
@@ -870,17 +883,17 @@ const styles = StyleSheet.create({
   },
   ratePillText: {
     fontSize: 13,
-    fontWeight: "700",
-    color: "#111111",
+    fontWeight: "800",
+    color: "#111827",
   },
   ratePillTextSelected: {
     color: "#ffffff",
   },
   reciterPill: {
-    backgroundColor: "#f9fafb",
+    backgroundColor: "#ffffff",
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: "#e5e7eb",
+    borderColor: "#e2e8f0",
     paddingVertical: 8,
     paddingHorizontal: 14,
   },
@@ -890,8 +903,8 @@ const styles = StyleSheet.create({
   },
   reciterPillText: {
     fontSize: 13,
-    fontWeight: "700",
-    color: "#111111",
+    fontWeight: "800",
+    color: "#111827",
   },
   reciterPillTextSelected: {
     color: "#ffffff",
@@ -914,10 +927,10 @@ const styles = StyleSheet.create({
     gap: 12,
     paddingVertical: 12,
     paddingHorizontal: 14,
-    borderRadius: 10,
+    borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#e5e7eb",
-    backgroundColor: "#f9fafb",
+    borderColor: "#e2e8f0",
+    backgroundColor: "#ffffff",
   },
   ratingRowSelected: {
     borderColor: "#2563eb",
@@ -932,7 +945,8 @@ const styles = StyleSheet.create({
   ratingLabel: {
     flex: 1,
     fontSize: 15,
-    color: "#111111",
+    color: "#111827",
+    fontWeight: "700",
   },
   ratingCheck: {
     fontSize: 16,
@@ -947,7 +961,7 @@ const styles = StyleSheet.create({
   skipButton: {
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#e5e7eb",
+    borderColor: "#e2e8f0",
     backgroundColor: "#ffffff",
     paddingVertical: 13,
     alignItems: "center",

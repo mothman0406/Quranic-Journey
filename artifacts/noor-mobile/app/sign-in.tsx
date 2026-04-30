@@ -36,36 +36,38 @@ export default function SignInScreen() {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>NoorPath</Text>
-      <TextInput
-        style={styles.input}
-        placeholder="Email"
-        placeholderTextColor="#999"
-        autoCapitalize="none"
-        keyboardType="email-address"
-        value={email}
-        onChangeText={setEmail}
-      />
-      <TextInput
-        style={styles.input}
-        placeholder="Password"
-        placeholderTextColor="#999"
-        secureTextEntry
-        value={password}
-        onChangeText={setPassword}
-      />
-      {error ? <Text style={styles.error}>{error}</Text> : null}
-      <Pressable
-        style={[styles.button, loading && styles.buttonDisabled]}
-        onPress={handleSignIn}
-        disabled={loading}
-      >
-        {loading ? (
-          <ActivityIndicator color="#fff" />
-        ) : (
-          <Text style={styles.buttonText}>Sign in</Text>
-        )}
-      </Pressable>
+      <View style={styles.card}>
+        <Text style={styles.title}>NoorPath</Text>
+        <TextInput
+          style={styles.input}
+          placeholder="Email"
+          placeholderTextColor="#94a3b8"
+          autoCapitalize="none"
+          keyboardType="email-address"
+          value={email}
+          onChangeText={setEmail}
+        />
+        <TextInput
+          style={styles.input}
+          placeholder="Password"
+          placeholderTextColor="#94a3b8"
+          secureTextEntry
+          value={password}
+          onChangeText={setPassword}
+        />
+        {error ? <Text style={styles.error}>{error}</Text> : null}
+        <Pressable
+          style={[styles.button, loading && styles.buttonDisabled]}
+          onPress={handleSignIn}
+          disabled={loading}
+        >
+          {loading ? (
+            <ActivityIndicator color="#fff" />
+          ) : (
+            <Text style={styles.buttonText}>Sign in</Text>
+          )}
+        </Pressable>
+      </View>
     </View>
   );
 }
@@ -75,32 +77,50 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: "center",
     padding: 24,
+    backgroundColor: "#f8fafc",
+  },
+  card: {
+    width: "100%",
+    maxWidth: 420,
+    alignSelf: "center",
     gap: 12,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    borderRadius: 12,
     backgroundColor: "#ffffff",
+    padding: 20,
+    shadowColor: "#0f172a",
+    shadowOpacity: 0.05,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 2,
   },
   title: {
     fontSize: 28,
-    fontWeight: "bold",
+    fontWeight: "900",
     textAlign: "center",
     marginBottom: 16,
-    color: "#111111",
+    color: "#111827",
   },
   input: {
     borderWidth: 1,
-    borderColor: "#cccccc",
-    borderRadius: 8,
+    borderColor: "#d1d5db",
+    borderRadius: 10,
     padding: 12,
     fontSize: 16,
-    color: "#111111",
+    color: "#111827",
     backgroundColor: "#ffffff",
+    fontWeight: "600",
   },
   error: {
-    color: "#cc0000",
+    color: "#dc2626",
     fontSize: 14,
+    lineHeight: 19,
+    fontWeight: "700",
   },
   button: {
     backgroundColor: "#2563eb",
-    borderRadius: 8,
+    borderRadius: 10,
     padding: 14,
     alignItems: "center",
     marginTop: 4,
@@ -111,6 +131,6 @@ const styles = StyleSheet.create({
   buttonText: {
     color: "#ffffff",
     fontSize: 16,
-    fontWeight: "600",
+    fontWeight: "800",
   },
 });

@@ -148,9 +148,9 @@ export default function ChildProfileScreen() {
 
 const styles = StyleSheet.create({
   errorBanner: {
-    margin: 20,
+    margin: 16,
     marginBottom: 0,
-    borderRadius: 10,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: "#fecaca",
     backgroundColor: "#fef2f2",
@@ -160,6 +160,7 @@ const styles = StyleSheet.create({
     color: "#dc2626",
     fontSize: 13,
     fontWeight: "700",
+    lineHeight: 18,
   },
   deleteButton: {
     borderRadius: 12,

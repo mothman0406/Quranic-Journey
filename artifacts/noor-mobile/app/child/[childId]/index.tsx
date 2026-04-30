@@ -1107,29 +1107,30 @@ export default function ChildDashboard() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#ffffff",
+    backgroundColor: "#f8fafc",
   },
   header: {
     flexDirection: "row",
     alignItems: "center",
     paddingTop: 60,
-    paddingHorizontal: 20,
-    paddingBottom: 16,
+    paddingHorizontal: 16,
+    paddingBottom: 12,
     borderBottomWidth: 1,
-    borderBottomColor: "#e5e7eb",
+    borderBottomColor: "#e2e8f0",
+    backgroundColor: "#ffffff",
   },
   back: {
     fontSize: 16,
     color: "#2563eb",
-    fontWeight: "500",
+    fontWeight: "800",
     width: 70,
   },
   title: {
     flex: 1,
     textAlign: "center",
-    fontSize: 20,
-    fontWeight: "700",
-    color: "#111111",
+    fontSize: 18,
+    fontWeight: "900",
+    color: "#111827",
   },
   headerRight: {
     width: 70,
@@ -1141,9 +1142,9 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
   list: {
-    padding: 20,
-    gap: 14,
-    paddingBottom: 32,
+    padding: 16,
+    gap: 12,
+    paddingBottom: 112,
   },
   center: {
     flex: 1,
@@ -1172,7 +1173,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   summaryBand: {
-    backgroundColor: "#111111",
+    backgroundColor: "#111827",
     borderRadius: 12,
     padding: 16,
     flexDirection: "row",
@@ -1201,7 +1202,7 @@ const styles = StyleSheet.create({
   summaryName: {
     fontSize: 20,
     color: "#ffffff",
-    fontWeight: "700",
+    fontWeight: "900",
     marginTop: 2,
   },
   summarySubline: {
@@ -1247,7 +1248,7 @@ const styles = StyleSheet.create({
     minHeight: 96,
     backgroundColor: "#ffffff",
     borderWidth: 1,
-    borderColor: "#e5e7eb",
+    borderColor: "#e2e8f0",
     borderRadius: 12,
     padding: 12,
     alignItems: "center",
@@ -1300,9 +1301,9 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   sectionTitle: {
-    color: "#111111",
+    color: "#111827",
     fontSize: 15,
-    fontWeight: "800",
+    fontWeight: "900",
   },
   sectionAction: {
     color: "#2563eb",
@@ -1310,12 +1311,17 @@ const styles = StyleSheet.create({
     fontWeight: "800",
   },
   card: {
-    backgroundColor: "#f9fafb",
+    backgroundColor: "#ffffff",
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#e5e7eb",
+    borderColor: "#e2e8f0",
     padding: 16,
     gap: 10,
+    shadowColor: "#0f172a",
+    shadowOpacity: 0.035,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 1,
   },
   cardHeader: {
     flexDirection: "row",
@@ -1345,8 +1351,8 @@ const styles = StyleSheet.create({
   },
   cardLabel: {
     fontSize: 17,
-    fontWeight: "700",
-    color: "#111111",
+    fontWeight: "900",
+    color: "#111827",
     marginTop: 1,
   },
   cardAction: {
@@ -1365,7 +1371,7 @@ const styles = StyleSheet.create({
   },
   cardDetail: {
     fontSize: 14,
-    color: "#444444",
+    color: "#475569",
     lineHeight: 20,
   },
   reviewPreviewList: {
@@ -1392,8 +1398,8 @@ const styles = StyleSheet.create({
   },
   reviewSurah: {
     fontSize: 14,
-    fontWeight: "700",
-    color: "#111111",
+    fontWeight: "900",
+    color: "#111827",
   },
   reviewRange: {
     fontSize: 12,
@@ -1437,9 +1443,9 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   nextTitle: {
-    color: "#111111",
+    color: "#111827",
     fontSize: 15,
-    fontWeight: "800",
+    fontWeight: "900",
   },
   nextDetail: {
     color: "#555555",
@@ -1455,7 +1461,7 @@ const styles = StyleSheet.create({
   panel: {
     backgroundColor: "#ffffff",
     borderWidth: 1,
-    borderColor: "#e5e7eb",
+    borderColor: "#e2e8f0",
     borderRadius: 12,
     overflow: "hidden",
   },
@@ -1471,7 +1477,7 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   goalTitle: {
-    color: "#111111",
+    color: "#111827",
     fontSize: 14,
     fontWeight: "800",
   },
@@ -1544,7 +1550,7 @@ const styles = StyleSheet.create({
   },
   achievementTitle: {
     flex: 1,
-    color: "#111111",
+    color: "#111827",
     fontSize: 14,
     fontWeight: "800",
   },
@@ -1586,7 +1592,7 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   suggestionTitle: {
-    color: "#111111",
+    color: "#111827",
     fontSize: 14,
     fontWeight: "800",
   },
@@ -1601,7 +1607,7 @@ const styles = StyleSheet.create({
     fontWeight: "800",
   },
   duaArabic: {
-    color: "#111111",
+    color: "#111827",
     fontSize: 15,
     lineHeight: 22,
     marginTop: 4,
@@ -1618,7 +1624,7 @@ const styles = StyleSheet.create({
     minHeight: 76,
     backgroundColor: "#ffffff",
     borderWidth: 1,
-    borderColor: "#e5e7eb",
+    borderColor: "#e2e8f0",
     borderRadius: 12,
     padding: 12,
     flexDirection: "row",
@@ -1637,7 +1643,7 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   quickTitle: {
-    color: "#111111",
+    color: "#111827",
     fontSize: 13,
     fontWeight: "800",
   },

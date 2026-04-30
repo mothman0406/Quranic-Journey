@@ -1235,14 +1235,14 @@ export default function ReviewScreen() {
 const styles = StyleSheet.create({
   reviewContent: {
     gap: 10,
-    paddingBottom: 96,
+    paddingBottom: 112,
   },
   sectionWithSpace: {
     marginTop: 20,
   },
   summaryCard: {
-    backgroundColor: "#111111",
-    borderRadius: 14,
+    backgroundColor: "#111827",
+    borderRadius: 12,
     padding: 16,
     gap: 14,
   },
@@ -1272,7 +1272,7 @@ const styles = StyleSheet.create({
   summaryTitle: {
     color: "#ffffff",
     fontSize: 19,
-    fontWeight: "800",
+    fontWeight: "900",
   },
   summaryDetail: {
     color: "#d1d5db",
@@ -1287,7 +1287,7 @@ const styles = StyleSheet.create({
   summaryMetric: {
     flex: 1,
     backgroundColor: "#ffffff",
-    borderRadius: 10,
+    borderRadius: 12,
     paddingVertical: 10,
     paddingHorizontal: 8,
     alignItems: "center",
@@ -1454,6 +1454,11 @@ const styles = StyleSheet.create({
     borderColor: "#dbeafe",
     padding: 14,
     gap: 12,
+    shadowColor: "#0f172a",
+    shadowOpacity: 0.035,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 1,
   },
   batchHeader: {
     flexDirection: "row",
@@ -1466,9 +1471,9 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   batchTitle: {
-    color: "#111111",
+    color: "#111827",
     fontSize: 15,
-    fontWeight: "800",
+    fontWeight: "900",
   },
   batchDetail: {
     color: "#555555",
@@ -1553,14 +1558,19 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
   card: {
-    backgroundColor: "#f9fafb",
+    backgroundColor: "#ffffff",
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#e5e7eb",
+    borderColor: "#e2e8f0",
     padding: 14,
     paddingLeft: 18,
     gap: 6,
     overflow: "hidden",
+    shadowColor: "#0f172a",
+    shadowOpacity: 0.03,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 1,
   },
   cardReadOnly: {
     opacity: 0.95,
@@ -1591,13 +1601,13 @@ const styles = StyleSheet.create({
   surahName: {
     flex: 1,
     fontSize: 16,
-    fontWeight: "700",
-    color: "#111111",
+    fontWeight: "900",
+    color: "#111827",
   },
   chunkBadge: {
     fontSize: 12,
-    color: "#666666",
-    fontWeight: "500",
+    color: "#64748b",
+    fontWeight: "800",
   },
   batchSelectCircle: {
     width: 28,
@@ -1629,7 +1639,7 @@ const styles = StyleSheet.create({
   cardSub: {
     flex: 1,
     fontSize: 13,
-    color: "#555555",
+    color: "#475569",
     lineHeight: 18,
   },
   statusBadge: {

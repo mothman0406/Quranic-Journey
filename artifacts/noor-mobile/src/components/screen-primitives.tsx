@@ -84,6 +84,9 @@ export function EmptyState({
 }) {
   return (
     <View style={styles.empty}>
+      <View style={styles.stateIcon}>
+        <Ionicons name="leaf-outline" size={22} color="#0f766e" />
+      </View>
       <Text style={styles.emptyTitle}>{title}</Text>
       {detail ? <Text style={styles.emptyDetail}>{detail}</Text> : null}
     </View>
@@ -99,7 +102,12 @@ export function ErrorState({
 }) {
   return (
     <ScreenCenter>
-      <Text style={styles.errorText}>{message}</Text>
+      <View style={styles.errorCard}>
+        <View style={styles.errorIcon}>
+          <Ionicons name="alert-circle-outline" size={22} color="#dc2626" />
+        </View>
+        <Text style={styles.errorText}>{message}</Text>
+      </View>
       {onRetry ? (
         <Pressable style={styles.primaryButton} onPress={onRetry}>
           <Text style={styles.primaryButtonText}>Retry</Text>
@@ -118,6 +126,7 @@ export function InlineError({
 }) {
   return (
     <View style={styles.inlineError}>
+      <Ionicons name="alert-circle-outline" size={17} color="#dc2626" />
       <Text style={styles.inlineErrorText}>{message}</Text>
       {onRetry ? (
         <Pressable style={styles.inlineErrorButton} onPress={onRetry}>
@@ -197,43 +206,47 @@ export function ListRow({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#ffffff",
+    backgroundColor: "#f8fafc",
   },
   header: {
     flexDirection: "row",
     alignItems: "center",
     paddingTop: 60,
-    paddingHorizontal: 20,
-    paddingBottom: 16,
+    paddingHorizontal: 16,
+    paddingBottom: 12,
     borderBottomWidth: 1,
-    borderBottomColor: "#e5e7eb",
+    borderBottomColor: "#e2e8f0",
     backgroundColor: "#ffffff",
   },
   headerSide: {
     alignItems: "flex-start",
+    minHeight: 38,
+    justifyContent: "center",
   },
   headerRight: {
     alignItems: "flex-end",
+    minHeight: 38,
+    justifyContent: "center",
   },
   backText: {
-    fontSize: 16,
+    fontSize: 15,
     color: "#2563eb",
-    fontWeight: "500",
+    fontWeight: "800",
   },
   headerTitle: {
     flex: 1,
     textAlign: "center",
-    fontSize: 20,
-    fontWeight: "700",
-    color: "#111111",
+    fontSize: 18,
+    fontWeight: "800",
+    color: "#111827",
   },
   scroll: {
     flex: 1,
   },
   scrollContent: {
-    padding: 20,
-    gap: 14,
-    paddingBottom: 32,
+    padding: 16,
+    gap: 12,
+    paddingBottom: 112,
   },
   center: {
     flex: 1,
@@ -244,32 +257,68 @@ const styles = StyleSheet.create({
   },
   loadingLabel: {
     fontSize: 13,
-    color: "#666666",
+    color: "#64748b",
     fontWeight: "600",
   },
   empty: {
     alignItems: "center",
     justifyContent: "center",
-    paddingVertical: 72,
-    paddingHorizontal: 24,
+    paddingVertical: 36,
+    paddingHorizontal: 22,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    borderRadius: 12,
+    backgroundColor: "#ffffff",
+  },
+  stateIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#ecfdf5",
+    borderWidth: 1,
+    borderColor: "#a7f3d0",
+    marginBottom: 12,
   },
   emptyTitle: {
     fontSize: 17,
-    color: "#111111",
-    fontWeight: "700",
+    color: "#111827",
+    fontWeight: "800",
     textAlign: "center",
   },
   emptyDetail: {
     fontSize: 14,
-    color: "#666666",
+    color: "#64748b",
     textAlign: "center",
     lineHeight: 20,
     marginTop: 6,
+  },
+  errorCard: {
+    width: "100%",
+    maxWidth: 360,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#fecaca",
+    borderRadius: 12,
+    backgroundColor: "#fff7f7",
+    padding: 18,
+    gap: 10,
+  },
+  errorIcon: {
+    width: 42,
+    height: 42,
+    borderRadius: 12,
+    backgroundColor: "#fee2e2",
+    alignItems: "center",
+    justifyContent: "center",
   },
   errorText: {
     fontSize: 15,
     color: "#dc2626",
     textAlign: "center",
+    lineHeight: 20,
+    fontWeight: "700",
   },
   primaryButton: {
     backgroundColor: "#2563eb",
@@ -286,17 +335,21 @@ const styles = StyleSheet.create({
     backgroundColor: "#fef2f2",
     borderWidth: 1,
     borderColor: "#fecaca",
-    borderRadius: 10,
+    borderRadius: 12,
     padding: 12,
+    flexDirection: "row",
+    alignItems: "center",
     gap: 10,
   },
   inlineErrorText: {
+    flex: 1,
     color: "#dc2626",
     fontSize: 13,
     fontWeight: "600",
+    lineHeight: 18,
   },
   inlineErrorButton: {
-    alignSelf: "flex-start",
+    alignSelf: "center",
     backgroundColor: "#dc2626",
     borderRadius: 8,
     paddingVertical: 8,
@@ -308,34 +361,35 @@ const styles = StyleSheet.create({
     fontWeight: "800",
   },
   sectionLabel: {
-    color: "#666666",
+    color: "#64748b",
     fontSize: 12,
     fontWeight: "800",
     textTransform: "uppercase",
+    marginTop: 4,
   },
   cardGroup: {
     backgroundColor: "#ffffff",
     borderWidth: 1,
-    borderColor: "#e5e7eb",
+    borderColor: "#e2e8f0",
     borderRadius: 12,
     overflow: "hidden",
   },
   row: {
-    minHeight: 68,
+    minHeight: 64,
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
     paddingVertical: 12,
     paddingHorizontal: 14,
     borderBottomWidth: 1,
-    borderBottomColor: "#f3f4f6",
+    borderBottomColor: "#f1f5f9",
   },
   rowDisabled: {
     opacity: 0.62,
   },
   rowIcon: {
-    width: 40,
-    height: 40,
+    width: 38,
+    height: 38,
     borderRadius: 10,
     alignItems: "center",
     justifyContent: "center",
@@ -347,12 +401,13 @@ const styles = StyleSheet.create({
   rowTitle: {
     fontSize: 15,
     fontWeight: "800",
-    color: "#111111",
+    color: "#111827",
   },
   rowDetail: {
     fontSize: 13,
-    color: "#666666",
+    color: "#64748b",
     marginTop: 2,
+    lineHeight: 18,
   },
   pill: {
     flexDirection: "row",

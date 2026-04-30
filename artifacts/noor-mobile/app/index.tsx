@@ -8,6 +8,7 @@ import {
   View,
 } from "react-native";
 import { Redirect, useRouter } from "expo-router";
+import { Ionicons } from "@expo/vector-icons";
 import { authClient } from "@/src/lib/auth-client";
 import { apiFetch } from "@/src/lib/api";
 
@@ -93,6 +94,9 @@ export default function HomeScreen() {
         </View>
       ) : children!.length === 0 ? (
         <View style={styles.center}>
+          <View style={styles.emptyIcon}>
+            <Ionicons name="person-add-outline" size={24} color="#2563eb" />
+          </View>
           <Text style={styles.emptyTitle}>Add your first child</Text>
           <Text style={styles.emptyText}>
             Create a profile here, then choose any surahs they already know.
@@ -144,7 +148,7 @@ export default function HomeScreen() {
                   </Text>
                 </View>
               </View>
-              <Text style={styles.cardArrow}>›</Text>
+              <Ionicons name="chevron-forward" size={19} color="#94a3b8" />
             </Pressable>
           ))}
         </ScrollView>
@@ -156,33 +160,35 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#ffffff",
+    backgroundColor: "#f8fafc",
   },
   header: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
     paddingTop: 60,
-    paddingHorizontal: 20,
-    paddingBottom: 16,
+    paddingHorizontal: 16,
+    paddingBottom: 12,
     borderBottomWidth: 1,
-    borderBottomColor: "#e5e7eb",
+    borderBottomColor: "#e2e8f0",
+    backgroundColor: "#ffffff",
   },
   title: {
     fontSize: 22,
-    fontWeight: "700",
-    color: "#111111",
+    fontWeight: "900",
+    color: "#111827",
   },
   signOut: {
     fontSize: 14,
     color: "#dc2626",
-    fontWeight: "500",
+    fontWeight: "800",
   },
   center: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
     gap: 16,
+    paddingHorizontal: 24,
   },
   errorText: {
     color: "#dc2626",
@@ -192,7 +198,7 @@ const styles = StyleSheet.create({
   },
   retryButton: {
     backgroundColor: "#2563eb",
-    borderRadius: 8,
+    borderRadius: 10,
     paddingVertical: 10,
     paddingHorizontal: 20,
   },
@@ -202,16 +208,25 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   emptyText: {
-    color: "#666666",
+    color: "#64748b",
     fontSize: 15,
     textAlign: "center",
-    paddingHorizontal: 32,
     lineHeight: 21,
   },
+  emptyIcon: {
+    width: 52,
+    height: 52,
+    borderRadius: 14,
+    backgroundColor: "#eff6ff",
+    borderWidth: 1,
+    borderColor: "#bfdbfe",
+    alignItems: "center",
+    justifyContent: "center",
+  },
   emptyTitle: {
-    color: "#111111",
+    color: "#111827",
     fontSize: 20,
-    fontWeight: "800",
+    fontWeight: "900",
     textAlign: "center",
   },
   primaryButton: {
@@ -226,9 +241,9 @@ const styles = StyleSheet.create({
     fontWeight: "800",
   },
   list: {
-    padding: 20,
+    padding: 16,
     gap: 12,
-    paddingBottom: 32,
+    paddingBottom: 36,
   },
   listHeader: {
     flexDirection: "row",
@@ -237,7 +252,7 @@ const styles = StyleSheet.create({
     marginBottom: 2,
   },
   addButton: {
-    backgroundColor: "#111111",
+    backgroundColor: "#111827",
     borderRadius: 10,
     paddingHorizontal: 14,
     paddingVertical: 9,
@@ -249,23 +264,28 @@ const styles = StyleSheet.create({
   },
   subtitle: {
     fontSize: 20,
-    fontWeight: "700",
-    color: "#111111",
+    fontWeight: "900",
+    color: "#111827",
   },
   listHint: {
     fontSize: 13,
-    color: "#666666",
+    color: "#64748b",
     marginTop: 2,
   },
   card: {
-    backgroundColor: "#f9fafb",
+    backgroundColor: "#ffffff",
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#e5e7eb",
+    borderColor: "#e2e8f0",
     padding: 16,
     flexDirection: "row",
     alignItems: "center",
     gap: 14,
+    shadowColor: "#0f172a",
+    shadowOpacity: 0.04,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 1,
   },
   avatarBubble: {
     width: 52,
@@ -273,7 +293,7 @@ const styles = StyleSheet.create({
     borderRadius: 15,
     backgroundColor: "#ffffff",
     borderWidth: 1,
-    borderColor: "#e5e7eb",
+    borderColor: "#e2e8f0",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -291,8 +311,8 @@ const styles = StyleSheet.create({
   },
   childName: {
     fontSize: 18,
-    fontWeight: "700",
-    color: "#111111",
+    fontWeight: "900",
+    color: "#111827",
     flexShrink: 1,
   },
   agePill: {
@@ -320,11 +340,7 @@ const styles = StyleSheet.create({
   },
   childMetaMuted: {
     fontSize: 13,
-    color: "#666666",
+    color: "#64748b",
     fontWeight: "600",
-  },
-  cardArrow: {
-    fontSize: 24,
-    color: "#999999",
   },
 });

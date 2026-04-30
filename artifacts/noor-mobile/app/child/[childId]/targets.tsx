@@ -987,7 +987,7 @@ export default function TargetsScreen() {
 
 const styles = StyleSheet.create({
   summaryBand: {
-    backgroundColor: "#111111",
+    backgroundColor: "#111827",
     borderRadius: 12,
     padding: 16,
     flexDirection: "row",
@@ -1017,7 +1017,7 @@ const styles = StyleSheet.create({
   summaryName: {
     fontSize: 20,
     color: "#ffffff",
-    fontWeight: "700",
+    fontWeight: "900",
     marginTop: 2,
   },
   summarySubline: {
@@ -1036,7 +1036,7 @@ const styles = StyleSheet.create({
     minHeight: 122,
     backgroundColor: "#ffffff",
     borderWidth: 1,
-    borderColor: "#e5e7eb",
+    borderColor: "#e2e8f0",
     borderRadius: 12,
     padding: 13,
     gap: 7,
@@ -1052,37 +1052,42 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   presetTitle: {
-    color: "#111111",
+    color: "#111827",
     fontSize: 15,
-    fontWeight: "800",
+    fontWeight: "900",
   },
   presetTitleActive: {
     color: "#2563eb",
   },
   presetStatus: {
-    color: "#666666",
+    color: "#64748b",
     fontSize: 11,
     fontWeight: "800",
   },
   presetDetail: {
-    color: "#666666",
+    color: "#64748b",
     fontSize: 12,
     lineHeight: 17,
     fontWeight: "600",
   },
   presetMeta: {
-    color: "#444444",
+    color: "#475569",
     fontSize: 12,
     lineHeight: 17,
     fontWeight: "700",
   },
   card: {
-    backgroundColor: "#f9fafb",
+    backgroundColor: "#ffffff",
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#e5e7eb",
+    borderColor: "#e2e8f0",
     padding: 16,
     gap: 14,
+    shadowColor: "#0f172a",
+    shadowOpacity: 0.035,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 1,
   },
   cardHeader: {
     flexDirection: "row",
@@ -1102,18 +1107,18 @@ const styles = StyleSheet.create({
   },
   cardTitle: {
     fontSize: 15,
-    color: "#111111",
-    fontWeight: "800",
+    color: "#111827",
+    fontWeight: "900",
   },
   cardDetail: {
     fontSize: 13,
-    color: "#666666",
+    color: "#64748b",
     marginTop: 2,
     lineHeight: 18,
   },
   statusText: {
     fontSize: 13,
-    color: "#666666",
+    color: "#64748b",
     fontWeight: "700",
   },
   statusSaved: {
@@ -1129,16 +1134,16 @@ const styles = StyleSheet.create({
   },
   optionButton: {
     borderWidth: 1,
-    borderColor: "#e5e7eb",
+    borderColor: "#e2e8f0",
     borderRadius: 10,
     paddingHorizontal: 12,
     paddingVertical: 9,
-    backgroundColor: "#ffffff",
+    backgroundColor: "#f8fafc",
   },
   optionText: {
     fontSize: 14,
-    color: "#444444",
-    fontWeight: "700",
+    color: "#475569",
+    fontWeight: "800",
   },
   memorizationOptionActive: {
     backgroundColor: "#f5f3ff",
@@ -1159,14 +1164,14 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 12,
     borderTopWidth: 1,
-    borderTopColor: "#e5e7eb",
+    borderTopColor: "#e2e8f0",
     paddingTop: 14,
   },
   stepButton: {
     width: 42,
     height: 42,
     borderRadius: 10,
-    backgroundColor: "#111111",
+    backgroundColor: "#111827",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -1186,11 +1191,11 @@ const styles = StyleSheet.create({
   stepValue: {
     fontSize: 18,
     fontWeight: "800",
-    color: "#111111",
+    color: "#111827",
   },
   stepHint: {
     fontSize: 12,
-    color: "#666666",
+    color: "#64748b",
     marginTop: 2,
   },
   toggleRow: {
@@ -1200,7 +1205,7 @@ const styles = StyleSheet.create({
   },
   toggleDivider: {
     height: 1,
-    backgroundColor: "#e5e7eb",
+    backgroundColor: "#e2e8f0",
   },
   settingRow: {
     flexDirection: "row",
@@ -1211,7 +1216,7 @@ const styles = StyleSheet.create({
   settingGroupLabel: {
     marginBottom: 8,
     fontSize: 12,
-    color: "#666666",
+    color: "#64748b",
     fontWeight: "800",
     textTransform: "uppercase",
   },
@@ -1219,9 +1224,9 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     borderWidth: 1,
-    borderColor: "#e5e7eb",
+    borderColor: "#e2e8f0",
     borderRadius: 10,
-    backgroundColor: "#ffffff",
+    backgroundColor: "#f8fafc",
     overflow: "hidden",
   },
   compactStepButton: {
@@ -1231,14 +1236,14 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   compactStepText: {
-    color: "#111111",
+    color: "#111827",
     fontSize: 18,
     fontWeight: "800",
   },
   compactValue: {
     minWidth: 44,
     textAlign: "center",
-    color: "#111111",
+    color: "#111827",
     fontSize: 14,
     fontWeight: "800",
   },

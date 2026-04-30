@@ -222,7 +222,7 @@ export default function MoreScreen() {
 
 const styles = StyleSheet.create({
   summaryBand: {
-    backgroundColor: "#111111",
+    backgroundColor: "#111827",
     borderRadius: 12,
     padding: 16,
     flexDirection: "row",
@@ -252,7 +252,7 @@ const styles = StyleSheet.create({
   summaryName: {
     fontSize: 20,
     color: "#ffffff",
-    fontWeight: "700",
+    fontWeight: "900",
     marginTop: 2,
   },
   summaryStats: {
