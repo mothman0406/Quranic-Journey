@@ -5,9 +5,12 @@ import {
   Dimensions,
   FlatList,
   Image,
+  KeyboardAvoidingView,
   Modal,
+  Platform,
   Pressable,
   ScrollView,
+  Share,
   StyleSheet,
   Text,
   TextInput,
@@ -35,9 +38,12 @@ const PAGE_ASPECT_RATIO = 1.45;
 const PRESET_PAGES = [1, 50, 300, TOTAL_MUSHAF_PAGES] as const;
 const BOOKMARK_LIMIT = 12;
 const RECENT_READ_LIMIT = 5;
+const QURAN_API = "https://api.quran.com/api/v4";
 
 type ReadingStatus = "not_started" | "in_progress" | "completed";
 type ToolMode = "none" | "blind" | "select" | "recite";
+type HighlightColor = "yellow" | "green" | "blue" | "pink";
+type AyahSheetView = "main" | "highlight" | "note" | "translation" | "tafseer" | "wbw";
 
 type ReadingGoal = {
   lastPage: number | null;
@@ -76,12 +82,56 @@ type PageAyahTarget = {
   textUthmani: string;
 };
 
+type AyahAnnotationRecord = PageAyahTarget & {
+  savedAt: number;
+};
+
+type AyahHighlightRecord = AyahAnnotationRecord & {
+  color: HighlightColor;
+};
+
+type AyahNoteRecord = AyahAnnotationRecord & {
+  text: string;
+  updatedAt: number;
+};
+
+type MushafAnnotations = {
+  bookmarks: Record<string, AyahAnnotationRecord>;
+  highlights: Record<string, AyahHighlightRecord>;
+  notes: Record<string, AyahNoteRecord>;
+};
+
+type WBWWord = {
+  position: number;
+  text_uthmani: string;
+  char_type_name: string;
+  transliteration?: { text?: string } | string;
+  translation?: { text?: string; language_name?: string } | string;
+};
+
+type LoadState<T> = {
+  status: "idle" | "loading" | "ready" | "error";
+  data: T | null;
+  error: string | null;
+};
+
+const HIGHLIGHT_COLORS: Record<HighlightColor, { bg: string; dot: string; label: string }> = {
+  yellow: { bg: "rgba(250, 204, 21, 0.26)", dot: "#f59e0b", label: "Yellow" },
+  green: { bg: "rgba(34, 197, 94, 0.22)", dot: "#16a34a", label: "Green" },
+  blue: { bg: "rgba(59, 130, 246, 0.2)", dot: "#2563eb", label: "Blue" },
+  pink: { bg: "rgba(236, 72, 153, 0.2)", dot: "#db2777", label: "Pink" },
+};
+
 function bookmarkStorageKey(childId: string | undefined) {
   return `noorpath:mushaf:bookmarks:${childId ?? "unknown"}`;
 }
 
 function recentReadStorageKey(childId: string | undefined) {
   return `noorpath:mushaf:recent:${childId ?? "unknown"}`;
+}
+
+function annotationStorageKey(childId: string | undefined) {
+  return `noorpath:mushaf:annotations:${childId ?? "unknown"}`;
 }
 
 function formatPageCount(value: number) {
@@ -139,6 +189,145 @@ function pageVerseToTarget(verse: ApiPageVerse, pageNumber: number): PageAyahTar
     pageNumber,
     textUthmani: verse.text_uthmani,
   };
+}
+
+function emptyAnnotations(): MushafAnnotations {
+  return { bookmarks: {}, highlights: {}, notes: {} };
+}
+
+function isHighlightColor(value: unknown): value is HighlightColor {
+  return value === "yellow" || value === "green" || value === "blue" || value === "pink";
+}
+
+function normalizeAnnotationRecord(value: unknown): AyahAnnotationRecord | null {
+  if (!value || typeof value !== "object") return null;
+  const record = value as Record<string, unknown>;
+  const verseKey = typeof record.verseKey === "string" ? record.verseKey : "";
+  const parsed = parseVerseKey(verseKey);
+  const pageNumber = Number(record.pageNumber);
+  const textUthmani = typeof record.textUthmani === "string" ? record.textUthmani : "";
+  const savedAt = Number(record.savedAt);
+
+  if (
+    !parsed ||
+    !Number.isInteger(pageNumber) ||
+    pageNumber < 1 ||
+    pageNumber > TOTAL_MUSHAF_PAGES ||
+    !textUthmani
+  ) {
+    return null;
+  }
+
+  return {
+    verseKey,
+    surahNumber: parsed.surahNumber,
+    ayahNumber: parsed.ayahNumber,
+    pageNumber,
+    textUthmani,
+    savedAt: Number.isFinite(savedAt) ? savedAt : Date.now(),
+  };
+}
+
+function normalizeAnnotations(raw: string | null): MushafAnnotations {
+  if (!raw) return emptyAnnotations();
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (!parsed || typeof parsed !== "object") return emptyAnnotations();
+    const record = parsed as Record<string, unknown>;
+    const bookmarks: MushafAnnotations["bookmarks"] = {};
+    const highlights: MushafAnnotations["highlights"] = {};
+    const notes: MushafAnnotations["notes"] = {};
+
+    for (const [verseKey, value] of Object.entries((record.bookmarks as Record<string, unknown>) ?? {})) {
+      const normalized = normalizeAnnotationRecord({ ...(value as object), verseKey });
+      if (normalized) bookmarks[normalized.verseKey] = normalized;
+    }
+
+    for (const [verseKey, value] of Object.entries((record.highlights as Record<string, unknown>) ?? {})) {
+      const normalized = normalizeAnnotationRecord({ ...(value as object), verseKey });
+      const color = value && typeof value === "object" ? (value as Record<string, unknown>).color : null;
+      if (normalized && isHighlightColor(color)) {
+        highlights[normalized.verseKey] = { ...normalized, color };
+      }
+    }
+
+    for (const [verseKey, value] of Object.entries((record.notes as Record<string, unknown>) ?? {})) {
+      const normalized = normalizeAnnotationRecord({ ...(value as object), verseKey });
+      const noteText = value && typeof value === "object" ? (value as Record<string, unknown>).text : null;
+      const updatedAt = value && typeof value === "object" ? Number((value as Record<string, unknown>).updatedAt) : Date.now();
+      if (normalized && typeof noteText === "string" && noteText.trim()) {
+        notes[normalized.verseKey] = {
+          ...normalized,
+          text: noteText,
+          updatedAt: Number.isFinite(updatedAt) ? updatedAt : normalized.savedAt,
+        };
+      }
+    }
+
+    return { bookmarks, highlights, notes };
+  } catch {
+    return emptyAnnotations();
+  }
+}
+
+function annotationRecordFromTarget(target: PageAyahTarget): AyahAnnotationRecord {
+  return {
+    ...target,
+    savedAt: Date.now(),
+  };
+}
+
+function formatVerseLabel(target: Pick<PageAyahTarget, "surahNumber" | "ayahNumber">) {
+  return `${target.surahNumber}:${target.ayahNumber}`;
+}
+
+function cleanTranslationHtml(raw: string): string {
+  return raw
+    .replace(/<sup[^>]*>.*?<\/sup>/gi, "")
+    .replace(/<[^>]+>/g, "")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&#\d+;/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+async function fetchAyahTranslation(verseKey: string): Promise<string> {
+  const res = await fetch(`${QURAN_API}/verses/by_key/${verseKey}?translations=20`);
+  if (!res.ok) throw new Error(`Translation unavailable (${res.status})`);
+  const data = (await res.json()) as { verse?: { translations?: Array<{ text?: string }> } };
+  const text = cleanTranslationHtml(data.verse?.translations?.[0]?.text ?? "");
+  if (!text) throw new Error("Translation unavailable");
+  return text;
+}
+
+async function fetchAyahTafseer(surahNumber: number, ayahNumber: number): Promise<string> {
+  const res = await fetch(`${QURAN_API}/tafsirs/169/by_ayah/${surahNumber}:${ayahNumber}`);
+  if (!res.ok) throw new Error(`Tafseer unavailable (${res.status})`);
+  const data = (await res.json()) as { tafsir?: { text?: string } };
+  const text = cleanTranslationHtml(data.tafsir?.text ?? "");
+  if (!text) throw new Error("Tafseer unavailable");
+  return text;
+}
+
+async function fetchAyahWbw(verseKey: string): Promise<WBWWord[]> {
+  const res = await fetch(
+    `${QURAN_API}/verses/by_key/${verseKey}?word_fields=text_uthmani,transliteration,translation`,
+  );
+  if (!res.ok) throw new Error(`Word-by-word unavailable (${res.status})`);
+  const data = (await res.json()) as { verse?: { words?: WBWWord[] } };
+  return (data.verse?.words ?? []).filter((word) => word.char_type_name !== "end");
+}
+
+function translationText(value: WBWWord["translation"]) {
+  if (!value) return "";
+  return typeof value === "string" ? value : value.text ?? "";
+}
+
+function transliterationText(value: WBWWord["transliteration"]) {
+  if (!value) return "";
+  return typeof value === "string" ? value : value.text ?? "";
 }
 
 function normalizeRecentReads(raw: string | null): RecentRead[] {
@@ -354,6 +543,7 @@ function AyahListModal({
   pageAyahs,
   status,
   selectedVerseKeys,
+  annotations,
   onClose,
   onOpenAyah,
   onToggleSelectedAyah,
@@ -366,6 +556,7 @@ function AyahListModal({
   pageAyahs: PageAyahTarget[];
   status: PageVerseStatus;
   selectedVerseKeys: Set<string>;
+  annotations: MushafAnnotations;
   onClose: () => void;
   onOpenAyah: (target: PageAyahTarget) => void;
   onToggleSelectedAyah: (target: PageAyahTarget) => void;
@@ -410,10 +601,17 @@ function AyahListModal({
             {pageAyahs.map((ayah) => {
               const selected = selectedVerseKeys.has(ayah.verseKey);
               const surah = MUSHAF_SURAHS[ayah.surahNumber - 1];
+              const highlight = annotations.highlights[ayah.verseKey];
+              const isBookmarked = !!annotations.bookmarks[ayah.verseKey];
+              const hasNote = !!annotations.notes[ayah.verseKey];
               return (
                 <Pressable
                   key={ayah.verseKey}
-                  style={[styles.ayahRow, selected && styles.ayahRowSelected]}
+                  style={[
+                    styles.ayahRow,
+                    highlight && { backgroundColor: HIGHLIGHT_COLORS[highlight.color].bg },
+                    selected && styles.ayahRowSelected,
+                  ]}
                   onPress={() => {
                     if (toolMode === "select") {
                       onToggleSelectedAyah(ayah);
@@ -441,6 +639,35 @@ function AyahListModal({
                     <Text style={styles.ayahRowArabic} numberOfLines={2}>
                       {ayah.textUthmani}
                     </Text>
+                    {isBookmarked || highlight || hasNote ? (
+                      <View style={styles.ayahAnnotationRow}>
+                        {isBookmarked ? (
+                          <View style={styles.ayahAnnotationChip}>
+                            <Ionicons name="bookmark" size={11} color="#b45309" />
+                            <Text style={styles.ayahAnnotationChipText}>Bookmark</Text>
+                          </View>
+                        ) : null}
+                        {highlight ? (
+                          <View style={styles.ayahAnnotationChip}>
+                            <View
+                              style={[
+                                styles.ayahAnnotationDot,
+                                { backgroundColor: HIGHLIGHT_COLORS[highlight.color].dot },
+                              ]}
+                            />
+                            <Text style={styles.ayahAnnotationChipText}>
+                              {HIGHLIGHT_COLORS[highlight.color].label}
+                            </Text>
+                          </View>
+                        ) : null}
+                        {hasNote ? (
+                          <View style={styles.ayahAnnotationChip}>
+                            <Ionicons name="document-text-outline" size={11} color="#2563eb" />
+                            <Text style={styles.ayahAnnotationChipText}>Note</Text>
+                          </View>
+                        ) : null}
+                      </View>
+                    ) : null}
                   </View>
                   <Ionicons
                     name={
@@ -489,57 +716,533 @@ function AyahListModal({
 function AyahActionSheet({
   target,
   selected,
+  annotations,
+  pageAyahs,
   onClose,
+  onNavigate,
   onOpenMemorization,
   onToggleSelection,
+  onToggleBookmark,
+  onSetHighlight,
+  onSaveNote,
 }: {
   target: PageAyahTarget | null;
   selected: boolean;
+  annotations: MushafAnnotations;
+  pageAyahs: PageAyahTarget[];
   onClose: () => void;
+  onNavigate: (target: PageAyahTarget) => void;
   onOpenMemorization: (target: PageAyahTarget) => void;
   onToggleSelection: (target: PageAyahTarget) => void;
+  onToggleBookmark: (target: PageAyahTarget) => void;
+  onSetHighlight: (target: PageAyahTarget, color: HighlightColor | null) => void;
+  onSaveNote: (target: PageAyahTarget, text: string) => void;
 }) {
   const surah = target ? MUSHAF_SURAHS[target.surahNumber - 1] : null;
+  const [sheetView, setSheetView] = useState<AyahSheetView>("main");
+  const [noteText, setNoteText] = useState("");
+  const [translationState, setTranslationState] = useState<LoadState<string>>({
+    status: "idle",
+    data: null,
+    error: null,
+  });
+  const [tafseerState, setTafseerState] = useState<LoadState<string>>({
+    status: "idle",
+    data: null,
+    error: null,
+  });
+  const [wbwState, setWbwState] = useState<LoadState<WBWWord[]>>({
+    status: "idle",
+    data: null,
+    error: null,
+  });
+
+  const bookmark = target ? annotations.bookmarks[target.verseKey] : undefined;
+  const highlight = target ? annotations.highlights[target.verseKey] : undefined;
+  const note = target ? annotations.notes[target.verseKey] : undefined;
+  const currentIndex = target ? pageAyahs.findIndex((ayah) => ayah.verseKey === target.verseKey) : -1;
+  const previousAyah = currentIndex > 0 ? pageAyahs[currentIndex - 1] : null;
+  const nextAyah =
+    currentIndex >= 0 && currentIndex < pageAyahs.length - 1 ? pageAyahs[currentIndex + 1] : null;
+  const sheetMaxHeight = Math.round(Dimensions.get("window").height * 0.86);
+
+  useEffect(() => {
+    setSheetView("main");
+    setNoteText(target ? annotations.notes[target.verseKey]?.text ?? "" : "");
+    setTranslationState({ status: "idle", data: null, error: null });
+    setTafseerState({ status: "idle", data: null, error: null });
+    setWbwState({ status: "idle", data: null, error: null });
+  }, [annotations.notes, target?.verseKey]);
+
+  useEffect(() => {
+    if (!target || sheetView !== "translation") return;
+    let cancelled = false;
+    setTranslationState({ status: "loading", data: null, error: null });
+    fetchAyahTranslation(target.verseKey)
+      .then((translation) => {
+        if (!cancelled) setTranslationState({ status: "ready", data: translation, error: null });
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          setTranslationState({
+            status: "error",
+            data: null,
+            error: error instanceof Error ? error.message : "Translation could not load.",
+          });
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [sheetView, target?.verseKey]);
+
+  useEffect(() => {
+    if (!target || sheetView !== "tafseer") return;
+    let cancelled = false;
+    setTafseerState({ status: "loading", data: null, error: null });
+    fetchAyahTafseer(target.surahNumber, target.ayahNumber)
+      .then((tafseer) => {
+        if (!cancelled) setTafseerState({ status: "ready", data: tafseer, error: null });
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          setTafseerState({
+            status: "error",
+            data: null,
+            error: error instanceof Error ? error.message : "Tafseer could not load.",
+          });
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [sheetView, target?.ayahNumber, target?.surahNumber]);
+
+  useEffect(() => {
+    if (!target || sheetView !== "wbw") return;
+    let cancelled = false;
+    setWbwState({ status: "loading", data: null, error: null });
+    fetchAyahWbw(target.verseKey)
+      .then((words) => {
+        if (!cancelled) setWbwState({ status: "ready", data: words, error: null });
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          setWbwState({
+            status: "error",
+            data: null,
+            error: error instanceof Error ? error.message : "Word-by-word could not load.",
+          });
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [sheetView, target?.verseKey]);
+
+  async function shareAyah() {
+    if (!target) return;
+    const translation = translationState.data ? `\n\n${translationState.data}` : "";
+    try {
+      await Share.share({
+        message: `${target.textUthmani}${translation}\n\nQuran ${formatVerseLabel(target)}`,
+      });
+    } catch {
+      // Sharing is best-effort.
+    }
+  }
+
+  function renderSubHeader(title: string) {
+    return (
+      <View style={styles.ayahSubHeader}>
+        <Pressable style={styles.ayahSubBack} onPress={() => setSheetView("main")}>
+          <Ionicons name="chevron-back" size={18} color="#2563eb" />
+          <Text style={styles.ayahSubBackText}>Actions</Text>
+        </Pressable>
+        <Text style={styles.ayahSubTitle}>{title}</Text>
+        <View style={styles.ayahSubHeaderSpacer} />
+      </View>
+    );
+  }
+
+  function renderNavigation() {
+    return (
+      <View style={styles.ayahNavigationRow}>
+        <Pressable
+          style={[styles.ayahNavButton, !previousAyah && styles.ayahNavButtonDisabled]}
+          disabled={!previousAyah}
+          onPress={() => previousAyah && onNavigate(previousAyah)}
+        >
+          <Ionicons name="chevron-back" size={15} color={previousAyah ? "#2563eb" : "#9ca3af"} />
+          <Text style={[styles.ayahNavButtonText, !previousAyah && styles.ayahNavButtonTextDisabled]}>
+            Previous
+          </Text>
+        </Pressable>
+        <Pressable
+          style={[styles.ayahNavButton, !nextAyah && styles.ayahNavButtonDisabled]}
+          disabled={!nextAyah}
+          onPress={() => nextAyah && onNavigate(nextAyah)}
+        >
+          <Text style={[styles.ayahNavButtonText, !nextAyah && styles.ayahNavButtonTextDisabled]}>
+            Next
+          </Text>
+          <Ionicons name="chevron-forward" size={15} color={nextAyah ? "#2563eb" : "#9ca3af"} />
+        </Pressable>
+      </View>
+    );
+  }
+
+  function renderLoadingContent(label: string) {
+    return (
+      <View style={styles.ayahContentState}>
+        <ActivityIndicator color="#2563eb" />
+        <Text style={styles.ayahContentStateText}>Loading {label}</Text>
+      </View>
+    );
+  }
+
+  function renderErrorContent(message: string | null) {
+    return (
+      <View style={styles.ayahContentState}>
+        <Ionicons name="cloud-offline-outline" size={24} color="#dc2626" />
+        <Text style={styles.ayahContentStateTitle}>Could not load</Text>
+        <Text style={styles.ayahContentStateText}>{message ?? "Try again in a moment."}</Text>
+      </View>
+    );
+  }
+
+  function renderMainView() {
+    if (!target) return null;
+
+    return (
+      <>
+        <View style={styles.ayahPreviewCard}>
+          <Text style={styles.ayahPreviewText} numberOfLines={4}>
+            {target.textUthmani}
+          </Text>
+          <View style={styles.ayahMetaGrid}>
+            <View style={styles.ayahMetaPill}>
+              <Text style={styles.ayahMetaLabel}>Quran</Text>
+              <Text style={styles.ayahMetaValue}>{formatVerseLabel(target)}</Text>
+            </View>
+            <View style={styles.ayahMetaPill}>
+              <Text style={styles.ayahMetaLabel}>Page</Text>
+              <Text style={styles.ayahMetaValue}>{target.pageNumber}</Text>
+            </View>
+            <View style={styles.ayahMetaPill}>
+              <Text style={styles.ayahMetaLabel}>Juz</Text>
+              <Text style={styles.ayahMetaValue}>{getJuzForMushafPage(target.pageNumber)}</Text>
+            </View>
+          </View>
+          {bookmark || highlight || note ? (
+            <View style={styles.ayahStatusRow}>
+              {bookmark ? (
+                <View style={styles.ayahStatusChip}>
+                  <Ionicons name="bookmark" size={12} color="#b45309" />
+                  <Text style={styles.ayahStatusChipText}>Bookmarked</Text>
+                </View>
+              ) : null}
+              {highlight ? (
+                <View style={styles.ayahStatusChip}>
+                  <View
+                    style={[styles.ayahAnnotationDot, { backgroundColor: HIGHLIGHT_COLORS[highlight.color].dot }]}
+                  />
+                  <Text style={styles.ayahStatusChipText}>
+                    {HIGHLIGHT_COLORS[highlight.color].label}
+                  </Text>
+                </View>
+              ) : null}
+              {note ? (
+                <View style={styles.ayahStatusChip}>
+                  <Ionicons name="document-text-outline" size={12} color="#2563eb" />
+                  <Text style={styles.ayahStatusChipText}>Note</Text>
+                </View>
+              ) : null}
+            </View>
+          ) : null}
+        </View>
+
+        <Pressable style={styles.ayahPrimaryButton} onPress={() => onOpenMemorization(target)}>
+          <Ionicons name="school-outline" size={17} color="#ffffff" />
+          <Text style={styles.ayahPrimaryButtonText}>Practice from here</Text>
+        </Pressable>
+
+        <View style={styles.ayahMenuGroup}>
+          <Pressable style={styles.ayahMenuRow} onPress={() => onToggleBookmark(target)}>
+            <Ionicons name={bookmark ? "bookmark" : "bookmark-outline"} size={18} color="#b45309" />
+            <Text style={styles.ayahMenuRowText}>{bookmark ? "Remove bookmark" : "Bookmark ayah"}</Text>
+          </Pressable>
+          <Pressable style={styles.ayahMenuRow} onPress={() => setSheetView("highlight")}>
+            <Ionicons name="color-palette-outline" size={18} color="#7c3aed" />
+            <Text style={styles.ayahMenuRowText}>
+              {highlight ? "Change highlight" : "Highlight ayah"}
+            </Text>
+            <Ionicons name="chevron-forward" size={17} color="#9ca3af" />
+          </Pressable>
+          <Pressable style={styles.ayahMenuRow} onPress={() => setSheetView("note")}>
+            <Ionicons name="document-text-outline" size={18} color="#2563eb" />
+            <Text style={styles.ayahMenuRowText}>{note ? "Edit note" : "Add note"}</Text>
+            <Ionicons name="chevron-forward" size={17} color="#9ca3af" />
+          </Pressable>
+        </View>
+
+        <View style={styles.ayahMenuGroup}>
+          <Pressable style={styles.ayahMenuRow} onPress={() => setSheetView("translation")}>
+            <Ionicons name="language-outline" size={18} color="#0f766e" />
+            <Text style={styles.ayahMenuRowText}>Translation</Text>
+            <Ionicons name="chevron-forward" size={17} color="#9ca3af" />
+          </Pressable>
+          <Pressable style={styles.ayahMenuRow} onPress={() => setSheetView("tafseer")}>
+            <Ionicons name="book-outline" size={18} color="#0f766e" />
+            <Text style={styles.ayahMenuRowText}>Tafseer</Text>
+            <Ionicons name="chevron-forward" size={17} color="#9ca3af" />
+          </Pressable>
+          <Pressable style={styles.ayahMenuRow} onPress={() => setSheetView("wbw")}>
+            <Ionicons name="text-outline" size={18} color="#0f766e" />
+            <Text style={styles.ayahMenuRowText}>Word by word</Text>
+            <Ionicons name="chevron-forward" size={17} color="#9ca3af" />
+          </Pressable>
+        </View>
+
+        <View style={styles.ayahMenuGroup}>
+          <Pressable style={styles.ayahMenuRow} onPress={shareAyah}>
+            <Ionicons name="share-outline" size={18} color="#374151" />
+            <Text style={styles.ayahMenuRowText}>Share ayah</Text>
+          </Pressable>
+          <Pressable style={styles.ayahMenuRow} onPress={() => onToggleSelection(target)}>
+            <Ionicons
+              name={selected ? "checkmark-circle" : "checkmark-circle-outline"}
+              size={18}
+              color="#047857"
+            />
+            <Text style={styles.ayahMenuRowText}>
+              {selected ? "Remove from selection" : "Add to selection"}
+            </Text>
+          </Pressable>
+        </View>
+
+        {renderNavigation()}
+      </>
+    );
+  }
+
+  function renderHighlightView() {
+    if (!target) return null;
+
+    return (
+      <>
+        {renderSubHeader("Highlight")}
+        <View style={styles.highlightGrid}>
+          {(Object.entries(HIGHLIGHT_COLORS) as [HighlightColor, (typeof HIGHLIGHT_COLORS)[HighlightColor]][]).map(
+            ([color, meta]) => (
+              <Pressable
+                key={color}
+                style={[
+                  styles.highlightSwatch,
+                  { backgroundColor: meta.bg, borderColor: highlight?.color === color ? meta.dot : "transparent" },
+                ]}
+                onPress={() => {
+                  onSetHighlight(target, color);
+                  setSheetView("main");
+                }}
+              >
+                <View style={[styles.highlightSwatchDot, { backgroundColor: meta.dot }]} />
+                <Text style={styles.highlightSwatchText}>{meta.label}</Text>
+              </Pressable>
+            ),
+          )}
+        </View>
+        {highlight ? (
+          <Pressable
+            style={styles.ayahDangerButton}
+            onPress={() => {
+              onSetHighlight(target, null);
+              setSheetView("main");
+            }}
+          >
+            <Ionicons name="trash-outline" size={16} color="#dc2626" />
+            <Text style={styles.ayahDangerButtonText}>Remove highlight</Text>
+          </Pressable>
+        ) : null}
+      </>
+    );
+  }
+
+  function renderNoteView() {
+    if (!target) return null;
+
+    return (
+      <>
+        {renderSubHeader(note ? "Edit note" : "Add note")}
+        <View style={styles.noteEditor}>
+          <Text style={styles.noteEditorMeta}>Quran {formatVerseLabel(target)}</Text>
+          <TextInput
+            value={noteText}
+            onChangeText={setNoteText}
+            placeholder="Write your note here"
+            placeholderTextColor="#9ca3af"
+            multiline
+            autoFocus
+            style={styles.noteInput}
+            textAlignVertical="top"
+          />
+          <View style={styles.noteButtonRow}>
+            <Pressable
+              style={styles.noteSaveButton}
+              onPress={() => {
+                onSaveNote(target, noteText);
+                setSheetView("main");
+              }}
+            >
+              <Ionicons name="save-outline" size={15} color="#ffffff" />
+              <Text style={styles.noteSaveButtonText}>Save note</Text>
+            </Pressable>
+            {note ? (
+              <Pressable
+                style={styles.noteDeleteButton}
+                onPress={() => {
+                  setNoteText("");
+                  onSaveNote(target, "");
+                  setSheetView("main");
+                }}
+              >
+                <Text style={styles.noteDeleteButtonText}>Delete</Text>
+              </Pressable>
+            ) : null}
+          </View>
+        </View>
+      </>
+    );
+  }
+
+  function renderTranslationView() {
+    if (!target) return null;
+
+    return (
+      <>
+        {renderSubHeader("Translation")}
+        <View style={styles.ayahTextPanel}>
+          <Text style={styles.ayahTextPanelArabic}>{target.textUthmani}</Text>
+          <Text style={styles.ayahTextPanelSource}>Saheeh International · Quran {formatVerseLabel(target)}</Text>
+        </View>
+        {translationState.status === "loading" ? (
+          renderLoadingContent("translation")
+        ) : translationState.status === "error" ? (
+          renderErrorContent(translationState.error)
+        ) : (
+          <Text style={styles.ayahLongText}>
+            {translationState.data ?? "Open this panel to load the translation."}
+          </Text>
+        )}
+        {renderNavigation()}
+      </>
+    );
+  }
+
+  function renderTafseerView() {
+    if (!target) return null;
+
+    return (
+      <>
+        {renderSubHeader("Tafseer")}
+        <View style={styles.ayahTextPanel}>
+          <Text style={styles.ayahTextPanelArabic}>{target.textUthmani}</Text>
+          <Text style={styles.ayahTextPanelSource}>Ibn Kathir · Quran {formatVerseLabel(target)}</Text>
+        </View>
+        {tafseerState.status === "loading" ? (
+          renderLoadingContent("tafseer")
+        ) : tafseerState.status === "error" ? (
+          renderErrorContent(tafseerState.error)
+        ) : (
+          <Text style={styles.ayahLongText}>
+            {tafseerState.data ?? "Open this panel to load tafseer."}
+          </Text>
+        )}
+        {renderNavigation()}
+      </>
+    );
+  }
+
+  function renderWbwView() {
+    if (!target) return null;
+
+    return (
+      <>
+        {renderSubHeader("Word by word")}
+        {wbwState.status === "loading" ? (
+          renderLoadingContent("word-by-word")
+        ) : wbwState.status === "error" ? (
+          renderErrorContent(wbwState.error)
+        ) : (
+          <View style={styles.wbwGrid}>
+            {(wbwState.data ?? []).map((word) => (
+              <View key={word.position} style={styles.wbwCard}>
+                <Text style={styles.wbwArabic}>{word.text_uthmani}</Text>
+                <Text style={styles.wbwTransliteration} numberOfLines={2}>
+                  {transliterationText(word.transliteration)}
+                </Text>
+                <Text style={styles.wbwTranslation} numberOfLines={3}>
+                  {translationText(word.translation)}
+                </Text>
+              </View>
+            ))}
+            {wbwState.status === "ready" && (wbwState.data?.length ?? 0) === 0 ? (
+              <Text style={styles.ayahContentStateText}>No word-by-word data returned.</Text>
+            ) : null}
+          </View>
+        )}
+        {renderNavigation()}
+      </>
+    );
+  }
+
+  function renderSheetContent() {
+    switch (sheetView) {
+      case "highlight":
+        return renderHighlightView();
+      case "note":
+        return renderNoteView();
+      case "translation":
+        return renderTranslationView();
+      case "tafseer":
+        return renderTafseerView();
+      case "wbw":
+        return renderWbwView();
+      default:
+        return renderMainView();
+    }
+  }
 
   return (
     <Modal visible={target !== null} transparent animationType="slide" onRequestClose={onClose}>
       <Pressable style={styles.backdrop} onPress={onClose} />
       {target ? (
-        <View style={styles.ayahActionSheet}>
-          <View style={styles.ayahActionHeader}>
-            <View style={styles.ayahActionTitleBlock}>
-              <Text style={styles.ayahActionTitle}>Ayah actions</Text>
-              <Text style={styles.ayahActionSubtitle}>
-                {surah?.name ?? `Surah ${target.surahNumber}`} · Ayah {target.ayahNumber}
-              </Text>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
+          style={styles.ayahKeyboardAvoider}
+        >
+          <View style={[styles.ayahActionSheet, { maxHeight: sheetMaxHeight }]}>
+            <View style={styles.sheetHandle} />
+            <View style={styles.ayahActionHeader}>
+              <View style={styles.ayahActionTitleBlock}>
+                <Text style={styles.ayahActionTitle}>Ayah actions</Text>
+                <Text style={styles.ayahActionSubtitle}>
+                  {surah?.name ?? `Surah ${target.surahNumber}`} · Ayah {target.ayahNumber}
+                </Text>
+              </View>
+              <Pressable style={styles.ayahActionClose} onPress={onClose}>
+                <Ionicons name="close" size={18} color="#6b7280" />
+              </Pressable>
             </View>
-            <Pressable style={styles.ayahActionClose} onPress={onClose}>
-              <Ionicons name="close" size={18} color="#6b7280" />
-            </Pressable>
+            <ScrollView
+              style={styles.ayahActionScroll}
+              contentContainerStyle={styles.ayahActionContent}
+              keyboardShouldPersistTaps="handled"
+            >
+              {renderSheetContent()}
+            </ScrollView>
           </View>
-
-          <View style={styles.ayahPreviewCard}>
-            <Text style={styles.ayahPreviewText} numberOfLines={4}>
-              {target.textUthmani}
-            </Text>
-          </View>
-
-          <Pressable style={styles.ayahPrimaryButton} onPress={() => onOpenMemorization(target)}>
-            <Ionicons name="mic-outline" size={17} color="#ffffff" />
-            <Text style={styles.ayahPrimaryButtonText}>Recite from here</Text>
-          </Pressable>
-
-          <Pressable style={styles.ayahSecondaryButton} onPress={() => onToggleSelection(target)}>
-            <Ionicons
-              name={selected ? "checkmark-circle" : "checkmark-circle-outline"}
-              size={17}
-              color="#047857"
-            />
-            <Text style={styles.ayahSecondaryButtonText}>
-              {selected ? "Remove from selection" : "Add to selection"}
-            </Text>
-          </Pressable>
-        </View>
+        </KeyboardAvoidingView>
       ) : null}
     </Modal>
   );
@@ -579,6 +1282,8 @@ export default function MushafScreen() {
   const [pageInput, setPageInput] = useState("");
   const [bookmarkedPages, setBookmarkedPages] = useState<number[]>([]);
   const [bookmarkError, setBookmarkError] = useState<string | null>(null);
+  const [annotations, setAnnotations] = useState<MushafAnnotations>(() => emptyAnnotations());
+  const [annotationError, setAnnotationError] = useState<string | null>(null);
   const [recentReads, setRecentReads] = useState<RecentRead[]>([]);
   const [chromeVisible, setChromeVisible] = useState(true);
   const [toolMode, setToolMode] = useState<ToolMode>("none");
@@ -617,6 +1322,20 @@ export default function MushafScreen() {
       }),
     [pageAyahs, selectedVerseKeys],
   );
+  const ayahBookmarkEntries = useMemo(
+    () =>
+      Object.values(annotations.bookmarks).sort((a, b) => {
+        const timeDiff = b.savedAt - a.savedAt;
+        if (timeDiff !== 0) return timeDiff;
+        if (a.surahNumber !== b.surahNumber) return a.surahNumber - b.surahNumber;
+        return a.ayahNumber - b.ayahNumber;
+      }),
+    [annotations.bookmarks],
+  );
+  const annotationCount =
+    Object.keys(annotations.bookmarks).length +
+    Object.keys(annotations.highlights).length +
+    Object.keys(annotations.notes).length;
   const parsedQuery = parsePositiveInteger(jumpQuery);
   const pageResult =
     parsedQuery !== null && parsedQuery >= 1 && parsedQuery <= TOTAL_MUSHAF_PAGES
@@ -698,9 +1417,20 @@ export default function MushafScreen() {
       }
     }
 
+    async function loadAnnotations() {
+      try {
+        const raw = await AsyncStorage.getItem(annotationStorageKey(childId));
+        if (cancelled) return;
+        setAnnotations(normalizeAnnotations(raw));
+      } catch {
+        if (!cancelled) setAnnotationError("Ayah annotations could not load.");
+      }
+    }
+
     loadInitialPage();
     loadBookmarks();
     loadRecentReads();
+    loadAnnotations();
 
     return () => {
       cancelled = true;
@@ -841,6 +1571,65 @@ export default function MushafScreen() {
     });
   }
 
+  function persistAnnotations(next: MushafAnnotations) {
+    AsyncStorage.setItem(annotationStorageKey(childId), JSON.stringify(next)).catch(() => {
+      setAnnotationError("Ayah annotations could not save.");
+    });
+  }
+
+  function updateAnnotations(updater: (current: MushafAnnotations) => MushafAnnotations) {
+    setAnnotationError(null);
+    setAnnotations((current) => {
+      const next = updater(current);
+      persistAnnotations(next);
+      return next;
+    });
+  }
+
+  function toggleAyahBookmark(target: PageAyahTarget) {
+    updateAnnotations((current) => {
+      const bookmarks = { ...current.bookmarks };
+      if (bookmarks[target.verseKey]) {
+        delete bookmarks[target.verseKey];
+      } else {
+        bookmarks[target.verseKey] = annotationRecordFromTarget(target);
+      }
+      return { ...current, bookmarks };
+    });
+  }
+
+  function setAyahHighlight(target: PageAyahTarget, color: HighlightColor | null) {
+    updateAnnotations((current) => {
+      const highlights = { ...current.highlights };
+      if (!color) {
+        delete highlights[target.verseKey];
+      } else {
+        highlights[target.verseKey] = {
+          ...annotationRecordFromTarget(target),
+          color,
+        };
+      }
+      return { ...current, highlights };
+    });
+  }
+
+  function saveAyahNote(target: PageAyahTarget, text: string) {
+    const clean = text.trim();
+    updateAnnotations((current) => {
+      const notes = { ...current.notes };
+      if (!clean) {
+        delete notes[target.verseKey];
+      } else {
+        notes[target.verseKey] = {
+          ...annotationRecordFromTarget(target),
+          text: clean,
+          updatedAt: Date.now(),
+        };
+      }
+      return { ...current, notes };
+    });
+  }
+
   function toggleToolMode(mode: ToolMode) {
     setToolMode((current) => {
       const next = current === mode ? "none" : mode;
@@ -859,7 +1648,19 @@ export default function MushafScreen() {
     });
   }
 
+  function toggleSelectedAyahFromSheet(target: PageAyahTarget) {
+    const willSelect = !selectedVerseKeys.has(target.verseKey);
+    toggleSelectedAyah(target);
+    if (willSelect) setToolMode("select");
+  }
+
   function openAyahActions(target: PageAyahTarget) {
+    setSelectedAyah(target);
+    setAyahListOpen(false);
+  }
+
+  function openAnnotatedAyah(target: PageAyahTarget) {
+    goToPage(target.pageNumber, true);
     setSelectedAyah(target);
     setAyahListOpen(false);
   }
@@ -980,6 +1781,14 @@ export default function MushafScreen() {
                 </Text>
               </View>
             ) : null}
+            {annotationCount > 0 ? (
+              <View style={styles.sourceContextPill}>
+                <Ionicons name="pricetags-outline" size={14} color="#7c3aed" />
+                <Text style={styles.sourceContextText} numberOfLines={1}>
+                  {annotationCount} ayah annotation{annotationCount === 1 ? "" : "s"} saved
+                </Text>
+              </View>
+            ) : null}
             <View style={styles.progressRow}>
               <View style={styles.progressTextBlock}>
                 <Text style={styles.progressLabel}>{goalCopy}</Text>
@@ -1059,6 +1868,11 @@ export default function MushafScreen() {
       {bookmarkError && (
         <View style={styles.errorBanner}>
           <Text style={styles.errorBannerText}>{bookmarkError}</Text>
+        </View>
+      )}
+      {annotationError && (
+        <View style={styles.errorBanner}>
+          <Text style={styles.errorBannerText}>{annotationError}</Text>
         </View>
       )}
 
@@ -1188,6 +2002,7 @@ export default function MushafScreen() {
         pageAyahs={pageAyahs}
         status={pageVerseStatus}
         selectedVerseKeys={selectedVerseKeys}
+        annotations={annotations}
         onClose={() => setAyahListOpen(false)}
         onOpenAyah={openAyahActions}
         onToggleSelectedAyah={toggleSelectedAyah}
@@ -1198,9 +2013,15 @@ export default function MushafScreen() {
       <AyahActionSheet
         target={selectedAyah}
         selected={selectedAyah ? selectedVerseKeys.has(selectedAyah.verseKey) : false}
+        annotations={annotations}
+        pageAyahs={pageAyahs}
         onClose={() => setSelectedAyah(null)}
+        onNavigate={setSelectedAyah}
         onOpenMemorization={openMemorizationFromAyah}
-        onToggleSelection={toggleSelectedAyah}
+        onToggleSelection={toggleSelectedAyahFromSheet}
+        onToggleBookmark={toggleAyahBookmark}
+        onSetHighlight={setAyahHighlight}
+        onSaveNote={saveAyahNote}
       />
 
       <Modal visible={jumpOpen} animationType="slide" onRequestClose={() => setJumpOpen(false)}>
@@ -1316,6 +2137,26 @@ export default function MushafScreen() {
                     </Pressable>
                   ))}
                 </ScrollView>
+              </View>
+            ) : null}
+
+            {ayahBookmarkEntries.length > 0 ? (
+              <View style={styles.resultGroup}>
+                <Text style={styles.sectionLabel}>Ayah bookmarks</Text>
+                {ayahBookmarkEntries.map((target) => {
+                  const surah = MUSHAF_SURAHS[target.surahNumber - 1];
+                  return (
+                    <JumpRow
+                      key={target.verseKey}
+                      title={`${surah?.name ?? `Surah ${target.surahNumber}`} ${formatVerseLabel(target)}`}
+                      detail={`Page ${target.pageNumber} · open ayah actions`}
+                      iconName="bookmark-outline"
+                      color="#b45309"
+                      trailing={formatVerseLabel(target)}
+                      onPress={() => openAnnotatedAyah(target)}
+                    />
+                  );
+                })}
               </View>
             ) : null}
 
@@ -1954,6 +2795,33 @@ const styles = StyleSheet.create({
     textAlign: "right",
     writingDirection: "rtl",
   },
+  ayahAnnotationRow: {
+    marginTop: 8,
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+  },
+  ayahAnnotationChip: {
+    minHeight: 22,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+    backgroundColor: "rgba(255, 255, 255, 0.72)",
+    paddingHorizontal: 8,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  ayahAnnotationChipText: {
+    fontSize: 10,
+    color: "#374151",
+    fontWeight: "800",
+  },
+  ayahAnnotationDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
   ayahListFooter: {
     paddingHorizontal: 16,
     paddingVertical: 12,
@@ -1988,22 +2856,32 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
     backgroundColor: "rgba(17, 24, 39, 0.45)",
   },
-  ayahActionSheet: {
+  ayahKeyboardAvoider: {
     position: "absolute",
     left: 0,
     right: 0,
     bottom: 0,
+  },
+  ayahActionSheet: {
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     backgroundColor: "#ffffff",
-    paddingHorizontal: 18,
-    paddingTop: 16,
-    paddingBottom: 30,
-    gap: 12,
+    paddingTop: 10,
+    overflow: "hidden",
+  },
+  sheetHandle: {
+    width: 42,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: "#d1d5db",
+    alignSelf: "center",
+    marginBottom: 10,
   },
   ayahActionHeader: {
     flexDirection: "row",
     alignItems: "center",
+    paddingHorizontal: 18,
+    paddingBottom: 12,
     gap: 12,
   },
   ayahActionTitleBlock: {
@@ -2029,6 +2907,14 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  ayahActionScroll: {
+    maxHeight: "100%",
+  },
+  ayahActionContent: {
+    paddingHorizontal: 18,
+    paddingBottom: 34,
+    gap: 12,
+  },
   ayahPreviewCard: {
     borderRadius: 12,
     backgroundColor: "#f8fafc",
@@ -2043,10 +2929,60 @@ const styles = StyleSheet.create({
     textAlign: "right",
     writingDirection: "rtl",
   },
+  ayahMetaGrid: {
+    marginTop: 12,
+    flexDirection: "row",
+    gap: 8,
+  },
+  ayahMetaPill: {
+    flex: 1,
+    minHeight: 48,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+    backgroundColor: "#ffffff",
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    justifyContent: "center",
+  },
+  ayahMetaLabel: {
+    fontSize: 10,
+    color: "#6b7280",
+    fontWeight: "800",
+    textTransform: "uppercase",
+  },
+  ayahMetaValue: {
+    marginTop: 2,
+    fontSize: 13,
+    color: "#111111",
+    fontWeight: "900",
+  },
+  ayahStatusRow: {
+    marginTop: 10,
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+  },
+  ayahStatusChip: {
+    minHeight: 24,
+    borderRadius: 999,
+    backgroundColor: "#ffffff",
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+    paddingHorizontal: 9,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+  },
+  ayahStatusChipText: {
+    fontSize: 11,
+    color: "#374151",
+    fontWeight: "800",
+  },
   ayahPrimaryButton: {
     minHeight: 46,
     borderRadius: 12,
-    backgroundColor: "#be123c",
+    backgroundColor: "#2563eb",
     alignItems: "center",
     justifyContent: "center",
     flexDirection: "row",
@@ -2072,6 +3008,264 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#047857",
     fontWeight: "900",
+  },
+  ayahMenuGroup: {
+    borderRadius: 12,
+    backgroundColor: "#ffffff",
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+    overflow: "hidden",
+  },
+  ayahMenuRow: {
+    minHeight: 48,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: "#f3f4f6",
+  },
+  ayahMenuRowText: {
+    flex: 1,
+    fontSize: 14,
+    color: "#111111",
+    fontWeight: "800",
+  },
+  ayahNavigationRow: {
+    flexDirection: "row",
+    gap: 10,
+  },
+  ayahNavButton: {
+    flex: 1,
+    minHeight: 42,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#bfdbfe",
+    backgroundColor: "#eff6ff",
+    alignItems: "center",
+    justifyContent: "center",
+    flexDirection: "row",
+    gap: 5,
+  },
+  ayahNavButtonDisabled: {
+    borderColor: "#e5e7eb",
+    backgroundColor: "#f9fafb",
+  },
+  ayahNavButtonText: {
+    fontSize: 12,
+    color: "#2563eb",
+    fontWeight: "900",
+  },
+  ayahNavButtonTextDisabled: {
+    color: "#9ca3af",
+  },
+  ayahSubHeader: {
+    minHeight: 42,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  ayahSubBack: {
+    width: 92,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 2,
+  },
+  ayahSubBackText: {
+    fontSize: 13,
+    color: "#2563eb",
+    fontWeight: "800",
+  },
+  ayahSubTitle: {
+    flex: 1,
+    fontSize: 16,
+    color: "#111111",
+    fontWeight: "900",
+    textAlign: "center",
+  },
+  ayahSubHeaderSpacer: {
+    width: 92,
+  },
+  highlightGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10,
+  },
+  highlightSwatch: {
+    width: "47%",
+    minHeight: 72,
+    borderRadius: 12,
+    borderWidth: 2,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 7,
+  },
+  highlightSwatchDot: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+  },
+  highlightSwatchText: {
+    fontSize: 12,
+    color: "#111111",
+    fontWeight: "900",
+  },
+  ayahDangerButton: {
+    minHeight: 44,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#fecaca",
+    backgroundColor: "#fef2f2",
+    alignItems: "center",
+    justifyContent: "center",
+    flexDirection: "row",
+    gap: 7,
+  },
+  ayahDangerButtonText: {
+    fontSize: 13,
+    color: "#dc2626",
+    fontWeight: "900",
+  },
+  noteEditor: {
+    gap: 10,
+  },
+  noteEditorMeta: {
+    fontSize: 12,
+    color: "#6b7280",
+    fontWeight: "800",
+  },
+  noteInput: {
+    minHeight: 128,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#d1d5db",
+    backgroundColor: "#ffffff",
+    padding: 12,
+    color: "#111111",
+    fontSize: 15,
+    lineHeight: 21,
+  },
+  noteButtonRow: {
+    flexDirection: "row",
+    gap: 10,
+  },
+  noteSaveButton: {
+    flex: 1,
+    minHeight: 44,
+    borderRadius: 10,
+    backgroundColor: "#2563eb",
+    alignItems: "center",
+    justifyContent: "center",
+    flexDirection: "row",
+    gap: 7,
+  },
+  noteSaveButtonText: {
+    color: "#ffffff",
+    fontSize: 13,
+    fontWeight: "900",
+  },
+  noteDeleteButton: {
+    minWidth: 88,
+    minHeight: 44,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#fecaca",
+    backgroundColor: "#fef2f2",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  noteDeleteButtonText: {
+    color: "#dc2626",
+    fontSize: 13,
+    fontWeight: "900",
+  },
+  ayahTextPanel: {
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+    backgroundColor: "#f8fafc",
+    padding: 14,
+  },
+  ayahTextPanelArabic: {
+    fontSize: 22,
+    lineHeight: 38,
+    color: "#111111",
+    textAlign: "right",
+    writingDirection: "rtl",
+  },
+  ayahTextPanelSource: {
+    marginTop: 8,
+    fontSize: 11,
+    color: "#6b7280",
+    fontWeight: "800",
+  },
+  ayahLongText: {
+    fontSize: 15,
+    lineHeight: 26,
+    color: "#374151",
+    fontWeight: "600",
+  },
+  ayahContentState: {
+    minHeight: 120,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+    backgroundColor: "#f9fafb",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 18,
+    gap: 8,
+  },
+  ayahContentStateTitle: {
+    fontSize: 14,
+    color: "#111111",
+    fontWeight: "900",
+    textAlign: "center",
+  },
+  ayahContentStateText: {
+    fontSize: 13,
+    color: "#6b7280",
+    fontWeight: "700",
+    textAlign: "center",
+  },
+  wbwGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  wbwCard: {
+    width: "31%",
+    minHeight: 116,
+    borderRadius: 11,
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+    backgroundColor: "#f8fafc",
+    padding: 8,
+    alignItems: "center",
+  },
+  wbwArabic: {
+    fontSize: 20,
+    lineHeight: 30,
+    color: "#111111",
+    textAlign: "center",
+    writingDirection: "rtl",
+  },
+  wbwTransliteration: {
+    marginTop: 5,
+    fontSize: 10,
+    lineHeight: 13,
+    color: "#6b7280",
+    fontWeight: "700",
+    textAlign: "center",
+  },
+  wbwTranslation: {
+    marginTop: 3,
+    fontSize: 10,
+    lineHeight: 13,
+    color: "#374151",
+    fontWeight: "700",
+    textAlign: "center",
   },
   pageJumpCard: {
     margin: 16,
