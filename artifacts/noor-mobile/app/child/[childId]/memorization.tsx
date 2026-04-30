@@ -446,6 +446,8 @@ export default function MemorizationScreen() {
   const [reciteListening, setReciteListening] = useState(false);
   const [reciteError, setReciteError] = useState<string | null>(null);
   const [reciteExpectedIdx, setReciteExpectedIdx] = useState(0);
+  const [reciteAttempts, setReciteAttempts] = useState(0);
+  const [revealedReciteWords, setRevealedReciteWords] = useState<Set<string>>(new Set());
 
   // Derived from reciterId state
   const reciter = findReciter(reciterId);
@@ -502,6 +504,8 @@ export default function MemorizationScreen() {
   // Recite refs (callbacks read these; state isn't visible inside listeners)
   const reciteModeRef = useRef(false);
   const reciteExpectedIdxRef = useRef(0);
+  const reciteAttemptsRef = useRef(0);
+  const revealedReciteWordsRef = useRef<Set<string>>(new Set());
   const displayWordsMapRef = useRef<Map<number, ApiWord[]>>(new Map());
   const surahNumberRef = useRef<number | null>(null);
   const matchedWordCountRef = useRef(0);
@@ -514,6 +518,8 @@ export default function MemorizationScreen() {
   useEffect(() => { playingVerseNumberRef.current = playingVerseNumber; }, [playingVerseNumber]);
   useEffect(() => { reciteModeRef.current = reciteMode; }, [reciteMode]);
   useEffect(() => { reciteExpectedIdxRef.current = reciteExpectedIdx; }, [reciteExpectedIdx]);
+  useEffect(() => { reciteAttemptsRef.current = reciteAttempts; }, [reciteAttempts]);
+  useEffect(() => { revealedReciteWordsRef.current = revealedReciteWords; }, [revealedReciteWords]);
   useEffect(() => { displayWordsMapRef.current = displayWordsMap; }, [displayWordsMap]);
   useEffect(() => { surahNumberRef.current = surahNumber; }, [surahNumber]);
   useEffect(() => { reciterRef.current = reciter; }, [reciter]);
@@ -1025,12 +1031,20 @@ export default function MemorizationScreen() {
 
     // In recite mode, the highlight tracks the next word to say. On verse change,
     // reset to word 0. Otherwise (audio playback), clear highlight entirely.
+    const resetReciteIdx = reciteModeRef.current
+      ? (getNextReciteWordIndex(
+          displayWordsMapRef.current.get(currentVerseRef.current) ?? [],
+          0,
+        ) ?? 0)
+      : 0;
     if (reciteModeRef.current) {
-      setHighlightedWord(0);
+      setHighlightedWord(resetReciteIdx);
       if (surahNumberRef.current !== null) {
+        const resetWord =
+          displayWordsMapRef.current.get(currentVerseRef.current)?.[resetReciteIdx];
         setHighlightedPage({
           verseKey: `${surahNumberRef.current}:${currentVerseRef.current}`,
-          position: 1,
+          position: resetWord?.position ?? resetReciteIdx + 1,
         });
       }
     } else {
@@ -1038,7 +1052,8 @@ export default function MemorizationScreen() {
       setHighlightedPage(null);
     }
 
-    setReciteExpectedIdx(0);
+    reciteExpectedIdxRef.current = resetReciteIdx;
+    setReciteExpectedIdx(resetReciteIdx);
     matchedWordCountRef.current = 0;
     lastMatchedWordRef.current = "";
     positionRef.current = 0;
@@ -1739,6 +1754,7 @@ export default function MemorizationScreen() {
       setReciteListening(false);
       setReciteError(null);
       setReciteExpectedIdx(0);
+      resetReciteAssistState();
       matchedWordCountRef.current = 0;
       lastMatchedWordRef.current = "";
       ExpoSpeechRecognitionModule.stop();
@@ -1899,6 +1915,7 @@ export default function MemorizationScreen() {
     setReciteListening(false);
     setReciteError(null);
     setReciteExpectedIdx(0);
+    resetReciteAssistState();
     ExpoSpeechRecognitionModule.stop();
     await stopAudioCompletely();
     setSessionReviewOnly(false);
@@ -1942,6 +1959,8 @@ export default function MemorizationScreen() {
   async function enterReciteMode(startVerse: number) {
     if (ayahStart === null || ayahEnd === null || surahNumberRef.current === null) return;
     const boundedStart = Math.max(ayahStart, Math.min(startVerse, ayahEnd));
+    const initialWords = displayWordsMapRef.current.get(boundedStart) ?? [];
+    const initialExpectedIdx = getNextReciteWordIndex(initialWords, 0) ?? 0;
 
     setTappedAyah(null);
     await stopAudioCompletely();
@@ -1954,15 +1973,10 @@ export default function MemorizationScreen() {
     currentVerseRef.current = boundedStart;
     matchedWordCountRef.current = 0;
     lastMatchedWordRef.current = "";
-    setReciteExpectedIdx(0);
-    reciteExpectedIdxRef.current = 0;
+    resetReciteAssistState();
     setReciteError(null);
     setReciteListening(false);
-    setHighlightedWord(0);
-    setHighlightedPage({
-      verseKey: `${surahNumberRef.current}:${boundedStart}`,
-      position: 1,
-    });
+    setReciteCursor(boundedStart, initialExpectedIdx);
     setReciteMode(true);
   }
 
@@ -2050,6 +2064,140 @@ export default function MemorizationScreen() {
   }
 
   // ── Recite mode ──────────────────────────────────────────────────────────────
+
+  function makeReciteWordKey(verseNumber: number, expectedIdx: number) {
+    return `${verseNumber}:${expectedIdx}`;
+  }
+
+  function isSkippedReciteWord(word?: ApiWord) {
+    const text = word?.text_uthmani ?? "";
+    if (!text || SKIP_CHARS.test(text)) return true;
+
+    const expectedNorm = stripTashkeel(text);
+    if (!expectedNorm) return true;
+
+    const expectedTry = stripAlPrefix(expectedNorm);
+    const expectedFinal = expectedTry.length >= 2 ? expectedTry : expectedNorm;
+    return expectedFinal.length <= 2 && /^[هاا]+$/.test(expectedFinal);
+  }
+
+  function getNextReciteWordIndex(verseWords: ApiWord[], startIdx: number) {
+    for (let idx = Math.max(0, startIdx); idx < verseWords.length; idx++) {
+      if (!isSkippedReciteWord(verseWords[idx])) return idx;
+    }
+    return null;
+  }
+
+  function setReciteCursor(verseNumber: number, expectedIdx: number) {
+    reciteExpectedIdxRef.current = expectedIdx;
+    setReciteExpectedIdx(expectedIdx);
+    setHighlightedWord(expectedIdx);
+
+    if (surahNumberRef.current !== null) {
+      const word = displayWordsMapRef.current.get(verseNumber)?.[expectedIdx];
+      setHighlightedPage({
+        verseKey: `${surahNumberRef.current}:${verseNumber}`,
+        position: word?.position ?? expectedIdx + 1,
+      });
+    }
+  }
+
+  function setReciteAttemptCount(nextAttempts: number) {
+    reciteAttemptsRef.current = nextAttempts;
+    setReciteAttempts(nextAttempts);
+  }
+
+  function addReciteAttempts(delta: number) {
+    const nextAttempts = reciteAttemptsRef.current + delta;
+    setReciteAttemptCount(nextAttempts);
+    return nextAttempts;
+  }
+
+  function revealReciteWord(verseNumber: number, expectedIdx: number) {
+    const key = makeReciteWordKey(verseNumber, expectedIdx);
+    const next = new Set(revealedReciteWordsRef.current);
+    next.add(key);
+    revealedReciteWordsRef.current = next;
+    setRevealedReciteWords(next);
+    return key;
+  }
+
+  function resetReciteAssistState() {
+    setReciteAttemptCount(0);
+    const empty = new Set<string>();
+    revealedReciteWordsRef.current = empty;
+    setRevealedReciteWords(empty);
+  }
+
+  function calculateReciteScore(attempts = reciteAttemptsRef.current) {
+    const hintsUsed = revealedReciteWordsRef.current.size;
+    const failedAttempts = Math.max(0, attempts - hintsUsed * 3);
+    const penalty = hintsUsed * 15 + failedAttempts * 3;
+    return Math.max(0, 100 - penalty);
+  }
+
+  function advancePastCurrentReciteVerse(scoreAttempts = reciteAttemptsRef.current) {
+    const nextVerse = currentVerseRef.current + 1;
+    if (ayahEndRef.current !== null && currentVerseRef.current < ayahEndRef.current) {
+      const nextWords = displayWordsMapRef.current.get(nextVerse) ?? [];
+      const nextExpectedIdx = getNextReciteWordIndex(nextWords, 0) ?? 0;
+      currentVerseRef.current = nextVerse;
+      setCurrentVerse(nextVerse);
+      setReciteCursor(nextVerse, nextExpectedIdx);
+      return;
+    }
+
+    setReciteListening(false);
+    ExpoSpeechRecognitionModule.stop();
+    openRecitationCheck({
+      completedToAyah: ayahEndRef.current ?? currentVerseRef.current,
+      source: "noorpath",
+      score: calculateReciteScore(scoreAttempts),
+    });
+  }
+
+  function handleShowReciteWord() {
+    if (!reciteModeRef.current) return;
+    const verseNumber = currentVerseRef.current;
+    const verseWords = displayWordsMapRef.current.get(verseNumber) ?? [];
+    const currentExpectedIdx = getNextReciteWordIndex(
+      verseWords,
+      reciteExpectedIdxRef.current,
+    );
+    if (currentExpectedIdx === null) return;
+
+    setReciteCursor(verseNumber, currentExpectedIdx);
+    revealReciteWord(verseNumber, currentExpectedIdx);
+    addReciteAttempts(3);
+  }
+
+  function handleSkipReciteWord() {
+    if (!reciteModeRef.current) return;
+    const verseNumber = currentVerseRef.current;
+    const verseWords = displayWordsMapRef.current.get(verseNumber) ?? [];
+    const currentExpectedIdx = getNextReciteWordIndex(
+      verseWords,
+      reciteExpectedIdxRef.current,
+    );
+
+    if (currentExpectedIdx === null) {
+      advancePastCurrentReciteVerse();
+      return;
+    }
+
+    revealReciteWord(verseNumber, currentExpectedIdx);
+    const nextAttempts = addReciteAttempts(5);
+    matchedWordCountRef.current = 0;
+    lastMatchedWordRef.current = "";
+
+    const nextExpectedIdx = getNextReciteWordIndex(verseWords, currentExpectedIdx + 1);
+    if (nextExpectedIdx !== null) {
+      setReciteCursor(verseNumber, nextExpectedIdx);
+      return;
+    }
+
+    advancePastCurrentReciteVerse(nextAttempts);
+  }
 
   async function startRecognition() {
     const { granted } = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
@@ -2149,32 +2297,14 @@ export default function MemorizationScreen() {
     }
 
     if (advanced) {
+      setReciteAttemptCount(0);
       if (expectedIdx >= verseWords.length) {
-        if (
-          ayahEndRef.current !== null &&
-          currentVerseRef.current < ayahEndRef.current
-        ) {
-          // Move to next verse — the [currentVerse] effect resets the recite state.
-          setCurrentVerse((v) => v + 1);
-        } else {
-          setReciteListening(false);
-          ExpoSpeechRecognitionModule.stop();
-          openRecitationCheck({
-            completedToAyah: ayahEndRef.current ?? currentVerseRef.current,
-            source: "noorpath",
-            score: 100,
-          });
-        }
+        advancePastCurrentReciteVerse(0);
       } else {
-        setReciteExpectedIdx(expectedIdx);
-        setHighlightedWord(expectedIdx);
-        if (surahNumberRef.current !== null) {
-          setHighlightedPage({
-            verseKey: `${surahNumberRef.current}:${currentVerseRef.current}`,
-            position: expectedIdx + 1,
-          });
-        }
+        setReciteCursor(currentVerseRef.current, expectedIdx);
       }
+    } else if (isFinal) {
+      addReciteAttempts(1);
     }
 
     // Final result closes this utterance — reset search position so the
@@ -2479,6 +2609,44 @@ export default function MemorizationScreen() {
                       item.verseKey === `${surahNumber}:${playingVerseNumber}`;
                     const isBlurred =
                       blurMode && isPlaying && inScope && !isCurrentlyPlayingVerse;
+                    const pageWordIndex =
+                      Number.isFinite(item.word.position) && item.word.position > 0
+                        ? item.word.position - 1
+                        : -1;
+                    const isSkippedPageWord = isSkippedReciteWord(item.word);
+                    const isCurrentReciteVerse =
+                      reciteMode && inScope && vVerse === currentVerse;
+                    const isFutureReciteVerse =
+                      reciteMode && inScope && vVerse > currentVerse;
+                    const isPastReciteVerse =
+                      reciteMode && inScope && vVerse < currentVerse;
+                    const isCurrentReciteWord =
+                      isCurrentReciteVerse &&
+                      pageWordIndex >= 0 &&
+                      currentReciteExpectedIndex !== null &&
+                      pageWordIndex === currentReciteExpectedIndex &&
+                      !isSkippedPageWord;
+                    const reciteWordRevealed =
+                      isCurrentReciteWord &&
+                      revealedReciteWords.has(makeReciteWordKey(vVerse, pageWordIndex));
+                    const isPastReciteWord =
+                      isPastReciteVerse ||
+                      (isCurrentReciteVerse &&
+                        currentReciteExpectedIndex !== null &&
+                        pageWordIndex >= 0 &&
+                        pageWordIndex < currentReciteExpectedIndex);
+                    const hideWordForRecite =
+                      reciteMode &&
+                      inScope &&
+                      pageWordIndex >= 0 &&
+                      !isSkippedPageWord &&
+                      !isPastReciteWord &&
+                      (isFutureReciteVerse ||
+                        (isCurrentReciteVerse &&
+                          currentReciteExpectedIndex !== null &&
+                          pageWordIndex >= currentReciteExpectedIndex &&
+                          (!isCurrentReciteWord || !reciteWordRevealed)));
+                    const hiddenByBlind = verseHidden && !reciteWordRevealed;
 
                     const tajweedColor =
                       tajweedEnabled && inScope
@@ -2490,6 +2658,8 @@ export default function MemorizationScreen() {
                         style={[
                           styles.mushafWordPressable,
                           isHighlighted && themedStyles.mushafWordHighlighted,
+                          isCurrentReciteWord && styles.reciteMushafWordCurrent,
+                          hideWordForRecite && !isCurrentReciteWord && styles.reciteMushafWordPending,
                         ]}
                         onPress={
                           inScope
@@ -2533,11 +2703,11 @@ export default function MemorizationScreen() {
                             tajweedColor ? { color: tajweedColor } : undefined,
                           ]}
                         >
-                          {verseHidden ? "••••" : item.word.text_uthmani}
+                          {hiddenByBlind ? "••••" : item.word.text_uthmani}
                         </Text>
-                        {isBlurred && (
+                        {(isBlurred || hideWordForRecite) && (
                           <BlurView
-                            intensity={32}
+                            intensity={hideWordForRecite ? 38 : 32}
                             tint={themeKey.endsWith("_dark") ? "dark" : "light"}
                             pointerEvents="none"
                             style={styles.mushafWordBlurOverlay}
@@ -2563,6 +2733,9 @@ export default function MemorizationScreen() {
   // ── Derived values ───────────────────────────────────────────────────────────
 
   const words = displayWordsMap.get(playingVerseNumber) ?? [];
+  const currentReciteExpectedIndex = reciteMode
+    ? getNextReciteWordIndex(words, reciteExpectedIdx)
+    : null;
   const ayahVerseKey = surahNumber !== null ? `${surahNumber}:${playingVerseNumber}` : "";
   const ayahVerseHidden = blindMode && !revealedVerses.has(ayahVerseKey);
   const verseIndex = ayahStart !== null ? currentVerse - ayahStart + 1 : 1;
@@ -2727,6 +2900,26 @@ export default function MemorizationScreen() {
             <View style={styles.wordContainer}>
               {words.map((word, idx) => {
                 const tajweedColor = tajweedEnabled ? extractTajweedColor(word.text_uthmani_tajweed) : null;
+                const isSkippedWord = isSkippedReciteWord(word);
+                const isCurrentReciteWord =
+                  reciteMode &&
+                  currentReciteExpectedIndex !== null &&
+                  currentReciteExpectedIndex === idx &&
+                  !isSkippedWord;
+                const isPastReciteWord =
+                  reciteMode &&
+                  currentReciteExpectedIndex !== null &&
+                  idx < currentReciteExpectedIndex;
+                const reciteWordRevealed =
+                  isCurrentReciteWord &&
+                  revealedReciteWords.has(makeReciteWordKey(playingVerseNumber, idx));
+                const hideWordForRecite =
+                  reciteMode &&
+                  currentReciteExpectedIndex !== null &&
+                  !isSkippedWord &&
+                  !isPastReciteWord &&
+                  (!isCurrentReciteWord || !reciteWordRevealed);
+                const hiddenByBlind = ayahVerseHidden && !reciteWordRevealed;
                 return (
                   <Pressable
                     key={`${playingVerseNumber}-${idx}`}
@@ -2753,7 +2946,12 @@ export default function MemorizationScreen() {
                       }
                     }}
                     delayLongPress={400}
-                    style={[styles.wordWrapper, highlightedWord === idx && styles.wordHighlighted]}
+                    style={[
+                      styles.wordWrapper,
+                      highlightedWord === idx && styles.wordHighlighted,
+                      isCurrentReciteWord && styles.reciteWordCurrent,
+                      hideWordForRecite && !isCurrentReciteWord && styles.reciteWordPending,
+                    ]}
                   >
                     <Text
                       style={[
@@ -2761,8 +2959,16 @@ export default function MemorizationScreen() {
                         tajweedColor ? { color: tajweedColor } : undefined,
                       ]}
                     >
-                      {ayahVerseHidden ? "••••" : word.text_uthmani}
+                      {hiddenByBlind ? "••••" : word.text_uthmani}
                     </Text>
+                    {hideWordForRecite && (
+                      <BlurView
+                        intensity={36}
+                        tint={themeKey.endsWith("_dark") ? "dark" : "light"}
+                        pointerEvents="none"
+                        style={styles.reciteWordBlurOverlay}
+                      />
+                    )}
                   </Pressable>
                 );
               })}
@@ -2807,6 +3013,33 @@ export default function MemorizationScreen() {
         )}
       </ScrollView>
 
+      {reciteMode && currentReciteExpectedIndex !== null && (
+        <View style={styles.reciteAssistRow}>
+          <Pressable
+            style={[styles.reciteAssistPill, styles.reciteShowPill]}
+            onPress={handleShowReciteWord}
+            accessibilityRole="button"
+            accessibilityLabel="Show current recite word"
+          >
+            <Ionicons name="eye-outline" size={15} color="#15803d" />
+            <Text style={[styles.reciteAssistPillText, styles.reciteShowPillText]}>
+              Show Word
+            </Text>
+          </Pressable>
+          <Pressable
+            style={[styles.reciteAssistPill, styles.reciteSkipPill]}
+            onPress={handleSkipReciteWord}
+            accessibilityRole="button"
+            accessibilityLabel="Skip current recite word"
+          >
+            <Ionicons name="play-skip-forward-outline" size={15} color="#b45309" />
+            <Text style={[styles.reciteAssistPillText, styles.reciteSkipPillText]}>
+              Skip Word
+            </Text>
+          </Pressable>
+        </View>
+      )}
+
       {/* Fixed controls island — always visible below the scroll area */}
       <View style={styles.controlsIsland}>
         {/* Mode buttons: Blind + Recite placeholder */}
@@ -2827,6 +3060,7 @@ export default function MemorizationScreen() {
             onPress={async () => {
               if (reciteMode) {
                 setReciteMode(false);
+                resetReciteAssistState();
                 return;
               }
               await enterReciteMode(currentVerseRef.current);
@@ -5757,6 +5991,8 @@ const styles = StyleSheet.create({
     justifyContent: "flex-start",
   },
   wordWrapper: {
+    position: "relative",
+    overflow: "hidden",
     paddingHorizontal: 4,
     paddingVertical: 4,
     marginHorizontal: 2,
@@ -5765,6 +6001,16 @@ const styles = StyleSheet.create({
   },
   wordHighlighted: {
     backgroundColor: "#dbeafe",
+  },
+  reciteWordCurrent: {
+    backgroundColor: "#ecfdf5",
+  },
+  reciteWordPending: {
+    backgroundColor: "rgba(249, 250, 251, 0.82)",
+  },
+  reciteWordBlurOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: 4,
   },
   arabicWord: {
     fontFamily: "AmiriQuran",
@@ -5823,6 +6069,12 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     borderRadius: 4,
   },
+  reciteMushafWordCurrent: {
+    backgroundColor: "#ecfdf5",
+  },
+  reciteMushafWordPending: {
+    backgroundColor: "rgba(249, 250, 251, 0.78)",
+  },
   mushafEndMarkerPressable: {
     minWidth: 30,
     minHeight: 30,
@@ -5845,6 +6097,51 @@ const styles = StyleSheet.create({
   mushafWordBlurOverlay: {
     ...StyleSheet.absoluteFillObject,
     borderRadius: 4,
+  },
+  reciteAssistRow: {
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    gap: 10,
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    paddingBottom: 8,
+    backgroundColor: "rgba(255, 255, 255, 0.96)",
+    borderTopWidth: 1,
+    borderTopColor: "#eef2f7",
+  },
+  reciteAssistPill: {
+    minHeight: 40,
+    borderRadius: 999,
+    borderWidth: 1,
+    paddingHorizontal: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 7,
+    shadowColor: "#000000",
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
+  },
+  reciteShowPill: {
+    backgroundColor: "#f0fdf4",
+    borderColor: "#86efac",
+  },
+  reciteSkipPill: {
+    backgroundColor: "#fffbeb",
+    borderColor: "#fcd34d",
+  },
+  reciteAssistPillText: {
+    fontSize: 13,
+    fontWeight: "900",
+  },
+  reciteShowPillText: {
+    color: "#15803d",
+  },
+  reciteSkipPillText: {
+    color: "#b45309",
   },
   // ── Fixed controls island ────────────────────────────────────────────────────
   controlsIsland: {
