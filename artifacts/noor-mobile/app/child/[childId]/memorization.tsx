@@ -414,8 +414,12 @@ export default function MemorizationScreen() {
     pageStart?: string;
     pageEnd?: string;
     session?: string;
+    recite?: string;
+    viewMode?: "ayah" | "page";
   }>();
   const childId = params.childId;
+  const routeViewMode =
+    params.viewMode === "page" || params.viewMode === "ayah" ? params.viewMode : null;
   const initialSessionRequested =
     params.session === "1" ||
     (params.surahNumber !== undefined &&
@@ -444,6 +448,7 @@ export default function MemorizationScreen() {
   const [sessionLoadId, setSessionLoadId] = useState(0);
   const [sessionReviewOnly, setSessionReviewOnly] = useState(false);
   const [startInRecitationCheck, setStartInRecitationCheck] = useState(false);
+  const [startInReciteMode, setStartInReciteMode] = useState(params.recite === "1");
   const [pendingSessionTarget, setPendingSessionTarget] = useState<SessionTarget | null>(null);
 
   const [loading, setLoading] = useState(true);
@@ -487,7 +492,7 @@ export default function MemorizationScreen() {
   const [autoplayThroughRange, setAutoplayThroughRange] = useState<boolean>(DEFAULT_SESSION_SETTINGS.autoplayThroughRange);
   const [blindMode, setBlindMode] = useState<boolean>(DEFAULT_SESSION_SETTINGS.blindMode);
   const [blurMode, setBlurMode] = useState<boolean>(DEFAULT_SESSION_SETTINGS.blurMode);
-  const [viewMode, setViewMode] = useState<"ayah" | "page">("ayah");
+  const [viewMode, setViewMode] = useState<"ayah" | "page">(routeViewMode ?? "ayah");
   const [themeKey, setThemeKey] = useState<ThemeKey>(DEFAULT_THEME_KEY);
   const [reciterId, setReciterId] = useState("husary");
   const [settingsLoaded, setSettingsLoaded] = useState(false);
@@ -644,13 +649,13 @@ export default function MemorizationScreen() {
       if (cancelled) return;
       setThemeKey(p.themeKey);
       setReciterId(p.reciterId);
-      setViewMode(p.viewMode);
+      setViewMode(routeViewMode ?? p.viewMode);
       setSettingsLoaded(true);
     })();
     return () => {
       cancelled = true;
     };
-  }, [childId]);
+  }, [childId, routeViewMode]);
 
   // Hydrate parent-chosen session defaults. These only set the starting state;
   // changes made inside a memorization session remain temporary.
@@ -836,6 +841,7 @@ export default function MemorizationScreen() {
     setRatingAyahEnd(null);
     setRecitationCheckSource("teacher");
     setRecitationScore(null);
+    setStartInReciteMode(false);
     setSaveError(null);
     setCelebration(null);
     setCumAyahIdx(0);
@@ -918,6 +924,24 @@ export default function MemorizationScreen() {
     sessionReviewOnly,
     ayahStart,
     ayahEnd,
+  ]);
+
+  useEffect(() => {
+    if (!startInReciteMode) return;
+    if (!sessionRequested || loading || error) return;
+    if (ayahStart === null) {
+      setStartInReciteMode(false);
+      return;
+    }
+
+    setStartInReciteMode(false);
+    void enterReciteMode(currentVerseRef.current || ayahStart);
+  }, [
+    startInReciteMode,
+    sessionRequested,
+    loading,
+    error,
+    ayahStart,
   ]);
 
   // Step 1: if no params, fetch dashboard to get today's memorization target
@@ -2029,6 +2053,7 @@ export default function MemorizationScreen() {
     setSaveError(null);
     setCelebration(null);
     setStartInRecitationCheck(false);
+    setStartInReciteMode(false);
     setSettingsOpen(false);
     setTranslationPopup(null);
     setTappedAyah(null);

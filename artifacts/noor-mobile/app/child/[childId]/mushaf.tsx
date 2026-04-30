@@ -18,9 +18,19 @@ import {
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
+import { Audio } from "expo-av";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { apiFetch } from "@/src/lib/api";
+import { ayahAudioUrl } from "@/src/lib/audio";
+import {
+  fetchDashboard,
+  fetchMemorizationProgress,
+  submitDailyProgress,
+  submitMemorization,
+  type DashboardResponse as MemorizationDashboardResponse,
+} from "@/src/lib/memorization";
 import { fetchVersesByPage, type ApiPageVerse } from "@/src/lib/quran";
+import { DEFAULT_RECITER_ID, RECITERS, findReciter } from "@/src/lib/reciters";
 import {
   MUSHAF_JUZS,
   MUSHAF_SURAHS,
@@ -39,6 +49,9 @@ const PRESET_PAGES = [1, 50, 300, TOTAL_MUSHAF_PAGES] as const;
 const BOOKMARK_LIMIT = 12;
 const RECENT_READ_LIMIT = 5;
 const QURAN_API = "https://api.quran.com/api/v4";
+const MUSHAF_AUDIO_SPEEDS = [0.75, 0.85, 1, 1.15, 1.25, 1.5] as const;
+const MUSHAF_AUDIO_AYAH_REPEATS = [1, 2, 3, 5] as const;
+const MUSHAF_AUDIO_RANGE_REPEATS = [1, 2, 3] as const;
 
 type ReadingStatus = "not_started" | "in_progress" | "completed";
 type ToolMode = "none" | "blind" | "select" | "recite";
@@ -66,6 +79,7 @@ type ReadingProgressResponse = {
 type SaveStatus = "idle" | "saving" | "saved" | "error";
 type SearchParamValue = string | string[] | undefined;
 type PageVerseStatus = "idle" | "loading" | "ready" | "error";
+type AudioPlayerStatus = "loading" | "playing" | "paused";
 
 type RecentRead = {
   page: number;
@@ -115,6 +129,22 @@ type LoadState<T> = {
   error: string | null;
 };
 
+type MushafAudioSettings = {
+  reciterId: string;
+  speed: number;
+  ayahRepeat: number;
+  rangeRepeat: number;
+};
+
+type MushafAudioPlayer = {
+  status: AudioPlayerStatus;
+  queue: PageAyahTarget[];
+  index: number;
+  ayahRepeatPass: number;
+  rangeRepeatPass: number;
+  sourceLabel: string;
+};
+
 const HIGHLIGHT_COLORS: Record<HighlightColor, { bg: string; dot: string; label: string }> = {
   yellow: { bg: "rgba(250, 204, 21, 0.26)", dot: "#f59e0b", label: "Yellow" },
   green: { bg: "rgba(34, 197, 94, 0.22)", dot: "#16a34a", label: "Green" },
@@ -132,6 +162,49 @@ function recentReadStorageKey(childId: string | undefined) {
 
 function annotationStorageKey(childId: string | undefined) {
   return `noorpath:mushaf:annotations:${childId ?? "unknown"}`;
+}
+
+function audioSettingsStorageKey(childId: string | undefined) {
+  return `noorpath:mushaf:audio-settings:${childId ?? "unknown"}`;
+}
+
+const DEFAULT_MUSHAF_AUDIO_SETTINGS: MushafAudioSettings = {
+  reciterId: DEFAULT_RECITER_ID,
+  speed: 1,
+  ayahRepeat: 1,
+  rangeRepeat: 1,
+};
+
+function nearestOption(value: number, options: readonly number[]) {
+  return options.reduce((best, option) =>
+    Math.abs(option - value) < Math.abs(best - value) ? option : best,
+  options[0] ?? value);
+}
+
+function normalizeAudioSettings(raw: string | null): MushafAudioSettings {
+  if (!raw) return DEFAULT_MUSHAF_AUDIO_SETTINGS;
+  try {
+    const parsed = JSON.parse(raw) as Partial<MushafAudioSettings>;
+    const reciterId =
+      typeof parsed.reciterId === "string" && RECITERS.some((reciter) => reciter.id === parsed.reciterId)
+        ? parsed.reciterId
+        : DEFAULT_MUSHAF_AUDIO_SETTINGS.reciterId;
+    const speed =
+      typeof parsed.speed === "number"
+        ? nearestOption(parsed.speed, MUSHAF_AUDIO_SPEEDS)
+        : DEFAULT_MUSHAF_AUDIO_SETTINGS.speed;
+    const ayahRepeat =
+      typeof parsed.ayahRepeat === "number"
+        ? nearestOption(parsed.ayahRepeat, MUSHAF_AUDIO_AYAH_REPEATS)
+        : DEFAULT_MUSHAF_AUDIO_SETTINGS.ayahRepeat;
+    const rangeRepeat =
+      typeof parsed.rangeRepeat === "number"
+        ? nearestOption(parsed.rangeRepeat, MUSHAF_AUDIO_RANGE_REPEATS)
+        : DEFAULT_MUSHAF_AUDIO_SETTINGS.rangeRepeat;
+    return { reciterId, speed, ayahRepeat, rangeRepeat };
+  } catch {
+    return DEFAULT_MUSHAF_AUDIO_SETTINGS;
+  }
 }
 
 function formatPageCount(value: number) {
@@ -189,6 +262,52 @@ function pageVerseToTarget(verse: ApiPageVerse, pageNumber: number): PageAyahTar
     pageNumber,
     textUthmani: verse.text_uthmani,
   };
+}
+
+function sortAyahTargets(targets: PageAyahTarget[]) {
+  return [...targets].sort((a, b) => {
+    if (a.surahNumber !== b.surahNumber) return a.surahNumber - b.surahNumber;
+    return a.ayahNumber - b.ayahNumber;
+  });
+}
+
+function formatTargetRange(targets: PageAyahTarget[]) {
+  if (targets.length === 0) return "No ayahs";
+  const sorted = sortAyahTargets(targets);
+  const first = sorted[0]!;
+  const last = sorted[sorted.length - 1]!;
+  if (first.surahNumber === last.surahNumber && first.ayahNumber === last.ayahNumber) {
+    return `Quran ${formatVerseLabel(first)}`;
+  }
+  if (first.surahNumber === last.surahNumber) {
+    return `Quran ${first.surahNumber}:${first.ayahNumber}-${last.ayahNumber}`;
+  }
+  return `Quran ${formatVerseLabel(first)}-${formatVerseLabel(last)}`;
+}
+
+function mergeMemorizedAyahs(existingAyahs: number[] | undefined, newAyahs: number[], totalVerses: number) {
+  return Array.from(new Set([...(existingAyahs ?? []), ...newAyahs]))
+    .filter((ayah) => Number.isInteger(ayah) && ayah >= 1 && ayah <= totalVerses)
+    .sort((a, b) => a - b);
+}
+
+function hasFullSurahMemorized(memorizedAyahs: number[], totalVerses: number) {
+  if (totalVerses <= 0) return false;
+  const memorizedSet = new Set(memorizedAyahs);
+  for (let ayah = 1; ayah <= totalVerses; ayah += 1) {
+    if (!memorizedSet.has(ayah)) return false;
+  }
+  return true;
+}
+
+function contiguousMemorizedThrough(start: number, end: number, memorizedAyahs: number[]) {
+  const memorizedSet = new Set(memorizedAyahs);
+  let completed = start - 1;
+  for (let ayah = start; ayah <= end; ayah += 1) {
+    if (!memorizedSet.has(ayah)) break;
+    completed = ayah;
+  }
+  return completed >= start ? completed : null;
 }
 
 function emptyAnnotations(): MushafAnnotations {
@@ -549,6 +668,10 @@ function AyahListModal({
   onToggleSelectedAyah,
   onStartRecite,
   onStartSelected,
+  onPlaySelected,
+  onReciteSelected,
+  onMarkSelected,
+  markingMemorized,
 }: {
   visible: boolean;
   pageNumber: number;
@@ -562,6 +685,10 @@ function AyahListModal({
   onToggleSelectedAyah: (target: PageAyahTarget) => void;
   onStartRecite: (target: PageAyahTarget) => void;
   onStartSelected: () => void;
+  onPlaySelected: () => void;
+  onReciteSelected: () => void;
+  onMarkSelected: () => void;
+  markingMemorized: boolean;
 }) {
   const selectedCount = selectedVerseKeys.size;
   const modeCopy =
@@ -699,15 +826,250 @@ function AyahListModal({
             <Text style={styles.ayahListFooterText}>
               {selectedCount} ayah{selectedCount === 1 ? "" : "s"} selected
             </Text>
-            <Pressable
-              style={[styles.ayahListFooterButton, selectedCount === 0 && styles.ayahListFooterButtonDisabled]}
-              disabled={selectedCount === 0}
-              onPress={onStartSelected}
-            >
-              <Text style={styles.ayahListFooterButtonText}>Open Range</Text>
-            </Pressable>
+            <View style={styles.ayahListFooterActions}>
+              <Pressable
+                style={[styles.ayahListFooterButton, selectedCount === 0 && styles.ayahListFooterButtonDisabled]}
+                disabled={selectedCount === 0}
+                onPress={onPlaySelected}
+              >
+                <Text style={styles.ayahListFooterButtonText}>Play</Text>
+              </Pressable>
+              <Pressable
+                style={[styles.ayahListFooterButton, selectedCount === 0 && styles.ayahListFooterButtonDisabled]}
+                disabled={selectedCount === 0}
+                onPress={onReciteSelected}
+              >
+                <Text style={styles.ayahListFooterButtonText}>Recite</Text>
+              </Pressable>
+              <Pressable
+                style={[
+                  styles.ayahListFooterButton,
+                  (selectedCount === 0 || markingMemorized) && styles.ayahListFooterButtonDisabled,
+                ]}
+                disabled={selectedCount === 0 || markingMemorized}
+                onPress={onMarkSelected}
+              >
+                <Text style={styles.ayahListFooterButtonText}>
+                  {markingMemorized ? "Saving" : "Mark"}
+                </Text>
+              </Pressable>
+              <Pressable
+                style={[styles.ayahListFooterButton, selectedCount === 0 && styles.ayahListFooterButtonDisabled]}
+                disabled={selectedCount === 0}
+                onPress={onStartSelected}
+              >
+                <Text style={styles.ayahListFooterButtonText}>Open</Text>
+              </Pressable>
+            </View>
           </View>
         ) : null}
+      </View>
+    </Modal>
+  );
+}
+
+function MushafAudioBar({
+  player,
+  settings,
+  onToggle,
+  onStop,
+  onPrevious,
+  onNext,
+  onOpenSettings,
+}: {
+  player: MushafAudioPlayer;
+  settings: MushafAudioSettings;
+  onToggle: () => void;
+  onStop: () => void;
+  onPrevious: () => void;
+  onNext: () => void;
+  onOpenSettings: () => void;
+}) {
+  const activeTarget = player.queue[player.index];
+  const reciter = findReciter(settings.reciterId);
+  const canPrevious = player.index > 0 || player.rangeRepeatPass > 1;
+  const canNext =
+    player.index < player.queue.length - 1 || player.rangeRepeatPass < settings.rangeRepeat;
+
+  if (!activeTarget) return null;
+
+  return (
+    <View style={styles.audioBar}>
+      <View style={styles.audioBarTop}>
+        <View style={styles.audioNowPlaying}>
+          <Text style={styles.audioKicker} numberOfLines={1}>
+            {player.sourceLabel}
+          </Text>
+          <Text style={styles.audioTitle} numberOfLines={1}>
+            {formatTargetRange([activeTarget])}
+          </Text>
+          <Text style={styles.audioMeta} numberOfLines={1}>
+            {reciter.fullName} · {settings.speed}x · ayah {player.ayahRepeatPass}/{settings.ayahRepeat} · range {player.rangeRepeatPass}/{settings.rangeRepeat}
+          </Text>
+        </View>
+        <Pressable style={styles.audioIconButton} onPress={onOpenSettings}>
+          <Ionicons name="options-outline" size={18} color="#2563eb" />
+        </Pressable>
+      </View>
+      <View style={styles.audioControls}>
+        <Pressable
+          style={[styles.audioRoundButton, !canPrevious && styles.audioRoundButtonDisabled]}
+          disabled={!canPrevious}
+          onPress={onPrevious}
+        >
+          <Ionicons name="play-skip-back" size={17} color={canPrevious ? "#374151" : "#9ca3af"} />
+        </Pressable>
+        <Pressable style={styles.audioPrimaryRoundButton} onPress={onToggle}>
+          <Ionicons
+            name={
+              player.status === "loading"
+                ? "hourglass-outline"
+                : player.status === "playing"
+                  ? "pause"
+                  : "play"
+            }
+            size={20}
+            color="#ffffff"
+          />
+        </Pressable>
+        <Pressable
+          style={[styles.audioRoundButton, !canNext && styles.audioRoundButtonDisabled]}
+          disabled={!canNext}
+          onPress={onNext}
+        >
+          <Ionicons name="play-skip-forward" size={17} color={canNext ? "#374151" : "#9ca3af"} />
+        </Pressable>
+        <Pressable style={styles.audioStopButton} onPress={onStop}>
+          <Ionicons name="square" size={14} color="#dc2626" />
+          <Text style={styles.audioStopButtonText}>Stop</Text>
+        </Pressable>
+      </View>
+    </View>
+  );
+}
+
+function MushafAudioSettingsModal({
+  visible,
+  settings,
+  onChange,
+  onClose,
+}: {
+  visible: boolean;
+  settings: MushafAudioSettings;
+  onChange: (next: MushafAudioSettings) => void;
+  onClose: () => void;
+}) {
+  function patchSettings(patch: Partial<MushafAudioSettings>) {
+    onChange({ ...settings, ...patch });
+  }
+
+  return (
+    <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
+      <View style={styles.sheet}>
+        <View style={styles.sheetHeader}>
+          <Pressable style={styles.sheetClose} onPress={onClose}>
+            <Ionicons name="chevron-down" size={22} color="#2563eb" />
+          </Pressable>
+          <View style={styles.sheetTitleBlock}>
+            <Text style={styles.sheetTitle}>Audio settings</Text>
+            <Text style={styles.sheetSubtitle}>Reciter, speed, and repeat controls</Text>
+          </View>
+          <View style={styles.sheetHeaderSpacer} />
+        </View>
+
+        <ScrollView style={styles.sheetScroll} contentContainerStyle={styles.audioSettingsContent}>
+          <View style={styles.audioSettingsGroup}>
+            <Text style={styles.sectionLabel}>Reciter</Text>
+            {RECITERS.map((reciter) => {
+              const selected = settings.reciterId === reciter.id;
+              return (
+                <Pressable
+                  key={reciter.id}
+                  style={[styles.reciterRow, selected && styles.reciterRowSelected]}
+                  onPress={() => patchSettings({ reciterId: reciter.id })}
+                >
+                  <View style={styles.reciterTextBlock}>
+                    <Text style={[styles.reciterName, selected && styles.reciterNameSelected]}>
+                      {reciter.fullName}
+                    </Text>
+                    <Text style={styles.reciterStyle}>{reciter.style}</Text>
+                  </View>
+                  <Ionicons
+                    name={selected ? "checkmark-circle" : "ellipse-outline"}
+                    size={20}
+                    color={selected ? "#2563eb" : "#9ca3af"}
+                  />
+                </Pressable>
+              );
+            })}
+          </View>
+
+          <View style={styles.audioSettingsGroup}>
+            <Text style={styles.sectionLabel}>Speed</Text>
+            <View style={styles.optionChipRow}>
+              {MUSHAF_AUDIO_SPEEDS.map((speed) => (
+                <Pressable
+                  key={speed}
+                  style={[styles.optionChip, settings.speed === speed && styles.optionChipSelected]}
+                  onPress={() => patchSettings({ speed })}
+                >
+                  <Text
+                    style={[
+                      styles.optionChipText,
+                      settings.speed === speed && styles.optionChipTextSelected,
+                    ]}
+                  >
+                    {speed}x
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+          </View>
+
+          <View style={styles.audioSettingsGroup}>
+            <Text style={styles.sectionLabel}>Ayah repeat</Text>
+            <View style={styles.optionChipRow}>
+              {MUSHAF_AUDIO_AYAH_REPEATS.map((repeat) => (
+                <Pressable
+                  key={repeat}
+                  style={[styles.optionChip, settings.ayahRepeat === repeat && styles.optionChipSelected]}
+                  onPress={() => patchSettings({ ayahRepeat: repeat })}
+                >
+                  <Text
+                    style={[
+                      styles.optionChipText,
+                      settings.ayahRepeat === repeat && styles.optionChipTextSelected,
+                    ]}
+                  >
+                    {repeat}x
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+          </View>
+
+          <View style={styles.audioSettingsGroup}>
+            <Text style={styles.sectionLabel}>Range repeat</Text>
+            <View style={styles.optionChipRow}>
+              {MUSHAF_AUDIO_RANGE_REPEATS.map((repeat) => (
+                <Pressable
+                  key={repeat}
+                  style={[styles.optionChip, settings.rangeRepeat === repeat && styles.optionChipSelected]}
+                  onPress={() => patchSettings({ rangeRepeat: repeat })}
+                >
+                  <Text
+                    style={[
+                      styles.optionChipText,
+                      settings.rangeRepeat === repeat && styles.optionChipTextSelected,
+                    ]}
+                  >
+                    {repeat}x
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+          </View>
+        </ScrollView>
       </View>
     </Modal>
   );
@@ -721,6 +1083,10 @@ function AyahActionSheet({
   onClose,
   onNavigate,
   onOpenMemorization,
+  onPlayAyah,
+  onPlayFromHere,
+  onReciteFromAyah,
+  onMarkMemorized,
   onToggleSelection,
   onToggleBookmark,
   onSetHighlight,
@@ -733,6 +1099,10 @@ function AyahActionSheet({
   onClose: () => void;
   onNavigate: (target: PageAyahTarget) => void;
   onOpenMemorization: (target: PageAyahTarget) => void;
+  onPlayAyah: (target: PageAyahTarget) => void;
+  onPlayFromHere: (target: PageAyahTarget) => void;
+  onReciteFromAyah: (target: PageAyahTarget) => void;
+  onMarkMemorized: (target: PageAyahTarget) => void;
   onToggleSelection: (target: PageAyahTarget) => void;
   onToggleBookmark: (target: PageAyahTarget) => void;
   onSetHighlight: (target: PageAyahTarget, color: HighlightColor | null) => void;
@@ -966,6 +1336,25 @@ function AyahActionSheet({
           <Ionicons name="school-outline" size={17} color="#ffffff" />
           <Text style={styles.ayahPrimaryButtonText}>Practice from here</Text>
         </Pressable>
+
+        <View style={styles.ayahMenuGroup}>
+          <Pressable style={styles.ayahMenuRow} onPress={() => onPlayAyah(target)}>
+            <Ionicons name="play-circle-outline" size={18} color="#2563eb" />
+            <Text style={styles.ayahMenuRowText}>Play ayah</Text>
+          </Pressable>
+          <Pressable style={styles.ayahMenuRow} onPress={() => onPlayFromHere(target)}>
+            <Ionicons name="play-forward-circle-outline" size={18} color="#2563eb" />
+            <Text style={styles.ayahMenuRowText}>Play from here</Text>
+          </Pressable>
+          <Pressable style={styles.ayahMenuRow} onPress={() => onReciteFromAyah(target)}>
+            <Ionicons name="mic-outline" size={18} color="#be123c" />
+            <Text style={styles.ayahMenuRowText}>Recite from here</Text>
+          </Pressable>
+          <Pressable style={styles.ayahMenuRow} onPress={() => onMarkMemorized(target)}>
+            <Ionicons name="ribbon-outline" size={18} color="#047857" />
+            <Text style={styles.ayahMenuRowText}>Mark memorized</Text>
+          </Pressable>
+        </View>
 
         <View style={styles.ayahMenuGroup}>
           <Pressable style={styles.ayahMenuRow} onPress={() => onToggleBookmark(target)}>
@@ -1293,10 +1682,23 @@ export default function MushafScreen() {
   const [selectedVerseKeys, setSelectedVerseKeys] = useState<Set<string>>(new Set());
   const [pageVerses, setPageVerses] = useState<ApiPageVerse[]>([]);
   const [pageVerseStatus, setPageVerseStatus] = useState<PageVerseStatus>("idle");
+  const [audioSettings, setAudioSettings] = useState<MushafAudioSettings>(
+    DEFAULT_MUSHAF_AUDIO_SETTINGS,
+  );
+  const [audioSettingsOpen, setAudioSettingsOpen] = useState(false);
+  const [audioPlayer, setAudioPlayer] = useState<MushafAudioPlayer | null>(null);
+  const [audioError, setAudioError] = useState<string | null>(null);
+  const [audioSettingsHydrated, setAudioSettingsHydrated] = useState(false);
+  const [markingMemorized, setMarkingMemorized] = useState(false);
 
   const listRef = useRef<FlatList<number>>(null);
   const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const saveStatusTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const audioSoundRef = useRef<Audio.Sound | null>(null);
+  const audioTokenRef = useRef(0);
+  const audioPlayerRef = useRef<MushafAudioPlayer | null>(null);
+  const audioSettingsRef = useRef<MushafAudioSettings>(DEFAULT_MUSHAF_AUDIO_SETTINGS);
+  const lastAudioReciterIdRef = useRef(DEFAULT_MUSHAF_AUDIO_SETTINGS.reciterId);
 
   const data = useMemo(
     () => Array.from({ length: TOTAL_MUSHAF_PAGES }, (_, i) => i + 1),
@@ -1427,17 +1829,80 @@ export default function MushafScreen() {
       }
     }
 
+    async function loadAudioSettings() {
+      setAudioSettingsHydrated(false);
+      try {
+        const raw = await AsyncStorage.getItem(audioSettingsStorageKey(childId));
+        if (cancelled) return;
+        setAudioSettings(normalizeAudioSettings(raw));
+      } catch {
+        if (!cancelled) setAudioSettings(DEFAULT_MUSHAF_AUDIO_SETTINGS);
+      } finally {
+        if (!cancelled) setAudioSettingsHydrated(true);
+      }
+    }
+
     loadInitialPage();
     loadBookmarks();
     loadRecentReads();
     loadAnnotations();
+    loadAudioSettings();
 
     return () => {
       cancelled = true;
       if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
       if (saveStatusTimer.current) clearTimeout(saveStatusTimer.current);
+      audioTokenRef.current += 1;
+      if (audioSoundRef.current) {
+        audioSoundRef.current.unloadAsync().catch(() => {});
+        audioSoundRef.current = null;
+      }
     };
   }, [childId, requestedInitialPage]);
+
+  useEffect(() => {
+    audioPlayerRef.current = audioPlayer;
+  }, [audioPlayer]);
+
+  useEffect(() => {
+    audioSettingsRef.current = audioSettings;
+    if (!audioSettingsHydrated) return;
+    AsyncStorage.setItem(audioSettingsStorageKey(childId), JSON.stringify(audioSettings)).catch(() => {
+      // Best-effort only.
+    });
+  }, [audioSettings, audioSettingsHydrated, childId]);
+
+  useEffect(() => {
+    Audio.setAudioModeAsync({
+      playsInSilentModeIOS: true,
+      staysActiveInBackground: false,
+      shouldDuckAndroid: true,
+    }).catch(() => {
+      // Non-fatal on simulator.
+    });
+  }, []);
+
+  useEffect(() => {
+    audioSoundRef.current?.setRateAsync(audioSettings.speed, true).catch(() => {
+      // Best-effort for already-loaded audio.
+    });
+  }, [audioSettings.speed]);
+
+  useEffect(() => {
+    const previousReciterId = lastAudioReciterIdRef.current;
+    lastAudioReciterIdRef.current = audioSettings.reciterId;
+    if (!audioSettingsHydrated || previousReciterId === audioSettings.reciterId) return;
+    const player = audioPlayerRef.current;
+    if (!player || player.status === "loading") return;
+    void startAudioQueueAt({
+      queue: player.queue,
+      index: player.index,
+      ayahRepeatPass: player.ayahRepeatPass,
+      rangeRepeatPass: player.rangeRepeatPass,
+      sourceLabel: player.sourceLabel,
+      shouldPlay: player.status === "playing",
+    });
+  }, [audioSettings.reciterId, audioSettingsHydrated]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1630,6 +2095,326 @@ export default function MushafScreen() {
     });
   }
 
+  async function unloadCurrentMushafAudio() {
+    const sound = audioSoundRef.current;
+    audioSoundRef.current = null;
+    if (!sound) return;
+    sound.setOnPlaybackStatusUpdate(null);
+    try {
+      await sound.unloadAsync();
+    } catch {
+      // Best-effort cleanup.
+    }
+  }
+
+  async function stopMushafAudio() {
+    audioTokenRef.current += 1;
+    await unloadCurrentMushafAudio();
+    setAudioPlayer(null);
+    setAudioError(null);
+  }
+
+  async function startAudioQueueAt({
+    queue,
+    index,
+    ayahRepeatPass,
+    rangeRepeatPass,
+    sourceLabel,
+    shouldPlay = true,
+  }: {
+    queue: PageAyahTarget[];
+    index: number;
+    ayahRepeatPass: number;
+    rangeRepeatPass: number;
+    sourceLabel: string;
+    shouldPlay?: boolean;
+  }) {
+    const target = queue[index];
+    if (!target) return;
+    const token = audioTokenRef.current + 1;
+    audioTokenRef.current = token;
+    const settings = audioSettingsRef.current;
+    const reciter = findReciter(settings.reciterId);
+    setAudioError(null);
+    setAudioPlayer({
+      status: "loading",
+      queue,
+      index,
+      ayahRepeatPass,
+      rangeRepeatPass,
+      sourceLabel,
+    });
+    if (target.pageNumber !== currentPage) {
+      goToPage(target.pageNumber);
+    }
+
+    try {
+      await unloadCurrentMushafAudio();
+      const { sound } = await Audio.Sound.createAsync(
+        { uri: ayahAudioUrl(reciter, target.surahNumber, target.ayahNumber) },
+        {
+          shouldPlay,
+          rate: settings.speed,
+          shouldCorrectPitch: true,
+        },
+        (status) => {
+          if (!status.isLoaded || !status.didJustFinish) return;
+          void handleMushafAudioFinished(token);
+        },
+      );
+      if (token !== audioTokenRef.current) {
+        await sound.unloadAsync().catch(() => {});
+        return;
+      }
+      audioSoundRef.current = sound;
+      setAudioPlayer({
+        status: shouldPlay ? "playing" : "paused",
+        queue,
+        index,
+        ayahRepeatPass,
+        rangeRepeatPass,
+        sourceLabel,
+      });
+    } catch (error) {
+      if (token !== audioTokenRef.current) return;
+      await unloadCurrentMushafAudio();
+      setAudioPlayer(null);
+      setAudioError(error instanceof Error ? error.message : "Audio could not play.");
+    }
+  }
+
+  async function handleMushafAudioFinished(token: number) {
+    if (token !== audioTokenRef.current) return;
+    const player = audioPlayerRef.current;
+    if (!player) return;
+    const settings = audioSettingsRef.current;
+
+    if (player.ayahRepeatPass < settings.ayahRepeat) {
+      await startAudioQueueAt({
+        queue: player.queue,
+        index: player.index,
+        ayahRepeatPass: player.ayahRepeatPass + 1,
+        rangeRepeatPass: player.rangeRepeatPass,
+        sourceLabel: player.sourceLabel,
+      });
+      return;
+    }
+
+    if (player.index < player.queue.length - 1) {
+      await startAudioQueueAt({
+        queue: player.queue,
+        index: player.index + 1,
+        ayahRepeatPass: 1,
+        rangeRepeatPass: player.rangeRepeatPass,
+        sourceLabel: player.sourceLabel,
+      });
+      return;
+    }
+
+    if (player.rangeRepeatPass < settings.rangeRepeat) {
+      await startAudioQueueAt({
+        queue: player.queue,
+        index: 0,
+        ayahRepeatPass: 1,
+        rangeRepeatPass: player.rangeRepeatPass + 1,
+        sourceLabel: player.sourceLabel,
+      });
+      return;
+    }
+
+    await stopMushafAudio();
+  }
+
+  async function playAudioTargets(targets: PageAyahTarget[], sourceLabel: string) {
+    const queue = sortAyahTargets(targets);
+    if (queue.length === 0) {
+      Alert.alert("No ayahs ready", "Open the ayah list after the page finishes loading.");
+      return;
+    }
+    await startAudioQueueAt({
+      queue,
+      index: 0,
+      ayahRepeatPass: 1,
+      rangeRepeatPass: 1,
+      sourceLabel,
+    });
+  }
+
+  async function toggleMushafAudio() {
+    const player = audioPlayerRef.current;
+    const sound = audioSoundRef.current;
+    if (!player || !sound || player.status === "loading") return;
+    try {
+      if (player.status === "playing") {
+        await sound.pauseAsync();
+        setAudioPlayer({ ...player, status: "paused" });
+      } else {
+        await sound.playAsync();
+        setAudioPlayer({ ...player, status: "playing" });
+      }
+    } catch (error) {
+      setAudioError(error instanceof Error ? error.message : "Audio control failed.");
+    }
+  }
+
+  function jumpMushafAudio(delta: -1 | 1) {
+    const player = audioPlayerRef.current;
+    if (!player || player.queue.length === 0) return;
+    const settings = audioSettingsRef.current;
+    let nextIndex = player.index + delta;
+    let nextRangePass = player.rangeRepeatPass;
+
+    if (nextIndex < 0) {
+      if (nextRangePass <= 1) return;
+      nextRangePass -= 1;
+      nextIndex = player.queue.length - 1;
+    }
+
+    if (nextIndex >= player.queue.length) {
+      if (nextRangePass >= settings.rangeRepeat) return;
+      nextRangePass += 1;
+      nextIndex = 0;
+    }
+
+    void startAudioQueueAt({
+      queue: player.queue,
+      index: nextIndex,
+      ayahRepeatPass: 1,
+      rangeRepeatPass: nextRangePass,
+      sourceLabel: player.sourceLabel,
+    });
+  }
+
+  function playPageAudio() {
+    void playAudioTargets(pageAyahs, `Page ${currentPage}`);
+  }
+
+  function playAyahAudio(target: PageAyahTarget) {
+    setSelectedAyah(null);
+    void playAudioTargets([target], formatTargetRange([target]));
+  }
+
+  function playFromAyah(target: PageAyahTarget) {
+    const queue = pageAyahs.filter((ayah) => {
+      if (ayah.surahNumber !== target.surahNumber) return ayah.surahNumber > target.surahNumber;
+      return ayah.ayahNumber >= target.ayahNumber;
+    });
+    setSelectedAyah(null);
+    void playAudioTargets(queue, `${formatTargetRange([target])} onward`);
+  }
+
+  function playSelectedAyahs() {
+    void playAudioTargets(selectedAyahTargets, "Selected ayahs");
+  }
+
+  async function maybeSubmitMarkedDailyProgress({
+    dashboard,
+    surahNumber: markedSurah,
+    mergedAyahs,
+  }: {
+    dashboard: MemorizationDashboardResponse;
+    surahNumber: number;
+    mergedAyahs: number[];
+  }) {
+    const todayWork = dashboard.todaysPlan.newMemorization;
+    if (!todayWork || todayWork.isReviewOnly) return;
+
+    const todayProgress = dashboard.todayProgress;
+    const targetSurah = todayProgress?.memTargetSurah ?? todayWork.surahNumber;
+    const targetEndSurah = todayWork.endSurahNumber ?? targetSurah;
+    if (targetSurah !== targetEndSurah || markedSurah !== targetSurah) return;
+
+    const targetAyahStart = todayProgress?.memTargetAyahStart ?? todayWork.ayahStart;
+    const targetAyahEnd = todayProgress?.memTargetAyahEnd ?? todayWork.ayahEnd;
+    if (targetAyahStart == null || targetAyahEnd == null) return;
+
+    const completedThrough = contiguousMemorizedThrough(
+      targetAyahStart,
+      targetAyahEnd,
+      mergedAyahs,
+    );
+    if (completedThrough === null) return;
+
+    const completedAyahEnd = Math.max(
+      todayProgress?.memCompletedAyahEnd ?? 0,
+      completedThrough,
+    );
+
+    await submitDailyProgress(childId, {
+      memStatus: completedAyahEnd >= targetAyahEnd ? "completed" : "in_progress",
+      memCompletedAyahEnd: completedAyahEnd,
+      memTargetSurah: targetSurah,
+      memTargetAyahStart: targetAyahStart,
+      memTargetAyahEnd: targetAyahEnd,
+      memTargetEndSurah: targetEndSurah,
+    });
+  }
+
+  async function markTargetsMemorized(targets: PageAyahTarget[]) {
+    const sortedTargets = sortAyahTargets(targets);
+    if (sortedTargets.length === 0 || markingMemorized) return;
+    setMarkingMemorized(true);
+    setAudioError(null);
+    try {
+      const [dashboardBeforeSave, latestProgress] = await Promise.all([
+        fetchDashboard(childId),
+        fetchMemorizationProgress(childId),
+      ]);
+      const grouped = new Map<number, number[]>();
+      for (const target of sortedTargets) {
+        const current = grouped.get(target.surahNumber) ?? [];
+        current.push(target.ayahNumber);
+        grouped.set(target.surahNumber, current);
+      }
+
+      for (const [targetSurah, ayahs] of grouped.entries()) {
+        const surahMeta = MUSHAF_SURAHS[targetSurah - 1];
+        const existingProgress = latestProgress.find((item) => item.surahNumber === targetSurah);
+        const totalVerses =
+          existingProgress?.totalVerses ??
+          surahMeta?.verseCount ??
+          Math.max(...ayahs);
+        const uniqueAyahs = Array.from(new Set(ayahs)).sort((a, b) => a - b);
+        const memorizedAyahs = mergeMemorizedAyahs(
+          existingProgress?.memorizedAyahs,
+          uniqueAyahs,
+          totalVerses,
+        );
+        const status = hasFullSurahMemorized(memorizedAyahs, totalVerses)
+          ? "memorized"
+          : "in_progress";
+
+        await submitMemorization(childId, {
+          surahId: targetSurah,
+          memorizedAyahs,
+          ratedAyahs: uniqueAyahs,
+          qualityRating: 5,
+          status,
+        });
+
+        await maybeSubmitMarkedDailyProgress({
+          dashboard: dashboardBeforeSave,
+          surahNumber: targetSurah,
+          mergedAyahs: memorizedAyahs,
+        });
+      }
+
+      await Promise.all([fetchDashboard(childId), fetchMemorizationProgress(childId)]);
+      setSelectedVerseKeys((current) => {
+        const next = new Set(current);
+        for (const target of sortedTargets) next.delete(target.verseKey);
+        return next;
+      });
+      setToolMode("none");
+      setSelectedAyah(null);
+      Alert.alert("Marked memorized", `${formatTargetRange(sortedTargets)} saved as memorized.`);
+    } catch (error) {
+      Alert.alert("Could not save", error instanceof Error ? error.message : "Try again in a moment.");
+    } finally {
+      setMarkingMemorized(false);
+    }
+  }
+
   function toggleToolMode(mode: ToolMode) {
     setToolMode((current) => {
       const next = current === mode ? "none" : mode;
@@ -1665,9 +2450,10 @@ export default function MushafScreen() {
     setAyahListOpen(false);
   }
 
-  function openMemorizationFromAyah(target: PageAyahTarget) {
+  function openMemorizationFromAyah(target: PageAyahTarget, options?: { recite?: boolean }) {
     setSelectedAyah(null);
     setAyahListOpen(false);
+    void stopMushafAudio();
     router.push({
       pathname: "/child/[childId]/memorization",
       params: {
@@ -1679,11 +2465,13 @@ export default function MushafScreen() {
         pageStart: String(target.pageNumber),
         pageEnd: String(target.pageNumber),
         session: "1",
+        recite: options?.recite ? "1" : undefined,
+        viewMode: options?.recite ? "page" : undefined,
       },
     });
   }
 
-  function openSelectedRangeInMemorization() {
+  function openSelectedRangeInMemorization(options?: { recite?: boolean }) {
     if (selectedAyahTargets.length === 0) return;
     const surahNumber = selectedAyahTargets[0]?.surahNumber;
     if (!surahNumber || selectedAyahTargets.some((target) => target.surahNumber !== surahNumber)) {
@@ -1694,6 +2482,7 @@ export default function MushafScreen() {
     const ayahStart = Math.min(...selectedAyahTargets.map((target) => target.ayahNumber));
     const ayahEnd = Math.max(...selectedAyahTargets.map((target) => target.ayahNumber));
     setAyahListOpen(false);
+    void stopMushafAudio();
     router.push({
       pathname: "/child/[childId]/memorization",
       params: {
@@ -1705,8 +2494,26 @@ export default function MushafScreen() {
         pageStart: String(currentPage),
         pageEnd: String(currentPage),
         session: "1",
+        recite: options?.recite ? "1" : undefined,
+        viewMode: options?.recite ? "page" : undefined,
       },
     });
+  }
+
+  function reciteFromAyah(target: PageAyahTarget) {
+    openMemorizationFromAyah(target, { recite: true });
+  }
+
+  function reciteSelectedAyahs() {
+    openSelectedRangeInMemorization({ recite: true });
+  }
+
+  function markSelectedAyahsMemorized() {
+    void markTargetsMemorized(selectedAyahTargets);
+  }
+
+  function markAyahMemorized(target: PageAyahTarget) {
+    void markTargetsMemorized([target]);
   }
 
   return (
@@ -1823,6 +2630,13 @@ export default function MushafScreen() {
                 onPress={() => setAyahListOpen(true)}
               />
               <ToolButton
+                label="Listen"
+                iconName="play-circle-outline"
+                color="#2563eb"
+                active={audioPlayer !== null}
+                onPress={playPageAudio}
+              />
+              <ToolButton
                 label="Blind"
                 iconName={toolMode === "blind" ? "eye-off-outline" : "eye-outline"}
                 color="#7c3aed"
@@ -1873,6 +2687,11 @@ export default function MushafScreen() {
       {annotationError && (
         <View style={styles.errorBanner}>
           <Text style={styles.errorBannerText}>{annotationError}</Text>
+        </View>
+      )}
+      {audioError && (
+        <View style={styles.errorBanner}>
+          <Text style={styles.errorBannerText}>{audioError}</Text>
         </View>
       )}
 
@@ -1928,10 +2747,39 @@ export default function MushafScreen() {
           <Text style={styles.selectionBarText}>
             {selectedVerseKeys.size} ayah{selectedVerseKeys.size === 1 ? "" : "s"} selected
           </Text>
-          <Pressable style={styles.selectionBarButton} onPress={openSelectedRangeInMemorization}>
-            <Text style={styles.selectionBarButtonText}>Open Range</Text>
-          </Pressable>
+          <View style={styles.selectionBarActions}>
+            <Pressable style={styles.selectionBarButton} onPress={playSelectedAyahs}>
+              <Text style={styles.selectionBarButtonText}>Play</Text>
+            </Pressable>
+            <Pressable style={styles.selectionBarButton} onPress={reciteSelectedAyahs}>
+              <Text style={styles.selectionBarButtonText}>Recite</Text>
+            </Pressable>
+            <Pressable
+              style={[styles.selectionBarButton, markingMemorized && styles.selectionBarButtonDisabled]}
+              onPress={markSelectedAyahsMemorized}
+              disabled={markingMemorized}
+            >
+              <Text style={styles.selectionBarButtonText}>
+                {markingMemorized ? "Saving" : "Mark"}
+              </Text>
+            </Pressable>
+            <Pressable style={styles.selectionBarButton} onPress={() => openSelectedRangeInMemorization()}>
+              <Text style={styles.selectionBarButtonText}>Open</Text>
+            </Pressable>
+          </View>
         </View>
+      ) : null}
+
+      {audioPlayer ? (
+        <MushafAudioBar
+          player={audioPlayer}
+          settings={audioSettings}
+          onToggle={() => void toggleMushafAudio()}
+          onStop={() => void stopMushafAudio()}
+          onPrevious={() => jumpMushafAudio(-1)}
+          onNext={() => jumpMushafAudio(1)}
+          onOpenSettings={() => setAudioSettingsOpen(true)}
+        />
       ) : null}
 
       {chromeVisible ? (
@@ -2007,7 +2855,11 @@ export default function MushafScreen() {
         onOpenAyah={openAyahActions}
         onToggleSelectedAyah={toggleSelectedAyah}
         onStartRecite={openMemorizationFromAyah}
-        onStartSelected={openSelectedRangeInMemorization}
+        onStartSelected={() => openSelectedRangeInMemorization()}
+        onPlaySelected={playSelectedAyahs}
+        onReciteSelected={reciteSelectedAyahs}
+        onMarkSelected={markSelectedAyahsMemorized}
+        markingMemorized={markingMemorized}
       />
 
       <AyahActionSheet
@@ -2018,10 +2870,21 @@ export default function MushafScreen() {
         onClose={() => setSelectedAyah(null)}
         onNavigate={setSelectedAyah}
         onOpenMemorization={openMemorizationFromAyah}
+        onPlayAyah={playAyahAudio}
+        onPlayFromHere={playFromAyah}
+        onReciteFromAyah={reciteFromAyah}
+        onMarkMemorized={markAyahMemorized}
         onToggleSelection={toggleSelectedAyahFromSheet}
         onToggleBookmark={toggleAyahBookmark}
         onSetHighlight={setAyahHighlight}
         onSaveNote={saveAyahNote}
+      />
+
+      <MushafAudioSettingsModal
+        visible={audioSettingsOpen}
+        settings={audioSettings}
+        onChange={setAudioSettings}
+        onClose={() => setAudioSettingsOpen(false)}
       />
 
       <Modal visible={jumpOpen} animationType="slide" onRequestClose={() => setJumpOpen(false)}>
@@ -2655,26 +3518,122 @@ const styles = StyleSheet.create({
     borderColor: "#a7f3d0",
     paddingHorizontal: 12,
     paddingVertical: 10,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 10,
+    gap: 8,
   },
   selectionBarText: {
-    flex: 1,
     fontSize: 13,
     color: "#047857",
     fontWeight: "900",
   },
+  selectionBarActions: {
+    flexDirection: "row",
+    gap: 6,
+  },
   selectionBarButton: {
+    flex: 1,
     borderRadius: 9,
     backgroundColor: "#047857",
-    paddingHorizontal: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 8,
     paddingVertical: 9,
+  },
+  selectionBarButtonDisabled: {
+    backgroundColor: "#9ca3af",
   },
   selectionBarButtonText: {
     color: "#ffffff",
+    fontSize: 11,
+    fontWeight: "900",
+  },
+  audioBar: {
+    marginHorizontal: 16,
+    marginBottom: 8,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#bfdbfe",
+    backgroundColor: "#eff6ff",
+    padding: 12,
+    gap: 10,
+  },
+  audioBarTop: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  audioNowPlaying: {
+    flex: 1,
+  },
+  audioKicker: {
+    fontSize: 10,
+    color: "#2563eb",
+    fontWeight: "900",
+    textTransform: "uppercase",
+  },
+  audioTitle: {
+    marginTop: 2,
+    fontSize: 14,
+    color: "#111827",
+    fontWeight: "900",
+  },
+  audioMeta: {
+    marginTop: 2,
+    fontSize: 11,
+    color: "#4b5563",
+    fontWeight: "700",
+  },
+  audioIconButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: "#ffffff",
+    borderWidth: 1,
+    borderColor: "#dbeafe",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  audioControls: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  audioRoundButton: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: "#ffffff",
+    borderWidth: 1,
+    borderColor: "#dbeafe",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  audioRoundButtonDisabled: {
+    backgroundColor: "#f9fafb",
+    borderColor: "#e5e7eb",
+  },
+  audioPrimaryRoundButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: "#2563eb",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  audioStopButton: {
+    minHeight: 38,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#fecaca",
+    backgroundColor: "#fff1f2",
+    paddingHorizontal: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+  },
+  audioStopButtonText: {
     fontSize: 12,
+    color: "#dc2626",
     fontWeight: "900",
   },
   sheet: {
@@ -2838,10 +3797,18 @@ const styles = StyleSheet.create({
     color: "#047857",
     fontWeight: "900",
   },
+  ayahListFooterActions: {
+    flex: 2,
+    flexDirection: "row",
+    gap: 6,
+  },
   ayahListFooterButton: {
+    flex: 1,
     borderRadius: 10,
     backgroundColor: "#047857",
-    paddingHorizontal: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 8,
     paddingVertical: 10,
   },
   ayahListFooterButtonDisabled: {
@@ -3332,6 +4299,75 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingBottom: 30,
     gap: 16,
+  },
+  audioSettingsContent: {
+    paddingHorizontal: 16,
+    paddingBottom: 30,
+    gap: 18,
+  },
+  audioSettingsGroup: {
+    gap: 10,
+  },
+  reciterRow: {
+    minHeight: 54,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+    backgroundColor: "#ffffff",
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  reciterRowSelected: {
+    borderColor: "#93c5fd",
+    backgroundColor: "#eff6ff",
+  },
+  reciterTextBlock: {
+    flex: 1,
+  },
+  reciterName: {
+    fontSize: 13,
+    color: "#111827",
+    fontWeight: "900",
+  },
+  reciterNameSelected: {
+    color: "#1d4ed8",
+  },
+  reciterStyle: {
+    marginTop: 2,
+    fontSize: 11,
+    color: "#6b7280",
+    fontWeight: "700",
+  },
+  optionChipRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  optionChip: {
+    minHeight: 36,
+    minWidth: 58,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+    backgroundColor: "#f9fafb",
+    paddingHorizontal: 12,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  optionChipSelected: {
+    borderColor: "#93c5fd",
+    backgroundColor: "#eff6ff",
+  },
+  optionChipText: {
+    fontSize: 12,
+    color: "#374151",
+    fontWeight: "900",
+  },
+  optionChipTextSelected: {
+    color: "#1d4ed8",
   },
   resultGroup: {
     gap: 8,
