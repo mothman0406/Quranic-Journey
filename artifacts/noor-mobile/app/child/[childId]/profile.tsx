@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { ChildProfileForm, type ChildProfileValues } from "@/src/components/child-profile-form";
@@ -29,11 +29,12 @@ function isValidChildId(childId: string | undefined) {
 }
 
 export default function ChildProfileScreen() {
-  const { childId } = useLocalSearchParams<{ childId: string }>();
+  const { childId, intent } = useLocalSearchParams<{ childId: string; intent?: string }>();
   const router = useRouter();
   const [child, setChild] = useState<ChildProfile | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const promptedDeleteRef = useRef(false);
 
   const loadChild = useCallback(async () => {
     if (!isValidChildId(childId)) {
@@ -107,6 +108,13 @@ export default function ChildProfileScreen() {
       ],
     );
   }
+
+  useEffect(() => {
+    if (intent !== "delete" || !child || promptedDeleteRef.current) return;
+
+    promptedDeleteRef.current = true;
+    confirmDelete();
+  }, [child, intent]);
 
   return (
     <ScreenContainer>
