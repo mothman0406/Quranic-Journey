@@ -22,7 +22,7 @@ import {
   useSpeechRecognitionEvent,
 } from "expo-speech-recognition";
 import { ChildBottomNav } from "@/src/components/child-bottom-nav";
-import { ayahAudioUrl } from "@/src/lib/audio";
+import { ayahAudioUrl, wbwAudioUrl } from "@/src/lib/audio";
 import { stripTashkeel, wordMatches, stripAlPrefix, tokenize, SKIP_CHARS } from "@/src/lib/recite";
 import {
   fetchDashboard,
@@ -102,6 +102,15 @@ type AyahSheetTarget = {
   ayahNumber: number;
   pageNumber: number | null;
   textUthmani: string;
+};
+
+type TappedWordTarget = {
+  key: string;
+  arabic: string;
+  translation: string;
+  surahNumber: number;
+  ayahNumber: number;
+  position: number;
 };
 
 const DISCOVERY_FILTERS: Array<{ key: DiscoveryFilter; label: string }> = [
@@ -420,6 +429,8 @@ export default function MemorizationScreen() {
     arabic: string;
     translation: string;
   } | null>(null);
+  const [tappedWord, setTappedWord] = useState<TappedWordTarget | null>(null);
+  const [wordAudioLoadingKey, setWordAudioLoadingKey] = useState<string | null>(null);
   const [tappedAyah, setTappedAyah] = useState<AyahSheetTarget | null>(null);
   const [playbackRate, setPlaybackRate] = useState<number>(1.0);
   const playbackRateRef = useRef(playbackRate);
@@ -448,6 +459,7 @@ export default function MemorizationScreen() {
 
   // Audio + RAF refs
   const soundRef = useRef<Audio.Sound | null>(null);
+  const wordAudioSoundRef = useRef<Audio.Sound | null>(null);
   const rafIdRef = useRef<number>(0);
   const positionRef = useRef(0);
   const durationRef = useRef(0);
@@ -514,6 +526,11 @@ export default function MemorizationScreen() {
   // Clear reveals on context switches so old peeks don't bleed through
   useEffect(() => { setRevealedVerses(new Set()); }, [viewMode]);
   useEffect(() => { setRevealedVerses(new Set()); }, [blindMode]);
+  useEffect(() => { setTappedWord(null); }, [viewMode]);
+  useEffect(() => { setTappedWord(null); }, [playingVerseNumber]);
+  useEffect(() => {
+    if (blindMode || reciteMode) setTappedWord(null);
+  }, [blindMode, reciteMode]);
   useEffect(() => {
     if (ayahStart !== null) setCumUpTo(ayahStart);
   }, [ayahStart]);
@@ -1073,6 +1090,15 @@ export default function MemorizationScreen() {
       }
       soundRef.current = null;
     }
+    if (wordAudioSoundRef.current) {
+      try {
+        await wordAudioSoundRef.current.unloadAsync();
+      } catch {
+        // ignore — word audio is best-effort
+      }
+      wordAudioSoundRef.current = null;
+    }
+    setWordAudioLoadingKey(null);
     isPlayingRef.current = false;
     setIsPlaying(false);
     setHighlightedWord(-1);
@@ -2152,6 +2178,86 @@ export default function MemorizationScreen() {
     return t.text ?? "";
   }
 
+  function openTappedWordTooltip({
+    verseKey,
+    word,
+    fallbackPosition,
+  }: {
+    verseKey: string;
+    word: ApiWord;
+    fallbackPosition: number;
+  }) {
+    if (blindMode || reciteModeRef.current || surahNumber === null) return;
+    const ci = verseKey.indexOf(":");
+    const vSurah = Number(verseKey.slice(0, ci));
+    const vVerse = Number(verseKey.slice(ci + 1));
+    if (vSurah !== surahNumber || !Number.isFinite(vVerse)) return;
+
+    const position = Number.isFinite(word.position) && word.position > 0
+      ? word.position
+      : fallbackPosition;
+    if (!Number.isFinite(position) || position <= 0) return;
+
+    const key = `${verseKey}:${position}`;
+    setTappedWord((prev) =>
+      prev?.key === key
+        ? null
+        : {
+            key,
+            arabic: word.text_uthmani,
+            translation: getTranslationText(word.translation),
+            surahNumber: vSurah,
+            ayahNumber: vVerse,
+            position,
+          },
+    );
+  }
+
+  async function playTappedWordAudio(target: TappedWordTarget) {
+    setWordAudioLoadingKey(target.key);
+    try {
+      if (wordAudioSoundRef.current) {
+        try {
+          await wordAudioSoundRef.current.unloadAsync();
+        } catch {
+          // ignore stale word audio
+        }
+        wordAudioSoundRef.current = null;
+      }
+
+      let createdSound: Audio.Sound | null = null;
+      const result = await Audio.Sound.createAsync(
+        { uri: wbwAudioUrl(target.surahNumber, target.ayahNumber, target.position) },
+        { shouldPlay: true },
+        (status) => {
+          if (!status.isLoaded || !status.didJustFinish) return;
+          const finishedSound = createdSound;
+          void (async () => {
+            if (wordAudioSoundRef.current === finishedSound) {
+              wordAudioSoundRef.current = null;
+            }
+            try {
+              await finishedSound?.unloadAsync();
+            } catch {
+              // ignore — the short word clip may already be gone
+            }
+          })();
+        },
+      );
+      createdSound = result.sound;
+      wordAudioSoundRef.current = result.sound;
+      try {
+        await result.sound.setVolumeAsync(1.0);
+      } catch {
+        // best-effort
+      }
+    } catch {
+      Alert.alert("Word audio unavailable", "Try playing this word again in a moment.");
+    } finally {
+      setWordAudioLoadingKey((key) => (key === target.key ? null : key));
+    }
+  }
+
   // ── Full Mushaf page renderer ────────────────────────────────────────────────
 
   function renderMushafPage(pageNum: number) {
@@ -2314,6 +2420,11 @@ export default function MemorizationScreen() {
                     const verseHidden = inScope && blindMode && !revealedVerses.has(item.verseKey);
                     const isCurrentlyPlayingVerse =
                       isPlaying && item.verseKey === `${surahNumber}:${playingVerseNumber}`;
+                    const canShowWordTooltip =
+                      inScope &&
+                      !blindMode &&
+                      !reciteMode &&
+                      item.verseKey === `${surahNumber}:${playingVerseNumber}`;
                     const isBlurred =
                       blurMode && isPlaying && inScope && !isCurrentlyPlayingVerse;
 
@@ -2332,16 +2443,25 @@ export default function MemorizationScreen() {
                           inScope
                             ? () => {
                                 if (blindMode) {
+                                  setTappedWord(null);
                                   toggleVerseReveal(item.verseKey);
                                   return;
                                 }
-                                handlePageWordTap(item.verseKey, item.word.position);
+                                void handlePageWordTap(item.verseKey, item.word.position);
+                                if (canShowWordTooltip) {
+                                  openTappedWordTooltip({
+                                    verseKey: item.verseKey,
+                                    word: item.word,
+                                    fallbackPosition: item.word.position,
+                                  });
+                                }
                               }
                             : undefined
                         }
                         onLongPress={
                           inScope
                             ? () => {
+                                setTappedWord(null);
                                 const translation = getTranslationText(item.word.translation);
                                 if (translation) {
                                   setTranslationPopup({
@@ -2560,12 +2680,21 @@ export default function MemorizationScreen() {
                     key={`${playingVerseNumber}-${idx}`}
                     onPress={() => {
                       if (blindMode) {
+                        setTappedWord(null);
                         toggleVerseReveal(ayahVerseKey);
                         return;
                       }
-                      handleWordTap(idx);
+                      void handleWordTap(idx);
+                      if (!reciteMode && ayahVerseKey) {
+                        openTappedWordTooltip({
+                          verseKey: ayahVerseKey,
+                          word,
+                          fallbackPosition: idx + 1,
+                        });
+                      }
                     }}
                     onLongPress={() => {
+                      setTappedWord(null);
                       const translation = getTranslationText(word.translation);
                       if (translation) {
                         setTranslationPopup({ arabic: word.text_uthmani, translation });
@@ -3364,6 +3493,57 @@ export default function MemorizationScreen() {
             <Text style={styles.sheetDoneText}>Done</Text>
           </Pressable>
         </View>
+      </Modal>
+
+      <Modal
+        visible={tappedWord !== null}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setTappedWord(null)}
+      >
+        <Pressable style={styles.wordTooltipBackdrop} onPress={() => setTappedWord(null)}>
+          <Pressable onPress={() => {}} style={styles.wordTooltipCard}>
+            <View style={styles.wordTooltipHeader}>
+              <View style={styles.wordTooltipTitleBlock}>
+                <Text style={styles.wordTooltipArabic}>{tappedWord?.arabic ?? ""}</Text>
+                <Text style={styles.wordTooltipMeta}>
+                  {tappedWord
+                    ? `${tappedWord.surahNumber}:${tappedWord.ayahNumber} · word ${tappedWord.position}`
+                    : ""}
+                </Text>
+              </View>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Play word audio"
+                style={[
+                  styles.wordTooltipAudioButton,
+                  wordAudioLoadingKey === tappedWord?.key && styles.wordTooltipAudioButtonDisabled,
+                ]}
+                onPress={() => {
+                  if (tappedWord) void playTappedWordAudio(tappedWord);
+                }}
+                disabled={wordAudioLoadingKey === tappedWord?.key}
+              >
+                {wordAudioLoadingKey === tappedWord?.key ? (
+                  <ActivityIndicator size="small" color="#b45309" />
+                ) : (
+                  <Ionicons name="volume-high-outline" size={17} color="#b45309" />
+                )}
+              </Pressable>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Close word tooltip"
+                style={styles.wordTooltipCloseButton}
+                onPress={() => setTappedWord(null)}
+              >
+                <Ionicons name="close" size={16} color="#9ca3af" />
+              </Pressable>
+            </View>
+            <Text style={tappedWord?.translation ? styles.wordTooltipTranslation : styles.wordTooltipEmpty}>
+              {tappedWord?.translation || "No translation available"}
+            </Text>
+          </Pressable>
+        </Pressable>
       </Modal>
 
       <Modal
@@ -6243,6 +6423,85 @@ const styles = StyleSheet.create({
   },
   ratePillTextSelected: {
     color: "#ffffff",
+  },
+  wordTooltipBackdrop: {
+    flex: 1,
+    justifyContent: "flex-end",
+    paddingHorizontal: 16,
+    paddingBottom: 190,
+    backgroundColor: "rgba(0,0,0,0.02)",
+  },
+  wordTooltipCard: {
+    width: "100%",
+    maxWidth: 360,
+    alignSelf: "center",
+    backgroundColor: "#ffffff",
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "#fde68a",
+    padding: 14,
+    gap: 10,
+    shadowColor: "#000000",
+    shadowOpacity: 0.14,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 8,
+  },
+  wordTooltipHeader: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 10,
+  },
+  wordTooltipTitleBlock: {
+    flex: 1,
+    minWidth: 0,
+  },
+  wordTooltipArabic: {
+    fontFamily: "AmiriQuran",
+    fontSize: 28,
+    lineHeight: 44,
+    color: "#78350f",
+    textAlign: "right",
+    writingDirection: "rtl",
+  },
+  wordTooltipMeta: {
+    marginTop: 2,
+    fontSize: 11,
+    fontWeight: "800",
+    color: "#d97706",
+  },
+  wordTooltipAudioButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: "#fef3c7",
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "#fde68a",
+  },
+  wordTooltipAudioButtonDisabled: {
+    opacity: 0.7,
+  },
+  wordTooltipCloseButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  wordTooltipTranslation: {
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: "600",
+    color: "#374151",
+  },
+  wordTooltipEmpty: {
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: "600",
+    fontStyle: "italic",
+    color: "#9ca3af",
   },
   translationBackdrop: {
     flex: 1,

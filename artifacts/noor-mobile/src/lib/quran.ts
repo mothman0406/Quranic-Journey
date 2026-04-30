@@ -27,7 +27,7 @@ export async function fetchSurahVerses(surahNumber: number): Promise<ApiVerse[]>
   const timer = setTimeout(() => ac.abort(), 10000);
   try {
     const res = await fetch(
-      `https://api.quran.com/api/v4/verses/by_chapter/${surahNumber}?words=true&fields=text_uthmani,page_number&word_fields=text_uthmani,text_uthmani_tajweed,translation,line_number,char_type_name&per_page=300&translations=131`,
+      `https://api.quran.com/api/v4/verses/by_chapter/${surahNumber}?words=true&fields=text_uthmani,page_number&word_fields=text_uthmani,text_uthmani_tajweed,translation,line_number,char_type_name,position&per_page=300&translations=131`,
       { signal: ac.signal },
     );
     if (!res.ok) throw new Error(`Quran.com API ${res.status}`);
