@@ -1,7 +1,7 @@
 # NoorPath / Quranic Journey — Phase 2G Web Parity Handoff
 
 **For: the next Codex/Claude Code conversation continuing this project**
-**Last updated: 2026-04-30 (Phase 2J.2 ahead-day local session behavior committed and locally validated; remote sync/hardware QA pending; beta remains blocked by 2J/2K parity before TestFlight readiness)**
+**Last updated: 2026-04-30 (Phase 2J.2 ahead-day local session behavior committed, locally validated, and synced; hardware QA pending; beta remains blocked by 2J/2K parity before TestFlight readiness)**
 
 This handoff supersedes earlier handoff drafts.
 
@@ -476,14 +476,14 @@ Phase 2D is complete.
 
 ## 7. Current: Phase 2J.2 Ahead-Day Local Session Behavior
 
-Phase 2D, 2E, 2F, 2G.1, 2G.2, 2G.3, Phase 2H.1-2H.6, Phase 2I.1, Phase 2I.2a through Phase 2I.2o, Phase 2I.3, Phase 2I.4, Phase 2J.1, the `Next up` skip-gap fix, and the Today's/Current work freeze correction are complete and hardware-tested. Phase 2J.2 local implementation started from `main` at `ce6a381b9fbab4d3f8af73653ee043d062c9e1e1`, with `main`, `origin/main`, `feature/main-working-branch`, and `origin/feature/main-working-branch` synced at start. Phase 2J.2 implementation commit: `3365683` (`feat(mobile): persist ahead review sessions`). Local validation has passed; remote sync and hardware QA are still pending. This docs update should be committed as the local-validation docs HEAD, then `main`, `origin/main`, `feature/main-working-branch`, and `origin/feature/main-working-branch` should all be synced to that final Phase 2J.2 local-validation HEAD. Do not start Phase 2K or TestFlight readiness until Phase 2J is fully implemented, documented, validated, synced, and hardware-tested.
+Phase 2D, 2E, 2F, 2G.1, 2G.2, 2G.3, Phase 2H.1-2H.6, Phase 2I.1, Phase 2I.2a through Phase 2I.2o, Phase 2I.3, Phase 2I.4, Phase 2J.1, the `Next up` skip-gap fix, and the Today's/Current work freeze correction are complete and hardware-tested. Phase 2J.2 local implementation started from `main` at `ce6a381b9fbab4d3f8af73653ee043d062c9e1e1`, with `main`, `origin/main`, `feature/main-working-branch`, and `origin/feature/main-working-branch` synced at start. Phase 2J.2 implementation commit: `3365683` (`feat(mobile): persist ahead review sessions`). Local validation has passed. Remote sync target after this docs sync: `main`, `origin/main`, `feature/main-working-branch`, and `origin/feature/main-working-branch` all synced to the final Phase 2J.2 local-validation docs HEAD. Mohammad hardware QA is still pending. Do not start Phase 2K or TestFlight readiness until Phase 2J is fully implemented, documented, validated, synced, and hardware-tested.
 
 - **Phase 2G foundation** — Diagnostic cleanup, IA shell, shared screen primitives, and API parity foundation are in place.
 - **Phase 2H** — First-pass dashboard/settings/review/reading/memorization discovery parity is hardware-tested, but it did not finish beta parity.
 - **Current local state** — `artifacts/noor-mobile/app/child/[childId]/review.tsx` now persists per-child active review date and date-keyed local review sessions with `AsyncStorage`, restores completed active-day rows, resolves `Continue Reviewing` to the next open review day, and groups completed prior review days in a `Completed Review Days` section.
 - **Preserved behavior** — `artifacts/noor-mobile/app/child/[childId]/review-session.tsx`, backend/API code, generated files, tajweed, recite matcher behavior, and native dependencies were not touched. Existing `reviewDate` route params and SM-2 review submission remain the path for completing reviews.
 - **Validation** — `cd artifacts/noor-mobile && npx tsc --noEmit` and `git diff --check` passed. API-server typecheck was not required because backend/API code was not touched.
-- **Phase 2J** — Review never-empty/ahead-day behavior: 2J.1 is hardware-tested; 2J.2 implementation commit `3365683` is validated and pending docs-sync commit, remote sync, and hardware QA.
+- **Phase 2J** — Review never-empty/ahead-day behavior: 2J.1 is hardware-tested; 2J.2 implementation commit `3365683` is validated and synced after this docs sync. Hardware QA remains pending.
 - **Phase 2K after 2J** — Full Quran/Mushaf Bayaan parity: reader tools, ayah sheets, annotations, audio range playback, recite/select modes, and memorization handoffs.
 - **Phase 2L/Phase 3 after 2K** — Polish, production EAS build readiness, App Store Connect, and TestFlight.
 
@@ -565,7 +565,7 @@ The old 2I/2J content/progress roadmap is now Phase 2M and deferred unless Moham
 
 1. **Read `TODO.md` and this handoff.** This one supersedes earlier handoffs.
 2. **Check git state.** At Phase 2J.1 hardware-QA docs start, `main`, `origin/main`, `feature/main-working-branch`, and `origin/feature/main-working-branch` were synced to `949fa3b83b36becaaaaa1b916d435fe72427932a`; after this docs commit they should be synced to the final Phase 2J.1 hardware-confirmed docs HEAD. `safe-cumulative` can be ignored.
-3. **Continue Phase 2J.2 ahead-day local session behavior.** The local mobile implementation is in `artifacts/noor-mobile/app/child/[childId]/review.tsx`: active review date/session persistence, restored completed active-day rows, next-open review day resolution, and completed prior-day grouping. Local validation passed and implementation commit is `3365683`. If not yet synced, commit this docs update on `main`, push `origin main`, fast-forward `feature/main-working-branch`, push it, switch back to `main`, and leave the tree clean. Keep the existing review-session route and SM-2 submission intact, preserve 2J.1 completed-today / `Continue Reviewing`, and do not start Phase 2K or TestFlight readiness before Phase 2J is synced and hardware-tested unless Mohammad explicitly reorders.
+3. **Hardware-test Phase 2J.2 ahead-day local session behavior.** The mobile implementation is in `artifacts/noor-mobile/app/child/[childId]/review.tsx`: active review date/session persistence, restored completed active-day rows, next-open review day resolution, and completed prior-day grouping. Local validation passed and implementation commit is `3365683`. Keep the existing review-session route and SM-2 submission intact, preserve 2J.1 completed-today / `Continue Reviewing`, and do not start Phase 2K or TestFlight readiness before Phase 2J is hardware-tested unless Mohammad explicitly reorders.
 4. **Preserve sensitive behavior.** Do not touch tajweed except to document it as backlogged, and do not tighten recite matcher behavior.
 5. **Run `cd artifacts/noor-mobile && npx tsc --noEmit` and `git diff --check` after future mobile/docs changes.**
 6. **Keep future slices JS-only unless explicitly approved.** Do not touch tajweed. Do not tighten recite matching. Do not add native dependencies unless Mohammad explicitly approves a rebuild.
