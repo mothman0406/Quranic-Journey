@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ComponentProps } from "react";
+import { useCallback, useEffect, useMemo, useState, type ComponentProps } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
   ActivityIndicator,
@@ -12,7 +12,7 @@ import {
   View,
   type GestureResponderEvent,
 } from "react-native";
-import { Redirect, useRouter } from "expo-router";
+import { Redirect, useFocusEffect, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { authClient } from "@/src/lib/auth-client";
 import { apiFetch } from "@/src/lib/api";
@@ -158,7 +158,7 @@ export default function HomeScreen() {
     return accountKey ? `noorpath:profile-picker-sort:${accountKey}` : null;
   }, [user?.email, user?.id]);
 
-  async function loadChildren() {
+  const loadChildren = useCallback(async () => {
     setFetchError(null);
     try {
       const data = await apiFetch<ChildrenResponse>("/api/children");
@@ -166,13 +166,15 @@ export default function HomeScreen() {
     } catch (e) {
       setFetchError(e instanceof Error ? e.message : "Failed to load children.");
     }
-  }
+  }, []);
 
-  useEffect(() => {
-    if (session?.user) {
-      loadChildren();
-    }
-  }, [session?.user]);
+  useFocusEffect(
+    useCallback(() => {
+      if (session?.user) {
+        void loadChildren();
+      }
+    }, [loadChildren, session?.user]),
+  );
 
   useEffect(() => {
     if (!sortStorageKey) return;
