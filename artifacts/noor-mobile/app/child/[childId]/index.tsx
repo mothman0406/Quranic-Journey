@@ -1,6 +1,7 @@
-import { useCallback, useState, type ComponentProps, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState, type ComponentProps, type ReactNode } from "react";
 import {
   ActivityIndicator,
+  Modal,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -19,7 +20,9 @@ type WorkStatus = "not_started" | "in_progress" | "completed";
 type IconName = ComponentProps<typeof Ionicons>["name"];
 
 type DashboardChild = {
+  id?: number;
   name: string;
+  age?: number;
   avatarEmoji: string;
   streakDays: number;
   totalPoints: number;
@@ -58,6 +61,23 @@ type DashboardDua = {
   arabic: string;
   transliteration: string;
   translation: string;
+};
+
+type DashboardReviewSession = {
+  surahName: string;
+  surahNumber: number;
+  ayahCount: number;
+};
+
+type SwitcherChild = {
+  id: number;
+  name: string;
+  age?: number;
+  avatarEmoji: string;
+};
+
+type ChildrenResponse = {
+  children: SwitcherChild[];
 };
 
 type Goal = {
@@ -121,6 +141,7 @@ type DashboardResponse = {
   child: DashboardChild;
   todaysPlan: {
     newMemorization: NewMemorization | null;
+    reviewSessions?: DashboardReviewSession[];
     story?: DashboardStory | null;
     dua?: DashboardDua | null;
     totalEstimatedMinutes: number;
@@ -206,10 +227,6 @@ function formatPageRange(start: number | undefined, end: number | undefined) {
   return start === end ? `Page ${start}` : `Pages ${start}-${end}`;
 }
 
-function formatDayStreak(days: number) {
-  return `${days} day${days === 1 ? "" : "s"}`;
-}
-
 function formatPercent(value: number, target: number) {
   if (target <= 0) return 0;
   return Math.max(0, Math.min(100, Math.round((value / target) * 100)));
@@ -220,6 +237,46 @@ function formatGoalDate(value: string | undefined) {
   const date = new Date(`${value}T12:00:00`);
   if (Number.isNaN(date.getTime())) return null;
   return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
+function getLocalDateValue() {
+  const date = new Date();
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function parseLocalDate(value: string) {
+  return new Date(`${value}T12:00:00`);
+}
+
+function formatLocalDateValue(date: Date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function addLocalDays(value: string, days: number) {
+  const date = parseLocalDate(value);
+  date.setDate(date.getDate() + days);
+  return formatLocalDateValue(date);
+}
+
+function formatScrubberDate(value: string) {
+  const date = parseLocalDate(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleDateString(undefined, {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+  });
+}
+
+function formatAge(age: number | undefined) {
+  if (typeof age !== "number" || !Number.isFinite(age)) return "Age not set";
+  return `${age} yr${age === 1 ? "" : "s"}`;
 }
 
 function wait(ms: number) {
@@ -294,6 +351,8 @@ function WorkCard({
   cta,
   tone,
   onPress,
+  readOnly = false,
+  onReadOnlyPress,
   status,
   children,
 }: {
@@ -303,6 +362,8 @@ function WorkCard({
   cta: string;
   tone: CardTone;
   onPress: () => void;
+  readOnly?: boolean;
+  onReadOnlyPress?: () => void;
   status?: WorkStatus;
   children?: ReactNode;
 }) {
@@ -316,8 +377,10 @@ function WorkCard({
           backgroundColor: tone.bg,
           borderColor: tone.border,
         },
+        readOnly && styles.cardReadOnly,
       ]}
-      onPress={onPress}
+      onPress={readOnly ? onReadOnlyPress : onPress}
+      accessibilityState={readOnly ? { disabled: true } : undefined}
     >
       <View style={styles.cardHeader}>
         <View style={[styles.cardIcon, { backgroundColor: tone.soft }]}>
@@ -344,7 +407,9 @@ function WorkCard({
             </Text>
           </View>
         )}
-        <Text style={[styles.cardAction, { color: tone.accent }]}>{cta}</Text>
+        <Text style={[styles.cardAction, { color: readOnly ? "#94a3b8" : tone.accent }]}>
+          {cta}
+        </Text>
       </View>
       <Text style={styles.cardDetail}>{detail}</Text>
       {children}
@@ -557,22 +622,206 @@ function ReviewPreviewItem({ item }: { item: ReviewQueueItem }) {
   );
 }
 
+function PlannedReviewPreviewItem({ item }: { item: DashboardReviewSession }) {
+  return (
+    <View
+      style={[
+        styles.reviewPreview,
+        { backgroundColor: "#fffaf5", borderColor: "#fed7aa" },
+      ]}
+    >
+      <View style={[styles.reviewDot, { backgroundColor: "#ea580c" }]} />
+      <View style={styles.reviewPreviewText}>
+        <Text style={styles.reviewSurah} numberOfLines={1}>
+          {item.surahName}
+        </Text>
+        <Text style={styles.reviewRange}>
+          {item.ayahCount} ayah{item.ayahCount === 1 ? "" : "s"}
+        </Text>
+      </View>
+      <Text style={[styles.reviewPriority, { color: "#ea580c" }]}>
+        Review
+      </Text>
+    </View>
+  );
+}
+
+function ChildSwitcherSheet({
+  visible,
+  childrenList,
+  currentChildId,
+  loading,
+  error,
+  fallbackChild,
+  onClose,
+  onRetry,
+  onSwitch,
+  onAddChild,
+}: {
+  visible: boolean;
+  childrenList: SwitcherChild[];
+  currentChildId: number;
+  loading: boolean;
+  error: string | null;
+  fallbackChild: { name: string; avatarEmoji: string; age?: number };
+  onClose: () => void;
+  onRetry: () => void;
+  onSwitch: (child: SwitcherChild) => void;
+  onAddChild: () => void;
+}) {
+  const fallbackSwitcherChild: SwitcherChild | null = Number.isFinite(currentChildId)
+    ? {
+        id: currentChildId,
+        name: fallbackChild.name,
+        avatarEmoji: fallbackChild.avatarEmoji,
+        age: fallbackChild.age,
+      }
+    : null;
+  const sheetChildren = fallbackSwitcherChild &&
+    !childrenList.some((child) => child.id === currentChildId)
+    ? [fallbackSwitcherChild, ...childrenList]
+    : childrenList;
+
+  return (
+    <Modal
+      visible={visible}
+      transparent
+      animationType="slide"
+      onRequestClose={onClose}
+    >
+      <Pressable style={styles.sheetBackdrop} onPress={onClose}>
+        <Pressable style={styles.switcherSheet} onPress={(event) => event.stopPropagation()}>
+          <View style={styles.sheetHandle} />
+          <View style={styles.switcherHeader}>
+            <View>
+              <Text style={styles.sheetTitle}>Switch child</Text>
+              <Text style={styles.sheetSubtitle}>Choose another dashboard</Text>
+            </View>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Close child switcher"
+              hitSlop={8}
+              style={styles.sheetCloseButton}
+              onPress={onClose}
+            >
+              <Ionicons name="close" size={19} color="#64748b" />
+            </Pressable>
+          </View>
+
+          {loading && sheetChildren.length === 0 ? (
+            <View style={styles.switcherState}>
+              <ActivityIndicator size="small" color="#2563eb" />
+              <Text style={styles.switcherStateText}>Loading profiles</Text>
+            </View>
+          ) : error && sheetChildren.length === 0 ? (
+            <View style={styles.switcherState}>
+              <Text style={styles.switcherErrorText}>{error}</Text>
+              <Pressable style={styles.switcherRetryButton} onPress={onRetry}>
+                <Text style={styles.switcherRetryText}>Retry</Text>
+              </Pressable>
+            </View>
+          ) : (
+            <ScrollView style={styles.switcherList} contentContainerStyle={styles.switcherListContent}>
+              {error ? (
+                <View style={styles.switcherInlineWarning}>
+                  <Text style={styles.switcherInlineWarningText}>{error}</Text>
+                </View>
+              ) : null}
+              {sheetChildren.map((child) => {
+                const selected = child.id === currentChildId;
+                return (
+                  <Pressable
+                    key={child.id}
+                    style={[styles.switcherRow, selected && styles.switcherRowSelected]}
+                    onPress={() => {
+                      if (selected) {
+                        onClose();
+                      } else {
+                        onSwitch(child);
+                      }
+                    }}
+                  >
+                    <View style={styles.switcherAvatar}>
+                      <Text style={styles.switcherAvatarText}>{child.avatarEmoji}</Text>
+                    </View>
+                    <View style={styles.switcherText}>
+                      <Text style={styles.switcherName} numberOfLines={1}>
+                        {child.name}
+                      </Text>
+                      <Text style={styles.switcherMeta}>{formatAge(child.age)}</Text>
+                    </View>
+                    {selected ? (
+                      <View style={styles.switcherSelectedBadge}>
+                        <Ionicons name="checkmark" size={14} color="#047857" />
+                      </View>
+                    ) : (
+                      <View style={styles.switcherAction}>
+                        <Text style={styles.switcherActionText}>Switch</Text>
+                        <Ionicons name="chevron-forward" size={15} color="#64748b" />
+                      </View>
+                    )}
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+          )}
+
+          <Pressable style={styles.addChildRow} onPress={onAddChild}>
+            <View style={styles.addChildIcon}>
+              <Ionicons name="add" size={18} color="#2563eb" />
+            </View>
+            <Text style={styles.addChildText}>Add Child</Text>
+          </Pressable>
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+}
+
 export default function ChildDashboard() {
   const { childId, name } = useLocalSearchParams<{ childId: string; name: string }>();
   const router = useRouter();
   const [state, setState] = useState<DashboardState>({ status: "loading" });
   const [refreshing, setRefreshing] = useState(false);
+  const [selectedDate, setSelectedDate] = useState(() => getLocalDateValue());
+  const [switcherOpen, setSwitcherOpen] = useState(false);
+  const [switcherChildren, setSwitcherChildren] = useState<SwitcherChild[] | null>(null);
+  const [switcherError, setSwitcherError] = useState<string | null>(null);
+  const [switcherLoading, setSwitcherLoading] = useState(false);
+  const [readOnlyNotice, setReadOnlyNotice] = useState<string | null>(null);
   const navChildId = typeof childId === "string" ? childId : undefined;
   const navName = typeof name === "string" ? name : "";
+  const todayDate = getLocalDateValue();
+  const isViewingToday = selectedDate === todayDate;
+  const dateLabel = isViewingToday ? "Today" : formatScrubberDate(selectedDate);
   const navReviewCount =
     state.status === "ok"
       ? state.reviews?.dueToday.length ?? state.dashboard.reviewsDueToday
       : undefined;
+  const headerChild = state.status === "ok"
+    ? state.dashboard.child
+    : { name: navName || "Dashboard", avatarEmoji: "?", age: undefined };
+  const sortedSwitcherChildren = useMemo(() => {
+    const list = [...(switcherChildren ?? [])];
+    const currentId = Number(childId);
+
+    return list.sort((a, b) => {
+      if (a.id === currentId) return -1;
+      if (b.id === currentId) return 1;
+      return a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
+    });
+  }, [childId, switcherChildren]);
 
   const loadDashboard = useCallback(
     async (mode: "initial" | "refresh" = "initial") => {
       const childIdParam = childId;
       const nameParam = name;
+      const dashboardPath = `/api/children/${childIdParam}/dashboard${
+        isViewingToday ? "" : "?preview=true"
+      }`;
+      const requestOptions = isViewingToday
+        ? undefined
+        : { headers: { "x-local-date": selectedDate } };
 
       if (mode === "initial") {
         setState({ status: "loading" });
@@ -593,21 +842,25 @@ export default function ChildDashboard() {
         let dashboard: DashboardResponse;
         try {
           dashboard = await apiFetch<DashboardResponse>(
-            `/api/children/${childIdParam}/dashboard`,
+            dashboardPath,
+            requestOptions,
           );
         } catch {
           await wait(350);
           dashboard = await apiFetch<DashboardResponse>(
-            `/api/children/${childIdParam}/dashboard`,
+            dashboardPath,
+            requestOptions,
           );
         }
         let reviews: ReviewQueueResponse | null = null;
         let reviewError: string | null = null;
 
-        try {
-          reviews = await fetchReviewQueue(childIdParam);
-        } catch (e) {
-          reviewError = describeError(e);
+        if (isViewingToday) {
+          try {
+            reviews = await fetchReviewQueue(childIdParam);
+          } catch (e) {
+            reviewError = describeError(e);
+          }
         }
 
         setState({
@@ -623,10 +876,12 @@ export default function ChildDashboard() {
         let reviewError: string | null = null;
         let child: ChildDetail | null = null;
 
-        try {
-          reviews = await fetchReviewQueue(childIdParam);
-        } catch (reviewFetchError) {
-          reviewError = describeError(reviewFetchError);
+        if (isViewingToday) {
+          try {
+            reviews = await fetchReviewQueue(childIdParam);
+          } catch (reviewFetchError) {
+            reviewError = describeError(reviewFetchError);
+          }
         }
 
         try {
@@ -646,8 +901,35 @@ export default function ChildDashboard() {
         setRefreshing(false);
       }
     },
-    [childId, name],
+    [childId, isViewingToday, name, selectedDate],
   );
+
+  const loadSwitcherChildren = useCallback(async () => {
+    setSwitcherLoading(true);
+    setSwitcherError(null);
+    try {
+      const data = await apiFetch<ChildrenResponse>("/api/children");
+      setSwitcherChildren(data.children);
+    } catch (e) {
+      setSwitcherError(e instanceof Error ? e.message : "Failed to load profiles.");
+    } finally {
+      setSwitcherLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    setReadOnlyNotice(null);
+  }, [selectedDate]);
+
+  useEffect(() => {
+    if (!readOnlyNotice) return undefined;
+
+    const timer = setTimeout(() => {
+      setReadOnlyNotice(null);
+    }, 3200);
+
+    return () => clearTimeout(timer);
+  }, [readOnlyNotice]);
 
   useFocusEffect(
     useCallback(() => {
@@ -655,7 +937,42 @@ export default function ChildDashboard() {
     }, [loadDashboard]),
   );
 
+  function showReadOnlyNotice() {
+    setReadOnlyNotice(`Viewing ${formatScrubberDate(selectedDate)}. Switch to Today to start work.`);
+  }
+
+  function shiftSelectedDate(days: number) {
+    setSelectedDate((current) => addLocalDays(current, days));
+  }
+
+  function resetToToday() {
+    setSelectedDate(getLocalDateValue());
+  }
+
+  function openChildSwitcher() {
+    setSwitcherOpen(true);
+    void loadSwitcherChildren();
+  }
+
+  function switchChild(child: SwitcherChild) {
+    setSwitcherOpen(false);
+    router.replace({
+      pathname: "/child/[childId]",
+      params: { childId: String(child.id), name: child.name },
+    });
+  }
+
+  function addChildFromSwitcher() {
+    setSwitcherOpen(false);
+    router.push("/profile/new");
+  }
+
   function handleCardPress(key: string) {
+    if (!isViewingToday) {
+      showReadOnlyNotice();
+      return;
+    }
+
     if (key === "review") {
       router.push({
         pathname: "/child/[childId]/review",
@@ -728,6 +1045,7 @@ export default function ChildDashboard() {
     const achievements = dashboard.achievements ?? [];
     const earnedAchievements = achievements.filter((achievement) => achievement.earned);
     const todayProgress = dashboard.todayProgress;
+    const dayCopy = isViewingToday ? "today" : "this day";
     const memStatus = todayProgress?.memStatus ?? "not_started";
     const memSurah = todaysMem?.currentWorkSurahName ?? todaysMem?.surahName;
     const memAyahStart = todaysMem?.currentWorkAyahStart ?? todaysMem?.ayahStart;
@@ -735,8 +1053,8 @@ export default function ChildDashboard() {
     const memPageLabel = formatPageRange(todaysMem?.pageStart, todaysMem?.pageEnd);
     const memDetail = !todaysMem
       ? stats?.totalSurahsMemorized
-        ? "No new memorization assigned today. Keep the memory fresh with review or reading."
-        : "No memorization assigned yet. Start with today's first lesson when you're ready."
+        ? `No new memorization assigned for ${dayCopy}. Keep the memory fresh with review or reading.`
+        : `No memorization assigned for ${dayCopy}.`
       : memStatus === "completed"
       ? `${todaysMem.workLabel ?? "Memorization"} complete for ${todaysMem.surahName}.`
       : memStatus === "in_progress"
@@ -747,11 +1065,13 @@ export default function ChildDashboard() {
           memAyahStart,
           memAyahEnd,
         )}${memPageLabel ? ` · ${memPageLabel}` : ""}`;
-    const memCta =
-      memStatus === "completed" ? "Done" : memStatus === "in_progress" ? "Continue" : "Start";
+    const memCta = !isViewingToday
+      ? memStatus === "completed" ? "Done" : "View only"
+      : memStatus === "completed" ? "Done" : memStatus === "in_progress" ? "Continue" : "Start";
 
-    const dueItems = reviews?.dueToday ?? [];
-    const reviewedItems = reviews?.reviewedToday ?? [];
+    const dueItems = isViewingToday ? reviews?.dueToday ?? [] : [];
+    const reviewedItems = isViewingToday ? reviews?.reviewedToday ?? [] : [];
+    const plannedReviewSessions = !isViewingToday ? dashboard.todaysPlan.reviewSessions ?? [] : [];
     const reviewsDueToday = reviews ? dueItems.length : dashboard.reviewsDueToday;
     const reviewCompletedToday = Math.max(
       todayProgress?.reviewCompletedCount ?? 0,
@@ -774,40 +1094,42 @@ export default function ChildDashboard() {
       reviewCompletedToday > 0 ||
       todayProgress?.reviewStatus === "in_progress";
     const reviewDetail = reviewDone
-      ? `Today's review complete · ${reviewCompletedToday}/${Math.max(
+      ? `Review complete · ${reviewCompletedToday}/${Math.max(
           reviewTarget,
           reviewCompletedToday,
         )} done`
       : reviewsDueToday > 0
-      ? `${reviewsDueToday} review${reviewsDueToday === 1 ? "" : "s"} due today${
+      ? `${reviewsDueToday} review${reviewsDueToday === 1 ? "" : "s"} due for ${dayCopy}${
           reviewCompletedToday > 0 ? ` · ${reviewCompletedToday} done` : ""
         }`
       : reviewError
       ? "Review queue could not refresh."
       : "Review is clear today. A light read still counts toward the habit.";
-    const reviewCta = reviewDone ? "Done" : reviewsDueToday > 0 ? "Review" : "Open";
+    const reviewCta = !isViewingToday
+      ? reviewDone ? "Done" : "View only"
+      : reviewDone ? "Done" : reviewsDueToday > 0 ? "Review" : "Open";
 
     const readingGoal = dashboard.readingGoal;
     const readingEnabled = !!readingGoal?.isEnabled;
     const readingDetail = !readingEnabled
       ? "No reading goal set yet. Add one from Targets when reading is part of the day."
       : readingGoal.status === "completed"
-      ? `Today's reading complete · ${readingGoal.completedPages}/${readingGoal.targetPages} pages`
+      ? `Reading complete · ${readingGoal.completedPages}/${readingGoal.targetPages} pages`
       : readingGoal.status === "in_progress"
       ? `${readingGoal.completedPages}/${readingGoal.targetPages} pages read · resume page ${
           readingGoal.lastPage ?? 1
         }`
       : `Read ${readingGoal.targetPages} page${
           readingGoal.targetPages === 1 ? "" : "s"
-        } today${readingGoal.lastPage ? ` · saved page ${readingGoal.lastPage}` : ""}`;
-    const readingCta =
-      readingGoal?.status === "completed"
+        } for ${dayCopy}${readingGoal.lastPage ? ` · saved page ${readingGoal.lastPage}` : ""}`;
+    const readingCta = !isViewingToday
+      ? readingGoal?.status === "completed" ? "Done" : "View only"
+      : readingGoal?.status === "completed"
         ? "Done"
         : readingGoal?.status === "in_progress"
         ? "Resume"
         : "Read";
     const readingStatus = readingGoal?.status ?? "not_started";
-    const totalMinutes = dashboard.todaysPlan.totalEstimatedMinutes;
     const story = !child.hideStories ? dashboard.todaysPlan.story : null;
     const dua = !child.hideDuas ? dashboard.todaysPlan.dua : null;
     const hasContentSuggestions = !!story || !!dua;
@@ -849,26 +1171,18 @@ export default function ChildDashboard() {
           />
         }
       >
-        <View style={styles.summaryBand}>
-          <Text style={styles.summaryAvatar}>{child.avatarEmoji}</Text>
-          <View style={styles.summaryText}>
-            <Text style={styles.summaryKicker}>Today</Text>
-            <Text style={styles.summaryName}>{child.name}</Text>
-            <Text style={styles.summarySubline}>
-              {totalMinutes > 0 ? `${totalMinutes} min plan` : "A gentle day is ready"}
-            </Text>
-          </View>
-          <View style={styles.summaryStats}>
-            <Text style={styles.summaryStat}>{formatDayStreak(child.streakDays)}</Text>
-            <Text style={styles.summaryStatMuted}>{child.totalPoints} pts</Text>
-          </View>
-        </View>
-
         {dashboardError && (
           <View style={styles.warningBanner}>
             <Text style={styles.warningText}>
-              Today's plan is temporarily unavailable. Pull down to refresh shortly.
+              This plan is temporarily unavailable. Pull down to refresh shortly.
             </Text>
+          </View>
+        )}
+
+        {readOnlyNotice && (
+          <View style={styles.readOnlyBanner}>
+            <Ionicons name="information-circle-outline" size={17} color="#475569" />
+            <Text style={styles.readOnlyBannerText}>{readOnlyNotice}</Text>
           </View>
         )}
 
@@ -912,13 +1226,13 @@ export default function ChildDashboard() {
               ]}
             >
               {showCompleteBanner
-                ? "All core work is complete for today."
+                ? `All core work is complete for ${dayCopy}.`
                 : "No required work is queued. Choose a light review, reading, or target update."}
             </Text>
           </View>
         )}
 
-        <SectionHeader title="Today's Work" />
+        <SectionHeader title={isViewingToday ? "Today's Work" : "Planned Work"} />
 
         <WorkCard
           title="Memorization"
@@ -927,6 +1241,8 @@ export default function ChildDashboard() {
           cta={memCta}
           tone={CARD_TONES.memorization}
           onPress={() => handleCardPress("memorization")}
+          readOnly={!isViewingToday}
+          onReadOnlyPress={showReadOnlyNotice}
           status={todaysMem ? memStatus : undefined}
         />
 
@@ -937,6 +1253,8 @@ export default function ChildDashboard() {
           cta={reviewCta}
           tone={CARD_TONES.review}
           onPress={() => handleCardPress("review")}
+          readOnly={!isViewingToday}
+          onReadOnlyPress={showReadOnlyNotice}
           status={hasReviewActivity ? reviewStatusForCard : undefined}
         >
           {dueItems.length > 0 && (
@@ -949,6 +1267,19 @@ export default function ChildDashboard() {
               )}
             </View>
           )}
+          {plannedReviewSessions.length > 0 && (
+            <View style={styles.reviewPreviewList}>
+              {plannedReviewSessions.slice(0, 3).map((item) => (
+                <PlannedReviewPreviewItem
+                  key={`${item.surahNumber}-${item.ayahCount}`}
+                  item={item}
+                />
+              ))}
+              {plannedReviewSessions.length > 3 && (
+                <Text style={styles.moreText}>+{plannedReviewSessions.length - 3} more queued</Text>
+              )}
+            </View>
+          )}
         </WorkCard>
 
         <WorkCard
@@ -958,6 +1289,8 @@ export default function ChildDashboard() {
           cta={readingCta}
           tone={CARD_TONES.reading}
           onPress={() => handleCardPress("reading")}
+          readOnly={!isViewingToday}
+          onReadOnlyPress={showReadOnlyNotice}
           status={readingEnabled ? readingStatus : undefined}
         />
 
@@ -965,8 +1298,8 @@ export default function ChildDashboard() {
           <>
             <SectionHeader title="Up Next" />
             <Pressable
-              style={styles.nextCard}
-              onPress={() => handleCardPress("memorization")}
+              style={[styles.nextCard, !isViewingToday && styles.nextCardReadOnly]}
+              onPress={isViewingToday ? () => handleCardPress("memorization") : showReadOnlyNotice}
             >
               <View style={styles.nextNumber}>
                 <Text style={styles.nextNumberText}>
@@ -1084,13 +1417,86 @@ export default function ChildDashboard() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Pressable onPress={() => router.back()}>
-          <Text style={styles.back}>← Back</Text>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Go back"
+          hitSlop={8}
+          style={styles.headerIconButton}
+          onPress={() => router.back()}
+        >
+          <Ionicons name="chevron-back" size={22} color="#111827" />
         </Pressable>
-        <Text style={styles.title}>{name ?? "Dashboard"}</Text>
-        <Pressable style={styles.headerRight} onPress={handleTargetsPress}>
-          <Text style={styles.targetsText}>Settings</Text>
+
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Switch child"
+          style={styles.childSwitcherButton}
+          onPress={openChildSwitcher}
+        >
+          <Text style={styles.headerAvatar}>{headerChild.avatarEmoji}</Text>
+          <Text style={styles.headerChildName} numberOfLines={1}>
+            {headerChild.name}
+          </Text>
+          <Ionicons name="chevron-down" size={15} color="#64748b" />
         </Pressable>
+
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Open child settings"
+          hitSlop={8}
+          style={styles.headerIconButton}
+          onPress={handleTargetsPress}
+        >
+          <Ionicons name="settings-outline" size={21} color="#111827" />
+        </Pressable>
+      </View>
+
+      <View style={styles.dateBar}>
+        <View style={styles.dateSide}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Reset dashboard date to today"
+            style={[
+              styles.todayResetButton,
+              isViewingToday && styles.todayResetButtonHidden,
+            ]}
+            disabled={isViewingToday}
+            onPress={resetToToday}
+          >
+            <Text style={styles.todayResetText}>Today</Text>
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Previous day"
+            hitSlop={8}
+            style={styles.dateArrow}
+            onPress={() => shiftSelectedDate(-1)}
+          >
+            <Ionicons name="chevron-back" size={18} color="#111827" />
+          </Pressable>
+        </View>
+
+        <View style={styles.dateCenter}>
+          <Text style={styles.dateLabel}>{dateLabel}</Text>
+          {isViewingToday && (
+            <View style={styles.todayPill}>
+              <Text style={styles.todayPillText}>Today</Text>
+            </View>
+          )}
+        </View>
+
+        <View style={[styles.dateSide, styles.dateSideRight]}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Next day"
+            hitSlop={8}
+            style={styles.dateArrow}
+            onPress={() => shiftSelectedDate(1)}
+          >
+            <Ionicons name="chevron-forward" size={18} color="#111827" />
+          </Pressable>
+          <View style={styles.todayResetSpacer} />
+        </View>
       </View>
 
       {renderContent()}
@@ -1099,6 +1505,18 @@ export default function ChildDashboard() {
         childId={navChildId}
         name={navName}
         reviewCount={navReviewCount}
+      />
+      <ChildSwitcherSheet
+        visible={switcherOpen}
+        childrenList={sortedSwitcherChildren}
+        currentChildId={Number(childId)}
+        loading={switcherLoading}
+        error={switcherError}
+        fallbackChild={headerChild}
+        onClose={() => setSwitcherOpen(false)}
+        onRetry={loadSwitcherChildren}
+        onSwitch={switchChild}
+        onAddChild={addChildFromSwitcher}
       />
     </View>
   );
@@ -1118,6 +1536,116 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: "#e2e8f0",
     backgroundColor: "#ffffff",
+  },
+  headerIconButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  childSwitcherButton: {
+    flex: 1,
+    minWidth: 0,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingHorizontal: 8,
+  },
+  headerAvatar: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: "#f8fafc",
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+    overflow: "hidden",
+    textAlign: "center",
+    lineHeight: 30,
+    fontSize: 17,
+  },
+  headerChildName: {
+    maxWidth: 160,
+    color: "#111827",
+    fontSize: 17,
+    fontWeight: "900",
+  },
+  dateBar: {
+    minHeight: 44,
+    paddingHorizontal: 16,
+    backgroundColor: "#ffffff",
+    borderBottomWidth: 1,
+    borderBottomColor: "#e5e7eb",
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  dateSide: {
+    width: 94,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  dateSideRight: {
+    justifyContent: "flex-end",
+  },
+  dateArrow: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: "#f8fafc",
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  dateCenter: {
+    flex: 1,
+    minWidth: 0,
+    alignItems: "center",
+    justifyContent: "center",
+    flexDirection: "row",
+    gap: 8,
+  },
+  dateLabel: {
+    color: "#111827",
+    fontSize: 14,
+    fontWeight: "900",
+  },
+  todayPill: {
+    borderWidth: 1,
+    borderColor: "#bfdbfe",
+    borderRadius: 999,
+    backgroundColor: "#eff6ff",
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  todayPillText: {
+    color: "#2563eb",
+    fontSize: 11,
+    fontWeight: "800",
+  },
+  todayResetButton: {
+    minWidth: 52,
+    minHeight: 30,
+    borderRadius: 999,
+    backgroundColor: "#f8fafc",
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 9,
+  },
+  todayResetButtonHidden: {
+    opacity: 0,
+  },
+  todayResetText: {
+    color: "#2563eb",
+    fontSize: 12,
+    fontWeight: "800",
+  },
+  todayResetSpacer: {
+    width: 52,
   },
   back: {
     fontSize: 16,
@@ -1239,6 +1767,24 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     fontWeight: "600",
   },
+  readOnlyBanner: {
+    backgroundColor: "#f8fafc",
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+    borderRadius: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  readOnlyBannerText: {
+    flex: 1,
+    color: "#475569",
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: "700",
+  },
   statsGrid: {
     flexDirection: "row",
     gap: 10,
@@ -1322,6 +1868,10 @@ const styles = StyleSheet.create({
     shadowRadius: 10,
     shadowOffset: { width: 0, height: 3 },
     elevation: 1,
+  },
+  cardReadOnly: {
+    shadowOpacity: 0,
+    elevation: 0,
   },
   cardHeader: {
     flexDirection: "row",
@@ -1424,6 +1974,9 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
+  },
+  nextCardReadOnly: {
+    opacity: 0.72,
   },
   nextNumber: {
     width: 42,
@@ -1652,5 +2205,193 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: "600",
     marginTop: 2,
+  },
+  sheetBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(15, 23, 42, 0.34)",
+    justifyContent: "flex-end",
+  },
+  switcherSheet: {
+    backgroundColor: "#ffffff",
+    borderTopLeftRadius: 18,
+    borderTopRightRadius: 18,
+    paddingTop: 10,
+    paddingHorizontal: 16,
+    paddingBottom: 28,
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+    maxHeight: "78%",
+  },
+  sheetHandle: {
+    alignSelf: "center",
+    width: 38,
+    height: 4,
+    borderRadius: 999,
+    backgroundColor: "#cbd5e1",
+    marginBottom: 14,
+  },
+  switcherHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+    marginBottom: 12,
+  },
+  sheetTitle: {
+    color: "#111827",
+    fontSize: 18,
+    fontWeight: "900",
+  },
+  sheetSubtitle: {
+    color: "#64748b",
+    fontSize: 13,
+    fontWeight: "700",
+    marginTop: 2,
+  },
+  sheetCloseButton: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: "#f8fafc",
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  switcherState: {
+    minHeight: 150,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
+  },
+  switcherStateText: {
+    color: "#64748b",
+    fontSize: 13,
+    fontWeight: "700",
+  },
+  switcherErrorText: {
+    color: "#dc2626",
+    fontSize: 13,
+    fontWeight: "700",
+    textAlign: "center",
+  },
+  switcherRetryButton: {
+    backgroundColor: "#2563eb",
+    borderRadius: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+  },
+  switcherRetryText: {
+    color: "#ffffff",
+    fontSize: 13,
+    fontWeight: "800",
+  },
+  switcherList: {
+    maxHeight: 360,
+  },
+  switcherListContent: {
+    gap: 8,
+    paddingBottom: 4,
+  },
+  switcherInlineWarning: {
+    backgroundColor: "#fffbeb",
+    borderWidth: 1,
+    borderColor: "#fde68a",
+    borderRadius: 10,
+    padding: 10,
+  },
+  switcherInlineWarningText: {
+    color: "#92400e",
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  switcherRow: {
+    minHeight: 64,
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+    borderRadius: 12,
+    backgroundColor: "#ffffff",
+    padding: 11,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  switcherRowSelected: {
+    backgroundColor: "#f8fafc",
+    borderColor: "#bfdbfe",
+  },
+  switcherAvatar: {
+    width: 42,
+    height: 42,
+    borderRadius: 14,
+    backgroundColor: "#f8fafc",
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  switcherAvatarText: {
+    fontSize: 22,
+  },
+  switcherText: {
+    flex: 1,
+    minWidth: 0,
+  },
+  switcherName: {
+    color: "#111827",
+    fontSize: 15,
+    fontWeight: "900",
+  },
+  switcherMeta: {
+    color: "#64748b",
+    fontSize: 12,
+    fontWeight: "700",
+    marginTop: 3,
+  },
+  switcherSelectedBadge: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: "#ecfdf5",
+    borderWidth: 1,
+    borderColor: "#a7f3d0",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  switcherAction: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 2,
+  },
+  switcherActionText: {
+    color: "#64748b",
+    fontSize: 12,
+    fontWeight: "800",
+  },
+  addChildRow: {
+    marginTop: 12,
+    minHeight: 52,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderStyle: "dashed",
+    borderColor: "#bfdbfe",
+    backgroundColor: "#f8fbff",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+  },
+  addChildIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: "#eff6ff",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  addChildText: {
+    color: "#2563eb",
+    fontSize: 14,
+    fontWeight: "900",
   },
 });

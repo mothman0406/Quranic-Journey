@@ -572,6 +572,7 @@ router.get("/children/:childId/dashboard", async (req, res) => {
   const [child] = await db.select().from(childrenTable).where(eq(childrenTable.id, childId));
   if (!child) { res.status(404).json({ error: "Child not found" }); return; }
   if (child.parentId !== req.user.id) { res.status(403).json({ error: "Forbidden" }); return; }
+  const isPreview = req.query.preview === "true";
 
   const memProgress = await db.select().from(memorizationProgressTable).where(eq(memorizationProgressTable.childId, childId));
   const dailyProgressRows = await db.select().from(dailyProgressTable)
@@ -790,19 +791,44 @@ router.get("/children/:childId/dashboard", async (req, res) => {
     null;
 
   if (!todayProgress) {
-    [todayProgress] = await db.insert(dailyProgressTable).values({
-      childId,
-      date: today,
-      memTargetSurah: desiredMemTargetSurah,
-      memTargetAyahStart: desiredMemTargetAyahStart,
-      memTargetAyahEnd: desiredMemTargetAyahEnd,
-      memTargetEndSurah: desiredMemTargetEndSurah,
-      memStatus: 'not_started',
-      reviewTargetCount: null,
-      reviewCompletedCount: 0,
-      reviewStatus: 'not_started',
-    }).returning();
+    if (isPreview) {
+      const now = new Date();
+      todayProgress = {
+        id: 0,
+        childId,
+        date: today,
+        memTargetSurah: desiredMemTargetSurah,
+        memTargetAyahStart: desiredMemTargetAyahStart,
+        memTargetAyahEnd: desiredMemTargetAyahEnd,
+        memTargetEndSurah: desiredMemTargetEndSurah,
+        memCompletedAyahEnd: null,
+        memStatus: "not_started",
+        reviewTargetCount: null,
+        reviewCompletedCount: 0,
+        reviewStatus: "not_started",
+        readingTargetPages: child.readPagesPerDay > 0 ? child.readPagesPerDay : null,
+        readingCompletedPages: 0,
+        readingLastPage: null,
+        readingStatus: "not_started",
+        createdAt: now,
+        updatedAt: now,
+      };
+    } else {
+      [todayProgress] = await db.insert(dailyProgressTable).values({
+        childId,
+        date: today,
+        memTargetSurah: desiredMemTargetSurah,
+        memTargetAyahStart: desiredMemTargetAyahStart,
+        memTargetAyahEnd: desiredMemTargetAyahEnd,
+        memTargetEndSurah: desiredMemTargetEndSurah,
+        memStatus: 'not_started',
+        reviewTargetCount: null,
+        reviewCompletedCount: 0,
+        reviewStatus: 'not_started',
+      }).returning();
+    }
   } else if (
+    !isPreview &&
     todayProgress.memStatus === "not_started" &&
     todayProgress.memTargetSurah == null
   ) {
