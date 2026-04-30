@@ -96,6 +96,14 @@ type SessionTarget = {
   startInRecitationCheck?: boolean;
 };
 
+type AyahSheetTarget = {
+  verseKey: string;
+  surahNumber: number;
+  ayahNumber: number;
+  pageNumber: number | null;
+  textUthmani: string;
+};
+
 const DISCOVERY_FILTERS: Array<{ key: DiscoveryFilter; label: string }> = [
   { key: "all", label: "All" },
   { key: "current", label: "Current" },
@@ -412,6 +420,7 @@ export default function MemorizationScreen() {
     arabic: string;
     translation: string;
   } | null>(null);
+  const [tappedAyah, setTappedAyah] = useState<AyahSheetTarget | null>(null);
   const [playbackRate, setPlaybackRate] = useState<number>(1.0);
   const playbackRateRef = useRef(playbackRate);
   const [internalPhase, setInternalPhase] = useState<InternalPhase>("single");
@@ -688,6 +697,7 @@ export default function MemorizationScreen() {
     setLeaveSheetOpen(false);
     setPauseSheetOpen(false);
     setPauseCompletedAyahEnd(null);
+    setTappedAyah(null);
     updateReadyToReciteSheet(false);
     setCompletionSheetOpen(false);
     setSelectedQuality(null);
@@ -1718,12 +1728,19 @@ export default function MemorizationScreen() {
     setIsPlaying(false);
   }
 
-  async function handleViewInFullMushaf() {
-    if (surahNumber === null) return;
-    const targetPage = activeMushafPage ?? 1;
+  async function handleViewInFullMushaf(target?: AyahSheetTarget) {
+    const targetSurah = target?.surahNumber ?? surahNumber;
+    if (targetSurah === null) return;
+    const targetAyah = target?.ayahNumber ?? playingVerseNumberRef.current;
+    const targetPage =
+      target?.pageNumber ??
+      versePageMap.get(targetAyah) ??
+      activeMushafPage ??
+      1;
     await pausePlaybackForMushafNavigation();
     setSettingsOpen(false);
     setTranslationPopup(null);
+    setTappedAyah(null);
     router.push({
       pathname: "/child/[childId]/mushaf",
       params: {
@@ -1731,10 +1748,41 @@ export default function MemorizationScreen() {
         name: params.name ?? "",
         page: String(targetPage),
         fromMemorization: "1",
-        surahNumber: String(surahNumber),
-        ayahNumber: String(playingVerseNumberRef.current),
+        surahNumber: String(targetSurah),
+        ayahNumber: String(targetAyah),
       },
     });
+  }
+
+  function openAyahSheet(target: AyahSheetTarget) {
+    if (reciteModeRef.current) return;
+    if (blindMode && !revealedVerses.has(target.verseKey)) return;
+    setSettingsOpen(false);
+    setTranslationPopup(null);
+    setTappedAyah(target);
+  }
+
+  async function handlePracticeFromAyah(target: AyahSheetTarget) {
+    const fromA = ayahStartRef.current;
+    const toA = ayahEndRef.current;
+    if (fromA === null || toA === null) return;
+    const nextVerse = clampNumber(target.ayahNumber, fromA, toA);
+    setTappedAyah(null);
+    setTranslationPopup(null);
+    await stopAudioCompletely();
+    setInternalPhase("single");
+    internalPhaseRef.current = "single";
+    setCumAyahIdx(0);
+    cumAyahIdxRef.current = 0;
+    setCumPass(1);
+    cumPassRef.current = 1;
+    setCumUpTo(nextVerse);
+    cumUpToRef.current = nextVerse;
+    setCurrentRepeat(1);
+    autoPlayRef.current = false;
+    pendingSeekPositionRef.current = null;
+    setCurrentVerse(nextVerse);
+    currentVerseRef.current = nextVerse;
   }
 
   async function handleLeaveWithoutSaving() {
@@ -1754,6 +1802,7 @@ export default function MemorizationScreen() {
     setStartInRecitationCheck(false);
     setSettingsOpen(false);
     setTranslationPopup(null);
+    setTappedAyah(null);
     setInternalPhase("single");
     internalPhaseRef.current = "single";
     setCumAyahIdx(0);
@@ -1816,6 +1865,7 @@ export default function MemorizationScreen() {
     if (ayahStart === null || ayahEnd === null || surahNumberRef.current === null) return;
     const boundedStart = Math.max(ayahStart, Math.min(startVerse, ayahEnd));
 
+    setTappedAyah(null);
     await stopAudioCompletely();
     setInternalPhase("single");
     internalPhaseRef.current = "single";
@@ -2220,16 +2270,41 @@ export default function MemorizationScreen() {
                       vVerse <= ayahEnd;
 
                     if (item.word.char_type_name === "end") {
+                      const markerHiddenByBlind =
+                        inScope && blindMode && !revealedVerses.has(item.verseKey);
+                      const canOpenAyahSheet = inScope && !reciteMode && !markerHiddenByBlind;
+                      const pageVerse = verses.find((verse) => verse.verse_key === item.verseKey);
                       return (
-                        <Text
+                        <Pressable
                           key={`${item.verseKey}-${item.word.position}-${idx}`}
-                          style={[
-                            themedStyles.mushafEndMarker,
-                            !inScope && themedStyles.mushafWordDimmed,
+                          accessibilityRole={canOpenAyahSheet ? "button" : undefined}
+                          accessibilityLabel={`Ayah ${vVerse} actions`}
+                          disabled={!canOpenAyahSheet}
+                          onPress={() => {
+                            openAyahSheet({
+                              verseKey: item.verseKey,
+                              surahNumber: vSurah,
+                              ayahNumber: vVerse,
+                              pageNumber: pageNum,
+                              textUthmani: pageVerse?.text_uthmani ?? "",
+                            });
+                          }}
+                          style={({ pressed }) => [
+                            styles.mushafEndMarkerPressable,
+                            canOpenAyahSheet && styles.mushafEndMarkerInteractive,
+                            pressed && styles.mushafEndMarkerPressed,
                           ]}
                         >
-                          {item.word.text_uthmani}
-                        </Text>
+                          <Text
+                            style={[
+                              themedStyles.mushafEndMarker,
+                              !inScope && themedStyles.mushafWordDimmed,
+                              markerHiddenByBlind && styles.mushafEndMarkerDisabledText,
+                            ]}
+                          >
+                            {item.word.text_uthmani}
+                          </Text>
+                        </Pressable>
                       );
                     }
 
@@ -2510,6 +2585,32 @@ export default function MemorizationScreen() {
                   </Pressable>
                 );
               })}
+              {surahNumber !== null && ayahVerseKey ? (() => {
+                const canOpenCurrentAyahSheet = !reciteMode && !ayahVerseHidden && !submitting;
+                return (
+                  <Pressable
+                    accessibilityRole={canOpenCurrentAyahSheet ? "button" : undefined}
+                    accessibilityLabel={`Ayah ${playingVerseNumber} actions`}
+                    disabled={!canOpenCurrentAyahSheet}
+                    onPress={() => {
+                      openAyahSheet({
+                        verseKey: ayahVerseKey,
+                        surahNumber,
+                        ayahNumber: playingVerseNumber,
+                        pageNumber: activeMushafPage,
+                        textUthmani: words.map((word) => word.text_uthmani).join(" "),
+                      });
+                    }}
+                    style={({ pressed }) => [
+                      styles.ayahEndMarkerButton,
+                      !canOpenCurrentAyahSheet && styles.ayahEndMarkerButtonDisabled,
+                      pressed && styles.ayahEndMarkerButtonPressed,
+                    ]}
+                  >
+                    <Text style={styles.ayahEndMarkerText}>{playingVerseNumber}</Text>
+                  </Pressable>
+                );
+              })() : null}
             </View>
           </View>
         ) : pageStart === null || pageEnd === null ? (
@@ -2996,6 +3097,70 @@ export default function MemorizationScreen() {
             </Pressable>
           </ScrollView>
         </View>
+      </Modal>
+
+      {/* Ayah action sheet */}
+      <Modal
+        visible={tappedAyah !== null}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setTappedAyah(null)}
+      >
+        <Pressable style={styles.backdrop} onPress={() => setTappedAyah(null)} />
+        {tappedAyah ? (
+          <View style={styles.completionSheet}>
+            <View style={styles.ayahSheetHeader}>
+              <View style={styles.ayahSheetTitleBlock}>
+                <Text style={styles.sheetTitle}>Ayah actions</Text>
+                <Text style={styles.completionSubtitle}>
+                  {chaptersMap.get(tappedAyah.surahNumber)?.name_simple ??
+                    `Surah ${tappedAyah.surahNumber}`}{" "}
+                  · Ayah {tappedAyah.ayahNumber}
+                </Text>
+              </View>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Close ayah actions"
+                style={styles.ayahSheetCloseButton}
+                onPress={() => setTappedAyah(null)}
+              >
+                <Ionicons name="close" size={18} color="#6b7280" />
+              </Pressable>
+            </View>
+
+            {tappedAyah.textUthmani ? (
+              <View style={styles.ayahSheetArabicCard}>
+                <Text style={styles.ayahSheetArabicText} numberOfLines={3}>
+                  {tappedAyah.textUthmani}
+                </Text>
+              </View>
+            ) : null}
+
+            <Pressable
+              style={[styles.ayahPrimaryActionButton, submitting && styles.completeButtonDisabled]}
+              onPress={() => {
+                const target = tappedAyah;
+                if (target) void handlePracticeFromAyah(target);
+              }}
+              disabled={submitting}
+            >
+              <Ionicons name="locate-outline" size={17} color="#ffffff" />
+              <Text style={styles.ayahPrimaryActionText}>Practice from this ayah</Text>
+            </Pressable>
+
+            <Pressable
+              style={[styles.ayahSecondaryActionButton, submitting && styles.sessionMushafButtonDisabled]}
+              onPress={() => {
+                const target = tappedAyah;
+                if (target) void handleViewInFullMushaf(target);
+              }}
+              disabled={submitting}
+            >
+              <Ionicons name="reader-outline" size={17} color="#0369a1" />
+              <Text style={styles.ayahSecondaryActionText}>View in Full Mushaf</Text>
+            </Pressable>
+          </View>
+        ) : null}
       </Modal>
 
       {/* Settings bottom sheet */}
@@ -5375,6 +5540,30 @@ const styles = StyleSheet.create({
     lineHeight: 60,
     color: "#111111",
   },
+  ayahEndMarkerButton: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    borderWidth: 1,
+    borderColor: "#b8974a",
+    backgroundColor: "#fdf8ee",
+    alignItems: "center",
+    justifyContent: "center",
+    marginHorizontal: 6,
+    marginVertical: 16,
+  },
+  ayahEndMarkerButtonDisabled: {
+    opacity: 0.45,
+  },
+  ayahEndMarkerButtonPressed: {
+    opacity: 0.7,
+  },
+  ayahEndMarkerText: {
+    fontSize: 13,
+    lineHeight: 16,
+    fontWeight: "800",
+    color: "#8a6020",
+  },
   // ── Parchment Mushaf page card (static parts) ────────────────────────────────
   pageBody: {
     paddingHorizontal: 14,
@@ -5401,6 +5590,25 @@ const styles = StyleSheet.create({
     position: "relative",
     overflow: "hidden",
     borderRadius: 4,
+  },
+  mushafEndMarkerPressable: {
+    minWidth: 30,
+    minHeight: 30,
+    borderRadius: 15,
+    alignItems: "center",
+    justifyContent: "center",
+    marginHorizontal: 2,
+  },
+  mushafEndMarkerInteractive: {
+    borderWidth: 1,
+    borderColor: "#d6b465",
+    backgroundColor: "rgba(253, 248, 238, 0.62)",
+  },
+  mushafEndMarkerPressed: {
+    opacity: 0.7,
+  },
+  mushafEndMarkerDisabledText: {
+    opacity: 0.45,
   },
   mushafWordBlurOverlay: {
     ...StyleSheet.absoluteFillObject,
@@ -5619,6 +5827,74 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: "#6b7280",
     textAlign: "center",
+  },
+  ayahSheetHeader: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+  ayahSheetTitleBlock: {
+    flex: 1,
+  },
+  ayahSheetCloseButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+    backgroundColor: "#ffffff",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  ayahSheetArabicCard: {
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#fde68a",
+    backgroundColor: "#fffbeb",
+    padding: 14,
+  },
+  ayahSheetArabicText: {
+    fontFamily: "AmiriQuran",
+    fontSize: 24,
+    lineHeight: 42,
+    color: "#111827",
+    textAlign: "right",
+    writingDirection: "rtl",
+  },
+  ayahPrimaryActionButton: {
+    width: "100%",
+    minHeight: 48,
+    borderRadius: 12,
+    backgroundColor: "#111111",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingHorizontal: 14,
+  },
+  ayahPrimaryActionText: {
+    color: "#ffffff",
+    fontSize: 15,
+    fontWeight: "800",
+  },
+  ayahSecondaryActionButton: {
+    width: "100%",
+    minHeight: 48,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#bae6fd",
+    backgroundColor: "#f0f9ff",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingHorizontal: 14,
+  },
+  ayahSecondaryActionText: {
+    color: "#0369a1",
+    fontSize: 15,
+    fontWeight: "800",
   },
   recitationCheckContainer: {
     flex: 1,
