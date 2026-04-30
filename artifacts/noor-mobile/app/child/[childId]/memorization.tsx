@@ -1,5 +1,4 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { BlurView } from "expo-blur";
 import { Ionicons } from "@expo/vector-icons";
 import {
   ActivityIndicator,
@@ -2647,11 +2646,20 @@ export default function MemorizationScreen() {
                           pageWordIndex >= currentReciteExpectedIndex &&
                           (!isCurrentReciteWord || !reciteWordRevealed)));
                     const hiddenByBlind = verseHidden && !reciteWordRevealed;
-
                     const tajweedColor =
                       tajweedEnabled && inScope
                         ? extractTajweedColor(item.word.text_uthmani_tajweed)
                         : null;
+                    const wordBlurTextStyle = hideWordForRecite
+                      ? isCurrentReciteWord
+                        ? styles.wordBlurSoftText
+                        : styles.wordBlurStrongText
+                      : isBlurred
+                        ? styles.wordBlurStrongText
+                      : undefined;
+                    const wordBlurShadowStyle = wordBlurTextStyle
+                      ? { textShadowColor: tajweedColor ?? THEMES[themeKey].pageText }
+                      : undefined;
                     return (
                       <Pressable
                         key={`${item.verseKey}-${item.word.position}-${idx}`}
@@ -2701,18 +2709,12 @@ export default function MemorizationScreen() {
                             themedStyles.mushafWord,
                             !inScope && themedStyles.mushafWordDimmed,
                             tajweedColor ? { color: tajweedColor } : undefined,
+                            wordBlurTextStyle,
+                            wordBlurShadowStyle,
                           ]}
                         >
                           {hiddenByBlind ? "••••" : item.word.text_uthmani}
                         </Text>
-                        {(isBlurred || hideWordForRecite) && (
-                          <BlurView
-                            intensity={hideWordForRecite ? 38 : 32}
-                            tint={themeKey.endsWith("_dark") ? "dark" : "light"}
-                            pointerEvents="none"
-                            style={styles.mushafWordBlurOverlay}
-                          />
-                        )}
                       </Pressable>
                     );
                   })}
@@ -2920,6 +2922,14 @@ export default function MemorizationScreen() {
                   !isPastReciteWord &&
                   (!isCurrentReciteWord || !reciteWordRevealed);
                 const hiddenByBlind = ayahVerseHidden && !reciteWordRevealed;
+                const reciteBlurTextStyle = hideWordForRecite
+                  ? isCurrentReciteWord
+                    ? styles.wordBlurSoftText
+                    : styles.wordBlurStrongText
+                  : undefined;
+                const reciteBlurShadowStyle = reciteBlurTextStyle
+                  ? { textShadowColor: tajweedColor ?? "#111111" }
+                  : undefined;
                 return (
                   <Pressable
                     key={`${playingVerseNumber}-${idx}`}
@@ -2957,18 +2967,12 @@ export default function MemorizationScreen() {
                       style={[
                         styles.arabicWord,
                         tajweedColor ? { color: tajweedColor } : undefined,
+                        reciteBlurTextStyle,
+                        reciteBlurShadowStyle,
                       ]}
                     >
                       {hiddenByBlind ? "••••" : word.text_uthmani}
                     </Text>
-                    {hideWordForRecite && (
-                      <BlurView
-                        intensity={36}
-                        tint={themeKey.endsWith("_dark") ? "dark" : "light"}
-                        pointerEvents="none"
-                        style={styles.reciteWordBlurOverlay}
-                      />
-                    )}
                   </Pressable>
                 );
               })}
@@ -5992,7 +5996,7 @@ const styles = StyleSheet.create({
   },
   wordWrapper: {
     position: "relative",
-    overflow: "hidden",
+    overflow: "visible",
     paddingHorizontal: 4,
     paddingVertical: 4,
     marginHorizontal: 2,
@@ -6005,12 +6009,16 @@ const styles = StyleSheet.create({
   reciteWordCurrent: {
     backgroundColor: "#ecfdf5",
   },
-  reciteWordPending: {
-    backgroundColor: "rgba(249, 250, 251, 0.82)",
+  reciteWordPending: {},
+  wordBlurSoftText: {
+    color: "transparent",
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 5,
   },
-  reciteWordBlurOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    borderRadius: 4,
+  wordBlurStrongText: {
+    color: "transparent",
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 8,
   },
   arabicWord: {
     fontFamily: "AmiriQuran",
@@ -6066,15 +6074,13 @@ const styles = StyleSheet.create({
   },
   mushafWordPressable: {
     position: "relative",
-    overflow: "hidden",
+    overflow: "visible",
     borderRadius: 4,
   },
   reciteMushafWordCurrent: {
     backgroundColor: "#ecfdf5",
   },
-  reciteMushafWordPending: {
-    backgroundColor: "rgba(249, 250, 251, 0.78)",
-  },
+  reciteMushafWordPending: {},
   mushafEndMarkerPressable: {
     minWidth: 30,
     minHeight: 30,
@@ -6093,10 +6099,6 @@ const styles = StyleSheet.create({
   },
   mushafEndMarkerDisabledText: {
     opacity: 0.45,
-  },
-  mushafWordBlurOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    borderRadius: 4,
   },
   reciteAssistRow: {
     flexDirection: "row",
