@@ -1050,7 +1050,7 @@ export default function ChildDashboard() {
         <View style={styles.quickGrid}>
           <QuickAction
             title="Settings"
-            detail="Targets"
+            detail="Targets & defaults"
             iconName="flag-outline"
             color="#2563eb"
             onPress={handleTargetsPress}

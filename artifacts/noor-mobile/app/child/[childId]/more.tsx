@@ -52,7 +52,7 @@ const OPEN_ITEMS: MoreItem[] = [
   },
   {
     title: "Parent Settings",
-    detail: "Targets, visibility, session defaults",
+    detail: "Targets, visibility, memorization defaults",
     icon: "flag-outline",
     tone: "#2563eb",
     route: "/child/[childId]/targets",

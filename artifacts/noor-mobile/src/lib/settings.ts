@@ -43,6 +43,9 @@ export type DefaultSessionSettings = {
   autoplayThroughRange: boolean;
   blurMode: boolean;
   blindMode: boolean;
+  cumulativeReview: boolean;
+  reviewRepeatCount: number;
+  confetti: boolean;
 };
 
 // Session-level defaults applied fresh each memorization session.
@@ -52,6 +55,9 @@ export const DEFAULT_SESSION_SETTINGS: DefaultSessionSettings = {
   autoplayThroughRange: true,
   blurMode: false,
   blindMode: false,
+  cumulativeReview: false,
+  reviewRepeatCount: 3,
+  confetti: true,
 };
 
 function sessionDefaultsKey(childId: string): string {
@@ -97,6 +103,23 @@ function normalizeSessionSettings(
       typeof settings.blindMode === "boolean"
         ? settings.blindMode
         : DEFAULT_SESSION_SETTINGS.blindMode,
+    cumulativeReview:
+      typeof settings.cumulativeReview === "boolean"
+        ? settings.cumulativeReview
+        : DEFAULT_SESSION_SETTINGS.cumulativeReview,
+    reviewRepeatCount: Math.round(
+      clamp(
+        typeof settings.reviewRepeatCount === "number"
+          ? settings.reviewRepeatCount
+          : DEFAULT_SESSION_SETTINGS.reviewRepeatCount,
+        1,
+        10,
+      ),
+    ),
+    confetti:
+      typeof settings.confetti === "boolean"
+        ? settings.confetti
+        : DEFAULT_SESSION_SETTINGS.confetti,
   };
 }
 
@@ -172,7 +195,13 @@ function normalizeBookmark(
     ),
   );
   const reviewRepeatCount = Math.round(
-    clamp(typeof bookmark.reviewRepeatCount === "number" ? bookmark.reviewRepeatCount : 3, 1, 10),
+    clamp(
+      typeof bookmark.reviewRepeatCount === "number"
+        ? bookmark.reviewRepeatCount
+        : DEFAULT_SESSION_SETTINGS.reviewRepeatCount,
+      1,
+      10,
+    ),
   );
   const savedAt =
     typeof bookmark.savedAt === "number" && Number.isFinite(bookmark.savedAt)
@@ -191,7 +220,9 @@ function normalizeBookmark(
         ? bookmark.autoAdvance
         : DEFAULT_SESSION_SETTINGS.autoplayThroughRange,
     cumulativeReview:
-      typeof bookmark.cumulativeReview === "boolean" ? bookmark.cumulativeReview : false,
+      typeof bookmark.cumulativeReview === "boolean"
+        ? bookmark.cumulativeReview
+        : DEFAULT_SESSION_SETTINGS.cumulativeReview,
     reviewRepeatCount,
     isReviewOnly:
       typeof bookmark.isReviewOnly === "boolean" ? bookmark.isReviewOnly : undefined,

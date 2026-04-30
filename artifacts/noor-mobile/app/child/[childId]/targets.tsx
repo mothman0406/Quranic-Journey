@@ -21,11 +21,17 @@ import {
 } from "@/src/components/screen-primitives";
 import { apiFetch } from "@/src/lib/api";
 import {
+  DEFAULT_PROFILE_SETTINGS,
   DEFAULT_SESSION_SETTINGS,
   loadDefaultSessionSettings,
+  loadProfileSettings,
   saveDefaultSessionSettings,
+  saveProfileSettings,
   type DefaultSessionSettings,
+  type ProfileSettings,
 } from "@/src/lib/settings";
+import { RECITERS } from "@/src/lib/reciters";
+import { THEMES, THEME_DISPLAY_NAMES, type ThemeKey } from "@/src/lib/mushaf-theme";
 
 type IconName = ComponentProps<typeof Ionicons>["name"];
 type TargetKey = "memorizePagePerDay" | "reviewPagesPerDay" | "readPagesPerDay";
@@ -172,6 +178,11 @@ const TARGET_PRESETS: TargetPreset[] = [
 ];
 
 const PRACTICE_PRESETS = [10, 15, 20, 30, 45, 60];
+const VIEW_MODE_OPTIONS: Array<{ value: ProfileSettings["viewMode"]; label: string }> = [
+  { value: "ayah", label: "Ayah view" },
+  { value: "page", label: "Full Mushaf" },
+];
+const THEME_OPTIONS = Object.keys(THEMES) as ThemeKey[];
 
 function clamp(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, value));
@@ -208,6 +219,24 @@ function normalizeSessionDefaults(settings: DefaultSessionSettings): DefaultSess
     autoplayThroughRange: settings.autoplayThroughRange,
     blurMode: settings.blurMode,
     blindMode: settings.blindMode,
+    cumulativeReview: settings.cumulativeReview,
+    reviewRepeatCount: Math.round(clamp(settings.reviewRepeatCount, 1, 10)),
+    confetti: settings.confetti,
+  };
+}
+
+function normalizeProfileDefaults(settings: ProfileSettings): ProfileSettings {
+  const themeKey = Object.prototype.hasOwnProperty.call(THEMES, settings.themeKey)
+    ? settings.themeKey
+    : DEFAULT_PROFILE_SETTINGS.themeKey;
+  const reciterId = RECITERS.some((reciter) => reciter.id === settings.reciterId)
+    ? settings.reciterId
+    : DEFAULT_PROFILE_SETTINGS.reciterId;
+
+  return {
+    themeKey,
+    reciterId,
+    viewMode: settings.viewMode === "page" ? "page" : "ayah",
   };
 }
 
@@ -325,6 +354,8 @@ export default function TargetsScreen() {
   const [child, setChild] = useState<ChildSettings | null>(null);
   const [sessionDefaults, setSessionDefaults] =
     useState<DefaultSessionSettings>(DEFAULT_SESSION_SETTINGS);
+  const [profileDefaults, setProfileDefaults] =
+    useState<ProfileSettings>(DEFAULT_PROFILE_SETTINGS);
   const [error, setError] = useState<string | null>(null);
   const [savingKey, setSavingKey] = useState<string | null>(null);
   const [savedKey, setSavedKey] = useState<string | null>(null);
@@ -337,12 +368,14 @@ export default function TargetsScreen() {
 
     setError(null);
     try {
-      const [childData, defaults] = await Promise.all([
+      const [childData, defaults, profile] = await Promise.all([
         apiFetch<ChildSettings>(`/api/children/${childId}`),
         loadDefaultSessionSettings(childId),
+        loadProfileSettings(childId),
       ]);
       setChild(childData);
       setSessionDefaults(defaults);
+      setProfileDefaults(normalizeProfileDefaults(profile));
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load settings.");
     }
@@ -420,6 +453,26 @@ export default function TargetsScreen() {
     }
   }
 
+  async function updateProfileDefaults(
+    patch: Partial<ProfileSettings>,
+    key: string,
+  ) {
+    if (!isValidChildId(childId)) return;
+    const next = normalizeProfileDefaults({ ...profileDefaults, ...patch });
+    setProfileDefaults(next);
+    setSavingKey(key);
+    setSavedKey(null);
+    setError(null);
+    try {
+      await saveProfileSettings(childId, next);
+      markSaved(key);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to save memorization defaults.");
+    } finally {
+      setSavingKey(null);
+    }
+  }
+
   function openProfile() {
     if (!isValidChildId(childId)) return;
     router.push({
@@ -451,6 +504,8 @@ export default function TargetsScreen() {
   const practiceSaving = savingKey === "practiceMinutesPerDay";
   const sessionSaving = savingKey?.startsWith("session:");
   const sessionSaved = savedKey?.startsWith("session:");
+  const profileSaving = savingKey?.startsWith("profile:");
+  const profileSaved = savedKey?.startsWith("profile:");
 
   return (
     <ScreenContainer>
@@ -759,6 +814,171 @@ export default function TargetsScreen() {
               thumbColor={sessionDefaults.blurMode ? "#7c3aed" : "#f9fafb"}
             />
           </View>
+          <View style={styles.toggleDivider} />
+          <View style={styles.toggleRow}>
+            <View style={styles.titleBlock}>
+              <Text style={styles.cardTitle}>Cumulative review</Text>
+              <Text style={styles.cardDetail}>Replay from the start after each new ayah.</Text>
+            </View>
+            <Switch
+              value={sessionDefaults.cumulativeReview}
+              onValueChange={(enabled) =>
+                updateSessionDefaults(
+                  { cumulativeReview: enabled },
+                  "session:cumulativeReview",
+                )
+              }
+              trackColor={{ false: "#e5e7eb", true: "#ddd6fe" }}
+              thumbColor={sessionDefaults.cumulativeReview ? "#7c3aed" : "#f9fafb"}
+            />
+          </View>
+          {sessionDefaults.cumulativeReview ? (
+            <View style={styles.settingRow}>
+              <View style={styles.titleBlock}>
+                <Text style={styles.cardTitle}>Review repeat count</Text>
+                <Text style={styles.cardDetail}>Default cumulative loop count.</Text>
+              </View>
+              <View style={styles.compactStepper}>
+                <Pressable
+                  style={styles.compactStepButton}
+                  onPress={() =>
+                    updateSessionDefaults(
+                      { reviewRepeatCount: sessionDefaults.reviewRepeatCount - 1 },
+                      "session:reviewRepeatCount",
+                    )
+                  }
+                >
+                  <Text style={styles.compactStepText}>-</Text>
+                </Pressable>
+                <Text style={styles.compactValue}>{sessionDefaults.reviewRepeatCount}x</Text>
+                <Pressable
+                  style={styles.compactStepButton}
+                  onPress={() =>
+                    updateSessionDefaults(
+                      { reviewRepeatCount: sessionDefaults.reviewRepeatCount + 1 },
+                      "session:reviewRepeatCount",
+                    )
+                  }
+                >
+                  <Text style={styles.compactStepText}>+</Text>
+                </Pressable>
+              </View>
+            </View>
+          ) : null}
+          <View style={styles.toggleRow}>
+            <View style={styles.titleBlock}>
+              <Text style={styles.cardTitle}>Celebration confetti</Text>
+              <Text style={styles.cardDetail}>Show celebration after completed memorization work.</Text>
+            </View>
+            <Switch
+              value={sessionDefaults.confetti}
+              onValueChange={(enabled) =>
+                updateSessionDefaults({ confetti: enabled }, "session:confetti")
+              }
+              trackColor={{ false: "#e5e7eb", true: "#ddd6fe" }}
+              thumbColor={sessionDefaults.confetti ? "#7c3aed" : "#f9fafb"}
+            />
+          </View>
+        </View>
+
+        <SectionLabel>Mushaf and audio defaults</SectionLabel>
+        <View style={styles.card}>
+          <View style={styles.cardHeader}>
+            <View style={[styles.iconBadge, { backgroundColor: "#ecfeff" }]}>
+              <Ionicons name="volume-high-outline" size={19} color="#0891b2" />
+            </View>
+            <View style={styles.titleBlock}>
+              <Text style={styles.cardTitle}>Memorization player</Text>
+              <Text style={styles.cardDetail}>
+                Default view, reciter, and Mushaf theme for new sessions.
+              </Text>
+            </View>
+            {profileSaving || profileSaved ? (
+              <Text style={[styles.statusText, profileSaved && styles.statusSaved]}>
+                {profileSaving ? "Saving" : "Saved"}
+              </Text>
+            ) : null}
+          </View>
+
+          <View>
+            <Text style={styles.settingGroupLabel}>View mode</Text>
+            <View style={styles.optionGrid}>
+              {VIEW_MODE_OPTIONS.map((option) => {
+                const active = profileDefaults.viewMode === option.value;
+                return (
+                  <Pressable
+                    key={option.value}
+                    style={[styles.optionButton, active && styles.memorizationOptionActive]}
+                    onPress={() =>
+                      updateProfileDefaults({ viewMode: option.value }, "profile:viewMode")
+                    }
+                  >
+                    <Text
+                      style={[
+                        styles.optionText,
+                        active && styles.memorizationOptionTextActive,
+                      ]}
+                    >
+                      {option.label}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+
+          <View>
+            <Text style={styles.settingGroupLabel}>Reciter</Text>
+            <View style={styles.optionGrid}>
+              {RECITERS.map((reciter) => {
+                const active = profileDefaults.reciterId === reciter.id;
+                const label = reciter.fullName.split(" ").slice(-1)[0] ?? reciter.fullName;
+                return (
+                  <Pressable
+                    key={reciter.id}
+                    style={[styles.optionButton, active && styles.memorizationOptionActive]}
+                    onPress={() =>
+                      updateProfileDefaults({ reciterId: reciter.id }, "profile:reciterId")
+                    }
+                  >
+                    <Text
+                      style={[
+                        styles.optionText,
+                        active && styles.memorizationOptionTextActive,
+                      ]}
+                    >
+                      {label}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+
+          <View>
+            <Text style={styles.settingGroupLabel}>Mushaf theme</Text>
+            <View style={styles.optionGrid}>
+              {THEME_OPTIONS.map((themeKey) => {
+                const active = profileDefaults.themeKey === themeKey;
+                return (
+                  <Pressable
+                    key={themeKey}
+                    style={[styles.optionButton, active && styles.memorizationOptionActive]}
+                    onPress={() => updateProfileDefaults({ themeKey }, "profile:themeKey")}
+                  >
+                    <Text
+                      style={[
+                        styles.optionText,
+                        active && styles.memorizationOptionTextActive,
+                      ]}
+                    >
+                      {THEME_DISPLAY_NAMES[themeKey]}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
         </View>
       </ScreenScrollView>
     </ScreenContainer>
@@ -920,6 +1140,13 @@ const styles = StyleSheet.create({
     color: "#444444",
     fontWeight: "700",
   },
+  memorizationOptionActive: {
+    backgroundColor: "#f5f3ff",
+    borderColor: "#c4b5fd",
+  },
+  memorizationOptionTextActive: {
+    color: "#7c3aed",
+  },
   practiceOptionActive: {
     backgroundColor: "#fffbeb",
     borderColor: "#fde68a",
@@ -980,6 +1207,13 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     gap: 12,
+  },
+  settingGroupLabel: {
+    marginBottom: 8,
+    fontSize: 12,
+    color: "#666666",
+    fontWeight: "800",
+    textTransform: "uppercase",
   },
   compactStepper: {
     flexDirection: "row",

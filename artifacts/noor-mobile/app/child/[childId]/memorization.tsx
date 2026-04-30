@@ -446,8 +446,15 @@ export default function MemorizationScreen() {
   const [cumAyahIdx, setCumAyahIdx] = useState<number>(0);
   const [cumPass, setCumPass] = useState<number>(1);
   const [cumUpTo, setCumUpTo] = useState<number>(0);
-  const [cumulativeReview, setCumulativeReview] = useState<boolean>(false);
-  const [reviewRepeatCount, setReviewRepeatCount] = useState<number>(3);
+  const [cumulativeReview, setCumulativeReview] = useState<boolean>(
+    DEFAULT_SESSION_SETTINGS.cumulativeReview,
+  );
+  const [reviewRepeatCount, setReviewRepeatCount] = useState<number>(
+    DEFAULT_SESSION_SETTINGS.reviewRepeatCount,
+  );
+  const [confettiEnabled, setConfettiEnabled] = useState<boolean>(
+    DEFAULT_SESSION_SETTINGS.confetti,
+  );
 
   // Recite mode
   const [reciteMode, setReciteMode] = useState(false);
@@ -586,6 +593,18 @@ export default function MemorizationScreen() {
 
   // Hydrate parent-chosen session defaults. These only set the starting state;
   // changes made inside a memorization session remain temporary.
+  const applyDefaultSessionSettings = useCallback(async () => {
+    const defaults = await loadDefaultSessionSettings(childId);
+    setRepeatCount(defaults.repeatCount);
+    setAutoAdvanceDelayMs(defaults.autoAdvanceDelayMs);
+    setAutoplayThroughRange(defaults.autoplayThroughRange);
+    setBlindMode(defaults.blindMode);
+    setBlurMode(defaults.blurMode);
+    setCumulativeReview(defaults.cumulativeReview);
+    setReviewRepeatCount(defaults.reviewRepeatCount);
+    setConfettiEnabled(defaults.confetti);
+  }, [childId]);
+
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -596,11 +615,18 @@ export default function MemorizationScreen() {
       setAutoplayThroughRange(defaults.autoplayThroughRange);
       setBlindMode(defaults.blindMode);
       setBlurMode(defaults.blurMode);
+      setCumulativeReview(defaults.cumulativeReview);
+      setReviewRepeatCount(defaults.reviewRepeatCount);
+      setConfettiEnabled(defaults.confetti);
     })();
     return () => {
       cancelled = true;
     };
   }, [childId]);
+
+  useEffect(() => {
+    if (!confettiEnabled) setCelebration(null);
+  }, [confettiEnabled]);
 
   // Configure iOS audio session so playback works through the speaker even
   // when the silent switch is on (AirPods always worked via Bluetooth).
@@ -690,9 +716,18 @@ export default function MemorizationScreen() {
     }, []),
   );
 
-  function prepareSession(target: SessionTarget) {
+  async function prepareSession(target: SessionTarget) {
     Keyboard.dismiss();
+    await applyDefaultSessionSettings();
     setPendingSessionTarget(target);
+  }
+
+  function openParentDefaults() {
+    if (!childId) return;
+    router.push({
+      pathname: "/child/[childId]/targets",
+      params: { childId, name: params.name ?? "" },
+    });
   }
 
   function startConfiguredSession(target: SessionTarget) {
@@ -2154,9 +2189,9 @@ export default function MemorizationScreen() {
       await clearMemorizationSessionBookmark(childId);
       setSessionRequested(false);
       setLoading(false);
-      if (nextCelebration) {
+      if (nextCelebration && confettiEnabled) {
         setCelebration(nextCelebration);
-      } else {
+      } else if (!nextCelebration) {
         Alert.alert("Progress saved.", "The rating was saved for the selected ayah range.");
       }
     } catch (e) {
@@ -2974,6 +3009,7 @@ export default function MemorizationScreen() {
           onCumulativeReviewChange={setCumulativeReview}
           onReviewRepeatCountChange={setReviewRepeatCount}
           onCancel={() => setPendingSessionTarget(null)}
+          onOpenSettings={openParentDefaults}
           onStart={startConfiguredSession}
           onJustGetTested={(target) =>
             startConfiguredSession({ ...target, startInRecitationCheck: true })
@@ -2999,6 +3035,7 @@ export default function MemorizationScreen() {
         }}
         onRetry={() => loadDiscovery()}
         onBack={() => router.back()}
+        onOpenSettings={openParentDefaults}
         onStart={prepareSession}
         onStartDirect={startConfiguredSession}
         onStartBookmark={startBookmarkedSession}
@@ -4015,7 +4052,7 @@ export default function MemorizationScreen() {
       </Modal>
 
       <CelebrationOverlay
-        show={celebration !== null}
+        show={confettiEnabled && celebration !== null}
         message={celebration?.message ?? ""}
         subMessage={celebration?.subMessage}
         onDone={() => setCelebration(null)}
@@ -4130,6 +4167,7 @@ function MemorizationSetup({
   onCumulativeReviewChange,
   onReviewRepeatCountChange,
   onCancel,
+  onOpenSettings,
   onStart,
   onJustGetTested,
 }: {
@@ -4147,6 +4185,7 @@ function MemorizationSetup({
   onCumulativeReviewChange: (value: boolean) => void;
   onReviewRepeatCountChange: (value: number) => void;
   onCancel: () => void;
+  onOpenSettings: () => void;
   onStart: (target: SessionTarget) => void;
   onJustGetTested: (target: SessionTarget) => void;
 }) {
@@ -4278,7 +4317,9 @@ function MemorizationSetup({
           <Text style={styles.discoveryTitle}>Session Setup</Text>
           <Text style={styles.discoverySubtitle}>{name ? `${name}'s practice` : "Practice setup"}</Text>
         </View>
-        <View style={styles.discoveryHeaderSpacer} />
+        <Pressable onPress={onOpenSettings} style={styles.discoveryHeaderAction}>
+          <Text style={styles.discoveryHeaderActionText}>Defaults</Text>
+        </Pressable>
       </View>
 
       <ScrollView
@@ -4557,6 +4598,7 @@ function MemorizationDiscovery({
   onRefresh,
   onRetry,
   onBack,
+  onOpenSettings,
   onStart,
   onStartDirect,
   onStartBookmark,
@@ -4573,6 +4615,7 @@ function MemorizationDiscovery({
   onRefresh: () => void;
   onRetry: () => void;
   onBack: () => void;
+  onOpenSettings: () => void;
   onStart: (target: SessionTarget) => void;
   onStartDirect: (target: SessionTarget) => void;
   onStartBookmark: (bookmark: MemorizationSessionBookmark) => void;
@@ -4674,7 +4717,9 @@ function MemorizationDiscovery({
           <Text style={styles.discoveryTitle}>Memorization</Text>
           <Text style={styles.discoverySubtitle}>{childName ? `${childName}'s hifz work` : "Hifz work"}</Text>
         </View>
-        <View style={styles.discoveryHeaderSpacer} />
+        <Pressable onPress={onOpenSettings} style={styles.discoveryHeaderAction}>
+          <Text style={styles.discoveryHeaderActionText}>Defaults</Text>
+        </Pressable>
       </View>
 
       {state.status === "loading" ? (
@@ -5368,6 +5413,19 @@ const styles = StyleSheet.create({
   },
   discoveryHeaderSpacer: {
     width: 70,
+  },
+  discoveryHeaderAction: {
+    width: 70,
+    minHeight: 36,
+    borderRadius: 10,
+    backgroundColor: "#eff6ff",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  discoveryHeaderActionText: {
+    fontSize: 12,
+    color: "#2563eb",
+    fontWeight: "800",
   },
   discoveryTitle: {
     fontSize: 17,
