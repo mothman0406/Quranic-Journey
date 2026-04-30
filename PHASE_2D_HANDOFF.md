@@ -1,7 +1,7 @@
 # NoorPath / Quranic Journey — Phase 2G Web Parity Handoff
 
 **For: the next Codex/Claude Code conversation continuing this project**
-**Last updated: 2026-04-30 (Phase 2L.0 UI refinement + backend QA pass active; 2L.0.a profile picker redesign implemented locally, hardware QA pending.)**
+**Last updated: 2026-04-30 (Phase 2L.0 UI refinement + backend QA pass active; 2L.0.a profile picker redesign + stale-list follow-up implemented locally, hardware QA pending.)**
 
 This handoff supersedes earlier handoff drafts.
 
@@ -528,6 +528,7 @@ Phase 2L.0 is complete when Mohammad explicitly says "2L.0 is done" or equivalen
 
 Reported items (filled in as Mohammad reports them):
 - 2L.0.a Profile picker redesign — Implemented locally Apr 30 in implementation commit `37f199c`: replaced the bulky profile-card stack with a compact searchable, sortable, filterable picker; added parent avatar menu, per-profile gear sheet, account-settings placeholder route, and Active today strip/filter using existing mobile/API surfaces. JS-only; no backend, native dependency, tajweed, matcher, or frozen web changes. Local validation passed with `cd artifacts/noor-mobile && npx tsc --noEmit` and `git diff --check`. Hardware QA: pending Mohammad iPhone test before 2L.0.b starts.
+- 2L.0.a follow-up stale profile picker list — Implemented locally Apr 30 in implementation commit `f933b10`: profile picker now refreshes `/api/children` on screen focus with `useFocusEffect`, so create/edit/delete changes are visible when returning to the picker without force-quitting. JS-only; no visual, backend, native dependency, tajweed, matcher, or frozen web changes. Local validation passed with `cd artifacts/noor-mobile && npx tsc --noEmit` and `git diff --check`. Hardware QA: pending Mohammad iPhone smoke for create/back, edit/back, and delete/back.
 
 ---
 
