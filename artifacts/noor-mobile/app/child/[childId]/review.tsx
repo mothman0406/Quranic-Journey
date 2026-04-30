@@ -51,6 +51,26 @@ type CompletedDaySection = {
 
 const REVIEW_LOOKAHEAD_DAYS = 45;
 
+function serializableReviewItem(item: ReviewQueueItem) {
+  return {
+    id: item.id,
+    surahId: item.surahId,
+    surahName: item.surahName,
+    surahNumber: item.surahNumber,
+    ayahStart: item.ayahStart,
+    ayahEnd: item.ayahEnd,
+    pageStart: item.pageStart,
+    pageEnd: item.pageEnd,
+    chunkIndex: item.chunkIndex,
+    chunkCount: item.chunkCount,
+    isPartialReview: item.isPartialReview,
+    dueDate: item.dueDate,
+    isOverdue: item.isOverdue,
+    isWeak: item.isWeak,
+    reviewPriority: item.reviewPriority,
+  };
+}
+
 function formatAyahRange(item: ReviewQueueItem) {
   return item.ayahStart === item.ayahEnd
     ? `Ayah ${item.ayahStart}`
@@ -605,15 +625,30 @@ function ReviewCard({
   item,
   onPress,
   variant = "due",
+  batchState,
 }: {
   item: ReviewQueueItem;
   onPress?: () => void;
   variant?: "due" | "upcoming" | "reviewed";
+  batchState?: {
+    active: boolean;
+    selected: boolean;
+    neighbor: boolean;
+    canToggle: boolean;
+    onToggle: () => void;
+  };
 }) {
   const pageLabel = formatPageRange(item);
   const priorityStyle = getReviewPriorityStyle(item.reviewPriority);
   const isReviewed = variant === "reviewed";
   const isUpcoming = variant === "upcoming";
+  const isBatchMode = !!batchState;
+  const cardPress =
+    isBatchMode && batchState.active
+      ? batchState.canToggle
+        ? batchState.onToggle
+        : undefined
+      : onPress;
   const statusLabel = isReviewed
     ? "Reviewed"
     : isUpcoming
@@ -630,10 +665,13 @@ function ReviewCard({
           backgroundColor: priorityStyle.cardBg,
           borderColor: priorityStyle.border,
         },
-        !onPress && styles.cardReadOnly,
+        batchState?.selected && styles.cardSelectedForBatch,
+        batchState?.neighbor && styles.cardNeighborForBatch,
+        isBatchMode && !batchState.canToggle && styles.cardBlockedForBatch,
+        !cardPress && styles.cardReadOnly,
       ]}
-      onPress={onPress}
-      disabled={!onPress}
+      onPress={cardPress}
+      disabled={!cardPress}
     >
       <View style={[styles.priorityRail, { backgroundColor: priorityStyle.text }]} />
       <View style={styles.cardTop}>
@@ -645,6 +683,25 @@ function ReviewCard({
           <Text style={styles.chunkBadge}>
             {item.chunkIndex} of {item.chunkCount}
           </Text>
+        )}
+        {batchState && (
+          <Pressable
+            style={[
+              styles.batchSelectCircle,
+              batchState.selected && styles.batchSelectCircleSelected,
+              batchState.neighbor && styles.batchSelectCircleNeighbor,
+              !batchState.canToggle && styles.batchSelectCircleDisabled,
+            ]}
+            onPress={(event) => {
+              event.stopPropagation();
+              if (batchState.canToggle) batchState.onToggle();
+            }}
+            disabled={!batchState.canToggle}
+          >
+            {batchState.selected ? (
+              <Ionicons name="checkmark" size={14} color="#ffffff" />
+            ) : null}
+          </Pressable>
         )}
       </View>
       <View style={styles.cardMetaRow}>
@@ -667,7 +724,82 @@ function ReviewCard({
       {isUpcoming && (
         <Text style={styles.upcomingDate}>Due {formatDueDate(item.dueDate)}</Text>
       )}
+      {batchState?.active && (
+        <Text
+          style={[
+            styles.batchCardHint,
+            batchState.selected && styles.batchCardHintSelected,
+          ]}
+        >
+          {batchState.selected
+            ? "Included"
+            : batchState.neighbor
+            ? "Next to select"
+            : "Outside connected run"}
+        </Text>
+      )}
     </Pressable>
+  );
+}
+
+function ReviewBatchPicker({
+  selectedCount,
+  totalCount,
+  startName,
+  allSelected,
+  onToggleAll,
+  onClear,
+  onStart,
+}: {
+  selectedCount: number;
+  totalCount: number;
+  startName?: string | null;
+  allSelected: boolean;
+  onToggleAll: () => void;
+  onClear: () => void;
+  onStart: () => void;
+}) {
+  const hasSelection = selectedCount > 0;
+
+  return (
+    <View style={styles.batchCard}>
+      <View style={styles.batchHeader}>
+        <View style={styles.batchTitleWrap}>
+          <Text style={styles.batchTitle}>Review A Few Together</Text>
+          <Text style={styles.batchDetail}>Connected Mushaf run</Text>
+        </View>
+        <Pressable style={styles.batchHeaderButton} onPress={onToggleAll}>
+          <Text style={styles.batchHeaderButtonText}>
+            {allSelected ? "Clear All" : "Select All"}
+          </Text>
+        </Pressable>
+      </View>
+
+      {hasSelection ? (
+        <View style={styles.batchSelectionPanel}>
+          <View style={styles.batchSelectionText}>
+            <Text style={styles.batchSelectionTitle}>
+              {selectedCount}/{totalCount} selected
+            </Text>
+            <Text style={styles.batchSelectionDetail} numberOfLines={1}>
+              {startName ? `Starts with ${startName}` : "Ready to start"}
+            </Text>
+          </View>
+          <View style={styles.batchActions}>
+            <Pressable style={styles.batchStartButton} onPress={onStart}>
+              <Text style={styles.batchStartButtonText}>Start Mushaf</Text>
+            </Pressable>
+            <Pressable style={styles.batchClearButton} onPress={onClear}>
+              <Text style={styles.batchClearButtonText}>Clear</Text>
+            </Pressable>
+          </View>
+        </View>
+      ) : (
+        <View style={styles.batchEmptyPanel}>
+          <Text style={styles.batchEmptyText}>Pick a starting card.</Text>
+        </View>
+      )}
+    </View>
   );
 }
 
@@ -682,6 +814,7 @@ export default function ReviewScreen() {
     CompletedDaySection[]
   >([]);
   const [nextOpenReviewDate, setNextOpenReviewDate] = useState<string | null>(null);
+  const [selectedMushafSurahIds, setSelectedMushafSurahIds] = useState<number[]>([]);
 
   const [state, setState] = useState<
     | { status: "loading" }
@@ -766,23 +899,28 @@ export default function ReviewScreen() {
     }, [childId, load, todayLocal]),
   );
 
-  function handleCardPress(item: ReviewQueueItem) {
+  function handleCardPress(item: ReviewQueueItem, batchItems?: ReviewQueueItem[]) {
+    const params: { childId: string; [key: string]: string } = {
+      childId,
+      name: name ?? "",
+      surahId: String(item.surahId),
+      surahNumber: String(item.surahNumber),
+      surahName: item.surahName ?? "",
+      ayahStart: String(item.ayahStart),
+      ayahEnd: String(item.ayahEnd),
+      pageStart: String(item.pageStart),
+      pageEnd: String(item.pageEnd),
+      chunkIndex: String(item.chunkIndex),
+      chunkCount: String(item.chunkCount),
+      reviewDate: activeLocalDate,
+    };
+    if (batchItems && batchItems.length > 1) {
+      params.batchQueue = JSON.stringify(batchItems.map(serializableReviewItem));
+    }
+
     router.push({
       pathname: "/child/[childId]/review-session",
-      params: {
-        childId,
-        name: name ?? "",
-        surahId: String(item.surahId),
-        surahNumber: String(item.surahNumber),
-        surahName: item.surahName ?? "",
-        ayahStart: String(item.ayahStart),
-        ayahEnd: String(item.ayahEnd),
-        pageStart: String(item.pageStart),
-        pageEnd: String(item.pageEnd),
-        chunkIndex: String(item.chunkIndex),
-        chunkCount: String(item.chunkCount),
-        reviewDate: activeLocalDate,
-      },
+      params,
     });
   }
 
@@ -840,6 +978,88 @@ export default function ReviewScreen() {
             const isFullyEmpty =
               dueToday.length === 0 && reviewedToday.length === 0 && upcoming.length === 0;
             const isCompleteToday = dueToday.length === 0 && reviewedToday.length > 0;
+            const pendingIds = new Set(dueToday.map((item) => item.surahId));
+            const activeSelectedIds = selectedMushafSurahIds.filter((surahId) =>
+              pendingIds.has(surahId),
+            );
+            const hasBatchSelection = activeSelectedIds.length > 0;
+            const selectedPendingIndices = dueToday.reduce<number[]>(
+              (acc, item, index) => {
+                if (activeSelectedIds.includes(item.surahId)) {
+                  acc.push(index);
+                }
+                return acc;
+              },
+              [],
+            );
+            const selectedBatchStartIndex = selectedPendingIndices[0] ?? null;
+            const selectedBatchEndIndex =
+              selectedPendingIndices[selectedPendingIndices.length - 1] ?? null;
+            const selectedBatchItems = dueToday.filter((item) =>
+              activeSelectedIds.includes(item.surahId),
+            );
+            const selectedBatchStartItem = selectedBatchItems[0] ?? null;
+            const batchNeighborIndices = new Set<number>();
+            if (selectedBatchStartIndex !== null && selectedBatchStartIndex > 0) {
+              batchNeighborIndices.add(selectedBatchStartIndex - 1);
+            }
+            if (
+              selectedBatchEndIndex !== null &&
+              selectedBatchEndIndex < dueToday.length - 1
+            ) {
+              batchNeighborIndices.add(selectedBatchEndIndex + 1);
+            }
+            const toggleBatchSelection = (itemIndex: number) => {
+              const item = dueToday[itemIndex];
+              if (!item) return;
+
+              setSelectedMushafSurahIds((prev) => {
+                const currentIds = prev.filter((surahId) => pendingIds.has(surahId));
+                const orderedSelectedIndices = dueToday.reduce<number[]>(
+                  (acc, pendingItem, pendingIndex) => {
+                    if (currentIds.includes(pendingItem.surahId)) {
+                      acc.push(pendingIndex);
+                    }
+                    return acc;
+                  },
+                  [],
+                );
+                const isSelected = currentIds.includes(item.surahId);
+
+                if (orderedSelectedIndices.length === 0) {
+                  return [item.surahId];
+                }
+
+                const firstIndex = orderedSelectedIndices[0]!;
+                const lastIndex = orderedSelectedIndices[orderedSelectedIndices.length - 1]!;
+
+                if (isSelected) {
+                  if (orderedSelectedIndices.length === 1) return [];
+                  if (itemIndex === firstIndex) {
+                    return dueToday
+                      .slice(firstIndex + 1, lastIndex + 1)
+                      .map((pendingItem) => pendingItem.surahId);
+                  }
+                  if (itemIndex === lastIndex) {
+                    return dueToday
+                      .slice(firstIndex, lastIndex)
+                      .map((pendingItem) => pendingItem.surahId);
+                  }
+                  return currentIds;
+                }
+
+                if (itemIndex === firstIndex - 1 || itemIndex === lastIndex + 1) {
+                  return dueToday
+                    .slice(
+                      Math.min(itemIndex, firstIndex),
+                      Math.max(itemIndex, lastIndex) + 1,
+                    )
+                    .map((pendingItem) => pendingItem.surahId);
+                }
+
+                return currentIds;
+              });
+            };
 
             return (
               <>
@@ -859,11 +1079,51 @@ export default function ReviewScreen() {
                         ? "Due Today"
                         : `Due ${activeDateLabel}`}
                     </SectionLabel>
+                    {dueToday.length > 1 && (
+                      <ReviewBatchPicker
+                        selectedCount={activeSelectedIds.length}
+                        totalCount={dueToday.length}
+                        startName={selectedBatchStartItem?.surahName}
+                        allSelected={activeSelectedIds.length === dueToday.length}
+                        onToggleAll={() =>
+                          setSelectedMushafSurahIds(
+                            activeSelectedIds.length === dueToday.length
+                              ? []
+                              : dueToday.map((item) => item.surahId),
+                          )
+                        }
+                        onClear={() => setSelectedMushafSurahIds([])}
+                        onStart={() => {
+                          if (selectedBatchItems.length === 0) return;
+                          setSelectedMushafSurahIds([]);
+                          handleCardPress(selectedBatchItems[0]!, selectedBatchItems);
+                        }}
+                      />
+                    )}
                     {dueToday.map((item, index) => (
                       <ReviewCard
                         key={itemKey("due", item, index)}
                         item={item}
-                        onPress={() => handleCardPress(item)}
+                        onPress={
+                          hasBatchSelection
+                            ? undefined
+                            : () => handleCardPress(item)
+                        }
+                        batchState={
+                          dueToday.length > 1
+                            ? {
+                                active: hasBatchSelection,
+                                selected: activeSelectedIds.includes(item.surahId),
+                                neighbor:
+                                  hasBatchSelection && batchNeighborIndices.has(index),
+                                canToggle:
+                                  !hasBatchSelection ||
+                                  activeSelectedIds.includes(item.surahId) ||
+                                  batchNeighborIndices.has(index),
+                                onToggle: () => toggleBatchSelection(index),
+                              }
+                            : undefined
+                        }
                       />
                     ))}
                   </>
@@ -1187,6 +1447,111 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: "800",
   },
+  batchCard: {
+    backgroundColor: "#ffffff",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#dbeafe",
+    padding: 14,
+    gap: 12,
+  },
+  batchHeader: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+  batchTitleWrap: {
+    flex: 1,
+    gap: 2,
+  },
+  batchTitle: {
+    color: "#111111",
+    fontSize: 15,
+    fontWeight: "800",
+  },
+  batchDetail: {
+    color: "#555555",
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  batchHeaderButton: {
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "#bfdbfe",
+    backgroundColor: "#eff6ff",
+    paddingVertical: 7,
+    paddingHorizontal: 11,
+  },
+  batchHeaderButtonText: {
+    color: "#1d4ed8",
+    fontSize: 12,
+    fontWeight: "800",
+  },
+  batchSelectionPanel: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    borderRadius: 11,
+    borderWidth: 1,
+    borderColor: "#bfdbfe",
+    backgroundColor: "#eff6ff",
+    padding: 11,
+  },
+  batchSelectionText: {
+    flex: 1,
+    gap: 2,
+  },
+  batchSelectionTitle: {
+    color: "#1e3a8a",
+    fontSize: 14,
+    fontWeight: "800",
+  },
+  batchSelectionDetail: {
+    color: "#1d4ed8",
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  batchActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  batchStartButton: {
+    backgroundColor: "#2563eb",
+    borderRadius: 999,
+    paddingVertical: 9,
+    paddingHorizontal: 12,
+  },
+  batchStartButtonText: {
+    color: "#ffffff",
+    fontSize: 12,
+    fontWeight: "800",
+  },
+  batchClearButton: {
+    borderRadius: 999,
+    paddingVertical: 9,
+    paddingHorizontal: 6,
+  },
+  batchClearButtonText: {
+    color: "#1d4ed8",
+    fontSize: 12,
+    fontWeight: "800",
+  },
+  batchEmptyPanel: {
+    borderRadius: 11,
+    borderWidth: 1,
+    borderStyle: "dashed",
+    borderColor: "#d1d5db",
+    backgroundColor: "#f9fafb",
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+  },
+  batchEmptyText: {
+    color: "#666666",
+    fontSize: 12,
+    fontWeight: "700",
+  },
   card: {
     backgroundColor: "#f9fafb",
     borderRadius: 12,
@@ -1199,6 +1564,17 @@ const styles = StyleSheet.create({
   },
   cardReadOnly: {
     opacity: 0.95,
+  },
+  cardSelectedForBatch: {
+    borderColor: "#2563eb",
+    backgroundColor: "#eff6ff",
+  },
+  cardNeighborForBatch: {
+    borderColor: "#93c5fd",
+    backgroundColor: "#f8fbff",
+  },
+  cardBlockedForBatch: {
+    opacity: 0.72,
   },
   priorityRail: {
     position: "absolute",
@@ -1222,6 +1598,28 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: "#666666",
     fontWeight: "500",
+  },
+  batchSelectCircle: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#93c5fd",
+    backgroundColor: "#ffffff",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  batchSelectCircleSelected: {
+    backgroundColor: "#2563eb",
+    borderColor: "#2563eb",
+  },
+  batchSelectCircleNeighbor: {
+    borderColor: "#2563eb",
+    backgroundColor: "#eff6ff",
+  },
+  batchSelectCircleDisabled: {
+    borderColor: "#d1d5db",
+    backgroundColor: "#f3f4f6",
   },
   cardMetaRow: {
     flexDirection: "row",
@@ -1247,6 +1645,14 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: "#555555",
     fontWeight: "600",
+  },
+  batchCardHint: {
+    color: "#666666",
+    fontSize: 11,
+    fontWeight: "800",
+  },
+  batchCardHintSelected: {
+    color: "#1d4ed8",
   },
   moreQueuedText: {
     textAlign: "center",

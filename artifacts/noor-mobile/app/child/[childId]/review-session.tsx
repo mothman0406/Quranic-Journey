@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -32,6 +32,73 @@ const QUALITY_OPTIONS: { rating: number; label: string; color: string }[] = [
   { rating: 5, label: "Excellent", color: "#16a34a" },
 ];
 
+type ReviewSessionQueueItem = {
+  id: number;
+  surahId: number;
+  surahName: string | null;
+  surahNumber: number;
+  ayahStart: number;
+  ayahEnd: number;
+  pageStart: number;
+  pageEnd: number;
+  chunkIndex: number;
+  chunkCount: number;
+};
+
+function finiteNumber(value: unknown, fallback: number) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function normalizeQueueItem(value: unknown): ReviewSessionQueueItem | null {
+  if (!value || typeof value !== "object") return null;
+  const record = value as Record<string, unknown>;
+  const surahId = finiteNumber(record.surahId, 0);
+  const surahNumber = finiteNumber(record.surahNumber, 0);
+  const ayahStart = finiteNumber(record.ayahStart, 1);
+  const ayahEnd = finiteNumber(record.ayahEnd, ayahStart);
+  const pageStart = finiteNumber(record.pageStart, 1);
+  const pageEnd = finiteNumber(record.pageEnd, pageStart);
+
+  if (!surahId || !surahNumber) return null;
+
+  return {
+    id: finiteNumber(record.id, surahId),
+    surahId,
+    surahName: typeof record.surahName === "string" ? record.surahName : null,
+    surahNumber,
+    ayahStart,
+    ayahEnd,
+    pageStart,
+    pageEnd,
+    chunkIndex: finiteNumber(record.chunkIndex, 1),
+    chunkCount: finiteNumber(record.chunkCount, 1),
+  };
+}
+
+function parseReviewBatchQueue(
+  batchQueue: string | undefined,
+  fallbackItem: ReviewSessionQueueItem,
+) {
+  if (!batchQueue) return [fallbackItem];
+  try {
+    const parsed = JSON.parse(batchQueue) as unknown;
+    if (!Array.isArray(parsed)) return [fallbackItem];
+    const queue = parsed
+      .map((item) => normalizeQueueItem(item))
+      .filter((item): item is ReviewSessionQueueItem => !!item);
+    return queue.length > 0 ? queue : [fallbackItem];
+  } catch {
+    return [fallbackItem];
+  }
+}
+
+function queueKey(queue: ReviewSessionQueueItem[]) {
+  return queue
+    .map((item) => `${item.surahId}:${item.ayahStart}:${item.ayahEnd}:${item.pageStart}`)
+    .join("|");
+}
+
 function formatRate(rate: number) {
   return rate === 1 ? "1x" : `${rate}x`;
 }
@@ -53,6 +120,7 @@ export default function ReviewSession() {
     pageStart,
     pageEnd,
     reviewDate,
+    batchQueue,
   } = useLocalSearchParams<{
     childId: string;
     surahId: string;
@@ -65,15 +133,45 @@ export default function ReviewSession() {
     chunkIndex: string;
     chunkCount: string;
     reviewDate?: string;
+    batchQueue?: string;
   }>();
 
-  const ayahStartN = Number(ayahStart);
-  const ayahEndN = Number(ayahEnd);
-  const pageStartN = Number(pageStart);
-  const pageEndN = Number(pageEnd);
-  const surahNumberN = Number(surahNumber);
-  const surahIdN = Number(surahId);
+  const fallbackQueueItem = useMemo<ReviewSessionQueueItem>(
+    () => ({
+      id: finiteNumber(surahId, 0),
+      surahId: finiteNumber(surahId, 0),
+      surahName: surahName || null,
+      surahNumber: finiteNumber(surahNumber, 0),
+      ayahStart: finiteNumber(ayahStart, 1),
+      ayahEnd: finiteNumber(ayahEnd, finiteNumber(ayahStart, 1)),
+      pageStart: finiteNumber(pageStart, 1),
+      pageEnd: finiteNumber(pageEnd, finiteNumber(pageStart, 1)),
+      chunkIndex: 1,
+      chunkCount: 1,
+    }),
+    [ayahEnd, ayahStart, pageEnd, pageStart, surahId, surahName, surahNumber],
+  );
+  const routeQueue = useMemo(
+    () => parseReviewBatchQueue(batchQueue, fallbackQueueItem),
+    [batchQueue, fallbackQueueItem],
+  );
+  const routeQueueKey = useMemo(() => queueKey(routeQueue), [routeQueue]);
+  const [sessionQueue, setSessionQueue] = useState(routeQueue);
+  const [queueIndex, setQueueIndex] = useState(0);
+  const currentQueueItem = sessionQueue[queueIndex] ?? sessionQueue[0] ?? fallbackQueueItem;
+
+  const ayahStartN = currentQueueItem.ayahStart;
+  const ayahEndN = currentQueueItem.ayahEnd;
+  const pageStartN = currentQueueItem.pageStart;
+  const pageEndN = currentQueueItem.pageEnd;
+  const surahNumberN = currentQueueItem.surahNumber;
+  const surahIdN = currentQueueItem.surahId;
   const totalAyahs = ayahEndN - ayahStartN + 1;
+  const isBatchSession = sessionQueue.length > 1;
+  const queuePosition = queueIndex + 1;
+  const queueTotal = sessionQueue.length;
+  const nextQueueItem = sessionQueue[queueIndex + 1] ?? null;
+  const hasNextQueueItem = !!nextQueueItem;
 
   const screenW = Dimensions.get("window").width;
   const imageWidth = screenW - 32;
@@ -98,8 +196,23 @@ export default function ReviewSession() {
   const selectedReciter = findReciter(reciterId);
 
   useEffect(() => {
+    setSessionQueue(routeQueue);
+    setQueueIndex(0);
+  }, [routeQueue, routeQueueKey]);
+
+  useEffect(() => {
     currentAyahRef.current = currentAyah;
   }, [currentAyah]);
+
+  useEffect(() => {
+    currentAyahRef.current = ayahStartN;
+    setCurrentAyah(ayahStartN);
+    setAudioError(null);
+    setSubmitError(null);
+    setSelectedRating(null);
+    setRatingModalVisible(false);
+    void stopAudio();
+  }, [ayahStartN, ayahEndN, pageStartN, pageEndN, surahIdN]);
 
   useEffect(() => {
     playbackRateRef.current = playbackRate;
@@ -213,6 +326,19 @@ export default function ReviewSession() {
     setRatingModalVisible(true);
   }
 
+  async function advanceQueue() {
+    await stopAudio();
+    setSelectedRating(null);
+    setSubmitError(null);
+    setRatingModalVisible(false);
+    setQueueIndex((index) => Math.min(index + 1, sessionQueue.length - 1));
+  }
+
+  async function handleSkipSurah() {
+    if (!hasNextQueueItem) return;
+    await advanceQueue();
+  }
+
   async function handleSubmit() {
     if (selectedRating === null) return;
     setSubmitting(true);
@@ -221,7 +347,16 @@ export default function ReviewSession() {
       await submitReview(childId, surahIdN, selectedRating, reviewDate);
       await stopAudio();
       setRatingModalVisible(false);
-      Alert.alert("Review saved!", undefined, [{ text: "OK", onPress: () => router.back() }]);
+      setSelectedRating(null);
+      if (hasNextQueueItem) {
+        setQueueIndex((index) => Math.min(index + 1, sessionQueue.length - 1));
+      } else {
+        Alert.alert(
+          isBatchSession ? "Review batch saved!" : "Review saved!",
+          undefined,
+          [{ text: "OK", onPress: () => router.back() }],
+        );
+      }
     } catch (e) {
       setSubmitError(e instanceof Error ? e.message : "Submission failed");
     } finally {
@@ -229,7 +364,8 @@ export default function ReviewSession() {
     }
   }
 
-  const headerTitle = `${surahName || `Surah ${surahNumberN}`} · Ayahs ${ayahStartN}-${ayahEndN}`;
+  const currentSurahName = currentQueueItem.surahName || `Surah ${surahNumberN}`;
+  const headerTitle = `${currentSurahName} · Ayahs ${ayahStartN}-${ayahEndN}`;
   const pageLabel =
     pageStartN === pageEndN ? `Page ${pageStartN}` : `Pages ${pageStartN}-${pageEndN}`;
   const currentAyahIndex = Math.max(1, currentAyah - ayahStartN + 1);
@@ -243,7 +379,13 @@ export default function ReviewSession() {
         <Text style={styles.headerTitle} numberOfLines={1}>
           {headerTitle}
         </Text>
-        <View style={styles.headerSpacer} />
+        {isBatchSession ? (
+          <Text style={styles.headerQueue}>
+            {queuePosition}/{queueTotal}
+          </Text>
+        ) : (
+          <View style={styles.headerSpacer} />
+        )}
       </View>
 
       <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent}>
@@ -252,13 +394,24 @@ export default function ReviewSession() {
             <Ionicons name="book-outline" size={20} color="#2563eb" />
           </View>
           <View style={styles.sessionText}>
-            <Text style={styles.sessionKicker}>Review range</Text>
-            <Text style={styles.sessionTitle}>{surahName || `Surah ${surahNumberN}`}</Text>
+            <Text style={styles.sessionKicker}>
+              {isBatchSession ? `Review ${queuePosition} of ${queueTotal}` : "Review range"}
+            </Text>
+            <Text style={styles.sessionTitle}>{currentSurahName}</Text>
             <Text style={styles.sessionDetail}>
               Ayahs {ayahStartN}-{ayahEndN} · {pageLabel}
             </Text>
           </View>
         </View>
+
+        {nextQueueItem && (
+          <View style={styles.nextQueueCard}>
+            <Ionicons name="arrow-forward-circle-outline" size={18} color="#2563eb" />
+            <Text style={styles.nextQueueText} numberOfLines={1}>
+              Next: {nextQueueItem.surahName || `Surah ${nextQueueItem.surahNumber}`}
+            </Text>
+          </View>
+        )}
 
         {audioError ? (
           <View style={styles.audioError}>
@@ -293,6 +446,7 @@ export default function ReviewSession() {
         <View style={styles.controlStatus}>
           <View>
             <Text style={styles.verseCounter}>
+              {isBatchSession ? `Queue ${queuePosition}/${queueTotal} · ` : ""}
               Verse {currentAyahIndex} of {totalAyahs}
             </Text>
             <Text style={styles.audioMeta} numberOfLines={1}>
@@ -407,6 +561,15 @@ export default function ReviewSession() {
         <Pressable style={styles.backdrop} onPress={() => setRatingModalVisible(false)} />
         <View style={styles.sheet}>
           <Text style={styles.sheetTitle}>How did it go?</Text>
+          {isBatchSession && (
+            <Text style={styles.sheetDetail}>
+              {hasNextQueueItem
+                ? `Next up: ${
+                    nextQueueItem.surahName || `Surah ${nextQueueItem.surahNumber}`
+                  }`
+                : "Last surah in this run"}
+            </Text>
+          )}
           {QUALITY_OPTIONS.map((opt) => (
             <Pressable
               key={opt.rating}
@@ -425,6 +588,15 @@ export default function ReviewSession() {
           ))}
           {submitError && (
             <Text style={styles.submitError}>{submitError}</Text>
+          )}
+          {hasNextQueueItem && (
+            <Pressable
+              style={[styles.skipButton, submitting && styles.skipButtonDisabled]}
+              onPress={handleSkipSurah}
+              disabled={submitting}
+            >
+              <Text style={styles.skipButtonText}>Skip This Surah</Text>
+            </Pressable>
           )}
           <Pressable
             style={[
@@ -472,6 +644,13 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: "600",
     color: "#111111",
+  },
+  headerQueue: {
+    width: 60,
+    textAlign: "right",
+    fontSize: 13,
+    color: "#2563eb",
+    fontWeight: "800",
   },
   headerSpacer: {
     width: 60,
@@ -523,6 +702,24 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: "#555555",
     fontWeight: "600",
+  },
+  nextQueueCard: {
+    width: "100%",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#bfdbfe",
+    backgroundColor: "#eff6ff",
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+  },
+  nextQueueText: {
+    flex: 1,
+    color: "#1d4ed8",
+    fontSize: 12,
+    fontWeight: "800",
   },
   audioError: {
     width: "100%",
@@ -639,6 +836,14 @@ const styles = StyleSheet.create({
     marginBottom: 6,
     textAlign: "center",
   },
+  sheetDetail: {
+    color: "#555555",
+    fontSize: 13,
+    fontWeight: "700",
+    textAlign: "center",
+    marginTop: -4,
+    marginBottom: 2,
+  },
   settingLabel: {
     fontSize: 15,
     color: "#111111",
@@ -738,6 +943,23 @@ const styles = StyleSheet.create({
     color: "#dc2626",
     fontSize: 13,
     textAlign: "center",
+  },
+  skipButton: {
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+    backgroundColor: "#ffffff",
+    paddingVertical: 13,
+    alignItems: "center",
+    marginTop: 2,
+  },
+  skipButtonDisabled: {
+    opacity: 0.5,
+  },
+  skipButtonText: {
+    color: "#555555",
+    fontSize: 15,
+    fontWeight: "800",
   },
   submitButton: {
     backgroundColor: "#2563eb",
