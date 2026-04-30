@@ -1355,6 +1355,125 @@ export default function MemorizationScreen() {
     await seekToWordPosition(position);
   }
 
+  async function replayPlaybackVerseFromStart(verseNum: number) {
+    if (isLoadingRef.current) return;
+    if (advanceTimeoutRef.current) {
+      clearTimeout(advanceTimeoutRef.current);
+      advanceTimeoutRef.current = null;
+    }
+    cancelAnimationFrame(rafIdRef.current);
+    setHighlightedWord(-1);
+    setHighlightedPage(null);
+    positionRef.current = 0;
+
+    if (soundRef.current) {
+      try {
+        await soundRef.current.setPositionAsync(0);
+        await soundRef.current.playAsync();
+        isPlayingRef.current = true;
+        setIsPlaying(true);
+        startRAF();
+        return;
+      } catch {
+        try {
+          await soundRef.current.unloadAsync();
+        } catch {
+          // ignore broken sound instance; playVerse will create a fresh one
+        }
+        soundRef.current = null;
+      }
+    }
+
+    await playVerse(verseNum);
+  }
+
+  function advanceAfterCumulativeSkip() {
+    setInternalPhase("single");
+    internalPhaseRef.current = "single";
+    if (
+      ayahEndRef.current !== null &&
+      currentVerseRef.current < ayahEndRef.current
+    ) {
+      autoPlayRef.current = true;
+      setCurrentVerse((v) => v + 1);
+    } else {
+      handleSessionComplete();
+    }
+  }
+
+  async function handleSkipRepeat() {
+    if (reciteModeRef.current || submitting || isLoadingRef.current) return;
+    if (advanceTimeoutRef.current) {
+      clearTimeout(advanceTimeoutRef.current);
+      advanceTimeoutRef.current = null;
+    }
+
+    if (internalPhaseRef.current === "cumulative") {
+      const fromA = ayahStartRef.current;
+      if (fromA === null) return;
+      const nextPass = cumPassRef.current + 1;
+      await stopAudioCompletely();
+      setCurrentRepeat(1);
+
+      if (nextPass <= reviewRepeatCountRef.current) {
+        const wasAtFirstCumulativeAyah = cumAyahIdxRef.current === 0;
+        setCumAyahIdx(0);
+        cumAyahIdxRef.current = 0;
+        setCumPass(nextPass);
+        cumPassRef.current = nextPass;
+
+        if (wasAtFirstCumulativeAyah) {
+          autoPlayRef.current = false;
+          await playVerse(fromA);
+        } else {
+          autoPlayRef.current = true;
+        }
+        return;
+      }
+
+      advanceAfterCumulativeSkip();
+      return;
+    }
+
+    const totalRepeats = repeatCountRef.current;
+    if (totalRepeats <= 1) return;
+
+    if (currentRepeatRef.current < totalRepeats) {
+      setCurrentRepeat(currentRepeatRef.current + 1);
+      await replayPlaybackVerseFromStart(playingVerseNumberRef.current);
+      return;
+    }
+
+    await stopAudioCompletely();
+    setCurrentRepeat(1);
+    handleAllRepeatsDone();
+  }
+
+  async function handleSkipAyah() {
+    if (reciteModeRef.current || submitting || isLoadingRef.current) return;
+    if (ayahEndRef.current === null) return;
+    if (advanceTimeoutRef.current) {
+      clearTimeout(advanceTimeoutRef.current);
+      advanceTimeoutRef.current = null;
+    }
+
+    await stopAudioCompletely();
+    setCurrentRepeat(1);
+
+    if (internalPhaseRef.current === "cumulative") {
+      advanceAfterCumulativeSkip();
+      return;
+    }
+
+    if (currentVerseRef.current < ayahEndRef.current) {
+      autoPlayRef.current = true;
+      setCurrentVerse((v) => v + 1);
+      return;
+    }
+
+    handleSessionComplete();
+  }
+
   function handlePrev() {
     if (advanceTimeoutRef.current) {
       clearTimeout(advanceTimeoutRef.current);
@@ -2212,6 +2331,10 @@ export default function MemorizationScreen() {
     internalPhase === "cumulative" ||
     canEnterCumulativeFromSingle ||
     (ayahEnd !== null && currentVerse < ayahEnd);
+  const canSkipRepeat = !reciteMode && !submitting && (
+    internalPhase === "cumulative" || repeatCount > 1
+  );
+  const canSkipAyah = !reciteMode && !submitting && ayahEnd !== null;
   const activeMushafPage = useMemo(() => {
     if (surahNumber === null) return null;
     const mappedPage = versePageMap.get(playingVerseNumber) ?? versePageMap.get(currentVerse);
@@ -2467,6 +2590,54 @@ export default function MemorizationScreen() {
             disabled={!canNext}
           >
             <Text style={styles.navButtonText}>Next ›</Text>
+          </Pressable>
+        </View>
+
+        <View style={styles.skipControls}>
+          <Pressable
+            style={[
+              styles.skipControlButton,
+              !canSkipRepeat && styles.skipControlButtonDisabled,
+            ]}
+            onPress={handleSkipRepeat}
+            disabled={!canSkipRepeat}
+            accessibilityRole="button"
+            accessibilityLabel="Skip repeat"
+          >
+            <Ionicons
+              name="play-forward-outline"
+              size={17}
+              color={canSkipRepeat ? "#2563eb" : "#9ca3af"}
+            />
+            <Text style={[
+              styles.skipControlText,
+              !canSkipRepeat && styles.skipControlTextDisabled,
+            ]}>
+              Skip Repeat
+            </Text>
+          </Pressable>
+
+          <Pressable
+            style={[
+              styles.skipControlButton,
+              !canSkipAyah && styles.skipControlButtonDisabled,
+            ]}
+            onPress={handleSkipAyah}
+            disabled={!canSkipAyah}
+            accessibilityRole="button"
+            accessibilityLabel="Skip ayah"
+          >
+            <Ionicons
+              name="play-skip-forward-outline"
+              size={17}
+              color={canSkipAyah ? "#2563eb" : "#9ca3af"}
+            />
+            <Text style={[
+              styles.skipControlText,
+              !canSkipAyah && styles.skipControlTextDisabled,
+            ]}>
+              Skip Ayah
+            </Text>
           </Pressable>
         </View>
 
@@ -5330,6 +5501,36 @@ const styles = StyleSheet.create({
   playButtonText: {
     color: "#ffffff",
     fontSize: 22,
+  },
+  skipControls: {
+    flexDirection: "row",
+    gap: 12,
+  },
+  skipControlButton: {
+    flex: 1,
+    minHeight: 44,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#bfdbfe",
+    backgroundColor: "#eff6ff",
+    paddingHorizontal: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+  },
+  skipControlButtonDisabled: {
+    borderColor: "#e5e7eb",
+    backgroundColor: "#f9fafb",
+    opacity: 0.65,
+  },
+  skipControlText: {
+    fontSize: 13,
+    fontWeight: "800",
+    color: "#1d4ed8",
+  },
+  skipControlTextDisabled: {
+    color: "#9ca3af",
   },
   completeButton: {
     width: "100%",
