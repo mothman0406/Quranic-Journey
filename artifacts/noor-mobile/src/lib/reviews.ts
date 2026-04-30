@@ -26,17 +26,28 @@ export type ReviewQueueResponse = {
   reviewedToday: ReviewQueueItem[];
 };
 
-export async function fetchReviewQueue(childId: string): Promise<ReviewQueueResponse> {
-  return apiFetch<ReviewQueueResponse>(`/api/children/${childId}/reviews`);
+function localDateHeaders(localDate?: string): HeadersInit | undefined {
+  return localDate ? { "x-local-date": localDate } : undefined;
+}
+
+export async function fetchReviewQueue(
+  childId: string,
+  localDate?: string,
+): Promise<ReviewQueueResponse> {
+  return apiFetch<ReviewQueueResponse>(`/api/children/${childId}/reviews`, {
+    headers: localDateHeaders(localDate),
+  });
 }
 
 export async function submitReview(
   childId: string,
   surahId: number,
   qualityRating: number,
+  localDate?: string,
 ): Promise<void> {
   await apiFetch(`/api/children/${childId}/reviews`, {
     method: "POST",
+    headers: localDateHeaders(localDate),
     body: JSON.stringify({
       surahId,
       qualityRating,

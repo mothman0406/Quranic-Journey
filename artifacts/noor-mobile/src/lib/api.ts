@@ -88,11 +88,14 @@ function readableErrorText(text: string, contentType: string | null) {
 export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const cookies = authClient.getCookie();
   const headers = new Headers(init?.headers);
-  const localDate = localDateHeader();
+  const defaultLocalDate = localDateHeader();
   if (!headers.has("Content-Type")) {
     headers.set("Content-Type", "application/json");
   }
-  headers.set("x-local-date", localDate);
+  if (!headers.has("x-local-date")) {
+    headers.set("x-local-date", defaultLocalDate);
+  }
+  const localDate = headers.get("x-local-date") ?? defaultLocalDate;
   if (cookies) {
     headers.set("Cookie", cookies);
   }

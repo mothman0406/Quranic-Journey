@@ -52,6 +52,7 @@ export default function ReviewSession() {
     ayahEnd,
     pageStart,
     pageEnd,
+    reviewDate,
   } = useLocalSearchParams<{
     childId: string;
     surahId: string;
@@ -63,6 +64,7 @@ export default function ReviewSession() {
     pageEnd: string;
     chunkIndex: string;
     chunkCount: string;
+    reviewDate?: string;
   }>();
 
   const ayahStartN = Number(ayahStart);
@@ -216,7 +218,7 @@ export default function ReviewSession() {
     setSubmitting(true);
     setSubmitError(null);
     try {
-      await submitReview(childId, surahIdN, selectedRating);
+      await submitReview(childId, surahIdN, selectedRating, reviewDate);
       await stopAudio();
       setRatingModalVisible(false);
       Alert.alert("Review saved!", undefined, [{ text: "OK", onPress: () => router.back() }]);

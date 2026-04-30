@@ -46,10 +46,41 @@ function startOfToday() {
   return new Date(now.getFullYear(), now.getMonth(), now.getDate());
 }
 
+function getLocalDateHeaderValue(date = new Date()) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function addDaysToLocalDate(value: string, days: number) {
+  const date = parseLocalDate(value);
+  if (!date) return value;
+  date.setDate(date.getDate() + days);
+  return getLocalDateHeaderValue(date);
+}
+
 function formatDueDate(value: string) {
   const date = parseLocalDate(value);
   if (!date) return value || "Scheduled";
   return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
+function formatReviewDayLabel(value: string) {
+  const date = parseLocalDate(value);
+  if (!date) return value || "this review day";
+  const diffDays = Math.round((date.getTime() - startOfToday().getTime()) / 86_400_000);
+  if (diffDays === 0) return "Today";
+  if (diffDays === 1) return "Tomorrow";
+  if (diffDays === -1) return "Yesterday";
+  return formatDueDate(value);
+}
+
+function formatReviewDayInSentence(label: string) {
+  if (label === "Today") return "today";
+  if (label === "Tomorrow") return "tomorrow";
+  if (label === "Yesterday") return "yesterday";
+  return label;
 }
 
 function formatRelativeDueDate(value: string) {
@@ -65,6 +96,18 @@ function formatRelativeDueDate(value: string) {
 
 function itemKey(prefix: string, item: ReviewQueueItem, index: number) {
   return `${prefix}-${item.id}-${item.surahId}-${item.ayahStart}-${index}`;
+}
+
+function findNextOpenReviewDate(activeLocalDate: string, upcoming: ReviewQueueItem[]) {
+  if (upcoming.length === 0) return null;
+
+  const nextScheduledDate =
+    upcoming
+      .map((item) => item.dueDate)
+      .filter((dueDate) => dueDate > activeLocalDate)
+      .sort()[0] ?? null;
+
+  return nextScheduledDate ?? addDaysToLocalDate(activeLocalDate, 1);
 }
 
 function PriorityPill({ priority }: { priority: string }) {
@@ -101,18 +144,20 @@ function QueueSummary({
   dueCount,
   reviewedCount,
   upcomingCount,
+  activeDateLabel,
 }: {
   dueCount: number;
   reviewedCount: number;
   upcomingCount: number;
+  activeDateLabel: string;
 }) {
   const summaryCopy =
     dueCount > 0
-      ? `${dueCount} review${dueCount === 1 ? "" : "s"} ready for today.`
+      ? `${dueCount} review${dueCount === 1 ? "" : "s"} ready for ${formatReviewDayInSentence(activeDateLabel)}.`
       : reviewedCount > 0
-      ? "Today's review queue is complete."
+      ? `${activeDateLabel}'s review queue is complete.`
       : upcomingCount > 0
-      ? "No reviews due today. The next queue is visible below."
+      ? `No reviews due for ${formatReviewDayInSentence(activeDateLabel)}. The next queue is visible below.`
       : "No reviews are scheduled yet.";
 
   return (
@@ -140,10 +185,14 @@ function DayStateCard({
   tone,
   title,
   detail,
+  actionLabel,
+  onAction,
 }: {
   tone: "complete" | "clear";
   title: string;
   detail: string;
+  actionLabel?: string;
+  onAction?: () => void;
 }) {
   const isComplete = tone === "complete";
   const color = isComplete ? "#047857" : "#0f766e";
@@ -162,6 +211,12 @@ function DayStateCard({
       <View style={styles.dayStateText}>
         <Text style={[styles.dayStateTitle, { color }]}>{title}</Text>
         <Text style={styles.dayStateDetail}>{detail}</Text>
+        {actionLabel && onAction ? (
+          <Pressable style={styles.dayStateAction} onPress={onAction}>
+            <Text style={styles.dayStateActionText}>{actionLabel}</Text>
+            <Ionicons name="arrow-forward" size={15} color="#ffffff" />
+          </Pressable>
+        ) : null}
       </View>
     </View>
   );
@@ -240,6 +295,8 @@ function ReviewCard({
 export default function ReviewScreen() {
   const { childId, name } = useLocalSearchParams<{ childId: string; name: string }>();
   const router = useRouter();
+  const todayLocal = getLocalDateHeaderValue();
+  const [activeLocalDate, setActiveLocalDate] = useState(todayLocal);
 
   const [state, setState] = useState<
     | { status: "loading" }
@@ -259,14 +316,14 @@ export default function ReviewScreen() {
       setRefreshing(true);
     }
     try {
-      const data = await fetchReviewQueue(childId);
+      const data = await fetchReviewQueue(childId, activeLocalDate);
       setState({ status: "ok", data });
     } catch (e) {
       setState({ status: "error", message: e instanceof Error ? e.message : "Failed to load" });
     } finally {
       setRefreshing(false);
     }
-  }, [childId]);
+  }, [activeLocalDate, childId]);
 
   useFocusEffect(
     useCallback(() => {
@@ -291,8 +348,14 @@ export default function ReviewScreen() {
         pageEnd: String(item.pageEnd),
         chunkIndex: String(item.chunkIndex),
         chunkCount: String(item.chunkCount),
+        reviewDate: activeLocalDate,
       },
     });
+  }
+
+  function handleContinueReviewing(nextDate: string) {
+    setState({ status: "loading" });
+    setActiveLocalDate(nextDate);
   }
 
   return (
@@ -325,6 +388,11 @@ export default function ReviewScreen() {
             const dueToday = state.data.dueToday ?? [];
             const upcoming = state.data.upcoming ?? [];
             const reviewedToday = state.data.reviewedToday ?? [];
+            const activeDateLabel = formatReviewDayLabel(activeLocalDate);
+            const nextOpenReviewDate = findNextOpenReviewDate(activeLocalDate, upcoming);
+            const nextOpenReviewLabel = nextOpenReviewDate
+              ? formatReviewDayLabel(nextOpenReviewDate)
+              : null;
             const isFullyEmpty =
               dueToday.length === 0 && reviewedToday.length === 0 && upcoming.length === 0;
             const isCompleteToday = dueToday.length === 0 && reviewedToday.length > 0;
@@ -335,11 +403,16 @@ export default function ReviewScreen() {
                   dueCount={dueToday.length}
                   reviewedCount={reviewedToday.length}
                   upcomingCount={upcoming.length}
+                  activeDateLabel={activeDateLabel}
                 />
 
                 {dueToday.length > 0 && (
                   <>
-                    <SectionLabel>Due Today</SectionLabel>
+                    <SectionLabel>
+                      {activeLocalDate === todayLocal
+                        ? "Due Today"
+                        : `Due ${activeDateLabel}`}
+                    </SectionLabel>
                     {dueToday.map((item, index) => (
                       <ReviewCard
                         key={itemKey("due", item, index)}
@@ -353,23 +426,47 @@ export default function ReviewScreen() {
                 {isCompleteToday && (
                   <DayStateCard
                     tone="complete"
-                    title="Today's review is complete"
-                    detail="The queue is clear. Finished items stay below for today's record."
+                    title={`${activeDateLabel}'s review is complete`}
+                    detail="The queue is clear. Finished items stay below for this review day."
+                    actionLabel={
+                      nextOpenReviewLabel
+                        ? `Continue Reviewing ${nextOpenReviewLabel}`
+                        : undefined
+                    }
+                    onAction={
+                      nextOpenReviewDate
+                        ? () => handleContinueReviewing(nextOpenReviewDate)
+                        : undefined
+                    }
                   />
                 )}
 
                 {dueToday.length === 0 && reviewedToday.length === 0 && upcoming.length > 0 && (
                   <DayStateCard
                     tone="clear"
-                    title="No reviews due today"
+                    title={`No reviews due ${formatReviewDayInSentence(activeDateLabel)}`}
                     detail={`Next scheduled review: ${formatDueDate(upcoming[0]!.dueDate)}.`}
+                    actionLabel={
+                      nextOpenReviewLabel
+                        ? `Continue Reviewing ${nextOpenReviewLabel}`
+                        : undefined
+                    }
+                    onAction={
+                      nextOpenReviewDate
+                        ? () => handleContinueReviewing(nextOpenReviewDate)
+                        : undefined
+                    }
                   />
                 )}
 
                 {reviewedToday.length > 0 && (
                   <>
                     <View style={dueToday.length > 0 ? styles.sectionWithSpace : undefined}>
-                      <SectionLabel>Reviewed Today</SectionLabel>
+                      <SectionLabel>
+                        {activeLocalDate === todayLocal
+                          ? "Reviewed Today"
+                          : `Reviewed ${activeDateLabel}`}
+                      </SectionLabel>
                     </View>
                     {reviewedToday.map((item, index) => (
                       <ReviewCard
@@ -527,6 +624,22 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 17,
     fontWeight: "600",
+  },
+  dayStateAction: {
+    alignSelf: "flex-start",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginTop: 8,
+    backgroundColor: "#111111",
+    borderRadius: 999,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+  },
+  dayStateActionText: {
+    color: "#ffffff",
+    fontSize: 12,
+    fontWeight: "800",
   },
   card: {
     backgroundColor: "#f9fafb",
