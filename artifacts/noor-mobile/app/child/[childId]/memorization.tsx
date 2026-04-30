@@ -497,6 +497,7 @@ export default function MemorizationScreen() {
   const scrollViewRef = useRef<ScrollView>(null);
   const lineLayoutMap = useRef<Map<string, number>>(new Map());
   const pageCardLayoutMap = useRef<Map<number, number>>(new Map());
+  const autoScrollRetryRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Recite refs (callbacks read these; state isn't visible inside listeners)
   const reciteModeRef = useRef(false);
@@ -929,35 +930,86 @@ export default function MemorizationScreen() {
     return () => { cancelled = true; };
   }, [chapterTimings, surahNumber, playingVerseNumber]);
 
-  // Auto-scroll to active verse on verse/mode change (page mode only, best-effort)
-  useEffect(() => {
-    if (viewMode !== "page" || pageStart === null || pageEnd === null || surahNumber === null) return;
-    for (let p = pageStart; p <= pageEnd; p++) {
-      const verses = pageWordsMap.get(p);
+  function clearMushafAutoScrollRetry() {
+    if (autoScrollRetryRef.current) {
+      clearTimeout(autoScrollRetryRef.current);
+      autoScrollRetryRef.current = null;
+    }
+  }
+
+  function resolveMushafScrollTarget(verseNumber: number) {
+    if (pageStart === null || pageEnd === null || surahNumber === null) return null;
+
+    for (let pageNum = pageStart; pageNum <= pageEnd; pageNum += 1) {
+      const verses = pageWordsMap.get(pageNum);
       if (!verses) continue;
+
       for (const verse of verses) {
         const ci = verse.verse_key.indexOf(":");
         const vSurah = Number(verse.verse_key.slice(0, ci));
         const vVerse = Number(verse.verse_key.slice(ci + 1));
-        if (vSurah !== surahNumber || vVerse !== playingVerseNumber) continue;
-        if (!verse.words.length) continue;
-        const firstWord = verse.words[0]!;
-        const lineKey = `page:${p}:line:${firstWord.line_number}`;
-        const lineY = lineLayoutMap.current.get(lineKey);
-        const pageCardY = pageCardLayoutMap.current.get(p);
-        if (lineY !== undefined && pageCardY !== undefined) {
-          // pageCardY = card's Y in scroll content; ~40px header; lineY within pageBody
-          const targetY = pageCardY + 40 + lineY;
-          scrollViewRef.current?.scrollTo({ y: Math.max(0, targetY - 80), animated: true });
-        }
-        return;
+        if (vSurah !== surahNumber || vVerse !== verseNumber) continue;
+
+        const firstWord =
+          verse.words.find((word) => word.char_type_name === "word") ?? verse.words[0];
+        return {
+          pageNum,
+          lineNumber: firstWord?.line_number,
+        };
       }
     }
-  }, [playingVerseNumber, viewMode]); // eslint-disable-line react-hooks/exhaustive-deps
+
+    const mappedPage = versePageMap.get(verseNumber);
+    if (
+      mappedPage !== undefined &&
+      mappedPage >= pageStart &&
+      mappedPage <= pageEnd
+    ) {
+      return { pageNum: clampMushafPage(mappedPage), lineNumber: undefined };
+    }
+
+    return null;
+  }
+
+  function scrollMushafVerseIntoView(verseNumber: number, attempt = 0) {
+    if (viewMode !== "page" || pageStart === null || pageEnd === null || surahNumber === null) return;
+
+    const target = resolveMushafScrollTarget(verseNumber);
+    const pageCardY =
+      target !== null ? pageCardLayoutMap.current.get(target.pageNum) : undefined;
+    const lineY =
+      target?.lineNumber !== undefined
+        ? lineLayoutMap.current.get(`page:${target.pageNum}:line:${target.lineNumber}`)
+        : undefined;
+
+    if (target !== null && pageCardY !== undefined) {
+      // pageCardY is the page card's Y in scroll content; lineY is within pageBody.
+      const targetY = lineY !== undefined ? pageCardY + 40 + lineY : pageCardY;
+      scrollViewRef.current?.scrollTo({ y: Math.max(0, targetY - 80), animated: true });
+      return;
+    }
+
+    if (attempt < 5) {
+      clearMushafAutoScrollRetry();
+      autoScrollRetryRef.current = setTimeout(() => {
+        autoScrollRetryRef.current = null;
+        scrollMushafVerseIntoView(verseNumber, attempt + 1);
+      }, 90);
+    }
+  }
+
+  // Keep the active ayah visible in page mode. In recite mode this acts as the
+  // page auto-flip when speech recognition advances across a mushaf boundary.
+  useEffect(() => {
+    clearMushafAutoScrollRetry();
+    scrollMushafVerseIntoView(playingVerseNumber);
+    return clearMushafAutoScrollRetry;
+  }, [playingVerseNumber, viewMode, pageStart, pageEnd, pageWordsMap, versePageMap, surahNumber]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Cleanup on unmount
   useEffect(() => {
     return () => {
+      clearMushafAutoScrollRetry();
       void stopAudioCompletely();
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
