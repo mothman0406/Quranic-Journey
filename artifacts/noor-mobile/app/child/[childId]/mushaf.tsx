@@ -54,6 +54,7 @@ type ReadingProgressResponse = {
 };
 
 type SaveStatus = "idle" | "saving" | "saved" | "error";
+type SearchParamValue = string | string[] | undefined;
 
 function bookmarkStorageKey(childId: string | undefined) {
   return `noorpath:mushaf:bookmarks:${childId ?? "unknown"}`;
@@ -83,6 +84,34 @@ function parsePositiveInteger(value: string) {
   const trimmed = value.trim();
   if (!/^\d+$/.test(trimmed)) return null;
   return Number(trimmed);
+}
+
+function singleParam(value: SearchParamValue) {
+  return Array.isArray(value) ? value[0] : value;
+}
+
+function parsePageParam(value: SearchParamValue) {
+  const page = singleParam(value);
+  if (!page) return null;
+  const parsed = parsePositiveInteger(page);
+  return parsed === null ? null : clampMushafPage(parsed);
+}
+
+function buildMemorizationContext({
+  fromMemorization,
+  surahNumber,
+  ayahNumber,
+}: {
+  fromMemorization: SearchParamValue;
+  surahNumber: SearchParamValue;
+  ayahNumber: SearchParamValue;
+}) {
+  if (singleParam(fromMemorization) !== "1") return null;
+  const surah = parsePositiveInteger(singleParam(surahNumber) ?? "");
+  const ayah = parsePositiveInteger(singleParam(ayahNumber) ?? "");
+  if (surah === null || ayah === null) return "Opened from Memorization";
+  const surahMeta = MUSHAF_SURAHS.find((item) => item.number === surah);
+  return `From Memorization · ${surahMeta?.name ?? `Surah ${surah}`} ${surah}:${ayah}`;
 }
 
 function PageView({ pageNumber, width }: { pageNumber: number; width: number }) {
@@ -163,9 +192,27 @@ function JuzChip({ item, onPress }: { item: MushafJuz; onPress: () => void }) {
 }
 
 export default function MushafScreen() {
-  const { childId, name } = useLocalSearchParams<{ childId: string; name?: string }>();
+  const params = useLocalSearchParams<{
+    childId: string;
+    name?: string;
+    page?: string;
+    fromMemorization?: string;
+    surahNumber?: string;
+    ayahNumber?: string;
+  }>();
+  const { childId, name } = params;
   const router = useRouter();
   const screenW = Dimensions.get("window").width;
+  const requestedInitialPage = useMemo(() => parsePageParam(params.page), [params.page]);
+  const memorizationContext = useMemo(
+    () =>
+      buildMemorizationContext({
+        fromMemorization: params.fromMemorization,
+        surahNumber: params.surahNumber,
+        ayahNumber: params.ayahNumber,
+      }),
+    [params.fromMemorization, params.surahNumber, params.ayahNumber],
+  );
 
   const [initialPage, setInitialPage] = useState<number | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
@@ -233,14 +280,17 @@ export default function MushafScreen() {
           goal?.lastPage != null && goal.lastPage >= 1
             ? clampMushafPage(goal.lastPage)
             : 1;
+        const startPage = requestedInitialPage ?? savedPage;
 
         setReadingGoal(goal);
         setLastSavedPage(goal?.lastPage ?? null);
-        setCurrentPage(savedPage);
-        setInitialPage(savedPage);
+        setCurrentPage(startPage);
+        setInitialPage(startPage);
       } catch {
         if (cancelled) return;
-        setInitialPage(1);
+        const fallbackPage = requestedInitialPage ?? 1;
+        setCurrentPage(fallbackPage);
+        setInitialPage(fallbackPage);
       }
     }
 
@@ -268,7 +318,7 @@ export default function MushafScreen() {
       if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
       if (saveStatusTimer.current) clearTimeout(saveStatusTimer.current);
     };
-  }, [childId]);
+  }, [childId, requestedInitialPage]);
 
   function goToPage(page: number, closeJump = false) {
     const target = clampMushafPage(page);
@@ -404,6 +454,14 @@ export default function MushafScreen() {
             </Text>
           </View>
         </View>
+        {memorizationContext ? (
+          <View style={styles.sourceContextPill}>
+            <Ionicons name="reader-outline" size={14} color="#0369a1" />
+            <Text style={styles.sourceContextText} numberOfLines={1}>
+              {memorizationContext}
+            </Text>
+          </View>
+        ) : null}
         <View style={styles.progressRow}>
           <View style={styles.progressTextBlock}>
             <Text style={styles.progressLabel}>{goalCopy}</Text>
@@ -798,6 +856,25 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: "#374151",
     fontWeight: "800",
+  },
+  sourceContextPill: {
+    alignSelf: "flex-start",
+    maxWidth: "100%",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "#bae6fd",
+    backgroundColor: "#f0f9ff",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  sourceContextText: {
+    flexShrink: 1,
+    fontSize: 12,
+    fontWeight: "800",
+    color: "#0369a1",
   },
   progressRow: {
     flexDirection: "row",

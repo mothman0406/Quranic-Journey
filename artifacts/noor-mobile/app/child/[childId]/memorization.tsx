@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BlurView } from "expo-blur";
+import { Ionicons } from "@expo/vector-icons";
 import {
   ActivityIndicator,
   Alert,
@@ -56,7 +57,7 @@ import {
   type ThemeKey,
   type MushafTheme,
 } from "@/src/lib/mushaf-theme";
-import { MUSHAF_SURAHS } from "@/src/lib/mushaf";
+import { MUSHAF_SURAHS, clampMushafPage } from "@/src/lib/mushaf";
 import { findReciter, RECITERS } from "@/src/lib/reciters";
 import {
   clearMemorizationSessionBookmark,
@@ -371,6 +372,7 @@ export default function MemorizationScreen() {
   const [displayWordsMap, setDisplayWordsMap] = useState<Map<number, ApiWord[]>>(new Map());
   const [chapterTimings, setChapterTimings] = useState<ChapterTimings | null>(null);
   const [pageWordsMap, setPageWordsMap] = useState<Map<number, ApiPageVerse[]>>(new Map());
+  const [versePageMap, setVersePageMap] = useState<Map<number, number>>(new Map());
   const [chaptersMap, setChaptersMap] = useState<Map<number, ApiChapter>>(new Map());
 
   const [isPlaying, setIsPlaying] = useState(false);
@@ -444,6 +446,7 @@ export default function MemorizationScreen() {
   const autoPlayRef = useRef(false);
   const isLoadingRef = useRef(false);
   const completionSheetOpenRef = useRef(false);
+  const suppressPlaybackForNavigationRef = useRef(false);
 
   // Refs readable inside async callbacks and RAF ticks (avoid stale closures)
   const viewModeRef = useRef<"ayah" | "page">(viewMode);
@@ -640,6 +643,12 @@ export default function MemorizationScreen() {
     setLeaveSheetOpen(true);
   });
 
+  useFocusEffect(
+    useCallback(() => {
+      suppressPlaybackForNavigationRef.current = false;
+    }, []),
+  );
+
   function prepareSession(target: SessionTarget) {
     Keyboard.dismiss();
     setPendingSessionTarget(target);
@@ -669,6 +678,7 @@ export default function MemorizationScreen() {
     setDisplayWordsMap(new Map());
     setChapterTimings(null);
     setPageWordsMap(new Map());
+    setVersePageMap(new Map());
     setHighlightedWord(-1);
     setHighlightedPage(null);
     setInternalPhase("single");
@@ -816,27 +826,27 @@ export default function MemorizationScreen() {
         ]);
         if (cancelled) return;
         const map = new Map<number, ApiWord[]>();
+        const nextVersePageMap = new Map<number, number>();
         for (const verse of verses) {
+          if (typeof verse.page_number === "number") {
+            nextVersePageMap.set(verse.verse_number, verse.page_number);
+          }
           map.set(
             verse.verse_number,
             verse.words.filter((w) => w.char_type_name === "word"),
           );
         }
         if (ayahStart !== null && ayahEnd !== null) {
-          const pages = verses
-            .filter(
-              (verse) =>
-                verse.verse_number >= ayahStart &&
-                verse.verse_number <= ayahEnd &&
-                typeof verse.page_number === "number",
-            )
-            .map((verse) => verse.page_number as number);
+          const pages = Array.from(nextVersePageMap.entries())
+            .filter(([verseNumber]) => verseNumber >= ayahStart && verseNumber <= ayahEnd)
+            .map(([, pageNumber]) => pageNumber);
           if (pages.length > 0) {
             setPageStart(Math.min(...pages));
             setPageEnd(Math.max(...pages));
           }
         }
         setDisplayWordsMap(map);
+        setVersePageMap(nextVersePageMap);
         setChapterTimings(timings);
         setLoading(false);
       } catch (e) {
@@ -1238,6 +1248,17 @@ export default function MemorizationScreen() {
         },
       );
       soundRef.current = sound;
+      if (suppressPlaybackForNavigationRef.current) {
+        try {
+          await sound.unloadAsync();
+        } catch {
+          // ignore — this is only guarding a late audio load during navigation
+        }
+        soundRef.current = null;
+        isPlayingRef.current = false;
+        setIsPlaying(false);
+        return;
+      }
       // Ensure max volume — different everyayah recordings have very different
       // mastered loudness levels (Afasy is significantly quieter than Husary).
       try {
@@ -1559,6 +1580,44 @@ export default function MemorizationScreen() {
     void handlePauseAndSave();
   }
 
+  async function pausePlaybackForMushafNavigation() {
+    suppressPlaybackForNavigationRef.current = true;
+    autoPlayRef.current = false;
+    if (advanceTimeoutRef.current) {
+      clearTimeout(advanceTimeoutRef.current);
+      advanceTimeoutRef.current = null;
+    }
+    cancelAnimationFrame(rafIdRef.current);
+    if (soundRef.current && isPlayingRef.current) {
+      try {
+        await soundRef.current.pauseAsync();
+      } catch {
+        // best-effort pause before opening the reader
+      }
+    }
+    isPlayingRef.current = false;
+    setIsPlaying(false);
+  }
+
+  async function handleViewInFullMushaf() {
+    if (surahNumber === null) return;
+    const targetPage = activeMushafPage ?? 1;
+    await pausePlaybackForMushafNavigation();
+    setSettingsOpen(false);
+    setTranslationPopup(null);
+    router.push({
+      pathname: "/child/[childId]/mushaf",
+      params: {
+        childId,
+        name: params.name ?? "",
+        page: String(targetPage),
+        fromMemorization: "1",
+        surahNumber: String(surahNumber),
+        ayahNumber: String(playingVerseNumberRef.current),
+      },
+    });
+  }
+
   async function handleLeaveWithoutSaving() {
     if (submitting) return;
     closeLeaveSheet(false);
@@ -1606,6 +1665,7 @@ export default function MemorizationScreen() {
     setDisplayWordsMap(new Map());
     setChapterTimings(null);
     setPageWordsMap(new Map());
+    setVersePageMap(new Map());
     setRevealedVerses(new Set());
     setError(null);
     setLoading(false);
@@ -2152,6 +2212,14 @@ export default function MemorizationScreen() {
     internalPhase === "cumulative" ||
     canEnterCumulativeFromSingle ||
     (ayahEnd !== null && currentVerse < ayahEnd);
+  const activeMushafPage = useMemo(() => {
+    if (surahNumber === null) return null;
+    const mappedPage = versePageMap.get(playingVerseNumber) ?? versePageMap.get(currentVerse);
+    if (mappedPage !== undefined) return clampMushafPage(mappedPage);
+    if (pageStart !== null) return clampMushafPage(pageStart);
+    const fallbackPage = MUSHAF_SURAHS.find((surah) => surah.number === surahNumber)?.startPage;
+    return fallbackPage ? clampMushafPage(fallbackPage) : null;
+  }, [surahNumber, versePageMap, playingVerseNumber, currentVerse, pageStart]);
 
   // ── Render ───────────────────────────────────────────────────────────────────
 
@@ -2364,6 +2432,20 @@ export default function MemorizationScreen() {
             </Text>
           </Pressable>
         </View>
+
+        <Pressable
+          style={[styles.sessionMushafButton, submitting && styles.sessionMushafButtonDisabled]}
+          onPress={() => {
+            void handleViewInFullMushaf();
+          }}
+          disabled={submitting}
+        >
+          <Ionicons name="reader-outline" size={17} color="#0369a1" />
+          <Text style={styles.sessionMushafButtonText}>View in Full Mushaf</Text>
+          <Text style={styles.sessionMushafButtonMeta}>
+            {activeMushafPage ? `p. ${activeMushafPage}` : "Quran"}
+          </Text>
+        </Pressable>
 
         {/* Prev / Play / Next */}
         <View style={styles.controls}>
@@ -5188,6 +5270,32 @@ const styles = StyleSheet.create({
   },
   modeButtonTextActive: {
     color: "#ffffff",
+  },
+  sessionMushafButton: {
+    minHeight: 44,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#bae6fd",
+    backgroundColor: "#f0f9ff",
+    paddingHorizontal: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+  },
+  sessionMushafButtonDisabled: {
+    opacity: 0.55,
+  },
+  sessionMushafButtonText: {
+    flexShrink: 1,
+    fontSize: 14,
+    fontWeight: "800",
+    color: "#0369a1",
+  },
+  sessionMushafButtonMeta: {
+    fontSize: 12,
+    fontWeight: "900",
+    color: "#0f766e",
   },
   controls: {
     flexDirection: "row",
