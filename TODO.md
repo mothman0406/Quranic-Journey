@@ -1,6 +1,6 @@
 # NoorPath / Quranic Journey — Status & Next Steps
 
-_Last updated: April 30, 2026 (Phase 2L.0 UI refinement + backend QA pass active; awaiting Mohammad's change list.)_
+_Last updated: April 30, 2026 (Phase 2L.0 UI refinement + backend QA pass active; 2L.0.a profile picker redesign implemented locally, hardware QA pending.)_
 
 ---
 
@@ -563,7 +563,7 @@ Process for each reported item:
 Phase 2L.0 is complete when Mohammad explicitly says "2L.0 is done" or equivalent. Only then does Phase 2L.2 app shell/assets start.
 
 Reported items (filled in as Mohammad reports them):
-- (none yet — awaiting list)
+- 2L.0.a Profile picker redesign — Implemented locally Apr 30 in implementation commit `37f199c`: replaced the bulky profile-card stack with a compact searchable, sortable, filterable picker; added parent avatar menu, per-profile gear sheet, account-settings placeholder route, and Active today strip/filter using existing mobile/API surfaces. JS-only; no backend, native dependency, tajweed, matcher, or frozen web changes. Local validation passed with `cd artifacts/noor-mobile && npx tsc --noEmit` and `git diff --check`. Hardware QA: pending Mohammad iPhone test before 2L.0.b starts.
 
 ---
 
