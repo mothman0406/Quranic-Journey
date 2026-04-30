@@ -22,4 +22,5 @@ export interface Surah {
   ageGroup: SurahAgeGroup;
   /** Recommended memorization order for children */
   recommendedOrder: number;
+  tajweedNotes?: string[];
 }

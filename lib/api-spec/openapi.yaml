@@ -1448,6 +1448,10 @@ components:
         recommendedOrder:
           type: integer
           description: Recommended memorization order for children
+        tajweedNotes:
+          type: array
+          items:
+            type: string
       required: [id, number, nameArabic, nameTransliteration, nameTranslation, verseCount, juzStart, revelationType, difficulty, ageGroup, recommendedOrder]
 
     SurahDetail:

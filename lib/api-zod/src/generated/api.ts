@@ -304,6 +304,7 @@ export const GetChildDashboardResponse = zod.object({
       recommendedOrder: zod
         .number()
         .describe("Recommended memorization order for children"),
+      tajweedNotes: zod.array(zod.string()).optional(),
     })
     .nullish(),
   achievements: zod.array(
@@ -990,6 +991,7 @@ export const ListSurahsResponse = zod.object({
       recommendedOrder: zod
         .number()
         .describe("Recommended memorization order for children"),
+      tajweedNotes: zod.array(zod.string()).optional(),
     }),
   ),
 });
@@ -1016,6 +1018,7 @@ export const GetSurahResponse = zod
     recommendedOrder: zod
       .number()
       .describe("Recommended memorization order for children"),
+    tajweedNotes: zod.array(zod.string()).optional(),
   })
   .and(
     zod.object({

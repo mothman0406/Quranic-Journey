@@ -85,6 +85,7 @@ export type SurahSummary = {
   difficulty: "beginner" | "intermediate" | "advanced";
   ageGroup: "toddler" | "child" | "preteen" | "teen" | "all";
   recommendedOrder: number;
+  tajweedNotes?: string[];
 };
 
 const qdcCache = new Map<string, Promise<Map<string, Segment[]>>>();

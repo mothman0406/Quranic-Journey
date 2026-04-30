@@ -443,7 +443,7 @@ router.get("/surahs", async (req, res) => {
   if (ageGroup) surahs = surahs.filter(s => s.ageGroup === ageGroup || s.ageGroup === "all");
   if (juz) surahs = surahs.filter(s => s.juzStart === parseInt(juz as string));
   surahs = surahs.sort((a, b) => a.recommendedOrder - b.recommendedOrder);
-  res.json({ surahs: surahs.map(({ verses: _, tafsirBrief: __, tajweedNotes: ___, ...s }) => s) });
+  res.json({ surahs: surahs.map(({ verses: _, tafsirBrief: __, ...s }) => s) });
 });
 
 router.get("/surahs/:surahId", async (req, res) => {

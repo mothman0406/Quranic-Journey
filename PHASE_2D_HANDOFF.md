@@ -1,7 +1,7 @@
 # NoorPath / Quranic Journey — Phase 2G Web Parity Handoff
 
 **For: the next Codex/Claude Code conversation continuing this project**
-**Last updated: 2026-04-30 (Phase 2I.3 memorization settings/defaults hardware QA passed; next action is Phase 2I.4 discovery polish; beta remains blocked by 2I/2J/2K parity before TestFlight readiness)**
+**Last updated: 2026-04-30 (Phase 2I.4 discovery polish local validation passed; commit/sync pending; beta remains blocked by 2I/2J/2K parity before TestFlight readiness)**
 
 This handoff supersedes earlier handoff drafts.
 
@@ -116,6 +116,7 @@ This handoff supersedes earlier handoff drafts.
 - Phase 2I.2o hardware QA result: Mohammad reported QA passed after commit `2226cac`. This clears completed-session celebration overlay, newly completed-surah celebration overlay, overlay dismissal, and partial Pause & Save still using the simple saved Alert. At Phase 2I.3 start, `main`, `origin/main`, `feature/main-working-branch`, and `origin/feature/main-working-branch` were synced to `2226cacdf92ce5ba7957a3fba04248666412af07`.
 - Active branch/SHA at Phase 2I.3 implementation start: `main` at `a78b99d`, with `main`, `origin/main`, `feature/main-working-branch`, and `origin/feature/main-working-branch` synced to `a78b99d0a2f7f1fd3d81300e4304912274f4ad5d`. Phase 2I.3 is implemented and locally validated in the active Expo app: `settings.ts` persists `cumulativeReview`, `reviewRepeatCount`, and `confetti`; `targets.tsx` exposes those controls plus reciter/theme/view-mode defaults in Parent Settings; Memorize discovery/setup has a `Defaults` action into Parent Settings; and new setup starts reload parent defaults while bookmark resume preserves bookmark-specific session settings. Local validation passed with `cd artifacts/noor-mobile && npx tsc --noEmit` and `git diff --check`. No frozen web files, backend/spec/generated files, tajweed implementation, recite matcher behavior, or native dependencies were touched. Remote sync target after this implementation/docs commit: all four refs synced to the final Phase 2I.3 local-validation HEAD.
 - Phase 2I.3 hardware QA result: Mohammad reported QA passed after commit `bcfcab4`. This clears Parent Settings controls for cumulative review/review repeat/confetti/reciter/theme/view mode, Memorize `Defaults` discoverability, new setup hydration, bookmark resume preserving bookmark values, and confetti opt-out for the 2I.2o overlay. At this docs-sync start, `main`, `origin/main`, `feature/main-working-branch`, and `origin/feature/main-working-branch` were synced to `bcfcab47ac2a3620e8b16cdf3a761aa85c7ec63c`. Remote sync target after this docs commit: all four refs synced to the final Phase 2I.3 hardware-confirmed docs HEAD.
+- Active branch/SHA at Phase 2I.4 implementation start: `main` at `a8b22cb`, with `main`, `origin/main`, `feature/main-working-branch`, and `origin/feature/main-working-branch` synced to `a8b22cbfafe89190d0d1dee45a2be71033540120`. Phase 2I.4 is implemented and locally validated: the active mobile Memorize discovery rows now mirror web `getReviewStrengthTone` with no tone for zero memorized ayahs, red for any memorized ayah at strength <= 1, orange for partial rows or fully memorized rows with any strength <= 3, and green only for fully memorized strong rows. Rows get a compact tone rail/progress color/pill without changing start/resume behavior. The `/api/surahs` summary now includes `tajweedNotes`, OpenAPI and generated client/Zod outputs were regenerated, mobile `SurahSummary` exposes optional notes, and discovery rows show a contained Tajweed Notes accordion when notes exist. In-session tajweed coloring remains backlogged. Local validation passed with `cd artifacts/noor-mobile && npx tsc --noEmit`, `/Users/mothmanaurascape.ai/Library/pnpm/pnpm --filter @workspace/api-server run typecheck`, and `git diff --check`. Remote sync target after this implementation/docs commit: all four refs synced to the final Phase 2I.4 local-validation HEAD.
 
 ---
 
@@ -472,12 +473,12 @@ Phase 2D is complete.
 
 ## 7. Current: Phase 2I.4 Discovery Polish
 
-Phase 2D, 2E, 2F, 2G.1, 2G.2, 2G.3, Phase 2H.1-2H.6, Phase 2I.1, Phase 2I.2a through Phase 2I.2o, Phase 2I.3, the `Next up` skip-gap fix, and the Today's/Current work freeze correction are complete and hardware-tested. The next action item is Phase 2I.4 discovery polish: add per-surah review tone and a Tajweed Notes accordion on the Memorize discovery rows, while keeping in-session tajweed coloring backlogged.
+Phase 2D, 2E, 2F, 2G.1, 2G.2, 2G.3, Phase 2H.1-2H.6, Phase 2I.1, Phase 2I.2a through Phase 2I.2o, Phase 2I.3, the `Next up` skip-gap fix, and the Today's/Current work freeze correction are complete and hardware-tested. Phase 2I.4 discovery polish is implemented and locally validated on `main` from `a8b22cb`; commit/sync are pending. The slice adds per-surah review tone and a Tajweed Notes accordion on the Memorize discovery rows, while keeping in-session tajweed coloring backlogged.
 
 - **Phase 2G foundation** — Diagnostic cleanup, IA shell, shared screen primitives, and API parity foundation are in place.
 - **Phase 2H** — First-pass dashboard/settings/review/reading/memorization discovery parity is hardware-tested, but it did not finish beta parity.
-- **Current next** — Start Phase 2I.4 discovery polish.
-- **Phase 2I next** — Implement and hardware-test 2I.4 before moving to Phase 2J unless Mohammad explicitly reorders.
+- **Current next** — Commit/sync Phase 2I.4 on both branches, then ask Mohammad for hardware QA.
+- **Phase 2I next** — Hardware-test 2I.4 before moving to Phase 2J unless Mohammad explicitly reorders.
 - **Phase 2J after 2I** — Review never-empty/ahead-day behavior: completed-today/completed-day visibility and Continue Reviewing into the next open day.
 - **Phase 2K after 2J** — Full Quran/Mushaf Bayaan parity: reader tools, ayah sheets, annotations, audio range playback, recite/select modes, and memorization handoffs.
 - **Phase 2L/Phase 3 after 2K** — Polish, production EAS build readiness, App Store Connect, and TestFlight.
@@ -559,8 +560,8 @@ The old 2I/2J content/progress roadmap is now Phase 2M and deferred unless Moham
 ## 9. What to do first in the next session
 
 1. **Read `TODO.md` and this handoff.** This one supersedes earlier handoffs.
-2. **Check git state.** At Phase 2I.3 hardware-QA docs start, `main`, `origin/main`, `feature/main-working-branch`, and `origin/feature/main-working-branch` were synced to `bcfcab47ac2a3620e8b16cdf3a761aa85c7ec63c`; after this docs commit they should be synced to the final Phase 2I.3 hardware-confirmed docs HEAD. `safe-cumulative` can be ignored.
-3. **Start Phase 2I.4 discovery polish.** Do not start 2J, 2K, or TestFlight readiness before 2I.4 is implemented, documented, validated, synced, and hardware-tested unless Mohammad explicitly reorders.
+2. **Check git state.** At Phase 2I.4 implementation start, `main`, `origin/main`, `feature/main-working-branch`, and `origin/feature/main-working-branch` were synced to `a8b22cbfafe89190d0d1dee45a2be71033540120`. Phase 2I.4 is implemented and locally validated; commit/sync is pending. `safe-cumulative` can be ignored.
+3. **Finish Phase 2I.4 discovery polish.** Commit/sync both branches and ask Mohammad to hardware-test before 2J/2K/TestFlight readiness unless he explicitly reorders.
 4. **Preserve sensitive behavior.** Do not touch tajweed except to document it as backlogged, and do not tighten recite matcher behavior.
 5. **Run `cd artifacts/noor-mobile && npx tsc --noEmit` and `git diff --check` after future mobile/docs changes.**
 6. **Keep future slices JS-only unless explicitly approved.** Do not touch tajweed. Do not tighten recite matching. Do not add native dependencies unless Mohammad explicitly approves a rebuild.

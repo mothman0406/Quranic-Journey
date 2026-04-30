@@ -76,6 +76,8 @@ import { CelebrationOverlay } from "@/src/components/celebration-overlay";
 const PLAYBACK_RATES = [0.75, 0.85, 1.0, 1.15, 1.25, 1.5] as const;
 type InternalPhase = "single" | "cumulative";
 type DiscoveryFilter = "all" | "current" | "in_progress" | "not_started" | "memorized" | "needs_review";
+type AyahTone = "white" | "red" | "orange" | "green";
+type ReviewStrengthTone = "red" | "orange" | "green";
 
 type DiscoveryState =
   | { status: "loading" }
@@ -125,6 +127,30 @@ const DISCOVERY_FILTERS: Array<{ key: DiscoveryFilter; label: string }> = [
 ];
 
 const DISCOVERY_CHUNK_AYAHS = 5;
+
+const REVIEW_TONE_META: Record<
+  ReviewStrengthTone,
+  { label: string; color: string; bg: string; border: string }
+> = {
+  red: {
+    label: "Review red",
+    color: "#dc2626",
+    bg: "#fff1f2",
+    border: "#fecdd3",
+  },
+  orange: {
+    label: "Review orange",
+    color: "#f59e0b",
+    bg: "#fffbeb",
+    border: "#fde68a",
+  },
+  green: {
+    label: "Review green",
+    color: "#059669",
+    bg: "#ecfdf5",
+    border: "#a7f3d0",
+  },
+};
 
 type QualityRatingValue = 2 | 4 | 5;
 type RecitationCheckSource = "teacher" | "noorpath";
@@ -208,6 +234,41 @@ function getStatusCopy(status: MemorizationStatus) {
     default:
       return { label: "New", color: "#2563eb", bg: "#eff6ff", border: "#bfdbfe" };
   }
+}
+
+function getAyahTone(
+  ayah: number,
+  memorizedSet: Set<number>,
+  ayahStrengths: Record<string, number> | undefined,
+  fallbackStrength: number | undefined,
+): AyahTone {
+  if (!memorizedSet.has(ayah)) return "white";
+
+  const strength = ayahStrengths?.[String(ayah)] ?? clampStrength(fallbackStrength);
+  if (strength <= 1) return "red";
+  if (strength <= 3) return "orange";
+  return "green";
+}
+
+function getReviewStrengthTone(progress: MemorizationProgress): ReviewStrengthTone | null {
+  const memorizedAyahs = progress.memorizedAyahs ?? [];
+  if (memorizedAyahs.length === 0) return null;
+
+  const memorizedSet = new Set(memorizedAyahs);
+  const hasRed = memorizedAyahs.some(
+    (ayah) => getAyahTone(ayah, memorizedSet, progress.ayahStrengths, progress.strength) === "red",
+  );
+  if (hasRed) return "red";
+
+  const isFullyMemorized = memorizedAyahs.length >= progress.totalVerses;
+  if (!isFullyMemorized) return "orange";
+
+  const hasOrange = memorizedAyahs.some(
+    (ayah) => getAyahTone(ayah, memorizedSet, progress.ayahStrengths, progress.strength) === "orange",
+  );
+  if (hasOrange) return "orange";
+
+  return "green";
 }
 
 function getStrengthLabel(strength: number | undefined | null) {
@@ -5195,61 +5256,114 @@ function SurahProgressRow({
   isCurrent: boolean;
   onPress: () => void;
 }) {
+  const [showTajweedNotes, setShowTajweedNotes] = useState(false);
   const status = getStatusCopy(progress.status);
   const percent = Math.max(0, Math.min(100, progress.percentComplete));
+  const reviewTone = getReviewStrengthTone(progress);
+  const toneMeta = reviewTone ? REVIEW_TONE_META[reviewTone] : null;
+  const tajweedNotes = (surah.tajweedNotes ?? []).filter((note) => note.trim().length > 0);
   const actionLabel =
     progress.status === "memorized" ? "Practice" : progress.status === "in_progress" ? "Resume" : "Start";
 
   return (
-    <Pressable style={[styles.surahRow, isCurrent && styles.surahRowCurrent]} onPress={onPress}>
-      <View style={styles.surahRowTop}>
-        <View style={styles.surahNumber}>
-          <Text style={styles.surahNumberText}>{surah.number}</Text>
-        </View>
-        <View style={styles.surahTitleBlock}>
-          <View style={styles.surahTitleLine}>
-            <Text style={styles.surahTitle}>{surah.nameTransliteration}</Text>
-            {isCurrent ? <Text style={styles.currentPill}>Current</Text> : null}
+    <View
+      style={[
+        styles.surahRow,
+        isCurrent && styles.surahRowCurrent,
+        toneMeta && { borderColor: toneMeta.border },
+      ]}
+    >
+      {toneMeta ? <View style={[styles.surahToneRail, { backgroundColor: toneMeta.color }]} /> : null}
+      <Pressable style={styles.surahRowPressArea} onPress={onPress}>
+        <View style={styles.surahRowTop}>
+          <View style={styles.surahNumber}>
+            <Text style={styles.surahNumberText}>{surah.number}</Text>
           </View>
-          <Text style={styles.surahSubtitle}>
-            {surah.nameTranslation} · {surah.verseCount} ayahs · Juz {surah.juzStart}
+          <View style={styles.surahTitleBlock}>
+            <View style={styles.surahTitleLine}>
+              <Text style={styles.surahTitle}>{surah.nameTransliteration}</Text>
+              {isCurrent ? <Text style={styles.currentPill}>Current</Text> : null}
+            </View>
+            <Text style={styles.surahSubtitle}>
+              {surah.nameTranslation} · {surah.verseCount} ayahs · Juz {surah.juzStart}
+            </Text>
+          </View>
+          <Text style={styles.surahArabic}>{surah.nameArabic}</Text>
+        </View>
+
+        <View style={styles.surahProgressLine}>
+          <View style={styles.surahProgressTrack}>
+            <View
+              style={[
+                styles.surahProgressFill,
+                { width: `${percent}%`, backgroundColor: toneMeta?.color ?? "#2563eb" },
+              ]}
+            />
+          </View>
+          <Text style={styles.surahProgressText}>{percent}%</Text>
+        </View>
+
+        <View style={styles.surahMetaRow}>
+          <View style={[styles.statusPill, { backgroundColor: status.bg, borderColor: status.border }]}>
+            <Text style={[styles.statusPillText, { color: status.color }]}>{status.label}</Text>
+          </View>
+          {toneMeta ? (
+            <View style={[styles.reviewTonePill, { backgroundColor: toneMeta.bg, borderColor: toneMeta.border }]}>
+              <View style={[styles.reviewToneDot, { backgroundColor: toneMeta.color }]} />
+              <Text style={[styles.reviewToneText, { color: toneMeta.color }]}>{toneMeta.label}</Text>
+            </View>
+          ) : null}
+          <Text style={styles.surahMetaText}>
+            {progress.versesMemorized}/{progress.totalVerses} ayahs
           </Text>
+          <Text style={styles.surahMetaText}>{getStrengthLabel(progress.strength)}</Text>
+          <StrengthDots strength={progress.strength} />
         </View>
-        <Text style={styles.surahArabic}>{surah.nameArabic}</Text>
-      </View>
 
-      <View style={styles.surahProgressLine}>
-        <View style={styles.surahProgressTrack}>
-          <View style={[styles.surahProgressFill, { width: `${percent}%` }]} />
+        <AyahStrengthStrip progress={progress} />
+
+        <View style={styles.surahActionRow}>
+          <Text style={styles.surahNextText}>
+            {progress.status === "memorized"
+              ? "Ready for a practice pass"
+              : `Next: ${formatAyahRange(
+                  buildProgressTarget(progress).ayahStart,
+                  buildProgressTarget(progress).ayahEnd,
+                )}`}
+          </Text>
+          <Text style={styles.surahActionText}>{actionLabel}</Text>
         </View>
-        <Text style={styles.surahProgressText}>{percent}%</Text>
-      </View>
+      </Pressable>
 
-      <View style={styles.surahMetaRow}>
-        <View style={[styles.statusPill, { backgroundColor: status.bg, borderColor: status.border }]}>
-          <Text style={[styles.statusPillText, { color: status.color }]}>{status.label}</Text>
+      {tajweedNotes.length > 0 ? (
+        <View style={styles.tajweedAccordion}>
+          <Pressable
+            style={styles.tajweedToggle}
+            onPress={() => setShowTajweedNotes((value) => !value)}
+          >
+            <View style={styles.tajweedToggleTitle}>
+              <Ionicons name="information-circle-outline" size={15} color="#b45309" />
+              <Text style={styles.tajweedToggleText}>Tajweed Notes</Text>
+            </View>
+            <Ionicons
+              name={showTajweedNotes ? "chevron-up" : "chevron-down"}
+              size={16}
+              color="#b45309"
+            />
+          </Pressable>
+          {showTajweedNotes ? (
+            <View style={styles.tajweedNotesList}>
+              {tajweedNotes.map((note, index) => (
+                <View key={`${surah.number}-tajweed-${index}`} style={styles.tajweedNoteRow}>
+                  <Text style={styles.tajweedBullet}>•</Text>
+                  <Text style={styles.tajweedNoteText}>{note}</Text>
+                </View>
+              ))}
+            </View>
+          ) : null}
         </View>
-        <Text style={styles.surahMetaText}>
-          {progress.versesMemorized}/{progress.totalVerses} ayahs
-        </Text>
-        <Text style={styles.surahMetaText}>{getStrengthLabel(progress.strength)}</Text>
-        <StrengthDots strength={progress.strength} />
-      </View>
-
-      <AyahStrengthStrip progress={progress} />
-
-      <View style={styles.surahActionRow}>
-        <Text style={styles.surahNextText}>
-          {progress.status === "memorized"
-            ? "Ready for a practice pass"
-            : `Next: ${formatAyahRange(
-                buildProgressTarget(progress).ayahStart,
-                buildProgressTarget(progress).ayahEnd,
-              )}`}
-        </Text>
-        <Text style={styles.surahActionText}>{actionLabel}</Text>
-      </View>
-    </Pressable>
+      ) : null}
+    </View>
   );
 }
 
@@ -6036,12 +6150,24 @@ const styles = StyleSheet.create({
     color: "#ffffff",
   },
   surahRow: {
+    position: "relative",
     gap: 10,
     borderRadius: 14,
     borderWidth: 1,
     borderColor: "#e5e7eb",
     backgroundColor: "#ffffff",
     padding: 14,
+    overflow: "hidden",
+  },
+  surahRowPressArea: {
+    gap: 10,
+  },
+  surahToneRail: {
+    position: "absolute",
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: 4,
   },
   surahRowCurrent: {
     borderColor: "#bfdbfe",
@@ -6141,6 +6267,24 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: "900",
   },
+  reviewTonePill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    borderRadius: 999,
+    borderWidth: 1,
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+  },
+  reviewToneDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+  },
+  reviewToneText: {
+    fontSize: 11,
+    fontWeight: "900",
+  },
   surahMetaText: {
     fontSize: 12,
     fontWeight: "700",
@@ -6202,6 +6346,58 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "900",
     color: "#2563eb",
+  },
+  tajweedAccordion: {
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#fde68a",
+    backgroundColor: "#fffbeb",
+    overflow: "hidden",
+  },
+  tajweedToggle: {
+    minHeight: 40,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+    paddingVertical: 9,
+    paddingHorizontal: 12,
+  },
+  tajweedToggleTitle: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 7,
+    flex: 1,
+  },
+  tajweedToggleText: {
+    fontSize: 12,
+    fontWeight: "900",
+    color: "#92400e",
+  },
+  tajweedNotesList: {
+    gap: 7,
+    borderTopWidth: 1,
+    borderTopColor: "#fde68a",
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+  },
+  tajweedNoteRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 7,
+  },
+  tajweedBullet: {
+    marginTop: 1,
+    fontSize: 12,
+    lineHeight: 18,
+    color: "#b45309",
+  },
+  tajweedNoteText: {
+    flex: 1,
+    fontSize: 12,
+    lineHeight: 18,
+    fontWeight: "600",
+    color: "#78350f",
   },
   header: {
     flexDirection: "row",
