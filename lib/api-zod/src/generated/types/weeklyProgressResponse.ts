@@ -5,8 +5,10 @@
  * NoorPath - Muslim Parenting & Quran Learning App API
  * OpenAPI spec version: 0.1.0
  */
-import type { DailyProgress } from "./dailyProgress";
+import type { WeeklyProgressDay } from "./weeklyProgressDay";
+import type { WeeklyProgressResponseRange } from "./weeklyProgressResponseRange";
 
 export interface WeeklyProgressResponse {
-  days: DailyProgress[];
+  range: WeeklyProgressResponseRange;
+  days: WeeklyProgressDay[];
 }

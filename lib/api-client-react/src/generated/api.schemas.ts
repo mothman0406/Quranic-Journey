@@ -438,8 +438,59 @@ export interface ReadingProgressResponse {
   readingLastPage: number | null;
 }
 
+export type WeeklyProgressResponseRange =
+  (typeof WeeklyProgressResponseRange)[keyof typeof WeeklyProgressResponseRange];
+
+export const WeeklyProgressResponseRange = {
+  week: "week",
+  month: "month",
+} as const;
+
+export type WeeklyProgressDayMemStatus =
+  (typeof WeeklyProgressDayMemStatus)[keyof typeof WeeklyProgressDayMemStatus];
+
+export const WeeklyProgressDayMemStatus = {
+  not_started: "not_started",
+  in_progress: "in_progress",
+  completed: "completed",
+} as const;
+
+export type WeeklyProgressDayReviewStatus =
+  (typeof WeeklyProgressDayReviewStatus)[keyof typeof WeeklyProgressDayReviewStatus];
+
+export const WeeklyProgressDayReviewStatus = {
+  not_started: "not_started",
+  in_progress: "in_progress",
+  completed: "completed",
+} as const;
+
+export type WeeklyProgressDayReadingStatus =
+  (typeof WeeklyProgressDayReadingStatus)[keyof typeof WeeklyProgressDayReadingStatus];
+
+export const WeeklyProgressDayReadingStatus = {
+  not_started: "not_started",
+  in_progress: "in_progress",
+  completed: "completed",
+} as const;
+
+export interface WeeklyProgressDay {
+  /** @pattern ^\d{4}-\d{2}-\d{2}$ */
+  date: string;
+  memorizationCompleted: boolean;
+  reviewCompleted: boolean;
+  readingPagesCompleted: number;
+  totalActivityScore: number;
+  memStatus: WeeklyProgressDayMemStatus;
+  memCompletedAyahEnd: number | null;
+  reviewStatus: WeeklyProgressDayReviewStatus;
+  reviewCompletedCount: number;
+  readingStatus: WeeklyProgressDayReadingStatus;
+  readingLastPage: number | null;
+}
+
 export interface WeeklyProgressResponse {
-  days: DailyProgress[];
+  range: WeeklyProgressResponseRange;
+  days: WeeklyProgressDay[];
 }
 
 export type LearningPlanWeeklyGoal = {
@@ -743,6 +794,18 @@ export type ListSessionsParams = {
 export type ListSessions200 = {
   sessions: LearningSession[];
 };
+
+export type GetWeeklyProgressParams = {
+  range?: GetWeeklyProgressRange;
+};
+
+export type GetWeeklyProgressRange =
+  (typeof GetWeeklyProgressRange)[keyof typeof GetWeeklyProgressRange];
+
+export const GetWeeklyProgressRange = {
+  week: "week",
+  month: "month",
+} as const;
 
 export type ListChildDuas200 = {
   duas: ChildDua[];

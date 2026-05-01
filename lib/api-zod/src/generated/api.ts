@@ -861,33 +861,39 @@ export const UpdateReadingProgressResponse = zod.object({
 });
 
 /**
- * @summary Get the last seven daily progress rows for a child
+ * @summary Get zero-filled daily progress for a child
  */
 export const GetWeeklyProgressParams = zod.object({
   childId: zod.coerce.number(),
 });
 
+export const getWeeklyProgressQueryRangeDefault = `week`;
+
+export const GetWeeklyProgressQueryParams = zod.object({
+  range: zod
+    .enum(["week", "month"])
+    .default(getWeeklyProgressQueryRangeDefault),
+});
+
+export const getWeeklyProgressResponseDaysItemDateRegExp = new RegExp(
+  "^\\d{4}-\\d{2}-\\d{2}$",
+);
+
 export const GetWeeklyProgressResponse = zod.object({
+  range: zod.enum(["week", "month"]),
   days: zod.array(
     zod.object({
-      id: zod.number(),
-      childId: zod.number(),
-      date: zod.date(),
-      memTargetSurah: zod.number().nullish(),
-      memTargetAyahStart: zod.number().nullish(),
-      memTargetAyahEnd: zod.number().nullish(),
-      memTargetEndSurah: zod.number().nullish(),
-      memCompletedAyahEnd: zod.number().nullish(),
+      date: zod.string().regex(getWeeklyProgressResponseDaysItemDateRegExp),
+      memorizationCompleted: zod.boolean(),
+      reviewCompleted: zod.boolean(),
+      readingPagesCompleted: zod.number(),
+      totalActivityScore: zod.number(),
       memStatus: zod.enum(["not_started", "in_progress", "completed"]),
-      reviewTargetCount: zod.number().nullish(),
-      reviewCompletedCount: zod.number(),
+      memCompletedAyahEnd: zod.number().nullable(),
       reviewStatus: zod.enum(["not_started", "in_progress", "completed"]),
-      readingTargetPages: zod.number().nullish(),
-      readingCompletedPages: zod.number(),
-      readingLastPage: zod.number().nullish(),
+      reviewCompletedCount: zod.number(),
       readingStatus: zod.enum(["not_started", "in_progress", "completed"]),
-      createdAt: zod.date(),
-      updatedAt: zod.date(),
+      readingLastPage: zod.number().nullable(),
     }),
   ),
 });

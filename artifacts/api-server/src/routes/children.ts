@@ -1,12 +1,12 @@
 import { Router, type IRouter } from "express";
 import { db } from "@workspace/db";
 import { childrenTable, memorizationProgressTable, reviewScheduleTable, learningSessionsTable, childDuasTable, dailyProgressTable } from "@workspace/db/schema";
-import { eq, desc, and, sql } from "drizzle-orm";
+import { eq, desc, and, sql, gte, lte } from "drizzle-orm";
 import { SURAHS } from "../data/surahs.js";
 import { resolvePageTarget, resolveStrictSurahScopedPageTarget, getPageForVerse } from "../data/quran-meta.js";
 import { STORIES } from "../data/stories.js";
 import { DUAS } from "../data/duas.js";
-import { getRequestLocalDate } from "../lib/local-date.js";
+import { addDaysToLocalDate, getRequestLocalDate } from "../lib/local-date.js";
 import {
   buildSurahPageChunks,
   buildSurahMemorizationWorkflow,
@@ -209,6 +209,34 @@ function addDays(date: Date, days: number): Date {
   const result = new Date(date);
   result.setDate(result.getDate() + days);
   return result;
+}
+
+type ProgressRange = "week" | "month";
+type DailyProgressStatus = "not_started" | "in_progress" | "completed";
+
+const DAILY_PROGRESS_STATUS_RANK: Record<DailyProgressStatus, number> = {
+  not_started: 0,
+  in_progress: 1,
+  completed: 2,
+};
+
+function normalizeProgressRange(value: unknown): ProgressRange {
+  return value === "month" ? "month" : "week";
+}
+
+function normalizeDailyProgressStatus(value: string): DailyProgressStatus {
+  if (value === "completed" || value === "in_progress") return value;
+  return "not_started";
+}
+
+function strongerDailyProgressStatus(
+  current: DailyProgressStatus,
+  next: string,
+): DailyProgressStatus {
+  const normalizedNext = normalizeDailyProgressStatus(next);
+  return DAILY_PROGRESS_STATUS_RANK[normalizedNext] > DAILY_PROGRESS_STATUS_RANK[current]
+    ? normalizedNext
+    : current;
 }
 
 type InitialSurahLevel = "very_strong" | "solid" | "learning" | "just_started";
@@ -1382,11 +1410,68 @@ router.post("/children/:childId/reading-progress", async (req, res) => {
 router.get("/children/:childId/weekly-progress", async (req, res) => {
   const childId = parseInt(req.params.childId);
   if (!await ownsChild(req.user.id, childId)) { res.status(403).json({ error: "Forbidden" }); return; }
+  const range = normalizeProgressRange(req.query.range);
+  const dayCount = range === "month" ? 30 : 7;
+  const endDate = getRequestLocalDate(req);
+  const startDate = addDaysToLocalDate(endDate, -(dayCount - 1));
+
   const rows = await db.select().from(dailyProgressTable)
-    .where(eq(dailyProgressTable.childId, childId))
-    .orderBy(desc(dailyProgressTable.date))
-    .limit(7);
-  res.json({ days: rows });
+    .where(and(
+      eq(dailyProgressTable.childId, childId),
+      gte(dailyProgressTable.date, startDate),
+      lte(dailyProgressTable.date, endDate),
+    ))
+    .orderBy(desc(dailyProgressTable.date));
+
+  const days = Array.from({ length: dayCount }, (_, index) => {
+    const date = addDaysToLocalDate(startDate, index);
+    return {
+      date,
+      memorizationCompleted: false,
+      reviewCompleted: false,
+      readingPagesCompleted: 0,
+      totalActivityScore: 0,
+      memStatus: "not_started" as DailyProgressStatus,
+      memCompletedAyahEnd: null as number | null,
+      reviewStatus: "not_started" as DailyProgressStatus,
+      reviewCompletedCount: 0,
+      readingStatus: "not_started" as DailyProgressStatus,
+      readingLastPage: null as number | null,
+    };
+  });
+  const daysByDate = new Map(days.map((day) => [day.date, day]));
+
+  for (const row of rows) {
+    const day = daysByDate.get(row.date);
+    if (!day) continue;
+
+    day.memStatus = strongerDailyProgressStatus(day.memStatus, row.memStatus);
+    day.memorizationCompleted = day.memorizationCompleted || row.memStatus === "completed";
+    day.memCompletedAyahEnd = Math.max(
+      day.memCompletedAyahEnd ?? 0,
+      row.memCompletedAyahEnd ?? 0,
+    ) || null;
+
+    day.reviewStatus = strongerDailyProgressStatus(day.reviewStatus, row.reviewStatus);
+    day.reviewCompleted = day.reviewCompleted || row.reviewStatus === "completed";
+    day.reviewCompletedCount += row.reviewCompletedCount ?? 0;
+
+    day.readingStatus = strongerDailyProgressStatus(day.readingStatus, row.readingStatus);
+    day.readingPagesCompleted = Math.max(
+      day.readingPagesCompleted,
+      row.readingCompletedPages ?? 0,
+    );
+    day.readingLastPage = Math.max(day.readingLastPage ?? 0, row.readingLastPage ?? 0) || null;
+  }
+
+  for (const day of days) {
+    day.totalActivityScore =
+      (day.memorizationCompleted ? 1 : 0) +
+      (day.reviewCompleted ? 1 : 0) +
+      day.readingPagesCompleted;
+  }
+
+  res.json({ range, days });
 });
 
 export default router;

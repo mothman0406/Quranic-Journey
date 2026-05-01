@@ -519,34 +519,6 @@ function PrimarySectionHeader({ title }: { title: string }) {
   );
 }
 
-function StatBannerItem({
-  label,
-  value,
-  iconName,
-  color,
-}: {
-  label: string;
-  value: string | number;
-  iconName: IconName;
-  color: string;
-}) {
-  return (
-    <View style={styles.statBannerItem}>
-      <View style={[styles.statBannerIcon, { backgroundColor: `${color}14` }]}>
-        <Ionicons name={iconName} size={14} color={color} />
-      </View>
-      <View style={styles.statBannerText}>
-        <Text style={[styles.statBannerValue, { color }]} numberOfLines={1}>
-          {value}
-        </Text>
-        <Text style={styles.statBannerLabel} numberOfLines={1}>
-          {label}
-        </Text>
-      </View>
-    </View>
-  );
-}
-
 function ProgressBar({
   value,
   color,
@@ -1217,7 +1189,6 @@ export default function ChildDashboard() {
     const stats = dashboard.memorizationStats;
     const goals = dashboard.goals ?? [];
     const achievements = dashboard.achievements ?? [];
-    const earnedAchievements = achievements.filter((achievement) => achievement.earned);
     const urgentGoal = pickUrgentGoal(goals);
     const dashboardAchievements = pickDashboardAchievements(achievements);
     const todayProgress = dashboard.todayProgress;
@@ -1361,29 +1332,6 @@ export default function ChildDashboard() {
             <Text style={styles.readOnlyBannerText}>{readOnlyNotice}</Text>
           </View>
         )}
-
-        <View style={styles.statsBanner}>
-          <StatBannerItem
-            label="Surahs"
-            value={stats?.totalSurahsMemorized ?? 0}
-            iconName="library-outline"
-            color="#2563eb"
-          />
-          <View style={styles.statsDivider} />
-          <StatBannerItem
-            label="Verses"
-            value={stats?.totalVersesMemorized ?? 0}
-            iconName="text-outline"
-            color="#d97706"
-          />
-          <View style={styles.statsDivider} />
-          <StatBannerItem
-            label="Badges"
-            value={earnedAchievements.length}
-            iconName="trophy-outline"
-            color="#be123c"
-          />
-        </View>
 
         {(showCompleteBanner || noPrimaryWork) && (
           <View
@@ -1898,52 +1846,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 18,
     fontWeight: "700",
-  },
-  statsBanner: {
-    minHeight: 56,
-    backgroundColor: "#ffffff",
-    borderWidth: 1,
-    borderColor: "#e5e7eb",
-    borderRadius: 12,
-    flexDirection: "row",
-    alignItems: "center",
-    overflow: "hidden",
-    paddingVertical: 8,
-  },
-  statBannerItem: {
-    flex: 1,
-    minWidth: 0,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 7,
-    paddingHorizontal: 8,
-  },
-  statBannerIcon: {
-    width: 26,
-    height: 26,
-    borderRadius: 8,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  statBannerText: {
-    minWidth: 0,
-  },
-  statBannerValue: {
-    fontSize: 16,
-    fontWeight: "900",
-    lineHeight: 18,
-  },
-  statBannerLabel: {
-    fontSize: 10,
-    color: "#64748b",
-    fontWeight: "800",
-    lineHeight: 13,
-  },
-  statsDivider: {
-    width: 1,
-    height: 32,
-    backgroundColor: "#e5e7eb",
   },
   dayStateBanner: {
     borderWidth: 1,

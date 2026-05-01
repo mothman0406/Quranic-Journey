@@ -1,7 +1,7 @@
 import { useCallback, useEffect, type ComponentProps, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter, type Href } from "expo-router";
 import { ChildBottomNav } from "@/src/components/child-bottom-nav";
 import {
   BadgePill,
@@ -30,6 +30,7 @@ type MoreRoute =
   | "/"
   | "/child/[childId]"
   | "/child/[childId]/mushaf"
+  | "/child/[childId]/progress"
   | "/child/[childId]/profile"
   | "/child/[childId]/targets";
 
@@ -65,6 +66,13 @@ const OPEN_ITEMS: MoreItem[] = [
     route: "/child/[childId]/profile",
   },
   {
+    title: "Progress",
+    detail: "Stats and badges",
+    icon: "bar-chart-outline",
+    tone: "#16a34a",
+    route: "/child/[childId]/progress",
+  },
+  {
     title: "Profiles",
     detail: "Parent dashboard",
     icon: "people-outline",
@@ -74,13 +82,6 @@ const OPEN_ITEMS: MoreItem[] = [
 ];
 
 const PLANNED_ITEMS: MoreItem[] = [
-  {
-    title: "Progress",
-    detail: "Stats and badges",
-    icon: "bar-chart-outline",
-    tone: "#16a34a",
-    badge: "2J",
-  },
   {
     title: "Learning Plan",
     detail: "Milestones and goals",
@@ -147,7 +148,7 @@ export default function MoreScreen() {
     router.push({
       pathname: route,
       params: { childId, name: child?.name ?? name ?? "" },
-    });
+    } as Href);
   }
 
   const displayName = child?.name ?? name ?? "Child";

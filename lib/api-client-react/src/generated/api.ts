@@ -24,6 +24,7 @@ import type {
   CreateChildRequest,
   CreateSessionRequest,
   DailyProgress,
+  GetWeeklyProgressParams,
   GoalsResponse,
   HealthStatus,
   LearningPlan,
@@ -1634,24 +1635,49 @@ export const useUpdateReadingProgress = <
 };
 
 /**
- * @summary Get the last seven daily progress rows for a child
+ * @summary Get zero-filled daily progress for a child
  */
-export const getGetWeeklyProgressUrl = (childId: number) => {
-  return `/api/children/${childId}/weekly-progress`;
+export const getGetWeeklyProgressUrl = (
+  childId: number,
+  params?: GetWeeklyProgressParams,
+) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/children/${childId}/weekly-progress?${stringifiedParams}`
+    : `/api/children/${childId}/weekly-progress`;
 };
 
 export const getWeeklyProgress = async (
   childId: number,
+  params?: GetWeeklyProgressParams,
   options?: RequestInit,
 ): Promise<WeeklyProgressResponse> => {
-  return customFetch<WeeklyProgressResponse>(getGetWeeklyProgressUrl(childId), {
-    ...options,
-    method: "GET",
-  });
+  return customFetch<WeeklyProgressResponse>(
+    getGetWeeklyProgressUrl(childId, params),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
 };
 
-export const getGetWeeklyProgressQueryKey = (childId: number) => {
-  return [`/api/children/${childId}/weekly-progress`] as const;
+export const getGetWeeklyProgressQueryKey = (
+  childId: number,
+  params?: GetWeeklyProgressParams,
+) => {
+  return [
+    `/api/children/${childId}/weekly-progress`,
+    ...(params ? [params] : []),
+  ] as const;
 };
 
 export const getGetWeeklyProgressQueryOptions = <
@@ -1659,6 +1685,7 @@ export const getGetWeeklyProgressQueryOptions = <
   TError = ErrorType<unknown>,
 >(
   childId: number,
+  params?: GetWeeklyProgressParams,
   options?: {
     query?: UseQueryOptions<
       Awaited<ReturnType<typeof getWeeklyProgress>>,
@@ -1671,11 +1698,12 @@ export const getGetWeeklyProgressQueryOptions = <
   const { query: queryOptions, request: requestOptions } = options ?? {};
 
   const queryKey =
-    queryOptions?.queryKey ?? getGetWeeklyProgressQueryKey(childId);
+    queryOptions?.queryKey ?? getGetWeeklyProgressQueryKey(childId, params);
 
   const queryFn: QueryFunction<
     Awaited<ReturnType<typeof getWeeklyProgress>>
-  > = ({ signal }) => getWeeklyProgress(childId, { signal, ...requestOptions });
+  > = ({ signal }) =>
+    getWeeklyProgress(childId, params, { signal, ...requestOptions });
 
   return {
     queryKey,
@@ -1695,7 +1723,7 @@ export type GetWeeklyProgressQueryResult = NonNullable<
 export type GetWeeklyProgressQueryError = ErrorType<unknown>;
 
 /**
- * @summary Get the last seven daily progress rows for a child
+ * @summary Get zero-filled daily progress for a child
  */
 
 export function useGetWeeklyProgress<
@@ -1703,6 +1731,7 @@ export function useGetWeeklyProgress<
   TError = ErrorType<unknown>,
 >(
   childId: number,
+  params?: GetWeeklyProgressParams,
   options?: {
     query?: UseQueryOptions<
       Awaited<ReturnType<typeof getWeeklyProgress>>,
@@ -1712,7 +1741,11 @@ export function useGetWeeklyProgress<
     request?: SecondParameter<typeof customFetch>;
   },
 ): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
-  const queryOptions = getGetWeeklyProgressQueryOptions(childId, options);
+  const queryOptions = getGetWeeklyProgressQueryOptions(
+    childId,
+    params,
+    options,
+  );
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;
