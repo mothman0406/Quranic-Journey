@@ -95,6 +95,12 @@ function startOfToday() {
   return new Date(now.getFullYear(), now.getMonth(), now.getDate());
 }
 
+function tomorrowLocalDate() {
+  const tomorrow = startOfToday();
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  return getLocalDateHeaderValue(tomorrow);
+}
+
 function getLocalDateHeaderValue(date = new Date()) {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");
@@ -467,6 +473,19 @@ function PriorityPill({ priority }: { priority: string }) {
   );
 }
 
+function MutedPriorityPill({ priority }: { priority: string }) {
+  const priorityStyle = getReviewPriorityStyle(priority);
+  return (
+    <BadgePill
+      label={priorityStyle.label}
+      color="#6b7280"
+      backgroundColor="#f9fafb"
+      borderColor="#e5e7eb"
+      dotColor={priorityStyle.text}
+    />
+  );
+}
+
 function SummaryMetric({
   label,
   value,
@@ -521,6 +540,41 @@ function QueueSummary({
         <SummaryMetric label="Done" value={reviewedCount} color="#16a34a" />
         <SummaryMetric label="Upcoming" value={upcomingCount} color="#2563eb" />
       </View>
+    </View>
+  );
+}
+
+function CompletionCelebrationCard({
+  reviewedCount,
+  tomorrowCount,
+  onStartTomorrow,
+  onDismiss,
+}: {
+  reviewedCount: number;
+  tomorrowCount: number;
+  onStartTomorrow: () => void;
+  onDismiss: () => void;
+}) {
+  return (
+    <View style={styles.celebrationCard}>
+      <View style={styles.celebrationIcon}>
+        <Ionicons name="checkmark-circle" size={44} color="#16a34a" />
+      </View>
+      <Text style={styles.celebrationTitle}>All caught up!</Text>
+      <Text style={styles.celebrationDetail}>
+        Great work - {reviewedCount} review{reviewedCount === 1 ? "" : "s"} done today.
+      </Text>
+      {tomorrowCount > 0 && (
+        <Pressable style={styles.celebrationPrimaryButton} onPress={onStartTomorrow}>
+          <Text style={styles.celebrationPrimaryButtonText}>
+            Start tomorrow's reviews early
+          </Text>
+          <Ionicons name="arrow-forward" size={16} color="#ffffff" />
+        </Pressable>
+      )}
+      <Pressable style={styles.celebrationDismissButton} onPress={onDismiss}>
+        <Text style={styles.celebrationDismissText}>Done for today</Text>
+      </Pressable>
     </View>
   );
 }
@@ -661,10 +715,13 @@ function ReviewCard({
     <Pressable
       style={[
         styles.card,
-        {
-          backgroundColor: priorityStyle.cardBg,
-          borderColor: priorityStyle.border,
-        },
+        !isReviewed &&
+          !isUpcoming && {
+            backgroundColor: priorityStyle.cardBg,
+            borderColor: priorityStyle.border,
+          },
+        isReviewed && styles.reviewedCard,
+        isUpcoming && styles.upcomingCard,
         batchState?.selected && styles.cardSelectedForBatch,
         batchState?.neighbor && styles.cardNeighborForBatch,
         isBatchMode && !batchState.canToggle && styles.cardBlockedForBatch,
@@ -673,14 +730,36 @@ function ReviewCard({
       onPress={cardPress}
       disabled={!cardPress}
     >
-      <View style={[styles.priorityRail, { backgroundColor: priorityStyle.text }]} />
-      <View style={styles.cardTop}>
-        <PriorityPill priority={item.reviewPriority} />
-        <Text style={styles.surahName} numberOfLines={1}>
+      {isReviewed ? (
+        <View style={styles.reviewedCheckRail}>
+          <Ionicons name="checkmark-circle" size={21} color="#16a34a" />
+        </View>
+      ) : (
+        <View
+          style={[
+            styles.priorityRail,
+            { backgroundColor: isUpcoming ? "#cbd5e1" : priorityStyle.text },
+          ]}
+        />
+      )}
+      <View style={[styles.cardTop, isUpcoming && styles.upcomingCardTop]}>
+        {isReviewed ? (
+          <MutedPriorityPill priority={item.reviewPriority} />
+        ) : (
+          <PriorityPill priority={item.reviewPriority} />
+        )}
+        <Text
+          style={[
+            styles.surahName,
+            isReviewed && styles.reviewedSurahName,
+            isUpcoming && styles.upcomingSurahName,
+          ]}
+          numberOfLines={1}
+        >
           {item.surahName ?? `Surah ${item.surahNumber}`}
         </Text>
         {item.isPartialReview && (
-          <Text style={styles.chunkBadge}>
+          <Text style={[styles.chunkBadge, isReviewed && styles.reviewedChunkBadge]}>
             {item.chunkIndex} of {item.chunkCount}
           </Text>
         )}
@@ -705,17 +784,33 @@ function ReviewCard({
         )}
       </View>
       <View style={styles.cardMetaRow}>
-        <Text style={styles.cardSub}>
+        <Text
+          style={[
+            styles.cardSub,
+            isReviewed && styles.reviewedCardSub,
+            isUpcoming && styles.upcomingCardSub,
+          ]}
+        >
           {formatAyahRange(item)} · {pageLabel}
         </Text>
         <Text
           style={[
             styles.statusBadge,
             {
-              color: isReviewed ? "#047857" : priorityStyle.text,
-              backgroundColor: isReviewed ? "#ecfdf5" : priorityStyle.bg,
-              borderColor: isReviewed ? "#a7f3d0" : priorityStyle.border,
+              color: isReviewed ? "#6b7280" : isUpcoming ? "#475569" : priorityStyle.text,
+              backgroundColor: isReviewed
+                ? "#f9fafb"
+                : isUpcoming
+                ? "#f8fafc"
+                : priorityStyle.bg,
+              borderColor: isReviewed
+                ? "#e5e7eb"
+                : isUpcoming
+                ? "#e2e8f0"
+                : priorityStyle.border,
             },
+            isReviewed && styles.reviewedStatusBadge,
+            isUpcoming && styles.upcomingStatusBadge,
           ]}
         >
           {statusLabel}
@@ -815,6 +910,8 @@ export default function ReviewScreen() {
   >([]);
   const [nextOpenReviewDate, setNextOpenReviewDate] = useState<string | null>(null);
   const [selectedMushafSurahIds, setSelectedMushafSurahIds] = useState<number[]>([]);
+  const [startTomorrowEarly, setStartTomorrowEarly] = useState(false);
+  const [completionDismissed, setCompletionDismissed] = useState(false);
 
   const [state, setState] = useState<
     | { status: "loading" }
@@ -925,9 +1022,18 @@ export default function ReviewScreen() {
   }
 
   function handleContinueReviewing(nextDate: string) {
+    setStartTomorrowEarly(false);
+    setCompletionDismissed(false);
+    setSelectedMushafSurahIds([]);
     activeDateRef.current = nextDate;
     setActiveLocalDate(nextDate);
     void load("initial", nextDate);
+  }
+
+  function handleStartTomorrowEarly() {
+    setStartTomorrowEarly(true);
+    setCompletionDismissed(false);
+    setSelectedMushafSurahIds([]);
   }
 
   return (
@@ -967,17 +1073,45 @@ export default function ReviewScreen() {
               activeLocalDate,
             );
             const reviewedSurahIds = new Set(reviewedToday.map((item) => item.surahId));
-            const dueToday = (state.data.dueToday ?? []).filter(
+            const baseDueToday = (state.data.dueToday ?? []).filter(
               (item) => !reviewedSurahIds.has(item.surahId),
             );
-            const upcoming = state.data.upcoming ?? [];
+            const rawUpcoming = state.data.upcoming ?? [];
+            const tomorrowDate = tomorrowLocalDate();
+            const tomorrowUpcoming = rawUpcoming.filter(
+              (item) =>
+                item.dueDate === tomorrowDate && !reviewedSurahIds.has(item.surahId),
+            );
+            const promoteTomorrow =
+              activeLocalDate === todayLocal &&
+              startTomorrowEarly &&
+              baseDueToday.length === 0;
+            const promotedTomorrow = promoteTomorrow ? tomorrowUpcoming : [];
+            const dueToday = promoteTomorrow
+              ? [...baseDueToday, ...promotedTomorrow]
+              : baseDueToday;
+            const upcoming = dueToday.length === 0 ? tomorrowUpcoming : [];
+            const nextRawUpcoming = rawUpcoming
+              .map((item) => item.dueDate)
+              .filter((dueDate) => dueDate > activeLocalDate)
+              .sort()[0];
             const activeDateLabel = formatReviewDayLabel(activeLocalDate);
             const nextOpenReviewLabel = nextOpenReviewDate
               ? formatReviewDayLabel(nextOpenReviewDate)
               : null;
             const isFullyEmpty =
-              dueToday.length === 0 && reviewedToday.length === 0 && upcoming.length === 0;
+              dueToday.length === 0 &&
+              reviewedToday.length === 0 &&
+              rawUpcoming.length === 0;
             const isCompleteToday = dueToday.length === 0 && reviewedToday.length > 0;
+            const showCompletionCelebration =
+              activeLocalDate === todayLocal && isCompleteToday && !completionDismissed;
+            const hasFutureReviews =
+              dueToday.length === 0 &&
+              reviewedToday.length === 0 &&
+              rawUpcoming.length > 0;
+            const upcomingCount =
+              promoteTomorrow && promotedTomorrow.length > 0 ? 0 : tomorrowUpcoming.length;
             const pendingIds = new Set(dueToday.map((item) => item.surahId));
             const activeSelectedIds = selectedMushafSurahIds.filter((surahId) =>
               pendingIds.has(surahId),
@@ -1066,7 +1200,7 @@ export default function ReviewScreen() {
                 <QueueSummary
                   dueCount={dueToday.length}
                   reviewedCount={reviewedToday.length}
-                  upcomingCount={upcoming.length}
+                  upcomingCount={upcomingCount}
                   activeDateLabel={activeDateLabel}
                 />
 
@@ -1129,36 +1263,37 @@ export default function ReviewScreen() {
                   </>
                 )}
 
-                {isCompleteToday && (
-                  <DayStateCard
-                    tone="complete"
-                    title={`${activeDateLabel}'s review is complete`}
-                    detail="The queue is clear. Finished items stay below for this review day."
-                    actionLabel={
-                      nextOpenReviewLabel
-                        ? `Continue Reviewing ${nextOpenReviewLabel}`
-                        : undefined
-                    }
-                    onAction={
-                      nextOpenReviewDate
-                        ? () => handleContinueReviewing(nextOpenReviewDate)
-                        : undefined
-                    }
+                {showCompletionCelebration && (
+                  <CompletionCelebrationCard
+                    reviewedCount={reviewedToday.length}
+                    tomorrowCount={tomorrowUpcoming.length}
+                    onStartTomorrow={handleStartTomorrowEarly}
+                    onDismiss={() => setCompletionDismissed(true)}
                   />
                 )}
 
-                {dueToday.length === 0 && reviewedToday.length === 0 && upcoming.length > 0 && (
+                {hasFutureReviews && (
                   <DayStateCard
                     tone="clear"
                     title={`No reviews due ${formatReviewDayInSentence(activeDateLabel)}`}
-                    detail={`Next scheduled review: ${formatDueDate(upcoming[0]!.dueDate)}.`}
+                    detail={
+                      upcoming.length > 0
+                        ? "Tomorrow's reviews are ready when you want them."
+                        : `Next scheduled review: ${
+                            nextRawUpcoming ? formatDueDate(nextRawUpcoming) : "soon"
+                          }.`
+                    }
                     actionLabel={
-                      nextOpenReviewLabel
+                      upcoming.length > 0
+                        ? "Start tomorrow's reviews early"
+                        : nextOpenReviewLabel
                         ? `Continue Reviewing ${nextOpenReviewLabel}`
                         : undefined
                     }
                     onAction={
-                      nextOpenReviewDate
+                      upcoming.length > 0
+                        ? handleStartTomorrowEarly
+                        : nextOpenReviewDate
                         ? () => handleContinueReviewing(nextOpenReviewDate)
                         : undefined
                     }
@@ -1301,6 +1436,63 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: "700",
     marginTop: 2,
+  },
+  celebrationCard: {
+    alignItems: "center",
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "#bbf7d0",
+    backgroundColor: "#f0fdf4",
+    paddingVertical: 22,
+    paddingHorizontal: 18,
+    gap: 8,
+  },
+  celebrationIcon: {
+    width: 58,
+    height: 58,
+    borderRadius: 29,
+    backgroundColor: "#ffffff",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 2,
+  },
+  celebrationTitle: {
+    color: "#064e3b",
+    fontSize: 21,
+    fontWeight: "900",
+    textAlign: "center",
+  },
+  celebrationDetail: {
+    color: "#047857",
+    fontSize: 13,
+    fontWeight: "700",
+    lineHeight: 18,
+    textAlign: "center",
+  },
+  celebrationPrimaryButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 7,
+    backgroundColor: "#16a34a",
+    borderRadius: 999,
+    paddingVertical: 11,
+    paddingHorizontal: 16,
+    marginTop: 8,
+  },
+  celebrationPrimaryButtonText: {
+    color: "#ffffff",
+    fontSize: 13,
+    fontWeight: "900",
+  },
+  celebrationDismissButton: {
+    paddingVertical: 7,
+    paddingHorizontal: 10,
+  },
+  celebrationDismissText: {
+    color: "#047857",
+    fontSize: 12,
+    fontWeight: "800",
   },
   dayStateCard: {
     flexDirection: "row",
@@ -1575,6 +1767,24 @@ const styles = StyleSheet.create({
   cardReadOnly: {
     opacity: 0.95,
   },
+  reviewedCard: {
+    backgroundColor: "#f3f4f6",
+    borderColor: "#e5e7eb",
+    paddingVertical: 12,
+    paddingLeft: 44,
+    shadowOpacity: 0,
+    elevation: 0,
+  },
+  upcomingCard: {
+    backgroundColor: "#f8fafc",
+    borderColor: "#e5e7eb",
+    paddingVertical: 11,
+    paddingHorizontal: 12,
+    paddingLeft: 16,
+    gap: 4,
+    shadowOpacity: 0,
+    elevation: 0,
+  },
   cardSelectedForBatch: {
     borderColor: "#2563eb",
     backgroundColor: "#eff6ff",
@@ -1593,10 +1803,21 @@ const styles = StyleSheet.create({
     bottom: 0,
     width: 5,
   },
+  reviewedCheckRail: {
+    position: "absolute",
+    left: 12,
+    top: 0,
+    bottom: 0,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   cardTop: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
+  },
+  upcomingCardTop: {
+    gap: 7,
   },
   surahName: {
     flex: 1,
@@ -1604,10 +1825,23 @@ const styles = StyleSheet.create({
     fontWeight: "900",
     color: "#111827",
   },
+  reviewedSurahName: {
+    color: "#4b5563",
+    fontSize: 15,
+    fontWeight: "800",
+  },
+  upcomingSurahName: {
+    color: "#334155",
+    fontSize: 14,
+    fontWeight: "800",
+  },
   chunkBadge: {
     fontSize: 12,
     color: "#64748b",
     fontWeight: "800",
+  },
+  reviewedChunkBadge: {
+    color: "#9ca3af",
   },
   batchSelectCircle: {
     width: 28,
@@ -1642,6 +1876,14 @@ const styles = StyleSheet.create({
     color: "#475569",
     lineHeight: 18,
   },
+  reviewedCardSub: {
+    color: "#6b7280",
+    fontSize: 12,
+  },
+  upcomingCardSub: {
+    color: "#64748b",
+    fontSize: 12,
+  },
   statusBadge: {
     overflow: "hidden",
     borderRadius: 999,
@@ -1651,9 +1893,17 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: "800",
   },
+  reviewedStatusBadge: {
+    paddingVertical: 3,
+    paddingHorizontal: 8,
+  },
+  upcomingStatusBadge: {
+    paddingVertical: 3,
+    paddingHorizontal: 8,
+  },
   upcomingDate: {
-    fontSize: 12,
-    color: "#555555",
+    fontSize: 11,
+    color: "#64748b",
     fontWeight: "600",
   },
   batchCardHint: {
