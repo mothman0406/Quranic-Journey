@@ -13,6 +13,7 @@ export type ApiVerse = {
   text_uthmani: string;
   page_number?: number;
   words: ApiWord[];
+  translations?: Array<{ text?: string }>;
 };
 
 export type ApiPageVerse = {
@@ -33,6 +34,46 @@ export async function fetchSurahVerses(surahNumber: number): Promise<ApiVerse[]>
     if (!res.ok) throw new Error(`Quran.com API ${res.status}`);
     const data = (await res.json()) as { verses?: ApiVerse[] };
     return data.verses ?? [];
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function cleanTranslationHtml(raw: string): string {
+  return raw
+    .replace(/<sup[^>]*>.*?<\/sup>/gi, "")
+    .replace(/<[^>]+>/g, "")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&#\d+;/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+const ayahTranslationCache = new Map<string, string>();
+
+export async function fetchAyahTranslation(
+  verseKey: string,
+  translationId = 131,
+): Promise<string> {
+  const cacheKey = `${translationId}:${verseKey}`;
+  const cached = ayahTranslationCache.get(cacheKey);
+  if (cached) return cached;
+
+  const ac = new AbortController();
+  const timer = setTimeout(() => ac.abort(), 10000);
+  try {
+    const res = await fetch(
+      `https://api.quran.com/api/v4/verses/by_key/${verseKey}?translations=${translationId}`,
+      { signal: ac.signal },
+    );
+    if (!res.ok) throw new Error(`Translation unavailable (${res.status})`);
+    const data = (await res.json()) as { verse?: { translations?: Array<{ text?: string }> } };
+    const text = cleanTranslationHtml(data.verse?.translations?.[0]?.text ?? "");
+    if (!text) throw new Error("Translation unavailable");
+    ayahTranslationCache.set(cacheKey, text);
+    return text;
   } finally {
     clearTimeout(timer);
   }

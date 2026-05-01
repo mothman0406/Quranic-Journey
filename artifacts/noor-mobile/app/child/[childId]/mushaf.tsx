@@ -43,6 +43,15 @@ import {
   type MushafJuz,
   type MushafSurah,
 } from "@/src/lib/mushaf";
+import {
+  emptyMushafAnnotations,
+  mushafAnnotationRecordFromTarget,
+  mushafAnnotationStorageKey,
+  normalizeMushafAnnotations,
+  type MushafAnnotations,
+  type MushafAyahTarget as PageAyahTarget,
+  type MushafHighlightColor as HighlightColor,
+} from "@/src/lib/mushaf-annotations";
 
 const PAGE_ASPECT_RATIO = 1.45;
 const PRESET_PAGES = [1, 50, 300, TOTAL_MUSHAF_PAGES] as const;
@@ -55,7 +64,6 @@ const MUSHAF_AUDIO_RANGE_REPEATS = [1, 2, 3] as const;
 
 type ReadingStatus = "not_started" | "in_progress" | "completed";
 type ToolMode = "none" | "blind" | "select" | "recite";
-type HighlightColor = "yellow" | "green" | "blue" | "pink";
 type AyahSheetView = "main" | "highlight" | "note" | "translation" | "tafseer" | "wbw";
 
 type ReadingGoal = {
@@ -86,33 +94,6 @@ type RecentRead = {
   surahNumber: number;
   surahName: string;
   timestamp: number;
-};
-
-type PageAyahTarget = {
-  verseKey: string;
-  surahNumber: number;
-  ayahNumber: number;
-  pageNumber: number;
-  textUthmani: string;
-};
-
-type AyahAnnotationRecord = PageAyahTarget & {
-  savedAt: number;
-};
-
-type AyahHighlightRecord = AyahAnnotationRecord & {
-  color: HighlightColor;
-};
-
-type AyahNoteRecord = AyahAnnotationRecord & {
-  text: string;
-  updatedAt: number;
-};
-
-type MushafAnnotations = {
-  bookmarks: Record<string, AyahAnnotationRecord>;
-  highlights: Record<string, AyahHighlightRecord>;
-  notes: Record<string, AyahNoteRecord>;
 };
 
 type WBWWord = {
@@ -158,10 +139,6 @@ function bookmarkStorageKey(childId: string | undefined) {
 
 function recentReadStorageKey(childId: string | undefined) {
   return `noorpath:mushaf:recent:${childId ?? "unknown"}`;
-}
-
-function annotationStorageKey(childId: string | undefined) {
-  return `noorpath:mushaf:annotations:${childId ?? "unknown"}`;
 }
 
 function audioSettingsStorageKey(childId: string | undefined) {
@@ -308,92 +285,6 @@ function contiguousMemorizedThrough(start: number, end: number, memorizedAyahs: 
     completed = ayah;
   }
   return completed >= start ? completed : null;
-}
-
-function emptyAnnotations(): MushafAnnotations {
-  return { bookmarks: {}, highlights: {}, notes: {} };
-}
-
-function isHighlightColor(value: unknown): value is HighlightColor {
-  return value === "yellow" || value === "green" || value === "blue" || value === "pink";
-}
-
-function normalizeAnnotationRecord(value: unknown): AyahAnnotationRecord | null {
-  if (!value || typeof value !== "object") return null;
-  const record = value as Record<string, unknown>;
-  const verseKey = typeof record.verseKey === "string" ? record.verseKey : "";
-  const parsed = parseVerseKey(verseKey);
-  const pageNumber = Number(record.pageNumber);
-  const textUthmani = typeof record.textUthmani === "string" ? record.textUthmani : "";
-  const savedAt = Number(record.savedAt);
-
-  if (
-    !parsed ||
-    !Number.isInteger(pageNumber) ||
-    pageNumber < 1 ||
-    pageNumber > TOTAL_MUSHAF_PAGES ||
-    !textUthmani
-  ) {
-    return null;
-  }
-
-  return {
-    verseKey,
-    surahNumber: parsed.surahNumber,
-    ayahNumber: parsed.ayahNumber,
-    pageNumber,
-    textUthmani,
-    savedAt: Number.isFinite(savedAt) ? savedAt : Date.now(),
-  };
-}
-
-function normalizeAnnotations(raw: string | null): MushafAnnotations {
-  if (!raw) return emptyAnnotations();
-  try {
-    const parsed = JSON.parse(raw) as unknown;
-    if (!parsed || typeof parsed !== "object") return emptyAnnotations();
-    const record = parsed as Record<string, unknown>;
-    const bookmarks: MushafAnnotations["bookmarks"] = {};
-    const highlights: MushafAnnotations["highlights"] = {};
-    const notes: MushafAnnotations["notes"] = {};
-
-    for (const [verseKey, value] of Object.entries((record.bookmarks as Record<string, unknown>) ?? {})) {
-      const normalized = normalizeAnnotationRecord({ ...(value as object), verseKey });
-      if (normalized) bookmarks[normalized.verseKey] = normalized;
-    }
-
-    for (const [verseKey, value] of Object.entries((record.highlights as Record<string, unknown>) ?? {})) {
-      const normalized = normalizeAnnotationRecord({ ...(value as object), verseKey });
-      const color = value && typeof value === "object" ? (value as Record<string, unknown>).color : null;
-      if (normalized && isHighlightColor(color)) {
-        highlights[normalized.verseKey] = { ...normalized, color };
-      }
-    }
-
-    for (const [verseKey, value] of Object.entries((record.notes as Record<string, unknown>) ?? {})) {
-      const normalized = normalizeAnnotationRecord({ ...(value as object), verseKey });
-      const noteText = value && typeof value === "object" ? (value as Record<string, unknown>).text : null;
-      const updatedAt = value && typeof value === "object" ? Number((value as Record<string, unknown>).updatedAt) : Date.now();
-      if (normalized && typeof noteText === "string" && noteText.trim()) {
-        notes[normalized.verseKey] = {
-          ...normalized,
-          text: noteText,
-          updatedAt: Number.isFinite(updatedAt) ? updatedAt : normalized.savedAt,
-        };
-      }
-    }
-
-    return { bookmarks, highlights, notes };
-  } catch {
-    return emptyAnnotations();
-  }
-}
-
-function annotationRecordFromTarget(target: PageAyahTarget): AyahAnnotationRecord {
-  return {
-    ...target,
-    savedAt: Date.now(),
-  };
 }
 
 function formatVerseLabel(target: Pick<PageAyahTarget, "surahNumber" | "ayahNumber">) {
@@ -1671,7 +1562,7 @@ export default function MushafScreen() {
   const [pageInput, setPageInput] = useState("");
   const [bookmarkedPages, setBookmarkedPages] = useState<number[]>([]);
   const [bookmarkError, setBookmarkError] = useState<string | null>(null);
-  const [annotations, setAnnotations] = useState<MushafAnnotations>(() => emptyAnnotations());
+  const [annotations, setAnnotations] = useState<MushafAnnotations>(() => emptyMushafAnnotations());
   const [annotationError, setAnnotationError] = useState<string | null>(null);
   const [recentReads, setRecentReads] = useState<RecentRead[]>([]);
   const [chromeVisible, setChromeVisible] = useState(true);
@@ -1821,9 +1712,9 @@ export default function MushafScreen() {
 
     async function loadAnnotations() {
       try {
-        const raw = await AsyncStorage.getItem(annotationStorageKey(childId));
+        const raw = await AsyncStorage.getItem(mushafAnnotationStorageKey(childId));
         if (cancelled) return;
-        setAnnotations(normalizeAnnotations(raw));
+        setAnnotations(normalizeMushafAnnotations(raw));
       } catch {
         if (!cancelled) setAnnotationError("Ayah annotations could not load.");
       }
@@ -2037,7 +1928,7 @@ export default function MushafScreen() {
   }
 
   function persistAnnotations(next: MushafAnnotations) {
-    AsyncStorage.setItem(annotationStorageKey(childId), JSON.stringify(next)).catch(() => {
+    AsyncStorage.setItem(mushafAnnotationStorageKey(childId), JSON.stringify(next)).catch(() => {
       setAnnotationError("Ayah annotations could not save.");
     });
   }
@@ -2057,7 +1948,7 @@ export default function MushafScreen() {
       if (bookmarks[target.verseKey]) {
         delete bookmarks[target.verseKey];
       } else {
-        bookmarks[target.verseKey] = annotationRecordFromTarget(target);
+        bookmarks[target.verseKey] = mushafAnnotationRecordFromTarget(target);
       }
       return { ...current, bookmarks };
     });
@@ -2070,7 +1961,7 @@ export default function MushafScreen() {
         delete highlights[target.verseKey];
       } else {
         highlights[target.verseKey] = {
-          ...annotationRecordFromTarget(target),
+          ...mushafAnnotationRecordFromTarget(target),
           color,
         };
       }
@@ -2086,7 +1977,7 @@ export default function MushafScreen() {
         delete notes[target.verseKey];
       } else {
         notes[target.verseKey] = {
-          ...annotationRecordFromTarget(target),
+          ...mushafAnnotationRecordFromTarget(target),
           text: clean,
           updatedAt: Date.now(),
         };

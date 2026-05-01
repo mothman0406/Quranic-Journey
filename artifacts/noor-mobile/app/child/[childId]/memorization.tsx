@@ -3,6 +3,8 @@ import { Ionicons } from "@expo/vector-icons";
 import {
   ActivityIndicator,
   Alert,
+  Clipboard,
+  FlatList,
   Keyboard,
   Modal,
   NativeScrollEvent,
@@ -13,6 +15,8 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  type StyleProp,
+  type TextStyle,
   View,
 } from "react-native";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
@@ -43,6 +47,7 @@ import {
   type WorkStatus,
 } from "@/src/lib/memorization";
 import {
+  fetchAyahTranslation,
   fetchSurahVerses,
   fetchVersesByPage,
   fetchAllChapters,
@@ -72,12 +77,21 @@ import {
 } from "@/src/lib/settings";
 import { extractTajweedColor } from "@/src/lib/tajweed";
 import { CelebrationOverlay } from "@/src/components/celebration-overlay";
+import {
+  saveMushafAyahBookmark,
+  type MushafAyahTarget,
+} from "@/src/lib/mushaf-annotations";
 
 const PLAYBACK_RATES = [0.75, 0.85, 1.0, 1.15, 1.25, 1.5] as const;
+const AYAH_ROW_ESTIMATED_HEIGHT = 190;
 type InternalPhase = "single" | "cumulative";
 type DiscoveryFilter = "all" | "current" | "in_progress" | "not_started" | "memorized" | "needs_review";
 type AyahTone = "white" | "red" | "orange" | "green";
 type ReviewStrengthTone = "red" | "orange" | "green";
+type AyahTranslationState =
+  | { status: "loading"; text: null; error: null }
+  | { status: "ready"; text: string; error: null }
+  | { status: "error"; text: null; error: string };
 
 type DiscoveryState =
   | { status: "loading" }
@@ -392,6 +406,27 @@ function getBookmarkSurahName(
   );
 }
 
+function splitTranslationInsertions(text: string) {
+  const parts: Array<{ text: string; insertion: boolean }> = [];
+  const pattern = /「([^」]*)」/g;
+  let cursor = 0;
+  let match: RegExpExecArray | null;
+
+  while ((match = pattern.exec(text)) !== null) {
+    if (match.index > cursor) {
+      parts.push({ text: text.slice(cursor, match.index), insertion: false });
+    }
+    parts.push({ text: match[1] ?? "", insertion: true });
+    cursor = match.index + match[0].length;
+  }
+
+  if (cursor < text.length) {
+    parts.push({ text: text.slice(cursor), insertion: false });
+  }
+
+  return parts.length > 0 ? parts : [{ text, insertion: false }];
+}
+
 function scoreProgress(progress: MemorizationProgress[]) {
   const memorized = progress.filter((item) => item.status === "memorized").length;
   const learning = progress.filter((item) => item.status === "in_progress").length;
@@ -508,9 +543,13 @@ export default function MemorizationScreen() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [revealedVerses, setRevealedVerses] = useState<Set<string>>(new Set());
   const [tajweedEnabled, setTajweedEnabled] = useState<boolean>(false);
+  const [showSessionTranslation, setShowSessionTranslation] = useState(false);
+  const [ayahTranslations, setAyahTranslations] = useState<Record<string, AyahTranslationState>>({});
   const [translationPopup, setTranslationPopup] = useState<{
     arabic: string;
     translation: string;
+    verseKey?: string;
+    loading?: boolean;
   } | null>(null);
   const [tappedWord, setTappedWord] = useState<TappedWordTarget | null>(null);
   const [wordAudioLoadingKey, setWordAudioLoadingKey] = useState<string | null>(null);
@@ -587,9 +626,15 @@ export default function MemorizationScreen() {
   const advanceTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Layout refs for auto-scroll
   const scrollViewRef = useRef<ScrollView>(null);
+  const ayahListRef = useRef<FlatList<number>>(null);
   const lineLayoutMap = useRef<Map<string, number>>(new Map());
   const pageCardLayoutMap = useRef<Map<number, number>>(new Map());
   const autoScrollRetryRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const ayahAutoScrollRetryRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const ayahViewabilityConfigRef = useRef({
+    minimumViewableTime: 100,
+    itemVisiblePercentThreshold: 30,
+  });
 
   // Recite refs (callbacks read these; state isn't visible inside listeners)
   const reciteModeRef = useRef(false);
@@ -838,6 +883,8 @@ export default function MemorizationScreen() {
     setHighlightedPage(null);
     setInternalPhase("single");
     internalPhaseRef.current = "single";
+    setShowSessionTranslation(false);
+    setAyahTranslations({});
     setSessionReviewOnly(Boolean(target.isReviewOnly));
     setStartInRecitationCheck(Boolean(target.isReviewOnly && target.startInRecitationCheck));
     setLeaveSheetOpen(false);
@@ -1085,6 +1132,41 @@ export default function MemorizationScreen() {
     }
   }
 
+  function clearAyahAutoScrollRetry() {
+    if (ayahAutoScrollRetryRef.current) {
+      clearTimeout(ayahAutoScrollRetryRef.current);
+      ayahAutoScrollRetryRef.current = null;
+    }
+  }
+
+  function scrollAyahListToVerse(verseNumber: number, attempt = 0) {
+    if (viewMode !== "ayah" || ayahStart === null || ayahEnd === null) return;
+    if (verseNumber < ayahStart || verseNumber > ayahEnd) return;
+
+    const index = verseNumber - ayahStart;
+    try {
+      ayahListRef.current?.scrollToIndex({
+        index,
+        animated: true,
+        viewPosition: 0.3,
+      });
+      return;
+    } catch {
+      ayahListRef.current?.scrollToOffset({
+        offset: Math.max(0, index * AYAH_ROW_ESTIMATED_HEIGHT),
+        animated: true,
+      });
+    }
+
+    if (attempt < 4) {
+      clearAyahAutoScrollRetry();
+      ayahAutoScrollRetryRef.current = setTimeout(() => {
+        ayahAutoScrollRetryRef.current = null;
+        scrollAyahListToVerse(verseNumber, attempt + 1);
+      }, 90);
+    }
+  }
+
   function resolveMushafScrollTarget(verseNumber: number) {
     if (pageStart === null || pageEnd === null || surahNumber === null) return null;
 
@@ -1178,10 +1260,17 @@ export default function MemorizationScreen() {
     return clearMushafAutoScrollRetry;
   }, [playingVerseNumber, viewMode, pageStart, pageEnd, pageWordsMap, versePageMap, surahNumber]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  useEffect(() => {
+    clearAyahAutoScrollRetry();
+    scrollAyahListToVerse(playingVerseNumber);
+    return clearAyahAutoScrollRetry;
+  }, [playingVerseNumber, viewMode, ayahStart, ayahEnd, sessionLoadId]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Cleanup on unmount
   useEffect(() => {
     return () => {
       clearMushafAutoScrollRetry();
+      clearAyahAutoScrollRetry();
       void stopAudioCompletely();
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -2015,9 +2104,12 @@ export default function MemorizationScreen() {
     });
   }
 
-  function openAyahSheet(target: AyahSheetTarget) {
-    if (reciteModeRef.current) return;
-    if (blindMode && !revealedVerses.has(target.verseKey)) return;
+  function openAyahSheet(
+    target: AyahSheetTarget,
+    options: { allowHidden?: boolean; allowRecite?: boolean } = {},
+  ) {
+    if (reciteModeRef.current && !options.allowRecite) return;
+    if (!options.allowHidden && blindMode && !revealedVerses.has(target.verseKey)) return;
     setSettingsOpen(false);
     setTranslationPopup(null);
     setTappedAyah(target);
@@ -2684,6 +2776,252 @@ export default function MemorizationScreen() {
     }
   }
 
+  function renderTranslationSegments(
+    text: string,
+    baseStyle: StyleProp<TextStyle>,
+    insertionStyle: StyleProp<TextStyle>,
+  ) {
+    return (
+      <Text style={baseStyle}>
+        {splitTranslationInsertions(text).map((part, index) => (
+          <Text
+            key={`${index}-${part.insertion ? "i" : "t"}`}
+            style={part.insertion ? insertionStyle : undefined}
+          >
+            {part.text}
+          </Text>
+        ))}
+      </Text>
+    );
+  }
+
+  function getAyahTextUthmani(verseNumber: number) {
+    return (displayWordsMap.get(verseNumber) ?? [])
+      .map((word) => word.text_uthmani)
+      .join(" ");
+  }
+
+  function buildAyahSheetTarget(verseNumber: number): AyahSheetTarget | null {
+    if (surahNumber === null) return null;
+    const verseKey = `${surahNumber}:${verseNumber}`;
+    return {
+      verseKey,
+      surahNumber,
+      ayahNumber: verseNumber,
+      pageNumber: versePageMap.get(verseNumber) ?? activeMushafPage,
+      textUthmani: getAyahTextUthmani(verseNumber),
+    };
+  }
+
+  function ensureAyahTranslation(verseKey: string) {
+    const existing = ayahTranslations[verseKey];
+    if (existing?.status === "loading" || existing?.status === "ready") return;
+
+    setAyahTranslations((current) => ({
+      ...current,
+      [verseKey]: { status: "loading", text: null, error: null },
+    }));
+
+    fetchAyahTranslation(verseKey, 131)
+      .then((translation) => {
+        setAyahTranslations((current) => ({
+          ...current,
+          [verseKey]: { status: "ready", text: translation, error: null },
+        }));
+      })
+      .catch((error) => {
+        setAyahTranslations((current) => ({
+          ...current,
+          [verseKey]: {
+            status: "error",
+            text: null,
+            error: error instanceof Error ? error.message : "Translation unavailable.",
+          },
+        }));
+      });
+  }
+
+  async function loadAyahTranslationText(verseKey: string) {
+    const existing = ayahTranslations[verseKey];
+    if (existing?.status === "ready") return existing.text;
+
+    setAyahTranslations((current) => ({
+      ...current,
+      [verseKey]: { status: "loading", text: null, error: null },
+    }));
+    const translation = await fetchAyahTranslation(verseKey, 131);
+    setAyahTranslations((current) => ({
+      ...current,
+      [verseKey]: { status: "ready", text: translation, error: null },
+    }));
+    return translation;
+  }
+
+  function getMushafBookmarkTarget(target: AyahSheetTarget): MushafAyahTarget {
+    const pageNumber = clampMushafPage(
+      target.pageNumber ?? versePageMap.get(target.ayahNumber) ?? activeMushafPage ?? 1,
+    );
+    return {
+      verseKey: target.verseKey,
+      surahNumber: target.surahNumber,
+      ayahNumber: target.ayahNumber,
+      pageNumber,
+      textUthmani: target.textUthmani,
+    };
+  }
+
+  function getAyahActionTitle(target: AyahSheetTarget) {
+    const surahName =
+      chaptersMap.get(target.surahNumber)?.name_simple ??
+      MUSHAF_SURAHS.find((surah) => surah.number === target.surahNumber)?.name ??
+      `Surah ${target.surahNumber}`;
+    return `${surahName} — Verse ${target.ayahNumber}`;
+  }
+
+  async function handleListenToAyah(target: AyahSheetTarget) {
+    setTappedAyah(null);
+    setTranslationPopup(null);
+    if (isLoadingRef.current) return;
+    isLoadingRef.current = true;
+    try {
+      if (advanceTimeoutRef.current) {
+        clearTimeout(advanceTimeoutRef.current);
+        advanceTimeoutRef.current = null;
+      }
+      autoPlayRef.current = false;
+      cancelAnimationFrame(rafIdRef.current);
+      if (soundRef.current) {
+        try {
+          await soundRef.current.unloadAsync();
+        } catch {
+          // ignore stale session audio
+        }
+        soundRef.current = null;
+      }
+      setCurrentRepeat(1);
+      setHighlightedWord(-1);
+      setHighlightedPage(null);
+      isPlayingRef.current = false;
+      setIsPlaying(false);
+
+      let createdSound: Audio.Sound | null = null;
+      const { sound } = await Audio.Sound.createAsync(
+        { uri: ayahAudioUrl(reciterRef.current, target.surahNumber, target.ayahNumber) },
+        { shouldPlay: true },
+        (status) => {
+          if (!status.isLoaded || !status.didJustFinish) return;
+          const finishedSound = createdSound;
+          void (async () => {
+            if (soundRef.current === finishedSound) {
+              soundRef.current = null;
+              isPlayingRef.current = false;
+              setIsPlaying(false);
+              setHighlightedWord(-1);
+              setHighlightedPage(null);
+            }
+            try {
+              await finishedSound?.unloadAsync();
+            } catch {
+              // single-ayah preview may already be unloaded
+            }
+          })();
+        },
+      );
+      createdSound = sound;
+      soundRef.current = sound;
+      try {
+        await sound.setVolumeAsync(1.0);
+        await sound.setRateAsync(playbackRateRef.current, true);
+      } catch {
+        // best-effort
+      }
+      isPlayingRef.current = true;
+      setIsPlaying(true);
+    } catch {
+      Alert.alert("Audio unavailable", "Try listening to this ayah again in a moment.");
+    } finally {
+      isLoadingRef.current = false;
+    }
+  }
+
+  async function handleOpenAyahTranslation(target: AyahSheetTarget) {
+    const hideArabic = blindMode && !revealedVerses.has(target.verseKey);
+    setTappedAyah(null);
+    setTranslationPopup({
+      arabic: hideArabic ? "" : target.textUthmani,
+      translation: "Loading translation...",
+      verseKey: target.verseKey,
+      loading: true,
+    });
+    try {
+      const translation = await loadAyahTranslationText(target.verseKey);
+      setTranslationPopup((current) =>
+        current?.verseKey === target.verseKey
+          ? {
+              arabic: hideArabic ? "" : target.textUthmani,
+              translation,
+              verseKey: target.verseKey,
+              loading: false,
+            }
+          : current,
+      );
+    } catch {
+      setTranslationPopup((current) =>
+        current?.verseKey === target.verseKey
+          ? {
+              arabic: hideArabic ? "" : target.textUthmani,
+              translation: "Translation could not load.",
+              verseKey: target.verseKey,
+              loading: false,
+            }
+          : current,
+      );
+    }
+  }
+
+  async function handleBookmarkAyah(target: AyahSheetTarget) {
+    try {
+      await saveMushafAyahBookmark(childId, getMushafBookmarkTarget(target));
+      setTappedAyah(null);
+      Alert.alert("Bookmarked", `Bookmarked ${getAyahActionTitle(target).replace(" — Verse", " verse")}.`);
+    } catch {
+      Alert.alert("Bookmark unavailable", "Try bookmarking this ayah again in a moment.");
+    }
+  }
+
+  function handleCopyAyah(target: AyahSheetTarget) {
+    Clipboard.setString(`${target.textUthmani}\n— Quran ${target.verseKey}`);
+    setTappedAyah(null);
+    Alert.alert("Copied", `Copied Quran ${target.verseKey}.`);
+  }
+
+  async function handleJumpToAyah(verseNumber: number) {
+    if (verseNumber === playingVerseNumberRef.current) return;
+    if (submitting || isLoadingRef.current) return;
+    if (ayahStartRef.current === null || ayahEndRef.current === null) return;
+    const nextVerse = clampNumber(verseNumber, ayahStartRef.current, ayahEndRef.current);
+    if (nextVerse === playingVerseNumberRef.current) return;
+
+    if (advanceTimeoutRef.current) {
+      clearTimeout(advanceTimeoutRef.current);
+      advanceTimeoutRef.current = null;
+    }
+    await stopAudioCompletely();
+    setInternalPhase("single");
+    internalPhaseRef.current = "single";
+    setCumAyahIdx(0);
+    cumAyahIdxRef.current = 0;
+    setCumPass(1);
+    cumPassRef.current = 1;
+    setCumUpTo(nextVerse);
+    cumUpToRef.current = nextVerse;
+    setCurrentRepeat(1);
+    autoPlayRef.current = true;
+    pendingSeekPositionRef.current = null;
+    currentVerseRef.current = nextVerse;
+    setCurrentVerse(nextVerse);
+  }
+
   // ── Full Mushaf page renderer ────────────────────────────────────────────────
 
   function renderMushafPage(pageNum: number) {
@@ -2983,10 +3321,24 @@ export default function MemorizationScreen() {
   const currentReciteExpectedIndex = reciteMode
     ? getNextReciteWordIndex(words, reciteExpectedIdx)
     : null;
-  const ayahVerseKey = surahNumber !== null ? `${surahNumber}:${playingVerseNumber}` : "";
-  const ayahVerseHidden = blindMode && !revealedVerses.has(ayahVerseKey);
   const verseIndex = ayahStart !== null ? currentVerse - ayahStart + 1 : 1;
   const totalVerses = ayahStart !== null && ayahEnd !== null ? ayahEnd - ayahStart + 1 : 0;
+  const sessionAyahNumbers = useMemo(
+    () => (ayahStart !== null && ayahEnd !== null ? buildAyahRange(ayahStart, ayahEnd) : []),
+    [ayahStart, ayahEnd],
+  );
+  const ayahListInitialIndex =
+    ayahStart !== null && sessionAyahNumbers.length > 0
+      ? clampNumber(currentVerse, ayahStart, ayahEnd ?? currentVerse) - ayahStart
+      : 0;
+  const getAyahItemLayout = useCallback(
+    (_data: ArrayLike<number> | null | undefined, index: number) => ({
+      length: AYAH_ROW_ESTIMATED_HEIGHT,
+      offset: AYAH_ROW_ESTIMATED_HEIGHT * index,
+      index,
+    }),
+    [],
+  );
   const singleRepeatPass = Math.min(currentRepeatDisplay, repeatCount);
   const canPrev = ayahStart !== null && currentVerse > ayahStart;
   const canEnterCumulativeFromSingle =
@@ -3093,6 +3445,231 @@ export default function MemorizationScreen() {
     [sessionMushafPages, viewMode],
   );
 
+  useEffect(() => {
+    if (!showSessionTranslation || viewMode !== "ayah" || surahNumber === null) return;
+    for (const ayahNumber of sessionAyahNumbers) {
+      ensureAyahTranslation(`${surahNumber}:${ayahNumber}`);
+    }
+  }, [showSessionTranslation, viewMode, surahNumber, sessionAyahNumbers]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  function renderInlineTranslation(verseKey: string, active: boolean) {
+    if (!showSessionTranslation) return null;
+    const state = ayahTranslations[verseKey];
+    if (!state || state.status === "loading") {
+      return (
+        <Text
+          style={[
+            styles.ayahInlineTranslation,
+            styles.ayahInlineTranslationLoading,
+            !active && styles.ayahRowDimmedText,
+          ]}
+        >
+          Loading translation...
+        </Text>
+      );
+    }
+    if (state.status === "error") {
+      return (
+        <Text
+          style={[
+            styles.ayahInlineTranslation,
+            styles.ayahInlineTranslationLoading,
+            !active && styles.ayahRowDimmedText,
+          ]}
+        >
+          Translation unavailable.
+        </Text>
+      );
+    }
+
+    return renderTranslationSegments(
+      state.text,
+      [
+        styles.ayahInlineTranslation,
+        !active && styles.ayahRowDimmedText,
+      ],
+      styles.ayahInlineTranslationInsertion,
+    );
+  }
+
+  function renderAyahWords(verseNumber: number, active: boolean) {
+    const rowWords = displayWordsMap.get(verseNumber) ?? [];
+    const rowVerseKey = surahNumber !== null ? `${surahNumber}:${verseNumber}` : "";
+    const rowVerseHidden = blindMode && !revealedVerses.has(rowVerseKey);
+    const rowReciteExpectedIndex =
+      active && reciteMode ? getNextReciteWordIndex(rowWords, reciteExpectedIdx) : null;
+
+    return (
+      <View style={[styles.wordContainer, !active && styles.ayahRowDimmedText]}>
+        {rowWords.map((word, idx) => {
+          const tajweedColor = tajweedEnabled ? extractTajweedColor(word.text_uthmani_tajweed) : null;
+          const isSkippedWord = isSkippedReciteWord(word);
+          const isCurrentReciteWord =
+            active &&
+            reciteMode &&
+            rowReciteExpectedIndex !== null &&
+            rowReciteExpectedIndex === idx &&
+            !isSkippedWord;
+          const isPastReciteWord =
+            active &&
+            reciteMode &&
+            rowReciteExpectedIndex !== null &&
+            idx < rowReciteExpectedIndex;
+          const reciteWordRevealed =
+            isCurrentReciteWord &&
+            revealedReciteWords.has(makeReciteWordKey(verseNumber, idx));
+          const hideWordForRecite =
+            active &&
+            reciteMode &&
+            rowReciteExpectedIndex !== null &&
+            !isSkippedWord &&
+            !isPastReciteWord &&
+            (!isCurrentReciteWord || !reciteWordRevealed);
+          const hiddenByBlind = rowVerseHidden && !reciteWordRevealed;
+          const reciteBlurTextStyle = hideWordForRecite
+            ? isCurrentReciteWord
+              ? styles.wordBlurSoftText
+              : styles.wordBlurStrongText
+            : undefined;
+          const reciteBlurShadowStyle = reciteBlurTextStyle
+            ? { textShadowColor: tajweedColor ?? "#111111" }
+            : undefined;
+
+          if (!active) {
+            return (
+              <View key={`${verseNumber}-${idx}`} style={styles.wordWrapper}>
+                <Text
+                  style={[
+                    styles.arabicWord,
+                    tajweedColor ? { color: tajweedColor } : undefined,
+                  ]}
+                >
+                  {hiddenByBlind ? "••••" : word.text_uthmani}
+                </Text>
+              </View>
+            );
+          }
+
+          return (
+            <Pressable
+              key={`${verseNumber}-${idx}`}
+              onPress={() => {
+                if (blindMode) {
+                  setTappedWord(null);
+                  toggleVerseReveal(rowVerseKey);
+                  return;
+                }
+                void handleWordTap(idx);
+                if (!reciteMode && rowVerseKey) {
+                  openTappedWordTooltip({
+                    verseKey: rowVerseKey,
+                    word,
+                    fallbackPosition: idx + 1,
+                  });
+                }
+              }}
+              onLongPress={() => {
+                setTappedWord(null);
+                const translation = getTranslationText(word.translation);
+                if (translation) {
+                  setTranslationPopup({ arabic: word.text_uthmani, translation });
+                }
+              }}
+              delayLongPress={400}
+              style={[
+                styles.wordWrapper,
+                highlightedWord === idx && styles.wordHighlighted,
+                isCurrentReciteWord && styles.reciteWordCurrent,
+                hideWordForRecite && !isCurrentReciteWord && styles.reciteWordPending,
+              ]}
+            >
+              <Text
+                style={[
+                  styles.arabicWord,
+                  tajweedColor ? { color: tajweedColor } : undefined,
+                  reciteBlurTextStyle,
+                  reciteBlurShadowStyle,
+                ]}
+              >
+                {hiddenByBlind ? "••••" : word.text_uthmani}
+              </Text>
+            </Pressable>
+          );
+        })}
+        {surahNumber !== null && rowVerseKey ? (() => {
+          const canOpenCurrentAyahSheet = active && !reciteMode && !rowVerseHidden && !submitting;
+          const target = buildAyahSheetTarget(verseNumber);
+          if (!target) return null;
+          if (!active) {
+            return (
+              <View style={[styles.ayahEndMarkerButton, styles.ayahEndMarkerPassive]}>
+                <Text style={styles.ayahEndMarkerText}>{verseNumber}</Text>
+              </View>
+            );
+          }
+          return (
+            <Pressable
+              accessibilityRole={canOpenCurrentAyahSheet ? "button" : undefined}
+              accessibilityLabel={`Ayah ${verseNumber} actions`}
+              disabled={!canOpenCurrentAyahSheet}
+              onPress={() => openAyahSheet(target)}
+              style={({ pressed }) => [
+                styles.ayahEndMarkerButton,
+                !canOpenCurrentAyahSheet && styles.ayahEndMarkerButtonDisabled,
+                pressed && styles.ayahEndMarkerButtonPressed,
+              ]}
+            >
+              <Text style={styles.ayahEndMarkerText}>{verseNumber}</Text>
+            </Pressable>
+          );
+        })() : null}
+      </View>
+    );
+  }
+
+  function renderAyahListRow({ item: verseNumber }: { item: number }) {
+    const active = verseNumber === playingVerseNumber;
+    const verseKey = surahNumber !== null ? `${surahNumber}:${verseNumber}` : "";
+    const target = buildAyahSheetTarget(verseNumber);
+
+    return (
+      <Pressable
+        style={styles.ayahListRow}
+        onPress={() => {
+          if (!active) void handleJumpToAyah(verseNumber);
+        }}
+        accessibilityRole={!active ? "button" : undefined}
+        accessibilityLabel={!active ? `Jump to ayah ${verseNumber}` : undefined}
+      >
+        <View style={styles.ayahSeparator}>
+          <View style={styles.ayahSeparatorLine} />
+          <View style={styles.ayahKeyPill}>
+            <Text style={styles.ayahKeyText}>{verseKey}</Text>
+          </View>
+        </View>
+
+        {target ? (
+          <Pressable
+            style={styles.ayahMenuButton}
+            onPress={(event) => {
+              event.stopPropagation();
+              openAyahSheet(target, { allowHidden: true, allowRecite: true });
+            }}
+            accessibilityRole="button"
+            accessibilityLabel={`Open actions for ${verseKey}`}
+          >
+            <Ionicons name="ellipsis-horizontal" size={24} color="#64748b" />
+          </Pressable>
+        ) : null}
+
+        <View style={styles.ayahRowArabicBlock}>
+          {renderAyahWords(verseNumber, active)}
+          {verseKey ? renderInlineTranslation(verseKey, active) : null}
+        </View>
+      </Pressable>
+    );
+  }
+
   // ── Render ───────────────────────────────────────────────────────────────────
 
   if (!sessionRequested) {
@@ -3191,132 +3768,47 @@ export default function MemorizationScreen() {
       </View>
 
       {/* Scrollable content — flex: 1 so controls island stays pinned below */}
-      <ScrollView
-        ref={scrollViewRef}
-        style={styles.scrollFlex}
-        contentContainerStyle={styles.scrollContent}
-        onScroll={handleSessionScroll}
-        scrollEventThrottle={120}
-      >
-        {viewMode === "ayah" ? (
-          <View style={styles.verseCard}>
-            <View style={styles.wordContainer}>
-              {words.map((word, idx) => {
-                const tajweedColor = tajweedEnabled ? extractTajweedColor(word.text_uthmani_tajweed) : null;
-                const isSkippedWord = isSkippedReciteWord(word);
-                const isCurrentReciteWord =
-                  reciteMode &&
-                  currentReciteExpectedIndex !== null &&
-                  currentReciteExpectedIndex === idx &&
-                  !isSkippedWord;
-                const isPastReciteWord =
-                  reciteMode &&
-                  currentReciteExpectedIndex !== null &&
-                  idx < currentReciteExpectedIndex;
-                const reciteWordRevealed =
-                  isCurrentReciteWord &&
-                  revealedReciteWords.has(makeReciteWordKey(playingVerseNumber, idx));
-                const hideWordForRecite =
-                  reciteMode &&
-                  currentReciteExpectedIndex !== null &&
-                  !isSkippedWord &&
-                  !isPastReciteWord &&
-                  (!isCurrentReciteWord || !reciteWordRevealed);
-                const hiddenByBlind = ayahVerseHidden && !reciteWordRevealed;
-                const reciteBlurTextStyle = hideWordForRecite
-                  ? isCurrentReciteWord
-                    ? styles.wordBlurSoftText
-                    : styles.wordBlurStrongText
-                  : undefined;
-                const reciteBlurShadowStyle = reciteBlurTextStyle
-                  ? { textShadowColor: tajweedColor ?? "#111111" }
-                  : undefined;
-                return (
-                  <Pressable
-                    key={`${playingVerseNumber}-${idx}`}
-                    onPress={() => {
-                      if (blindMode) {
-                        setTappedWord(null);
-                        toggleVerseReveal(ayahVerseKey);
-                        return;
-                      }
-                      void handleWordTap(idx);
-                      if (!reciteMode && ayahVerseKey) {
-                        openTappedWordTooltip({
-                          verseKey: ayahVerseKey,
-                          word,
-                          fallbackPosition: idx + 1,
-                        });
-                      }
-                    }}
-                    onLongPress={() => {
-                      setTappedWord(null);
-                      const translation = getTranslationText(word.translation);
-                      if (translation) {
-                        setTranslationPopup({ arabic: word.text_uthmani, translation });
-                      }
-                    }}
-                    delayLongPress={400}
-                    style={[
-                      styles.wordWrapper,
-                      highlightedWord === idx && styles.wordHighlighted,
-                      isCurrentReciteWord && styles.reciteWordCurrent,
-                      hideWordForRecite && !isCurrentReciteWord && styles.reciteWordPending,
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.arabicWord,
-                        tajweedColor ? { color: tajweedColor } : undefined,
-                        reciteBlurTextStyle,
-                        reciteBlurShadowStyle,
-                      ]}
-                    >
-                      {hiddenByBlind ? "••••" : word.text_uthmani}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-              {surahNumber !== null && ayahVerseKey ? (() => {
-                const canOpenCurrentAyahSheet = !reciteMode && !ayahVerseHidden && !submitting;
-                return (
-                  <Pressable
-                    accessibilityRole={canOpenCurrentAyahSheet ? "button" : undefined}
-                    accessibilityLabel={`Ayah ${playingVerseNumber} actions`}
-                    disabled={!canOpenCurrentAyahSheet}
-                    onPress={() => {
-                      openAyahSheet({
-                        verseKey: ayahVerseKey,
-                        surahNumber,
-                        ayahNumber: playingVerseNumber,
-                        pageNumber: activeMushafPage,
-                        textUthmani: words.map((word) => word.text_uthmani).join(" "),
-                      });
-                    }}
-                    style={({ pressed }) => [
-                      styles.ayahEndMarkerButton,
-                      !canOpenCurrentAyahSheet && styles.ayahEndMarkerButtonDisabled,
-                      pressed && styles.ayahEndMarkerButtonPressed,
-                    ]}
-                  >
-                    <Text style={styles.ayahEndMarkerText}>{playingVerseNumber}</Text>
-                  </Pressable>
-                );
-              })() : null}
+      {viewMode === "ayah" ? (
+        <FlatList
+          key={`ayah-list-${sessionLoadId}-${surahNumber ?? "none"}-${ayahStart ?? 0}-${ayahEnd ?? 0}`}
+          ref={ayahListRef}
+          style={styles.scrollFlex}
+          contentContainerStyle={styles.ayahListContent}
+          data={sessionAyahNumbers}
+          renderItem={renderAyahListRow}
+          keyExtractor={(item) => `${surahNumber}:${item}`}
+          getItemLayout={getAyahItemLayout}
+          initialScrollIndex={sessionAyahNumbers.length > 0 ? ayahListInitialIndex : undefined}
+          viewabilityConfig={ayahViewabilityConfigRef.current}
+          showsVerticalScrollIndicator={false}
+          onScrollToIndexFailed={(info) => {
+            ayahListRef.current?.scrollToOffset({
+              offset: Math.max(0, info.index * AYAH_ROW_ESTIMATED_HEIGHT),
+              animated: true,
+            });
+          }}
+        />
+      ) : (
+        <ScrollView
+          ref={scrollViewRef}
+          style={styles.scrollFlex}
+          contentContainerStyle={styles.scrollContent}
+          onScroll={handleSessionScroll}
+          scrollEventThrottle={120}
+        >
+          {pageStart === null || pageEnd === null ? (
+            <View style={[themedStyles.pageCard, styles.centered, { minHeight: 200 }]}>
+              <Text style={styles.errorText}>Page data not available.</Text>
             </View>
-          </View>
-        ) : pageStart === null || pageEnd === null ? (
-          <View style={[themedStyles.pageCard, styles.centered, { minHeight: 200 }]}>
-            <Text style={styles.errorText}>Page data not available.</Text>
-          </View>
-        ) : (
-          <>
-            {Array.from({ length: pageEnd - pageStart + 1 }, (_, i) =>
-              renderMushafPage(pageStart + i),
-            )}
-          </>
-        )}
-      </ScrollView>
+          ) : (
+            <>
+              {Array.from({ length: pageEnd - pageStart + 1 }, (_, i) =>
+                renderMushafPage(pageStart + i),
+              )}
+            </>
+          )}
+        </ScrollView>
+      )}
 
       {reciteMode && currentReciteExpectedIndex !== null && (
         <View style={styles.reciteAssistRow}>
@@ -3820,11 +4312,9 @@ export default function MemorizationScreen() {
           <View style={styles.completionSheet}>
             <View style={styles.ayahSheetHeader}>
               <View style={styles.ayahSheetTitleBlock}>
-                <Text style={styles.sheetTitle}>Ayah actions</Text>
+                <Text style={styles.sheetTitle}>{getAyahActionTitle(tappedAyah)}</Text>
                 <Text style={styles.completionSubtitle}>
-                  {chaptersMap.get(tappedAyah.surahNumber)?.name_simple ??
-                    `Surah ${tappedAyah.surahNumber}`}{" "}
-                  · Ayah {tappedAyah.ayahNumber}
+                  Quran {tappedAyah.verseKey}
                 </Text>
               </View>
               <Pressable
@@ -3837,7 +4327,11 @@ export default function MemorizationScreen() {
               </Pressable>
             </View>
 
-            {tappedAyah.textUthmani ? (
+            {blindMode && !revealedVerses.has(tappedAyah.verseKey) ? (
+              <View style={styles.ayahSheetArabicCard}>
+                <Text style={styles.ayahSheetHiddenText}>Hidden in blind mode</Text>
+              </View>
+            ) : tappedAyah.textUthmani ? (
               <View style={styles.ayahSheetArabicCard}>
                 <Text style={styles.ayahSheetArabicText} numberOfLines={3}>
                   {tappedAyah.textUthmani}
@@ -3845,29 +4339,60 @@ export default function MemorizationScreen() {
               </View>
             ) : null}
 
-            <Pressable
-              style={[styles.ayahPrimaryActionButton, submitting && styles.completeButtonDisabled]}
-              onPress={() => {
-                const target = tappedAyah;
-                if (target) void handlePracticeFromAyah(target);
-              }}
-              disabled={submitting}
-            >
-              <Ionicons name="locate-outline" size={17} color="#ffffff" />
-              <Text style={styles.ayahPrimaryActionText}>Practice from this ayah</Text>
-            </Pressable>
-
-            <Pressable
-              style={[styles.ayahSecondaryActionButton, submitting && styles.sessionMushafButtonDisabled]}
-              onPress={() => {
-                const target = tappedAyah;
-                if (target) void handleViewInFullMushaf(target);
-              }}
-              disabled={submitting}
-            >
-              <Ionicons name="reader-outline" size={17} color="#0369a1" />
-              <Text style={styles.ayahSecondaryActionText}>View in Full Mushaf</Text>
-            </Pressable>
+            <View style={styles.ayahActionList}>
+              <Pressable
+                style={[styles.ayahActionRow, submitting && styles.sessionMushafButtonDisabled]}
+                onPress={() => {
+                  const target = tappedAyah;
+                  if (target) void handleListenToAyah(target);
+                }}
+                disabled={submitting}
+              >
+                <Ionicons name="play-circle-outline" size={19} color="#2563eb" />
+                <Text style={styles.ayahActionRowText}>Listen</Text>
+              </Pressable>
+              <Pressable
+                style={styles.ayahActionRow}
+                onPress={() => {
+                  const target = tappedAyah;
+                  if (target) void handleOpenAyahTranslation(target);
+                }}
+              >
+                <Ionicons name="language-outline" size={19} color="#0f766e" />
+                <Text style={styles.ayahActionRowText}>Translation</Text>
+              </Pressable>
+              <Pressable
+                style={styles.ayahActionRow}
+                onPress={() => {
+                  const target = tappedAyah;
+                  if (target) void handleBookmarkAyah(target);
+                }}
+              >
+                <Ionicons name="bookmark-outline" size={19} color="#b45309" />
+                <Text style={styles.ayahActionRowText}>Bookmark</Text>
+              </Pressable>
+              <Pressable
+                style={[styles.ayahActionRow, submitting && styles.sessionMushafButtonDisabled]}
+                onPress={() => {
+                  const target = tappedAyah;
+                  if (target) void handleViewInFullMushaf(target);
+                }}
+                disabled={submitting}
+              >
+                <Ionicons name="reader-outline" size={19} color="#0369a1" />
+                <Text style={styles.ayahActionRowText}>View in Full Mushaf</Text>
+              </Pressable>
+              <Pressable
+                style={styles.ayahActionRow}
+                onPress={() => {
+                  const target = tappedAyah;
+                  if (target) handleCopyAyah(target);
+                }}
+              >
+                <Ionicons name="copy-outline" size={19} color="#475569" />
+                <Text style={styles.ayahActionRowText}>Copy</Text>
+              </Pressable>
+            </View>
           </View>
         ) : null}
       </Modal>
@@ -3928,6 +4453,24 @@ export default function MemorizationScreen() {
                   </Text>
                 </Pressable>
               </View>
+
+              <Pressable
+                style={styles.sessionSettingRow}
+                onPress={() => setShowSessionTranslation(!showSessionTranslation)}
+                accessibilityRole="switch"
+                accessibilityState={{ checked: showSessionTranslation }}
+                accessibilityLabel="Show translation"
+              >
+                <View style={styles.sessionSettingTextBlock}>
+                  <Text style={styles.sessionSettingLabel}>Show translation</Text>
+                  <Text style={styles.sessionSettingDetail}>
+                    {showSessionTranslation ? "Inline Sahih International is shown." : "Arabic only for this session."}
+                  </Text>
+                </View>
+                <View style={[styles.toggleSwitch, showSessionTranslation && styles.toggleSwitchOn]}>
+                  <View style={[styles.toggleKnob, showSessionTranslation && styles.toggleKnobOn]} />
+                </View>
+              </Pressable>
 
               <Pressable
                 style={styles.sessionSettingRow}
@@ -4279,8 +4822,21 @@ export default function MemorizationScreen() {
       >
         <Pressable style={styles.translationBackdrop} onPress={() => setTranslationPopup(null)}>
           <Pressable onPress={() => {}} style={styles.translationCard}>
-            <Text style={styles.translationArabic}>{translationPopup?.arabic ?? ""}</Text>
-            <Text style={styles.translationText}>{translationPopup?.translation ?? ""}</Text>
+            {translationPopup?.arabic ? (
+              <Text style={styles.translationArabic}>{translationPopup.arabic}</Text>
+            ) : null}
+            {translationPopup?.loading ? (
+              <View style={styles.translationLoadingRow}>
+                <ActivityIndicator color="#2563eb" />
+                <Text style={styles.translationText}>{translationPopup.translation}</Text>
+              </View>
+            ) : (
+              renderTranslationSegments(
+                translationPopup?.translation ?? "",
+                styles.translationText,
+                styles.translationInsertionText,
+              )
+            )}
             <Pressable style={styles.translationCloseButton} onPress={() => setTranslationPopup(null)}>
               <Text style={styles.translationCloseText}>Close</Text>
             </Pressable>
@@ -6597,6 +7153,89 @@ const styles = StyleSheet.create({
     gap: 18,
     paddingBottom: 16,
   },
+  ayahListContent: {
+    paddingHorizontal: 16,
+    paddingTop: 10,
+    paddingBottom: 16,
+  },
+  ayahListRow: {
+    position: "relative",
+    minHeight: AYAH_ROW_ESTIMATED_HEIGHT,
+    paddingTop: 26,
+    paddingBottom: 22,
+  },
+  ayahSeparator: {
+    position: "absolute",
+    top: 10,
+    left: 0,
+    right: 0,
+    height: 28,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  ayahSeparatorLine: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    top: 14,
+    height: 1,
+    backgroundColor: "#e5e7eb",
+  },
+  ayahKeyPill: {
+    zIndex: 1,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+    backgroundColor: "#ffffff",
+    paddingVertical: 5,
+    paddingHorizontal: 12,
+  },
+  ayahKeyText: {
+    fontSize: 11,
+    lineHeight: 14,
+    fontWeight: "800",
+    color: "#64748b",
+  },
+  ayahMenuButton: {
+    position: "absolute",
+    top: 8,
+    right: 0,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 2,
+  },
+  ayahRowArabicBlock: {
+    paddingTop: 20,
+    paddingHorizontal: 8,
+  },
+  ayahRowDimmedText: {
+    opacity: 0.46,
+  },
+  ayahEndMarkerPassive: {
+    opacity: 1,
+  },
+  ayahInlineTranslation: {
+    marginTop: 8,
+    paddingHorizontal: 6,
+    fontSize: 15,
+    lineHeight: 22,
+    fontWeight: "400",
+    color: "#475569",
+    textAlign: "left",
+    writingDirection: "ltr",
+  },
+  ayahInlineTranslationLoading: {
+    fontSize: 13,
+    fontStyle: "italic",
+    color: "#94a3b8",
+  },
+  ayahInlineTranslationInsertion: {
+    fontStyle: "italic",
+    color: "#94a3b8",
+  },
   // ── Ayah-by-Ayah card ────────────────────────────────────────────────────────
   verseCard: {
     width: "100%",
@@ -7182,6 +7821,36 @@ const styles = StyleSheet.create({
     textAlign: "right",
     writingDirection: "rtl",
   },
+  ayahSheetHiddenText: {
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: "700",
+    color: "#92400e",
+    textAlign: "center",
+  },
+  ayahActionList: {
+    gap: 8,
+  },
+  ayahActionRow: {
+    width: "100%",
+    minHeight: 48,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+    backgroundColor: "#ffffff",
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  ayahActionRowText: {
+    flex: 1,
+    minWidth: 0,
+    fontSize: 15,
+    fontWeight: "800",
+    color: "#111827",
+  },
   ayahPrimaryActionButton: {
     width: "100%",
     minHeight: 48,
@@ -7672,6 +8341,16 @@ const styles = StyleSheet.create({
     color: "#444444",
     textAlign: "center",
     lineHeight: 22,
+  },
+  translationInsertionText: {
+    fontStyle: "italic",
+    color: "#94a3b8",
+  },
+  translationLoadingRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
   },
   translationCloseButton: {
     backgroundColor: "#2563eb",
