@@ -29,7 +29,12 @@ import {
   submitMemorization,
   type DashboardResponse as MemorizationDashboardResponse,
 } from "@/src/lib/memorization";
-import { fetchVersesByPage, type ApiPageVerse } from "@/src/lib/quran";
+import {
+  cleanTranslationHtml,
+  fetchAyahTranslation,
+  fetchVersesByPage,
+  type ApiPageVerse,
+} from "@/src/lib/quran";
 import { DEFAULT_RECITER_ID, RECITERS, findReciter } from "@/src/lib/reciters";
 import {
   MUSHAF_JUZS,
@@ -289,27 +294,6 @@ function contiguousMemorizedThrough(start: number, end: number, memorizedAyahs: 
 
 function formatVerseLabel(target: Pick<PageAyahTarget, "surahNumber" | "ayahNumber">) {
   return `${target.surahNumber}:${target.ayahNumber}`;
-}
-
-function cleanTranslationHtml(raw: string): string {
-  return raw
-    .replace(/<sup[^>]*>.*?<\/sup>/gi, "")
-    .replace(/<[^>]+>/g, "")
-    .replace(/&amp;/g, "&")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&#\d+;/g, "")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-async function fetchAyahTranslation(verseKey: string): Promise<string> {
-  const res = await fetch(`${QURAN_API}/verses/by_key/${verseKey}?translations=20`);
-  if (!res.ok) throw new Error(`Translation unavailable (${res.status})`);
-  const data = (await res.json()) as { verse?: { translations?: Array<{ text?: string }> } };
-  const text = cleanTranslationHtml(data.verse?.translations?.[0]?.text ?? "");
-  if (!text) throw new Error("Translation unavailable");
-  return text;
 }
 
 async function fetchAyahTafseer(surahNumber: number, ayahNumber: number): Promise<string> {

@@ -7,6 +7,8 @@ export type ApiWord = {
   line_number: number;
 };
 
+const QURAN_TRANSLATION_ID = 20;
+
 export type ApiVerse = {
   verse_number: number;
   verse_key: string;
@@ -28,7 +30,7 @@ export async function fetchSurahVerses(surahNumber: number): Promise<ApiVerse[]>
   const timer = setTimeout(() => ac.abort(), 10000);
   try {
     const res = await fetch(
-      `https://api.quran.com/api/v4/verses/by_chapter/${surahNumber}?words=true&fields=text_uthmani,page_number&word_fields=text_uthmani,text_uthmani_tajweed,translation,line_number,char_type_name,position&per_page=300&translations=131`,
+      `https://api.quran.com/api/v4/verses/by_chapter/${surahNumber}?words=true&fields=text_uthmani,page_number&word_fields=text_uthmani,text_uthmani_tajweed,translation,line_number,char_type_name,position&per_page=300&translations=${QURAN_TRANSLATION_ID}`,
       { signal: ac.signal },
     );
     if (!res.ok) throw new Error(`Quran.com API ${res.status}`);
@@ -55,7 +57,7 @@ const ayahTranslationCache = new Map<string, string>();
 
 export async function fetchAyahTranslation(
   verseKey: string,
-  translationId = 131,
+  translationId = QURAN_TRANSLATION_ID,
 ): Promise<string> {
   const cacheKey = `${translationId}:${verseKey}`;
   const cached = ayahTranslationCache.get(cacheKey);
@@ -84,7 +86,7 @@ export async function fetchVersesByPage(pageNumber: number): Promise<ApiPageVers
   const timer = setTimeout(() => ac.abort(), 10000);
   try {
     const res = await fetch(
-      `https://api.quran.com/api/v4/verses/by_page/${pageNumber}?words=true&fields=text_uthmani&word_fields=text_uthmani,text_uthmani_tajweed,translation,line_number,char_type_name,position&per_page=50&translations=131`,
+      `https://api.quran.com/api/v4/verses/by_page/${pageNumber}?words=true&fields=text_uthmani&word_fields=text_uthmani,text_uthmani_tajweed,translation,line_number,char_type_name,position&per_page=50&translations=${QURAN_TRANSLATION_ID}`,
       { signal: ac.signal },
     );
     if (!res.ok) throw new Error(`Quran.com API ${res.status}`);
