@@ -663,6 +663,7 @@ export default function MemorizationScreen() {
   const lastMatchedWordRef = useRef("");
   const lastMatchTimeRef = useRef(0);
   const lastRenderLoadingLogRef = useRef<boolean | null>(null);
+  const lastFullMushafFlatListLogKeyRef = useRef<string | null>(null);
 
   function logNoorMem(label: string, details: Record<string, unknown> = {}) {
     console.log("[noor-mem]", label, details);
@@ -917,14 +918,6 @@ export default function MemorizationScreen() {
     });
     setSessionRequested(true);
     setSessionLoadId((value) => value + 1);
-    logNoorMem("setLoading-true-from-beginSession", {
-      currentSessionLoadId: sessionLoadId,
-      expectedNextSessionLoadId: sessionLoadId + 1,
-      targetSurahNumber: target.surahNumber,
-      targetAyahStart: nextStart,
-      targetAyahEnd: nextEnd,
-    });
-    setLoading(true);
     setError(null);
     setDisplayWordsMap(new Map());
     setChapterTimings(null);
@@ -965,6 +958,68 @@ export default function MemorizationScreen() {
     setCumUpTo(nextStart);
     cumUpToRef.current = nextStart;
     setCurrentRepeat(1);
+    logNoorMem("beginSession-post-reset", {
+      currentSessionLoadId: sessionLoadId,
+      expectedNextSessionLoadId: sessionLoadId + 1,
+      resetCommandsIssued: {
+        displayWordsMap: true,
+        chapterTimings: true,
+        pageWordsMap: true,
+        versePageMap: true,
+        displayedMushafPage: true,
+        lineLayoutMap: true,
+        pageBodyLayoutMap: true,
+        pageViewportHeightMap: true,
+        mushafPageScrollRefs: true,
+        highlightedWord: true,
+        highlightedPage: true,
+        internalPhase: "single",
+        showSessionTranslation: false,
+        ayahTranslations: true,
+        sheetsAndSelection: true,
+        cumulativeRefs: true,
+        currentRepeat: 1,
+      },
+      stateSnapshotAfterResetCommands: {
+        displayWordsMapSize: displayWordsMap.size,
+        pageWordsMapSize: pageWordsMap.size,
+        versePageMapSize: versePageMap.size,
+        chapterTimings: chapterTimings === null ? "null" : "present",
+        displayedMushafPage,
+        currentVerse,
+        viewMode,
+        loading,
+      },
+      refsAfterReset: {
+        displayedMushafPageRef: displayedMushafPageRef.current,
+        lineLayoutMapSize: lineLayoutMap.current.size,
+        pageBodyLayoutMapSize: pageBodyLayoutMap.current.size,
+        pageViewportHeightMapSize: pageViewportHeightMap.current.size,
+        mushafPageScrollRefsSize: mushafPageScrollRefs.current.size,
+        autoPlayRef: autoPlayRef.current,
+        isLoadingRef: isLoadingRef.current,
+        internalPhaseRef: internalPhaseRef.current,
+        cumAyahIdxRef: cumAyahIdxRef.current,
+        cumPassRef: cumPassRef.current,
+        cumUpToRef: cumUpToRef.current,
+      },
+      nextSessionState: {
+        surahNumber: target.surahNumber,
+        ayahStart: nextStart,
+        ayahEnd: nextEnd,
+        currentVerse: nextCurrent,
+        pageStart: target.pageStart ?? null,
+        pageEnd: target.pageEnd ?? null,
+      },
+    });
+    logNoorMem("setLoading-true-from-beginSession", {
+      currentSessionLoadId: sessionLoadId,
+      expectedNextSessionLoadId: sessionLoadId + 1,
+      targetSurahNumber: target.surahNumber,
+      targetAyahStart: nextStart,
+      targetAyahEnd: nextEnd,
+    });
+    setLoading(true);
     setSurahNumber(target.surahNumber);
     setAyahStart(nextStart);
     setAyahEnd(nextEnd);
@@ -2633,6 +2688,55 @@ export default function MemorizationScreen() {
         });
       }
 
+      logNoorMem("save-completion-cleanup-state", {
+        sessionLoadId,
+        cleanupCommandsAboutToRun: [
+          "setCompletionSheetOpen(false)",
+          "setSelectedQuality(null)",
+          "setRatingAyahEnd(null)",
+          "setRecitationCheckSource(teacher)",
+          "setRecitationScore(null)",
+          "setStartInRecitationCheck(false)",
+          "setSessionBookmark(null)",
+          "clearMemorizationSessionBookmark(childId)",
+          "setSessionRequested(false)",
+          "setLoading(false)",
+        ],
+        stateBeforeCleanup: {
+          viewMode,
+          currentVerse,
+          playingVerseNumber,
+          displayWordsMapSize: displayWordsMap.size,
+          pageWordsMapSize: pageWordsMap.size,
+          versePageMapSize: versePageMap.size,
+          chapterTimings: chapterTimings === null ? "null" : "present",
+          pageStart,
+          pageEnd,
+          displayedMushafPage,
+          sessionRequested,
+          internalPhase,
+          completionSheetOpen,
+          recitationCheckSource,
+          ratingAyahEnd,
+          selectedQuality,
+        },
+        refsBeforeCleanup: {
+          viewModeRef: viewModeRef.current,
+          currentVerseRef: currentVerseRef.current,
+          playingVerseNumberRef: playingVerseNumberRef.current,
+          displayedMushafPageRef: displayedMushafPageRef.current,
+          autoPlayRef: autoPlayRef.current,
+          isLoadingRef: isLoadingRef.current,
+          internalPhaseRef: internalPhaseRef.current,
+          cumAyahIdxRef: cumAyahIdxRef.current,
+          cumPassRef: cumPassRef.current,
+          cumUpToRef: cumUpToRef.current,
+          lineLayoutMapSize: lineLayoutMap.current.size,
+          pageBodyLayoutMapSize: pageBodyLayoutMap.current.size,
+          pageViewportHeightMapSize: pageViewportHeightMap.current.size,
+          mushafPageScrollRefsSize: mushafPageScrollRefs.current.size,
+        },
+      });
       setCompletionSheetOpen(false);
       setSelectedQuality(null);
       setRatingAyahEnd(null);
@@ -2647,6 +2751,38 @@ export default function MemorizationScreen() {
         surahNumber,
         completedThroughAyah,
         status,
+      });
+      logNoorMem("post-save-state", {
+        sessionLoadId,
+        viewMode,
+        currentVerse,
+        playingVerseNumber,
+        displayWordsMapSize: displayWordsMap.size,
+        pageWordsMapSize: pageWordsMap.size,
+        versePageMapSize: versePageMap.size,
+        chapterTimings: chapterTimings === null ? "null" : "present",
+        pageStart,
+        pageEnd,
+        displayedMushafPage,
+        sessionRequested,
+        loading,
+        internalPhase,
+        refs: {
+          viewModeRef: viewModeRef.current,
+          currentVerseRef: currentVerseRef.current,
+          playingVerseNumberRef: playingVerseNumberRef.current,
+          displayedMushafPageRef: displayedMushafPageRef.current,
+          autoPlayRef: autoPlayRef.current,
+          isLoadingRef: isLoadingRef.current,
+          internalPhaseRef: internalPhaseRef.current,
+          cumAyahIdxRef: cumAyahIdxRef.current,
+          cumPassRef: cumPassRef.current,
+          cumUpToRef: cumUpToRef.current,
+          lineLayoutMapSize: lineLayoutMap.current.size,
+          pageBodyLayoutMapSize: pageBodyLayoutMap.current.size,
+          pageViewportHeightMapSize: pageViewportHeightMap.current.size,
+          mushafPageScrollRefsSize: mushafPageScrollRefs.current.size,
+        },
       });
       setLoading(false);
       if (nextCelebration && confettiEnabled) {
@@ -3295,8 +3431,35 @@ export default function MemorizationScreen() {
 
   function renderMushafPage(pageNum: number, pageWidth: number) {
     const verses = pageWordsMap.get(pageNum);
+    const versesOnThisPage = verses?.length ?? 0;
+    logNoorMem("page-render-attempt", {
+      sessionLoadId,
+      pageNumber: pageNum,
+      currentVerse,
+      playingVerseNumber,
+      viewMode,
+      pageWordsMapSize: pageWordsMap.size,
+      hasPageWordsMapEntry: Boolean(verses),
+      versesOnThisPage,
+      displayWordsMapSize: displayWordsMap.size,
+      chapterTimings: chapterTimings === null ? "null" : "present",
+      pageStart,
+      pageEnd,
+      displayedMushafPage,
+      mushafPageWidth: pageWidth,
+    });
 
     if (!verses) {
+      logNoorMem("page-render-bailout", {
+        sessionLoadId,
+        pageNumber: pageNum,
+        reason: "pageWordsMap-missing-page",
+        currentVerse,
+        viewMode,
+        pageWordsMapSize: pageWordsMap.size,
+        pageStart,
+        pageEnd,
+      });
       return (
         <View key={pageNum} style={[styles.mushafPageFrame, { width: pageWidth }]}>
           <ScrollView
@@ -3359,6 +3522,15 @@ export default function MemorizationScreen() {
 
     const juz = getJuzForPage(pageNum);
     const lineNums = [...lineMap.keys()].sort((a, b) => a - b);
+    if (lineNums.length === 0) {
+      logNoorMem("page-render-empty-lines", {
+        sessionLoadId,
+        pageNumber: pageNum,
+        versesOnThisPage,
+        currentVerse,
+        viewMode,
+      });
+    }
 
     return (
       <View key={pageNum} style={[styles.mushafPageFrame, { width: pageWidth }]}>
@@ -4120,6 +4292,43 @@ export default function MemorizationScreen() {
         </Pressable>
       </View>
     );
+  }
+
+  if (viewMode === "page" && sessionMushafPages.length > 0) {
+    const totalPages =
+      pageStart !== null && pageEnd !== null
+        ? pageEnd - pageStart + 1
+        : sessionMushafPages.length;
+    const currentVerseDerivedPage = versePageMap.get(currentVerse) ?? activeMushafPage ?? null;
+    const flatListLogKey = [
+      sessionLoadId,
+      pageStart ?? "x",
+      pageEnd ?? "x",
+      sessionMushafPages.join(","),
+      mushafInitialPageIndex,
+      currentVerse,
+      currentVerseDerivedPage ?? "x",
+      pageWordsMap.size,
+    ].join("|");
+    if (lastFullMushafFlatListLogKeyRef.current !== flatListLogKey) {
+      logNoorMem("full-mushaf-flatlist-render", {
+        sessionLoadId,
+        pageStart,
+        pageEnd,
+        totalPages,
+        sessionMushafPages,
+        initialScrollIndex: mushafInitialPageIndex,
+        currentVerse,
+        currentVerseDerivedPage,
+        activeMushafPage,
+        displayedMushafPage,
+        displayedMushafPageIndex,
+        pageWordsMapSize: pageWordsMap.size,
+        displayWordsMapSize: displayWordsMap.size,
+        chapterTimings: chapterTimings === null ? "null" : "present",
+      });
+      lastFullMushafFlatListLogKeyRef.current = flatListLogKey;
+    }
   }
 
   return (
