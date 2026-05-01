@@ -2153,6 +2153,15 @@ export default function MemorizationScreen() {
     setReciteMode(true);
   }
 
+  async function handleToggleReciteMode() {
+    if (reciteMode) {
+      setReciteMode(false);
+      resetReciteAssistState();
+      return;
+    }
+    await enterReciteMode(currentVerseRef.current);
+  }
+
   async function handleReciteToNoorPath() {
     if (ayahStart === null) return;
     updateReadyToReciteSheet(false);
@@ -3181,36 +3190,6 @@ export default function MemorizationScreen() {
         </Pressable>
       </View>
 
-      {/* View mode toggle */}
-      <View style={styles.toggleContainer}>
-        <Pressable
-          style={[styles.togglePill, viewMode === "ayah" && styles.togglePillSelected]}
-          onPress={() => setViewMode("ayah")}
-        >
-          <Text
-            style={[
-              styles.togglePillText,
-              viewMode === "ayah" && styles.togglePillTextSelected,
-            ]}
-          >
-            Ayah by Ayah
-          </Text>
-        </Pressable>
-        <Pressable
-          style={[styles.togglePill, viewMode === "page" && styles.togglePillSelected]}
-          onPress={() => setViewMode("page")}
-        >
-          <Text
-            style={[
-              styles.togglePillText,
-              viewMode === "page" && styles.togglePillTextSelected,
-            ]}
-          >
-            Full Mushaf
-          </Text>
-        </Pressable>
-      </View>
-
       {/* Scrollable content — flex: 1 so controls island stays pinned below */}
       <ScrollView
         ref={scrollViewRef}
@@ -3407,101 +3386,71 @@ export default function MemorizationScreen() {
 
       {/* Fixed controls island — always visible below the scroll area */}
       <View style={styles.controlsIsland}>
-        {/* Mode buttons: Blind + Recite placeholder */}
-        <View style={styles.modeButtonRow}>
-          <Pressable
-            style={[styles.modeButton, blindMode && styles.modeButtonActive]}
-            onPress={() => setBlindMode(!blindMode)}
-          >
-            <Text style={[styles.modeButtonText, blindMode && styles.modeButtonTextActive]}>
-              {blindMode ? "👁 Blind ON" : "Blind"}
-            </Text>
-          </Pressable>
+        <View style={styles.playbackControlsRow}>
           <Pressable
             style={[
-              styles.modeButton,
-              reciteMode && styles.modeButtonActive,
-            ]}
-            onPress={async () => {
-              if (reciteMode) {
-                setReciteMode(false);
-                resetReciteAssistState();
-                return;
-              }
-              await enterReciteMode(currentVerseRef.current);
-            }}
-          >
-            <Text style={[styles.modeButtonText, reciteMode && styles.modeButtonTextActive]}>
-              {reciteMode ? (reciteListening ? "🎤 Listening…" : "🎤 Recite ON") : "🎤 Recite"}
-            </Text>
-          </Pressable>
-        </View>
-
-        <Pressable
-          style={[styles.sessionMushafButton, submitting && styles.sessionMushafButtonDisabled]}
-          onPress={() => {
-            void handleViewInFullMushaf();
-          }}
-          disabled={submitting}
-        >
-          <Ionicons name="reader-outline" size={17} color="#0369a1" />
-          <Text style={styles.sessionMushafButtonText}>View in Full Mushaf</Text>
-          <Text style={styles.sessionMushafButtonMeta}>
-            {activeMushafPage ? `p. ${activeMushafPage}` : "Quran"}
-          </Text>
-        </Pressable>
-
-        {/* Prev / Play / Next */}
-        <View style={styles.controls}>
-          <Pressable
-            style={[styles.navButton, !canPrev && styles.navButtonDisabled]}
-            onPress={handlePrev}
-            disabled={!canPrev}
-          >
-            <Text style={styles.navButtonText}>‹ Prev</Text>
-          </Pressable>
-
-          <Pressable style={styles.playButton} onPress={handlePlayPause}>
-            <Text style={styles.playButtonText}>{isPlaying ? "⏸" : "▶"}</Text>
-          </Pressable>
-
-          <Pressable
-            style={[styles.navButton, !canNext && styles.navButtonDisabled]}
-            onPress={handleNext}
-            disabled={!canNext}
-          >
-            <Text style={styles.navButtonText}>Next ›</Text>
-          </Pressable>
-        </View>
-
-        <View style={styles.skipControls}>
-          <Pressable
-            style={[
-              styles.skipControlButton,
-              !canSkipRepeat && styles.skipControlButtonDisabled,
+              styles.playbackIconButton,
+              !canSkipRepeat && styles.playbackIconButtonDisabled,
             ]}
             onPress={handleSkipRepeat}
             disabled={!canSkipRepeat}
             accessibilityRole="button"
-            accessibilityLabel="Skip repeat"
+            accessibilityLabel="Skip repeat pass"
           >
             <Ionicons
-              name="play-forward-outline"
-              size={17}
+              name="refresh-circle-outline"
+              size={26}
               color={canSkipRepeat ? "#2563eb" : "#9ca3af"}
             />
-            <Text style={[
-              styles.skipControlText,
-              !canSkipRepeat && styles.skipControlTextDisabled,
-            ]}>
-              Skip Repeat
-            </Text>
           </Pressable>
 
           <Pressable
             style={[
-              styles.skipControlButton,
-              !canSkipAyah && styles.skipControlButtonDisabled,
+              styles.playbackIconButton,
+              !canPrev && styles.playbackIconButtonDisabled,
+            ]}
+            onPress={handlePrev}
+            disabled={!canPrev}
+            accessibilityRole="button"
+            accessibilityLabel="Previous ayah"
+          >
+            <Ionicons
+              name="play-skip-back"
+              size={24}
+              color={canPrev ? "#111827" : "#9ca3af"}
+            />
+          </Pressable>
+
+          <Pressable
+            style={styles.playButton}
+            onPress={handlePlayPause}
+            accessibilityRole="button"
+            accessibilityLabel={isPlaying ? "Pause playback" : "Play playback"}
+          >
+            <Ionicons name={isPlaying ? "pause" : "play"} size={28} color="#ffffff" />
+          </Pressable>
+
+          <Pressable
+            style={[
+              styles.playbackIconButton,
+              !canNext && styles.playbackIconButtonDisabled,
+            ]}
+            onPress={handleNext}
+            disabled={!canNext}
+            accessibilityRole="button"
+            accessibilityLabel="Next ayah"
+          >
+            <Ionicons
+              name="play-skip-forward"
+              size={24}
+              color={canNext ? "#111827" : "#9ca3af"}
+            />
+          </Pressable>
+
+          <Pressable
+            style={[
+              styles.playbackIconButton,
+              !canSkipAyah && styles.playbackIconButtonDisabled,
             ]}
             onPress={handleSkipAyah}
             disabled={!canSkipAyah}
@@ -3509,32 +3458,12 @@ export default function MemorizationScreen() {
             accessibilityLabel="Skip ayah"
           >
             <Ionicons
-              name="play-skip-forward-outline"
-              size={17}
+              name="play-forward-circle-outline"
+              size={26}
               color={canSkipAyah ? "#2563eb" : "#9ca3af"}
             />
-            <Text style={[
-              styles.skipControlText,
-              !canSkipAyah && styles.skipControlTextDisabled,
-            ]}>
-              Skip Ayah
-            </Text>
           </Pressable>
         </View>
-
-        <Pressable
-          style={[styles.completeButton, submitting && styles.completeButtonDisabled]}
-          onPress={handlePauseAndSave}
-          disabled={submitting}
-        >
-          {submitting ? (
-            <ActivityIndicator color="#ffffff" />
-          ) : (
-            <Text style={styles.completeButtonText}>
-              {sessionReviewOnly ? "Finish Recitation" : "Pause & Save"}
-            </Text>
-          )}
-        </Pressable>
       </View>
 
       {/* Recite error */}
@@ -3954,190 +3883,328 @@ export default function MemorizationScreen() {
         <View style={styles.settingsSheet}>
           <Text style={styles.sheetTitle}>Settings</Text>
 
-          <View style={styles.settingRow}>
-            <Text style={styles.settingLabel}>Repeat count</Text>
-            <View style={styles.stepper}>
-              <Pressable
-                style={styles.stepperButton}
-                onPress={() => setRepeatCount(Math.max(1, repeatCount - 1))}
-              >
-                <Text style={styles.stepperButtonText}>−</Text>
-              </Pressable>
-              <Text style={styles.stepperValue}>{repeatCount}</Text>
-              <Pressable
-                style={styles.stepperButton}
-                onPress={() => setRepeatCount(Math.min(10, repeatCount + 1))}
-              >
-                <Text style={styles.stepperButtonText}>+</Text>
-              </Pressable>
-            </View>
-          </View>
-
-          <View style={styles.settingRow}>
-            <Text style={styles.settingLabel}>Delay between verses</Text>
-            <View style={styles.stepper}>
-              <Pressable
-                style={styles.stepperButton}
-                onPress={() => setAutoAdvanceDelayMs(Math.max(0, autoAdvanceDelayMs - 500))}
-              >
-                <Text style={styles.stepperButtonText}>−</Text>
-              </Pressable>
-              <Text style={styles.stepperValue}>{(autoAdvanceDelayMs / 1000).toFixed(1)}s</Text>
-              <Pressable
-                style={styles.stepperButton}
-                onPress={() => setAutoAdvanceDelayMs(Math.min(5000, autoAdvanceDelayMs + 500))}
-              >
-                <Text style={styles.stepperButtonText}>+</Text>
-              </Pressable>
-            </View>
-          </View>
-
-          <View style={styles.settingRow}>
-            <Text style={styles.settingLabel}>Auto-advance through range</Text>
-            <Pressable
-              onPress={() => setAutoplayThroughRange(!autoplayThroughRange)}
-              style={[styles.toggleSwitch, autoplayThroughRange && styles.toggleSwitchOn]}
-            >
-              <View style={[styles.toggleKnob, autoplayThroughRange && styles.toggleKnobOn]} />
-            </Pressable>
-          </View>
-
-          <View style={styles.settingRow}>
-            <Text style={styles.settingLabel}>Blur other verses while playing</Text>
-            <Pressable
-              onPress={() => setBlurMode(!blurMode)}
-              style={[styles.toggleSwitch, blurMode && styles.toggleSwitchOn]}
-            >
-              <View style={[styles.toggleKnob, blurMode && styles.toggleKnobOn]} />
-            </Pressable>
-          </View>
-
-          <View style={styles.settingRow}>
-            <Text style={styles.settingLabel}>Tajweed coloring</Text>
-            <Pressable
-              onPress={() => setTajweedEnabled(!tajweedEnabled)}
-              style={[styles.toggleSwitch, tajweedEnabled && styles.toggleSwitchOn]}
-            >
-              <View style={[styles.toggleKnob, tajweedEnabled && styles.toggleKnobOn]} />
-            </Pressable>
-          </View>
-
-          <View style={styles.settingRow}>
-            <Text style={styles.settingLabel}>Cumulative review</Text>
-            <Pressable
-              onPress={() => setCumulativeReview(!cumulativeReview)}
-              style={[styles.toggleSwitch, cumulativeReview && styles.toggleSwitchOn]}
-            >
-              <View style={[styles.toggleKnob, cumulativeReview && styles.toggleKnobOn]} />
-            </Pressable>
-          </View>
-
-          {cumulativeReview && (
-            <View style={styles.settingRow}>
-              <Text style={styles.settingLabel}>Review repeat count</Text>
-              <View style={styles.stepper}>
+          <ScrollView
+            style={styles.settingsSheetScroll}
+            contentContainerStyle={styles.settingsSheetContent}
+            showsVerticalScrollIndicator={false}
+          >
+            <View style={styles.settingsSection}>
+              <Text style={styles.settingsSectionTitle}>Session</Text>
+              <View style={styles.settingsSegment}>
                 <Pressable
-                  style={styles.stepperButton}
-                  onPress={() => setReviewRepeatCount(Math.max(1, reviewRepeatCount - 1))}
+                  style={[
+                    styles.settingsSegmentPill,
+                    viewMode === "ayah" && styles.settingsSegmentPillSelected,
+                  ]}
+                  onPress={() => setViewMode("ayah")}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: viewMode === "ayah" }}
                 >
-                  <Text style={styles.stepperButtonText}>−</Text>
+                  <Text
+                    style={[
+                      styles.settingsSegmentText,
+                      viewMode === "ayah" && styles.settingsSegmentTextSelected,
+                    ]}
+                  >
+                    Ayah by Ayah
+                  </Text>
                 </Pressable>
-                <Text style={styles.stepperValue}>{reviewRepeatCount}×</Text>
                 <Pressable
-                  style={styles.stepperButton}
-                  onPress={() => setReviewRepeatCount(Math.min(10, reviewRepeatCount + 1))}
+                  style={[
+                    styles.settingsSegmentPill,
+                    viewMode === "page" && styles.settingsSegmentPillSelected,
+                  ]}
+                  onPress={() => setViewMode("page")}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: viewMode === "page" }}
                 >
-                  <Text style={styles.stepperButtonText}>+</Text>
+                  <Text
+                    style={[
+                      styles.settingsSegmentText,
+                      viewMode === "page" && styles.settingsSegmentTextSelected,
+                    ]}
+                  >
+                    Full Mushaf
+                  </Text>
                 </Pressable>
               </View>
+
+              <Pressable
+                style={styles.sessionSettingRow}
+                onPress={() => setBlindMode(!blindMode)}
+                accessibilityRole="switch"
+                accessibilityState={{ checked: blindMode }}
+                accessibilityLabel="Blind mode"
+              >
+                <View style={styles.sessionSettingTextBlock}>
+                  <Text style={styles.sessionSettingLabel}>Blind mode</Text>
+                  <Text style={styles.sessionSettingDetail}>
+                    {blindMode ? "Ayah text is hidden." : "Ayah text is visible."}
+                  </Text>
+                </View>
+                <View style={[styles.toggleSwitch, blindMode && styles.toggleSwitchOn]}>
+                  <View style={[styles.toggleKnob, blindMode && styles.toggleKnobOn]} />
+                </View>
+              </Pressable>
+
+              <Pressable
+                style={styles.sessionSettingRow}
+                onPress={() => {
+                  void handleToggleReciteMode();
+                }}
+                accessibilityRole="switch"
+                accessibilityState={{ checked: reciteMode }}
+                accessibilityLabel="Recite mode"
+              >
+                <View style={styles.sessionSettingTextBlock}>
+                  <Text style={styles.sessionSettingLabel}>Recite mode</Text>
+                  <Text style={styles.sessionSettingDetail}>
+                    {reciteMode
+                      ? reciteListening
+                        ? "Listening now."
+                        : "Recite mode is on."
+                      : "Use microphone practice."}
+                  </Text>
+                </View>
+                <View style={[styles.toggleSwitch, reciteMode && styles.toggleSwitchOn]}>
+                  <View style={[styles.toggleKnob, reciteMode && styles.toggleKnobOn]} />
+                </View>
+              </Pressable>
+
+              <Pressable
+                style={[
+                  styles.sessionActionRow,
+                  submitting && styles.sessionActionRowDisabled,
+                ]}
+                onPress={() => {
+                  void handleViewInFullMushaf();
+                }}
+                disabled={submitting}
+                accessibilityRole="button"
+                accessibilityLabel={`View in Full Mushaf page ${activeMushafPage ?? 1}`}
+              >
+                <Ionicons name="reader-outline" size={20} color="#0369a1" />
+                <Text style={styles.sessionActionText}>
+                  View in Full Mushaf · p. {activeMushafPage ?? 1}
+                </Text>
+                <Ionicons name="chevron-forward" size={18} color="#0369a1" />
+              </Pressable>
+
+              <Pressable
+                style={[
+                  styles.sessionActionRow,
+                  styles.sessionPauseActionRow,
+                  submitting && styles.sessionActionRowDisabled,
+                ]}
+                onPress={() => {
+                  setSettingsOpen(false);
+                  void handlePauseAndSave();
+                }}
+                disabled={submitting}
+                accessibilityRole="button"
+                accessibilityLabel="Pause and save"
+              >
+                <Ionicons name="pause-circle-outline" size={21} color="#b45309" />
+                <View style={styles.sessionActionTextBlock}>
+                  <Text style={[styles.sessionActionText, styles.sessionPauseActionText]}>
+                    Pause & Save
+                  </Text>
+                  <Text style={styles.sessionPauseActionDetail}>
+                    {sessionReviewOnly ? "Finish this recitation." : "Pick the completed ayah."}
+                  </Text>
+                </View>
+                <Ionicons name="chevron-forward" size={18} color="#b45309" />
+              </Pressable>
             </View>
-          )}
 
-          <View style={styles.settingRow}>
-            <Text style={styles.settingLabel}>Playback speed</Text>
-          </View>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={{ gap: 8, paddingVertical: 4 }}
-          >
-            {PLAYBACK_RATES.map((r) => (
-              <Pressable
-                key={r}
-                onPress={() => setPlaybackRate(r)}
-                style={[
-                  styles.ratePill,
-                  playbackRate === r && styles.ratePillSelected,
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.ratePillText,
-                    playbackRate === r && styles.ratePillTextSelected,
-                  ]}
-                >
-                  {r === 1.0 ? "1x" : `${r}x`}
-                </Text>
-              </Pressable>
-            ))}
-          </ScrollView>
+            <View style={styles.settingsSection}>
+              <Text style={styles.settingsSectionTitle}>Practice</Text>
+              <View style={styles.settingRow}>
+                <Text style={styles.settingLabel}>Repeat count</Text>
+                <View style={styles.stepper}>
+                  <Pressable
+                    style={styles.stepperButton}
+                    onPress={() => setRepeatCount(Math.max(1, repeatCount - 1))}
+                  >
+                    <Text style={styles.stepperButtonText}>−</Text>
+                  </Pressable>
+                  <Text style={styles.stepperValue}>{repeatCount}</Text>
+                  <Pressable
+                    style={styles.stepperButton}
+                    onPress={() => setRepeatCount(Math.min(10, repeatCount + 1))}
+                  >
+                    <Text style={styles.stepperButtonText}>+</Text>
+                  </Pressable>
+                </View>
+              </View>
 
-          <View style={styles.settingRow}>
-            <Text style={styles.settingLabel}>Theme</Text>
-          </View>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={{ gap: 8, paddingVertical: 4 }}
-          >
-            {(Object.keys(THEMES) as ThemeKey[]).map((k) => (
-              <Pressable
-                key={k}
-                onPress={() => setThemeKey(k)}
-                style={[
-                  styles.themePill,
-                  themeKey === k && styles.themePillSelected,
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.themePillText,
-                    themeKey === k && styles.themePillTextSelected,
-                  ]}
-                >
-                  {THEME_DISPLAY_NAMES[k]}
-                </Text>
-              </Pressable>
-            ))}
-          </ScrollView>
+              <View style={styles.settingRow}>
+                <Text style={styles.settingLabel}>Delay between verses</Text>
+                <View style={styles.stepper}>
+                  <Pressable
+                    style={styles.stepperButton}
+                    onPress={() => setAutoAdvanceDelayMs(Math.max(0, autoAdvanceDelayMs - 500))}
+                  >
+                    <Text style={styles.stepperButtonText}>−</Text>
+                  </Pressable>
+                  <Text style={styles.stepperValue}>{(autoAdvanceDelayMs / 1000).toFixed(1)}s</Text>
+                  <Pressable
+                    style={styles.stepperButton}
+                    onPress={() => setAutoAdvanceDelayMs(Math.min(5000, autoAdvanceDelayMs + 500))}
+                  >
+                    <Text style={styles.stepperButtonText}>+</Text>
+                  </Pressable>
+                </View>
+              </View>
 
-          <View style={styles.settingRow}>
-            <Text style={styles.settingLabel}>Reciter</Text>
-          </View>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={{ gap: 8, paddingVertical: 4 }}
-          >
-            {RECITERS.map((r) => (
-              <Pressable
-                key={r.id}
-                onPress={() => setReciterId(r.id)}
-                style={[
-                  styles.reciterPill,
-                  reciterId === r.id && styles.reciterPillSelected,
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.reciterPillText,
-                    reciterId === r.id && styles.reciterPillTextSelected,
-                  ]}
+              <View style={styles.settingRow}>
+                <Text style={styles.settingLabel}>Auto-advance through range</Text>
+                <Pressable
+                  onPress={() => setAutoplayThroughRange(!autoplayThroughRange)}
+                  style={[styles.toggleSwitch, autoplayThroughRange && styles.toggleSwitchOn]}
                 >
-                  {r.fullName.split(" ").slice(-1)[0]}
-                </Text>
-              </Pressable>
-            ))}
+                  <View style={[styles.toggleKnob, autoplayThroughRange && styles.toggleKnobOn]} />
+                </Pressable>
+              </View>
+
+              <View style={styles.settingRow}>
+                <Text style={styles.settingLabel}>Blur other verses while playing</Text>
+                <Pressable
+                  onPress={() => setBlurMode(!blurMode)}
+                  style={[styles.toggleSwitch, blurMode && styles.toggleSwitchOn]}
+                >
+                  <View style={[styles.toggleKnob, blurMode && styles.toggleKnobOn]} />
+                </Pressable>
+              </View>
+
+              <View style={styles.settingRow}>
+                <Text style={styles.settingLabel}>Tajweed coloring</Text>
+                <Pressable
+                  onPress={() => setTajweedEnabled(!tajweedEnabled)}
+                  style={[styles.toggleSwitch, tajweedEnabled && styles.toggleSwitchOn]}
+                >
+                  <View style={[styles.toggleKnob, tajweedEnabled && styles.toggleKnobOn]} />
+                </Pressable>
+              </View>
+
+              <View style={styles.settingRow}>
+                <Text style={styles.settingLabel}>Cumulative review</Text>
+                <Pressable
+                  onPress={() => setCumulativeReview(!cumulativeReview)}
+                  style={[styles.toggleSwitch, cumulativeReview && styles.toggleSwitchOn]}
+                >
+                  <View style={[styles.toggleKnob, cumulativeReview && styles.toggleKnobOn]} />
+                </Pressable>
+              </View>
+
+              {cumulativeReview && (
+                <View style={styles.settingRow}>
+                  <Text style={styles.settingLabel}>Review repeat count</Text>
+                  <View style={styles.stepper}>
+                    <Pressable
+                      style={styles.stepperButton}
+                      onPress={() => setReviewRepeatCount(Math.max(1, reviewRepeatCount - 1))}
+                    >
+                      <Text style={styles.stepperButtonText}>−</Text>
+                    </Pressable>
+                    <Text style={styles.stepperValue}>{reviewRepeatCount}×</Text>
+                    <Pressable
+                      style={styles.stepperButton}
+                      onPress={() => setReviewRepeatCount(Math.min(10, reviewRepeatCount + 1))}
+                    >
+                      <Text style={styles.stepperButtonText}>+</Text>
+                    </Pressable>
+                  </View>
+                </View>
+              )}
+
+              <View style={styles.settingRow}>
+                <Text style={styles.settingLabel}>Playback speed</Text>
+              </View>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={{ gap: 8, paddingVertical: 4 }}
+              >
+                {PLAYBACK_RATES.map((r) => (
+                  <Pressable
+                    key={r}
+                    onPress={() => setPlaybackRate(r)}
+                    style={[
+                      styles.ratePill,
+                      playbackRate === r && styles.ratePillSelected,
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.ratePillText,
+                        playbackRate === r && styles.ratePillTextSelected,
+                      ]}
+                    >
+                      {r === 1.0 ? "1x" : `${r}x`}
+                    </Text>
+                  </Pressable>
+                ))}
+              </ScrollView>
+
+              <View style={styles.settingRow}>
+                <Text style={styles.settingLabel}>Theme</Text>
+              </View>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={{ gap: 8, paddingVertical: 4 }}
+              >
+                {(Object.keys(THEMES) as ThemeKey[]).map((k) => (
+                  <Pressable
+                    key={k}
+                    onPress={() => setThemeKey(k)}
+                    style={[
+                      styles.themePill,
+                      themeKey === k && styles.themePillSelected,
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.themePillText,
+                        themeKey === k && styles.themePillTextSelected,
+                      ]}
+                    >
+                      {THEME_DISPLAY_NAMES[k]}
+                    </Text>
+                  </Pressable>
+                ))}
+              </ScrollView>
+
+              <View style={styles.settingRow}>
+                <Text style={styles.settingLabel}>Reciter</Text>
+              </View>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={{ gap: 8, paddingVertical: 4 }}
+              >
+                {RECITERS.map((r) => (
+                  <Pressable
+                    key={r.id}
+                    onPress={() => setReciterId(r.id)}
+                    style={[
+                      styles.reciterPill,
+                      reciterId === r.id && styles.reciterPillSelected,
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.reciterPillText,
+                        reciterId === r.id && styles.reciterPillTextSelected,
+                      ]}
+                    >
+                      {r.fullName.split(" ").slice(-1)[0]}
+                    </Text>
+                  </Pressable>
+                ))}
+              </ScrollView>
+            </View>
           </ScrollView>
 
           <Pressable style={styles.sheetDoneButton} onPress={() => setSettingsOpen(false)}>
@@ -6723,18 +6790,37 @@ const styles = StyleSheet.create({
   },
   // ── Fixed controls island ────────────────────────────────────────────────────
   controlsIsland: {
-    paddingHorizontal: 16,
-    paddingTop: 12,
-    paddingBottom: 24,
-    gap: 12,
+    paddingHorizontal: 18,
+    paddingTop: 8,
+    paddingBottom: 10,
     borderTopWidth: 1,
-    borderTopColor: "#e2e8f0",
+    borderTopColor: "#e5e7eb",
     backgroundColor: "#ffffff",
     shadowColor: "#0f172a",
-    shadowOpacity: 0.08,
-    shadowRadius: 14,
-    shadowOffset: { width: 0, height: -4 },
-    elevation: 8,
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: -2 },
+    elevation: 4,
+  },
+  playbackControlsRow: {
+    minHeight: 56,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+  },
+  playbackIconButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#ffffff",
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+  },
+  playbackIconButtonDisabled: {
+    opacity: 0.4,
   },
   modeButtonRow: {
     flexDirection: "row",
@@ -6812,11 +6898,16 @@ const styles = StyleSheet.create({
   },
   playButton: {
     backgroundColor: "#2563eb",
-    width: 60,
-    height: 60,
-    borderRadius: 30,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
     justifyContent: "center",
     alignItems: "center",
+    shadowColor: "#1d4ed8",
+    shadowOpacity: 0.22,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 5,
   },
   playButtonText: {
     color: "#ffffff",
@@ -6912,9 +7003,126 @@ const styles = StyleSheet.create({
     backgroundColor: "#ffffff",
     borderTopLeftRadius: 18,
     borderTopRightRadius: 18,
-    padding: 24,
-    paddingBottom: 40,
+    paddingTop: 20,
+    paddingHorizontal: 20,
+    paddingBottom: 34,
+    gap: 14,
+    maxHeight: "88%",
+  },
+  settingsSheetScroll: {
+    flexGrow: 0,
+  },
+  settingsSheetContent: {
     gap: 16,
+    paddingBottom: 2,
+  },
+  settingsSection: {
+    gap: 10,
+  },
+  settingsSectionTitle: {
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: "900",
+    color: "#64748b",
+    textTransform: "uppercase",
+  },
+  settingsSegment: {
+    flexDirection: "row",
+    gap: 8,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+    backgroundColor: "#f8fafc",
+    padding: 4,
+  },
+  settingsSegmentPill: {
+    flex: 1,
+    minHeight: 38,
+    borderRadius: 999,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 10,
+  },
+  settingsSegmentPillSelected: {
+    backgroundColor: "#2563eb",
+  },
+  settingsSegmentText: {
+    fontSize: 13,
+    fontWeight: "900",
+    color: "#475569",
+    textAlign: "center",
+  },
+  settingsSegmentTextSelected: {
+    color: "#ffffff",
+  },
+  sessionSettingRow: {
+    minHeight: 54,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+    backgroundColor: "#ffffff",
+    paddingVertical: 9,
+    paddingHorizontal: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+  sessionSettingTextBlock: {
+    flex: 1,
+    minWidth: 0,
+  },
+  sessionSettingLabel: {
+    fontSize: 14,
+    fontWeight: "900",
+    color: "#111827",
+  },
+  sessionSettingDetail: {
+    marginTop: 2,
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: "600",
+    color: "#64748b",
+  },
+  sessionActionRow: {
+    minHeight: 48,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#bae6fd",
+    backgroundColor: "#f0f9ff",
+    paddingVertical: 11,
+    paddingHorizontal: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 9,
+  },
+  sessionActionRowDisabled: {
+    opacity: 0.55,
+  },
+  sessionActionTextBlock: {
+    flex: 1,
+    minWidth: 0,
+  },
+  sessionActionText: {
+    flexShrink: 1,
+    minWidth: 0,
+    fontSize: 14,
+    fontWeight: "900",
+    color: "#0369a1",
+  },
+  sessionPauseActionRow: {
+    borderColor: "#fed7aa",
+    backgroundColor: "#fff7ed",
+  },
+  sessionPauseActionText: {
+    color: "#b45309",
+  },
+  sessionPauseActionDetail: {
+    marginTop: 2,
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: "700",
+    color: "#92400e",
   },
   sheetTitle: {
     fontSize: 18,
