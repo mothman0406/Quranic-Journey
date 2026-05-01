@@ -17,6 +17,7 @@ import {
   TextInput,
   type StyleProp,
   type TextStyle,
+  useWindowDimensions,
   View,
 } from "react-native";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
@@ -449,6 +450,8 @@ function scoreProgress(progress: MemorizationProgress[]) {
 
 export default function MemorizationScreen() {
   const router = useRouter();
+  const { width: screenWidth } = useWindowDimensions();
+  const mushafPageWidth = Math.max(1, Math.round(screenWidth));
   const params = useLocalSearchParams<{
     childId: string;
     name: string;
@@ -604,6 +607,7 @@ export default function MemorizationScreen() {
   const viewModeRef = useRef<"ayah" | "page">(viewMode);
   const currentVerseRef = useRef<number>(currentVerse);
   const playingVerseNumberRef = useRef<number>(playingVerseNumber);
+  const displayedMushafPageRef = useRef<number | null>(displayedMushafPage);
   const ayahStartRef = useRef<number | null>(ayahStart);
   const ayahEndRef = useRef<number | null>(ayahEnd);
   const isPlayingRef = useRef(false);
@@ -625,10 +629,12 @@ export default function MemorizationScreen() {
   const currentRepeatRef = useRef(1);
   const advanceTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Layout refs for auto-scroll
-  const scrollViewRef = useRef<ScrollView>(null);
+  const mushafListRef = useRef<FlatList<number>>(null);
+  const mushafPageScrollRefs = useRef<Map<number, ScrollView | null>>(new Map());
   const ayahListRef = useRef<FlatList<number>>(null);
   const lineLayoutMap = useRef<Map<string, number>>(new Map());
-  const pageCardLayoutMap = useRef<Map<number, number>>(new Map());
+  const pageBodyLayoutMap = useRef<Map<number, number>>(new Map());
+  const pageViewportHeightMap = useRef<Map<number, number>>(new Map());
   const autoScrollRetryRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const ayahAutoScrollRetryRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const ayahViewabilityConfigRef = useRef({
@@ -651,6 +657,7 @@ export default function MemorizationScreen() {
   useEffect(() => { viewModeRef.current = viewMode; }, [viewMode]);
   useEffect(() => { currentVerseRef.current = currentVerse; }, [currentVerse]);
   useEffect(() => { playingVerseNumberRef.current = playingVerseNumber; }, [playingVerseNumber]);
+  useEffect(() => { displayedMushafPageRef.current = displayedMushafPage; }, [displayedMushafPage]);
   useEffect(() => { reciteModeRef.current = reciteMode; }, [reciteMode]);
   useEffect(() => { reciteExpectedIdxRef.current = reciteExpectedIdx; }, [reciteExpectedIdx]);
   useEffect(() => { reciteAttemptsRef.current = reciteAttempts; }, [reciteAttempts]);
@@ -876,8 +883,11 @@ export default function MemorizationScreen() {
     setPageWordsMap(new Map());
     setVersePageMap(new Map());
     setDisplayedMushafPage(null);
+    displayedMushafPageRef.current = null;
     lineLayoutMap.current.clear();
-    pageCardLayoutMap.current.clear();
+    pageBodyLayoutMap.current.clear();
+    pageViewportHeightMap.current.clear();
+    mushafPageScrollRefs.current.clear();
     clearMushafAutoScrollRetry();
     setHighlightedWord(-1);
     setHighlightedPage(null);
@@ -1139,6 +1149,13 @@ export default function MemorizationScreen() {
     }
   }
 
+  function updateDisplayedMushafPage(pageNum: number | null) {
+    displayedMushafPageRef.current = pageNum;
+    setDisplayedMushafPage((previousPage) =>
+      previousPage === pageNum ? previousPage : pageNum,
+    );
+  }
+
   function scrollAyahListToVerse(verseNumber: number, attempt = 0) {
     if (viewMode !== "ayah" || ayahStart === null || ayahEnd === null) return;
     if (verseNumber < ayahStart || verseNumber > ayahEnd) return;
@@ -1169,6 +1186,13 @@ export default function MemorizationScreen() {
 
   function resolveMushafScrollTarget(verseNumber: number) {
     if (pageStart === null || pageEnd === null || surahNumber === null) return null;
+    const reciteWordIndex =
+      reciteModeRef.current && verseNumber === currentVerseRef.current
+        ? getNextReciteWordIndex(
+            displayWordsMapRef.current.get(verseNumber) ?? [],
+            reciteExpectedIdxRef.current,
+          )
+        : null;
 
     for (let pageNum = pageStart; pageNum <= pageEnd; pageNum += 1) {
       const verses = pageWordsMap.get(pageNum);
@@ -1180,8 +1204,19 @@ export default function MemorizationScreen() {
         const vVerse = Number(verse.verse_key.slice(ci + 1));
         if (vSurah !== surahNumber || vVerse !== verseNumber) continue;
 
+        const reciteWord =
+          reciteWordIndex !== null
+            ? verse.words.find(
+                (word) =>
+                  word.char_type_name === "word" &&
+                  Number.isFinite(word.position) &&
+                  word.position === reciteWordIndex + 1,
+              )
+            : undefined;
         const firstWord =
-          verse.words.find((word) => word.char_type_name === "word") ?? verse.words[0];
+          reciteWord ??
+          verse.words.find((word) => word.char_type_name === "word") ??
+          verse.words[0];
         return {
           pageNum,
           lineNumber: firstWord?.line_number,
@@ -1201,24 +1236,62 @@ export default function MemorizationScreen() {
     return null;
   }
 
+  function scrollMushafPageIntoView(pageNum: number, animated = true) {
+    if (viewMode !== "page" || pageStart === null || pageEnd === null) return;
+    const targetPage = clampNumber(clampMushafPage(pageNum), pageStart, pageEnd);
+    const targetIndex = targetPage - pageStart;
+    if (targetIndex < 0 || targetIndex > pageEnd - pageStart) return;
+
+    updateDisplayedMushafPage(targetPage);
+
+    try {
+      mushafListRef.current?.scrollToIndex({ index: targetIndex, animated });
+    } catch {
+      try {
+        mushafListRef.current?.scrollToOffset({
+          offset: Math.max(0, targetIndex * mushafPageWidth),
+          animated,
+        });
+      } catch {
+        // Measurement timing varies while FlatList is mounting.
+      }
+    }
+  }
+
   function scrollMushafVerseIntoView(verseNumber: number, attempt = 0) {
     if (viewMode !== "page" || pageStart === null || pageEnd === null || surahNumber === null) return;
 
     const target = resolveMushafScrollTarget(verseNumber);
     if (target !== null) {
-      setDisplayedMushafPage(target.pageNum);
+      if (displayedMushafPageRef.current !== target.pageNum) {
+        scrollMushafPageIntoView(target.pageNum);
+      } else {
+        updateDisplayedMushafPage(target.pageNum);
+      }
     }
-    const pageCardY =
-      target !== null ? pageCardLayoutMap.current.get(target.pageNum) : undefined;
+    const pageScrollRef =
+      target !== null ? mushafPageScrollRefs.current.get(target.pageNum) : null;
+    const pageBodyY =
+      target !== null ? pageBodyLayoutMap.current.get(target.pageNum) : undefined;
+    const pageViewportHeight =
+      target !== null ? pageViewportHeightMap.current.get(target.pageNum) : undefined;
     const lineY =
       target?.lineNumber !== undefined
         ? lineLayoutMap.current.get(`page:${target.pageNum}:line:${target.lineNumber}`)
         : undefined;
 
-    if (target !== null && pageCardY !== undefined) {
-      // pageCardY is the page card's Y in scroll content; lineY is within pageBody.
-      const targetY = lineY !== undefined ? pageCardY + 40 + lineY : pageCardY;
-      scrollViewRef.current?.scrollTo({ y: Math.max(0, targetY - 80), animated: true });
+    if (target !== null && pageScrollRef && pageBodyY !== undefined) {
+      const targetY = lineY !== undefined ? pageBodyY + lineY : pageBodyY;
+      const preferredTopOffset =
+        pageViewportHeight !== undefined ? pageViewportHeight * 0.3 : 96;
+      try {
+        pageScrollRef.scrollTo({
+          y: Math.max(0, targetY - preferredTopOffset),
+          animated: true,
+        });
+      } catch {
+        // Layout can disappear briefly while FlatList virtualizes pages.
+      }
       return;
     }
 
@@ -1227,27 +1300,6 @@ export default function MemorizationScreen() {
       autoScrollRetryRef.current = setTimeout(() => {
         autoScrollRetryRef.current = null;
         scrollMushafVerseIntoView(verseNumber, attempt + 1);
-      }, 90);
-    }
-  }
-
-  function scrollMushafPageIntoView(pageNum: number, attempt = 0) {
-    if (viewMode !== "page" || pageStart === null || pageEnd === null) return;
-    const targetPage = clampMushafPage(pageNum);
-    const pageCardY = pageCardLayoutMap.current.get(targetPage);
-
-    setDisplayedMushafPage(targetPage);
-
-    if (pageCardY !== undefined) {
-      scrollViewRef.current?.scrollTo({ y: Math.max(0, pageCardY - 12), animated: true });
-      return;
-    }
-
-    if (attempt < 5) {
-      clearMushafAutoScrollRetry();
-      autoScrollRetryRef.current = setTimeout(() => {
-        autoScrollRetryRef.current = null;
-        scrollMushafPageIntoView(targetPage, attempt + 1);
       }, 90);
     }
   }
@@ -2191,8 +2243,11 @@ export default function MemorizationScreen() {
     setPageWordsMap(new Map());
     setVersePageMap(new Map());
     setDisplayedMushafPage(null);
+    displayedMushafPageRef.current = null;
     lineLayoutMap.current.clear();
-    pageCardLayoutMap.current.clear();
+    pageBodyLayoutMap.current.clear();
+    pageViewportHeightMap.current.clear();
+    mushafPageScrollRefs.current.clear();
     clearMushafAutoScrollRetry();
     setRevealedVerses(new Set());
     setError(null);
@@ -3024,13 +3079,27 @@ export default function MemorizationScreen() {
 
   // ── Full Mushaf page renderer ────────────────────────────────────────────────
 
-  function renderMushafPage(pageNum: number) {
+  function renderMushafPage(pageNum: number, pageWidth: number) {
     const verses = pageWordsMap.get(pageNum);
 
     if (!verses) {
       return (
-        <View key={pageNum} style={[themedStyles.pageCard, styles.centered, { minHeight: 200 }]}>
-          <ActivityIndicator color={THEMES[themeKey].pageMuted} />
+        <View key={pageNum} style={[styles.mushafPageFrame, { width: pageWidth }]}>
+          <ScrollView
+            ref={(ref) => {
+              mushafPageScrollRefs.current.set(pageNum, ref);
+            }}
+            style={styles.mushafPageScroll}
+            contentContainerStyle={styles.mushafPageScrollContent}
+            showsVerticalScrollIndicator={false}
+            onLayout={(e) => {
+              pageViewportHeightMap.current.set(pageNum, e.nativeEvent.layout.height);
+            }}
+          >
+            <View style={[themedStyles.pageCard, styles.centered, styles.mushafPageLoadingCard]}>
+              <ActivityIndicator color={THEMES[themeKey].pageMuted} />
+            </View>
+          </ScrollView>
         </View>
       );
     }
@@ -3078,24 +3147,35 @@ export default function MemorizationScreen() {
     const lineNums = [...lineMap.keys()].sort((a, b) => a - b);
 
     return (
-      <View
-        key={pageNum}
-        style={themedStyles.pageCard}
-        onLayout={(e) => {
-          pageCardLayoutMap.current.set(pageNum, e.nativeEvent.layout.y);
-        }}
+      <View key={pageNum} style={[styles.mushafPageFrame, { width: pageWidth }]}>
+        <ScrollView
+          ref={(ref) => {
+            mushafPageScrollRefs.current.set(pageNum, ref);
+          }}
+          style={styles.mushafPageScroll}
+          contentContainerStyle={styles.mushafPageScrollContent}
+          showsVerticalScrollIndicator={false}
+          onLayout={(e) => {
+            pageViewportHeightMap.current.set(pageNum, e.nativeEvent.layout.height);
+          }}
       >
-        {/* Header bar: surah names (left) + Juz label (right) */}
-        <View style={themedStyles.pageHeader}>
-          <Text style={themedStyles.pageHeaderNames} numberOfLines={1}>
-            {surahNamesStr}
-          </Text>
-          <Text style={themedStyles.pageHeaderJuz}>{`JUZ ${juz}`}</Text>
-        </View>
+          <View style={themedStyles.pageCard}>
+            {/* Header bar: surah names (left) + Juz label (right) */}
+            <View style={themedStyles.pageHeader}>
+              <Text style={themedStyles.pageHeaderNames} numberOfLines={1}>
+                {surahNamesStr}
+              </Text>
+              <Text style={themedStyles.pageHeaderJuz}>{`JUZ ${juz}`}</Text>
+            </View>
 
-        {/* Page body: lines with surah banners injected at surah transitions */}
-        <View style={styles.pageBody}>
-          {lineNums.map((lineNum) => {
+            {/* Page body: lines with surah banners injected at surah transitions */}
+            <View
+              style={styles.pageBody}
+              onLayout={(e) => {
+                pageBodyLayoutMap.current.set(pageNum, e.nativeEvent.layout.y);
+              }}
+            >
+              {lineNums.map((lineNum) => {
             const lineItems = lineMap.get(lineNum)!;
             const bannerSurahNum = bannerBeforeLine.get(lineNum);
             const bannerName =
@@ -3304,13 +3384,15 @@ export default function MemorizationScreen() {
                 </View>
               </React.Fragment>
             );
-          })}
-        </View>
+              })}
+            </View>
 
-        {/* Footer: centered page number */}
-        <View style={themedStyles.pageFooter}>
-          <Text style={themedStyles.pageFooterText}>{pageNum}</Text>
-        </View>
+            {/* Footer: centered page number */}
+            <View style={themedStyles.pageFooter}>
+              <Text style={themedStyles.pageFooterText}>{pageNum}</Text>
+            </View>
+          </View>
+        </ScrollView>
       </View>
     );
   }
@@ -3363,6 +3445,13 @@ export default function MemorizationScreen() {
     return fallbackPage ? clampMushafPage(fallbackPage) : null;
   }, [surahNumber, versePageMap, playingVerseNumber, currentVerse, pageStart]);
   const sessionMushafPages = useMemo(() => {
+    if (pageStart !== null && pageEnd !== null) {
+      return Array.from(
+        { length: Math.max(0, pageEnd - pageStart + 1) },
+        (_, index) => clampMushafPage(pageStart + index),
+      );
+    }
+
     const pages = new Set<number>();
     if (ayahStart !== null && ayahEnd !== null) {
       for (const [verseNumber, pageNumber] of versePageMap) {
@@ -3371,21 +3460,54 @@ export default function MemorizationScreen() {
         }
       }
     }
-
-    if (pages.size === 0 && pageStart !== null && pageEnd !== null) {
-      for (let pageNum = pageStart; pageNum <= pageEnd; pageNum += 1) {
-        pages.add(clampMushafPage(pageNum));
-      }
-    }
-
     return [...pages].sort((a, b) => a - b);
   }, [ayahStart, ayahEnd, versePageMap, pageStart, pageEnd]);
+  const activeMushafPageIndex =
+    activeMushafPage !== null ? sessionMushafPages.indexOf(activeMushafPage) : -1;
+  const mushafInitialPageIndex = activeMushafPageIndex >= 0 ? activeMushafPageIndex : 0;
   const displayedRecitePage = displayedMushafPage ?? activeMushafPage;
   const displayedRecitePageIndex =
     displayedRecitePage !== null ? sessionMushafPages.indexOf(displayedRecitePage) : -1;
-  const currentReciteWordPage = reciteMode
-    ? (versePageMap.get(currentVerse) ?? activeMushafPage)
-    : null;
+  const displayedMushafPageIndex =
+    displayedRecitePageIndex >= 0 ? displayedRecitePageIndex : mushafInitialPageIndex;
+  const mushafHasMultiplePages = sessionMushafPages.length > 1;
+  const canGoPreviousMushafPage = displayedMushafPageIndex > 0;
+  const canGoNextMushafPage = displayedMushafPageIndex < sessionMushafPages.length - 1;
+  const currentReciteWordPage = useMemo(() => {
+    if (!reciteMode) return null;
+    if (
+      surahNumber !== null &&
+      currentReciteExpectedIndex !== null &&
+      pageStart !== null &&
+      pageEnd !== null
+    ) {
+      const currentVerseKey = `${surahNumber}:${currentVerse}`;
+      for (let pageNum = pageStart; pageNum <= pageEnd; pageNum += 1) {
+        const pageVerse = pageWordsMap
+          .get(pageNum)
+          ?.find((verse) => verse.verse_key === currentVerseKey);
+        if (!pageVerse) continue;
+        const hasCurrentWord = pageVerse.words.some(
+          (word) =>
+            word.char_type_name === "word" &&
+            Number.isFinite(word.position) &&
+            word.position === currentReciteExpectedIndex + 1,
+        );
+        if (hasCurrentWord) return clampMushafPage(pageNum);
+      }
+    }
+    return versePageMap.get(currentVerse) ?? activeMushafPage;
+  }, [
+    activeMushafPage,
+    currentReciteExpectedIndex,
+    currentVerse,
+    pageEnd,
+    pageStart,
+    pageWordsMap,
+    reciteMode,
+    surahNumber,
+    versePageMap,
+  ]);
   const recitePageNavigationVisible =
     reciteMode &&
     viewMode === "page" &&
@@ -3410,40 +3532,66 @@ export default function MemorizationScreen() {
     currentReciteWordPage !== null &&
     displayedRecitePage !== null &&
     currentReciteWordPage < displayedRecitePage
-      ? "arrow-up-outline"
-      : "arrow-down-outline";
+      ? "arrow-back-outline"
+      : "arrow-forward-outline";
+  const getMushafItemLayout = useCallback(
+    (_data: ArrayLike<number> | null | undefined, index: number) => ({
+      length: mushafPageWidth,
+      offset: mushafPageWidth * index,
+      index,
+    }),
+    [mushafPageWidth],
+  );
+  const handleMushafScrollToIndexFailed = useCallback(
+    (info: { index: number }) => {
+      const offset = Math.max(0, info.index * mushafPageWidth);
+      setTimeout(() => {
+        try {
+          mushafListRef.current?.scrollToOffset({ offset, animated: true });
+        } catch {
+          // FlatList may still be measuring its first page.
+        }
+      }, 80);
+    },
+    [mushafPageWidth],
+  );
+  const handleMushafMomentumEnd = useCallback(
+    (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+      if (sessionMushafPages.length === 0) return;
+      const index = clampNumber(
+        Math.round(event.nativeEvent.contentOffset.x / mushafPageWidth),
+        0,
+        sessionMushafPages.length - 1,
+      );
+      const pageNum = sessionMushafPages[index] ?? null;
+      if (pageNum !== null) updateDisplayedMushafPage(pageNum);
+    },
+    [mushafPageWidth, sessionMushafPages],
+  );
+  function scrollMushafPageIndexIntoView(index: number) {
+    const pageNum = sessionMushafPages[
+      clampNumber(index, 0, Math.max(0, sessionMushafPages.length - 1))
+    ];
+    if (pageNum !== undefined) scrollMushafPageIntoView(pageNum);
+  }
 
   useEffect(() => {
     if (viewMode !== "page" || activeMushafPage === null) return;
-    setDisplayedMushafPage((previousPage) =>
-      previousPage === activeMushafPage ? previousPage : activeMushafPage,
-    );
+    updateDisplayedMushafPage(activeMushafPage);
   }, [activeMushafPage, viewMode, sessionLoadId]);
 
-  const handleSessionScroll = useCallback(
-    (event: NativeSyntheticEvent<NativeScrollEvent>) => {
-      if (viewMode !== "page" || sessionMushafPages.length === 0) return;
-
-      const topEdge = event.nativeEvent.contentOffset.y + 96;
-      let visiblePage = sessionMushafPages[0] ?? null;
-      for (const pageNum of sessionMushafPages) {
-        const pageY = pageCardLayoutMap.current.get(pageNum);
-        if (pageY === undefined) continue;
-        if (pageY <= topEdge) {
-          visiblePage = pageNum;
-        } else {
-          break;
-        }
-      }
-
-      if (visiblePage !== null) {
-        setDisplayedMushafPage((previousPage) =>
-          previousPage === visiblePage ? previousPage : visiblePage,
-        );
-      }
-    },
-    [sessionMushafPages, viewMode],
-  );
+  useEffect(() => {
+    if (!reciteMode || viewMode !== "page" || currentReciteWordPage === null) return;
+    clearMushafAutoScrollRetry();
+    scrollMushafVerseIntoView(currentVerse);
+    return clearMushafAutoScrollRetry;
+  }, [
+    currentReciteExpectedIndex,
+    currentReciteWordPage,
+    currentVerse,
+    reciteMode,
+    viewMode,
+  ]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!showSessionTranslation || viewMode !== "ayah" || surahNumber === null) return;
@@ -3790,25 +3938,89 @@ export default function MemorizationScreen() {
           }}
         />
       ) : (
-        <ScrollView
-          ref={scrollViewRef}
-          style={styles.scrollFlex}
-          contentContainerStyle={styles.scrollContent}
-          onScroll={handleSessionScroll}
-          scrollEventThrottle={120}
-        >
-          {pageStart === null || pageEnd === null ? (
+        <View style={styles.mushafPagerShell}>
+          {mushafHasMultiplePages && (
+            <View style={styles.mushafPageIndicatorWrap}>
+              <Pressable
+                style={[
+                  styles.mushafPageIndicatorButton,
+                  !canGoPreviousMushafPage && styles.mushafPageIndicatorButtonDisabled,
+                ]}
+                disabled={!canGoPreviousMushafPage}
+                onPress={() => scrollMushafPageIndexIntoView(displayedMushafPageIndex - 1)}
+                accessibilityRole="button"
+                accessibilityLabel="Previous Mushaf session page"
+              >
+                <Ionicons
+                  name="chevron-back"
+                  size={15}
+                  color={canGoPreviousMushafPage ? "#475569" : "#cbd5e1"}
+                />
+              </Pressable>
+              <View style={styles.mushafPageIndicatorPill}>
+                <Text style={styles.mushafPageIndicatorText}>
+                  Page {displayedMushafPageIndex + 1} of {sessionMushafPages.length}
+                </Text>
+              </View>
+              <Pressable
+                style={[
+                  styles.mushafPageIndicatorButton,
+                  !canGoNextMushafPage && styles.mushafPageIndicatorButtonDisabled,
+                ]}
+                disabled={!canGoNextMushafPage}
+                onPress={() => scrollMushafPageIndexIntoView(displayedMushafPageIndex + 1)}
+                accessibilityRole="button"
+                accessibilityLabel="Next Mushaf session page"
+              >
+                <Ionicons
+                  name="chevron-forward"
+                  size={15}
+                  color={canGoNextMushafPage ? "#475569" : "#cbd5e1"}
+                />
+              </Pressable>
+            </View>
+          )}
+
+          {sessionMushafPages.length === 0 ? (
             <View style={[themedStyles.pageCard, styles.centered, { minHeight: 200 }]}>
               <Text style={styles.errorText}>Page data not available.</Text>
             </View>
           ) : (
-            <>
-              {Array.from({ length: pageEnd - pageStart + 1 }, (_, i) =>
-                renderMushafPage(pageStart + i),
-              )}
-            </>
+            <FlatList
+              key={`mushaf-pager-${sessionLoadId}-${pageStart ?? "x"}-${pageEnd ?? "x"}-${mushafPageWidth}`}
+              ref={mushafListRef}
+              style={styles.mushafPagerList}
+              data={sessionMushafPages}
+              keyExtractor={(item) => String(item)}
+              horizontal
+              pagingEnabled
+              inverted
+              showsHorizontalScrollIndicator={false}
+              initialScrollIndex={mushafInitialPageIndex}
+              getItemLayout={getMushafItemLayout}
+              onScrollToIndexFailed={handleMushafScrollToIndexFailed}
+              onMomentumScrollEnd={handleMushafMomentumEnd}
+              windowSize={3}
+              initialNumToRender={1}
+              maxToRenderPerBatch={2}
+              extraData={{
+                blindMode,
+                blurMode,
+                currentReciteExpectedIndex,
+                currentVerse,
+                highlightedPage,
+                isPlaying,
+                playingVerseNumber,
+                reciteMode,
+                revealedReciteWords,
+                revealedVerses,
+                tajweedEnabled,
+                themeKey,
+              }}
+              renderItem={({ item }) => renderMushafPage(item, mushafPageWidth)}
+            />
           )}
-        </ScrollView>
+        </View>
       )}
 
       {reciteMode && currentReciteExpectedIndex !== null && (
@@ -3842,7 +4054,7 @@ export default function MemorizationScreen() {
               accessibilityRole="button"
               accessibilityLabel={`Go to previous recite page ${previousRecitePage}`}
             >
-              <Ionicons name="chevron-up-outline" size={15} color="#475569" />
+              <Ionicons name="chevron-back-outline" size={15} color="#475569" />
               <Text style={[styles.reciteAssistPillText, styles.recitePagePillText]}>
                 p. {previousRecitePage}
               </Text>
@@ -3858,7 +4070,7 @@ export default function MemorizationScreen() {
               <Text style={[styles.reciteAssistPillText, styles.recitePagePillText]}>
                 p. {nextRecitePage}
               </Text>
-              <Ionicons name="chevron-down-outline" size={15} color="#475569" />
+              <Ionicons name="chevron-forward-outline" size={15} color="#475569" />
             </Pressable>
           )}
           {showCurrentReciteWordJump && (
@@ -7153,6 +7365,69 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 18,
     paddingBottom: 16,
+  },
+  mushafPagerShell: {
+    flex: 1,
+    backgroundColor: "#f8fafc",
+  },
+  mushafPagerList: {
+    flex: 1,
+  },
+  mushafPageIndicatorWrap: {
+    minHeight: 40,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingTop: 8,
+    paddingBottom: 6,
+    backgroundColor: "#f8fafc",
+  },
+  mushafPageIndicatorPill: {
+    minHeight: 26,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+    backgroundColor: "#ffffff",
+    paddingHorizontal: 12,
+  },
+  mushafPageIndicatorText: {
+    fontSize: 12,
+    lineHeight: 15,
+    fontWeight: "800",
+    color: "#475569",
+  },
+  mushafPageIndicatorButton: {
+    width: 28,
+    height: 28,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+    backgroundColor: "#ffffff",
+  },
+  mushafPageIndicatorButtonDisabled: {
+    opacity: 0.58,
+  },
+  mushafPageFrame: {
+    flex: 1,
+    height: "100%",
+    backgroundColor: "#f8fafc",
+  },
+  mushafPageScroll: {
+    flex: 1,
+  },
+  mushafPageScrollContent: {
+    flexGrow: 1,
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 16,
+  },
+  mushafPageLoadingCard: {
+    minHeight: 200,
   },
   ayahListContent: {
     paddingHorizontal: 16,
