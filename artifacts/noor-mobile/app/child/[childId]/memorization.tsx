@@ -47,11 +47,13 @@ import {
   type WorkStatus,
 } from "@/src/lib/memorization";
 import {
+  cleanTranslationHtml,
   fetchAyahTranslation,
   fetchSurahVerses,
   fetchVersesByPage,
   fetchAllChapters,
   type ApiWord,
+  type ApiVerse,
   type ApiPageVerse,
   type ApiChapter,
 } from "@/src/lib/quran";
@@ -88,10 +90,6 @@ type InternalPhase = "single" | "cumulative";
 type DiscoveryFilter = "all" | "current" | "in_progress" | "not_started" | "memorized" | "needs_review";
 type AyahTone = "white" | "red" | "orange" | "green";
 type ReviewStrengthTone = "red" | "orange" | "green";
-type AyahTranslationState =
-  | { status: "loading"; text: null; error: null }
-  | { status: "ready"; text: string; error: null }
-  | { status: "error"; text: null; error: string };
 
 type DiscoveryState =
   | { status: "loading" }
@@ -502,6 +500,7 @@ export default function MemorizationScreen() {
   const [discoveryQuery, setDiscoveryQuery] = useState("");
   const [discoveryFilter, setDiscoveryFilter] = useState<DiscoveryFilter>("all");
   const [sessionBookmark, setSessionBookmark] = useState<MemorizationSessionBookmark | null>(null);
+  const [verseDataMap, setVerseDataMap] = useState<Map<number, ApiVerse>>(new Map());
   const [displayWordsMap, setDisplayWordsMap] = useState<Map<number, ApiWord[]>>(new Map());
   const [chapterTimings, setChapterTimings] = useState<ChapterTimings | null>(null);
   const [pageWordsMap, setPageWordsMap] = useState<Map<number, ApiPageVerse[]>>(new Map());
@@ -544,7 +543,6 @@ export default function MemorizationScreen() {
   const [revealedVerses, setRevealedVerses] = useState<Set<string>>(new Set());
   const [tajweedEnabled, setTajweedEnabled] = useState<boolean>(false);
   const [showSessionTranslation, setShowSessionTranslation] = useState(false);
-  const [ayahTranslations, setAyahTranslations] = useState<Record<string, AyahTranslationState>>({});
   const [translationPopup, setTranslationPopup] = useState<{
     arabic: string;
     translation: string;
@@ -871,6 +869,7 @@ export default function MemorizationScreen() {
     setSessionLoadId((value) => value + 1);
     setLoading(true);
     setError(null);
+    setVerseDataMap(new Map());
     setDisplayWordsMap(new Map());
     setChapterTimings(null);
     setPageWordsMap(new Map());
@@ -884,7 +883,6 @@ export default function MemorizationScreen() {
     setInternalPhase("single");
     internalPhaseRef.current = "single";
     setShowSessionTranslation(false);
-    setAyahTranslations({});
     setSessionReviewOnly(Boolean(target.isReviewOnly));
     setStartInRecitationCheck(Boolean(target.isReviewOnly && target.startInRecitationCheck));
     setLeaveSheetOpen(false);
@@ -1049,8 +1047,10 @@ export default function MemorizationScreen() {
         ]);
         if (cancelled) return;
         const map = new Map<number, ApiWord[]>();
+        const verseMap = new Map<number, ApiVerse>();
         const nextVersePageMap = new Map<number, number>();
         for (const verse of verses) {
+          verseMap.set(verse.verse_number, verse);
           if (typeof verse.page_number === "number") {
             nextVersePageMap.set(verse.verse_number, verse.page_number);
           }
@@ -1068,6 +1068,7 @@ export default function MemorizationScreen() {
             setPageEnd(Math.max(...pages));
           }
         }
+        setVerseDataMap(verseMap);
         setDisplayWordsMap(map);
         setVersePageMap(nextVersePageMap);
         setChapterTimings(timings);
@@ -2186,6 +2187,7 @@ export default function MemorizationScreen() {
     setCurrentVerse(1);
     setPageStart(null);
     setPageEnd(null);
+    setVerseDataMap(new Map());
     setDisplayWordsMap(new Map());
     setChapterTimings(null);
     setPageWordsMap(new Map());
@@ -2813,48 +2815,8 @@ export default function MemorizationScreen() {
     };
   }
 
-  function ensureAyahTranslation(verseKey: string) {
-    const existing = ayahTranslations[verseKey];
-    if (existing?.status === "loading" || existing?.status === "ready") return;
-
-    setAyahTranslations((current) => ({
-      ...current,
-      [verseKey]: { status: "loading", text: null, error: null },
-    }));
-
-    fetchAyahTranslation(verseKey, 131)
-      .then((translation) => {
-        setAyahTranslations((current) => ({
-          ...current,
-          [verseKey]: { status: "ready", text: translation, error: null },
-        }));
-      })
-      .catch((error) => {
-        setAyahTranslations((current) => ({
-          ...current,
-          [verseKey]: {
-            status: "error",
-            text: null,
-            error: error instanceof Error ? error.message : "Translation unavailable.",
-          },
-        }));
-      });
-  }
-
-  async function loadAyahTranslationText(verseKey: string) {
-    const existing = ayahTranslations[verseKey];
-    if (existing?.status === "ready") return existing.text;
-
-    setAyahTranslations((current) => ({
-      ...current,
-      [verseKey]: { status: "loading", text: null, error: null },
-    }));
-    const translation = await fetchAyahTranslation(verseKey, 131);
-    setAyahTranslations((current) => ({
-      ...current,
-      [verseKey]: { status: "ready", text: translation, error: null },
-    }));
-    return translation;
+  function getLoadedAyahTranslationText(verseNumber: number) {
+    return cleanTranslationHtml(verseDataMap.get(verseNumber)?.translations?.[0]?.text ?? "");
   }
 
   function getMushafBookmarkTarget(target: AyahSheetTarget): MushafAyahTarget {
@@ -2946,7 +2908,19 @@ export default function MemorizationScreen() {
 
   async function handleOpenAyahTranslation(target: AyahSheetTarget) {
     const hideArabic = blindMode && !revealedVerses.has(target.verseKey);
+    const loadedTranslation = getLoadedAyahTranslationText(target.ayahNumber);
     setTappedAyah(null);
+
+    if (loadedTranslation) {
+      setTranslationPopup({
+        arabic: hideArabic ? "" : target.textUthmani,
+        translation: loadedTranslation,
+        verseKey: target.verseKey,
+        loading: false,
+      });
+      return;
+    }
+
     setTranslationPopup({
       arabic: hideArabic ? "" : target.textUthmani,
       translation: "Loading translation...",
@@ -2954,7 +2928,7 @@ export default function MemorizationScreen() {
       loading: true,
     });
     try {
-      const translation = await loadAyahTranslationText(target.verseKey);
+      const translation = await fetchAyahTranslation(target.verseKey, 131);
       setTranslationPopup((current) =>
         current?.verseKey === target.verseKey
           ? {
@@ -3445,30 +3419,10 @@ export default function MemorizationScreen() {
     [sessionMushafPages, viewMode],
   );
 
-  useEffect(() => {
-    if (!showSessionTranslation || viewMode !== "ayah" || surahNumber === null) return;
-    for (const ayahNumber of sessionAyahNumbers) {
-      ensureAyahTranslation(`${surahNumber}:${ayahNumber}`);
-    }
-  }, [showSessionTranslation, viewMode, surahNumber, sessionAyahNumbers]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  function renderInlineTranslation(verseKey: string, active: boolean) {
+  function renderInlineTranslation(verseNumber: number, active: boolean) {
     if (!showSessionTranslation) return null;
-    const state = ayahTranslations[verseKey];
-    if (!state || state.status === "loading") {
-      return (
-        <Text
-          style={[
-            styles.ayahInlineTranslation,
-            styles.ayahInlineTranslationLoading,
-            !active && styles.ayahRowDimmedText,
-          ]}
-        >
-          Loading translation...
-        </Text>
-      );
-    }
-    if (state.status === "error") {
+    const translation = getLoadedAyahTranslationText(verseNumber);
+    if (!translation) {
       return (
         <Text
           style={[
@@ -3483,7 +3437,7 @@ export default function MemorizationScreen() {
     }
 
     return renderTranslationSegments(
-      state.text,
+      translation,
       [
         styles.ayahInlineTranslation,
         !active && styles.ayahRowDimmedText,
@@ -3664,7 +3618,7 @@ export default function MemorizationScreen() {
 
         <View style={styles.ayahRowArabicBlock}>
           {renderAyahWords(verseNumber, active)}
-          {verseKey ? renderInlineTranslation(verseKey, active) : null}
+          {renderInlineTranslation(verseNumber, active)}
         </View>
       </Pressable>
     );

@@ -39,7 +39,7 @@ export async function fetchSurahVerses(surahNumber: number): Promise<ApiVerse[]>
   }
 }
 
-function cleanTranslationHtml(raw: string): string {
+export function cleanTranslationHtml(raw: string): string {
   return raw
     .replace(/<sup[^>]*>.*?<\/sup>/gi, "")
     .replace(/<[^>]+>/g, "")
