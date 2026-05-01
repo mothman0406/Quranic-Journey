@@ -393,13 +393,22 @@ function getBookmarkSurahName(
 }
 
 function scoreProgress(progress: MemorizationProgress[]) {
-  const total = progress.length;
-  if (total === 0) return { memorized: 0, learning: 0, average: 0 };
   const memorized = progress.filter((item) => item.status === "memorized").length;
   const learning = progress.filter((item) => item.status === "in_progress").length;
-  const average = Math.round(
-    progress.reduce((sum, item) => sum + clampStrength(item.strength), 0) / total,
+  const strengthItems = progress.filter(
+    (item) =>
+      item.status === "memorized" ||
+      item.status === "in_progress" ||
+      (item.memorizedAyahs?.length ?? 0) > 0 ||
+      item.versesMemorized > 0,
   );
+  const average =
+    strengthItems.length > 0
+      ? Math.round(
+          strengthItems.reduce((sum, item) => sum + clampStrength(item.strength), 0) /
+            strengthItems.length,
+        )
+      : null;
   return { memorized, learning, average };
 }
 
@@ -4836,11 +4845,15 @@ function MemorizationDiscovery({
               <Text style={styles.discoverySummaryTitle}>
                 {content.stats.memorized} memorized · {content.stats.learning} learning
               </Text>
-              <Text style={styles.discoverySummaryDetail}>
-                Average strength {content.stats.average || 1}/5
-              </Text>
+              {content.stats.average !== null ? (
+                <Text style={styles.discoverySummaryDetail}>
+                  Average strength {content.stats.average}/5
+                </Text>
+              ) : null}
             </View>
-            <StrengthDots strength={content.stats.average || 1} />
+            {content.stats.average !== null ? (
+              <StrengthDots strength={content.stats.average} />
+            ) : null}
           </View>
 
           <View style={styles.discoverySectionHeader}>
