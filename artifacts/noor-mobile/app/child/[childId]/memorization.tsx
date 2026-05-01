@@ -662,12 +662,6 @@ export default function MemorizationScreen() {
   const matchedWordCountRef = useRef(0);
   const lastMatchedWordRef = useRef("");
   const lastMatchTimeRef = useRef(0);
-  const lastRenderLoadingLogRef = useRef<boolean | null>(null);
-  const lastFullMushafFlatListLogKeyRef = useRef<string | null>(null);
-
-  function logNoorMem(label: string, details: Record<string, unknown> = {}) {
-    console.log("[noor-mem]", label, details);
-  }
 
   // Keep callback-visible refs in sync with state
   useEffect(() => { viewModeRef.current = viewMode; }, [viewMode]);
@@ -890,34 +884,9 @@ export default function MemorizationScreen() {
     const nextStart = Math.max(1, target.ayahStart);
     const nextEnd = Math.max(nextStart, target.ayahEnd);
     const nextCurrent = clampNumber(target.currentAyah ?? nextStart, nextStart, nextEnd);
-    logNoorMem("beginSession-entry", {
-      target: {
-        surahNumber: target.surahNumber,
-        ayahStart: target.ayahStart,
-        ayahEnd: target.ayahEnd,
-        currentAyah: target.currentAyah ?? null,
-        pageStart: target.pageStart ?? null,
-        pageEnd: target.pageEnd ?? null,
-        isReviewOnly: Boolean(target.isReviewOnly),
-      },
-      normalizedTarget: {
-        ayahStart: nextStart,
-        ayahEnd: nextEnd,
-        currentAyah: nextCurrent,
-      },
-      currentState: {
-        surahNumber,
-        ayahStart,
-        ayahEnd,
-        displayWordsMapSize: displayWordsMap.size,
-        chapterTimings: chapterTimings === null ? "null" : "present",
-        loading,
-        sessionRequested,
-        sessionLoadId,
-      },
-    });
     setSessionRequested(true);
     setSessionLoadId((value) => value + 1);
+    setLoading(true);
     setError(null);
     setDisplayWordsMap(new Map());
     setChapterTimings(null);
@@ -958,68 +927,6 @@ export default function MemorizationScreen() {
     setCumUpTo(nextStart);
     cumUpToRef.current = nextStart;
     setCurrentRepeat(1);
-    logNoorMem("beginSession-post-reset", {
-      currentSessionLoadId: sessionLoadId,
-      expectedNextSessionLoadId: sessionLoadId + 1,
-      resetCommandsIssued: {
-        displayWordsMap: true,
-        chapterTimings: true,
-        pageWordsMap: true,
-        versePageMap: true,
-        displayedMushafPage: true,
-        lineLayoutMap: true,
-        pageBodyLayoutMap: true,
-        pageViewportHeightMap: true,
-        mushafPageScrollRefs: true,
-        highlightedWord: true,
-        highlightedPage: true,
-        internalPhase: "single",
-        showSessionTranslation: false,
-        ayahTranslations: true,
-        sheetsAndSelection: true,
-        cumulativeRefs: true,
-        currentRepeat: 1,
-      },
-      stateSnapshotAfterResetCommands: {
-        displayWordsMapSize: displayWordsMap.size,
-        pageWordsMapSize: pageWordsMap.size,
-        versePageMapSize: versePageMap.size,
-        chapterTimings: chapterTimings === null ? "null" : "present",
-        displayedMushafPage,
-        currentVerse,
-        viewMode,
-        loading,
-      },
-      refsAfterReset: {
-        displayedMushafPageRef: displayedMushafPageRef.current,
-        lineLayoutMapSize: lineLayoutMap.current.size,
-        pageBodyLayoutMapSize: pageBodyLayoutMap.current.size,
-        pageViewportHeightMapSize: pageViewportHeightMap.current.size,
-        mushafPageScrollRefsSize: mushafPageScrollRefs.current.size,
-        autoPlayRef: autoPlayRef.current,
-        isLoadingRef: isLoadingRef.current,
-        internalPhaseRef: internalPhaseRef.current,
-        cumAyahIdxRef: cumAyahIdxRef.current,
-        cumPassRef: cumPassRef.current,
-        cumUpToRef: cumUpToRef.current,
-      },
-      nextSessionState: {
-        surahNumber: target.surahNumber,
-        ayahStart: nextStart,
-        ayahEnd: nextEnd,
-        currentVerse: nextCurrent,
-        pageStart: target.pageStart ?? null,
-        pageEnd: target.pageEnd ?? null,
-      },
-    });
-    logNoorMem("setLoading-true-from-beginSession", {
-      currentSessionLoadId: sessionLoadId,
-      expectedNextSessionLoadId: sessionLoadId + 1,
-      targetSurahNumber: target.surahNumber,
-      targetAyahStart: nextStart,
-      targetAyahEnd: nextEnd,
-    });
-    setLoading(true);
     setSurahNumber(target.surahNumber);
     setAyahStart(nextStart);
     setAyahEnd(nextEnd);
@@ -1115,60 +1022,17 @@ export default function MemorizationScreen() {
 
   // Step 1: if no params, fetch dashboard to get today's memorization target
   useEffect(() => {
-    if (!sessionRequested) {
-      logNoorMem("step1-entry", {
-        branch: "early-return-session-not-requested",
-        sessionRequested,
-        surahNumber,
-        ayahStart,
-        ayahEnd,
-        loading,
-        sessionLoadId,
-      });
-      return;
-    }
+    if (!sessionRequested) return;
     if (surahNumber !== null && ayahStart !== null && ayahEnd !== null) {
-      logNoorMem("step1-entry", {
-        branch: "early-return-with-setCurrentVerse",
-        sessionRequested,
-        surahNumber,
-        ayahStart,
-        ayahEnd,
-        currentVerse,
-        loading,
-        sessionLoadId,
-      });
       setCurrentVerse((value) => clampNumber(value, ayahStart, ayahEnd));
       return;
     }
-    logNoorMem("step1-entry", {
-      branch: "dashboard-fetch",
-      sessionRequested,
-      surahNumber,
-      ayahStart,
-      ayahEnd,
-      loading,
-      sessionLoadId,
-    });
     (async () => {
       try {
         const dash = await fetchDashboard(childId);
         const nm = dash.todaysPlan.newMemorization;
-        logNoorMem("step1-dashboard-fetch-resolved", {
-          hasNewMemorization: Boolean(nm),
-          sessionLoadId,
-          currentWorkSurahNumber: nm?.currentWorkSurahNumber ?? null,
-          currentWorkAyahStart: nm?.currentWorkAyahStart ?? null,
-          currentWorkAyahEnd: nm?.currentWorkAyahEnd ?? null,
-          pageStart: nm?.pageStart ?? null,
-          pageEnd: nm?.pageEnd ?? null,
-          isReviewOnly: Boolean(nm?.isReviewOnly),
-        });
         if (!nm) {
           setError("No memorization assigned for today.");
-          logNoorMem("setLoading-false-from-step1-no-memorization", {
-            sessionLoadId,
-          });
           setLoading(false);
           return;
         }
@@ -1182,25 +1046,8 @@ export default function MemorizationScreen() {
         setCurrentVerse(as);
         setPageStart(nm.pageStart);
         setPageEnd(nm.pageEnd);
-        logNoorMem("step1-dashboard-fetch-applied", {
-          sessionLoadId,
-          surahNumber: sn,
-          ayahStart: as,
-          ayahEnd: ae,
-          pageStart: nm.pageStart,
-          pageEnd: nm.pageEnd,
-          isReviewOnly: Boolean(nm.isReviewOnly),
-        });
       } catch (e) {
-        logNoorMem("step1-dashboard-fetch-error", {
-          sessionLoadId,
-          message: e instanceof Error ? e.message : String(e),
-          willSetLoadingFalse: true,
-        });
         setError(e instanceof Error ? e.message : "Failed to load today's plan.");
-        logNoorMem("setLoading-false-from-step1-catch", {
-          sessionLoadId,
-        });
         setLoading(false);
       }
     })();
@@ -1209,72 +1056,18 @@ export default function MemorizationScreen() {
   // Step 2: once surahNumber + chapters are known, fetch verses + timings in parallel.
   // Gated on chaptersMap.size > 0 so chapter metadata (name_arabic etc.) is available.
   useEffect(() => {
-    logNoorMem("step2-entry", {
-      sessionRequested,
-      surahNumber,
-      ayahStart,
-      ayahEnd,
-      reciterId,
-      chaptersMapSize: chaptersMap.size,
-      sessionLoadId,
-      loading,
-    });
-    if (!sessionRequested) {
-      logNoorMem("step2 early-return: session-not-requested", {
-        sessionLoadId,
-        loading,
-      });
-      return;
-    }
-    if (surahNumber === null) {
-      logNoorMem("step2 early-return: surahNumber-null", {
-        sessionLoadId,
-        ayahStart,
-        ayahEnd,
-        loading,
-      });
-      return;
-    }
-    if (chaptersMap.size === 0) {
-      logNoorMem("step2 early-return: chaptersMap-empty", {
-        sessionLoadId,
-        surahNumber,
-        ayahStart,
-        ayahEnd,
-        loading,
-      });
-      return;
-    }
+    if (!sessionRequested) return;
+    if (surahNumber === null) return;
+    if (chaptersMap.size === 0) return;
     const currentReciter = findReciter(reciterId);
     let cancelled = false;
-    logNoorMem("step2-fetch-begin", {
-      sessionLoadId,
-      surahNumber,
-      ayahStart,
-      ayahEnd,
-      reciterId,
-      reciter: currentReciter.id,
-    });
     (async () => {
       try {
         const [verses, timings] = await Promise.all([
           fetchSurahVerses(surahNumber),
           fetchTimingsForReciter(currentReciter, surahNumber),
         ]);
-        logNoorMem("step2-fetch-resolved", {
-          sessionLoadId,
-          surahNumber,
-          versesCount: verses.length,
-          timingsKind: timings.kind,
-          cancelled,
-        });
-        if (cancelled) {
-          logNoorMem("step2 early-return: cancelled-after-fetch", {
-            sessionLoadId,
-            surahNumber,
-          });
-          return;
-        }
+        if (cancelled) return;
         const map = new Map<number, ApiWord[]>();
         const nextVersePageMap = new Map<number, number>();
         for (const verse of verses) {
@@ -1298,39 +1091,15 @@ export default function MemorizationScreen() {
         setDisplayWordsMap(map);
         setVersePageMap(nextVersePageMap);
         setChapterTimings(timings);
-        logNoorMem("setLoading-false-from-step2", {
-          sessionLoadId,
-          surahNumber,
-          displayWordsMapSize: map.size,
-          versePageMapSize: nextVersePageMap.size,
-          chapterTimingsKind: timings.kind,
-        });
         setLoading(false);
       } catch (e) {
-        logNoorMem("step2-fetch-error", {
-          sessionLoadId,
-          surahNumber,
-          message: e instanceof Error ? e.message : String(e),
-          cancelled,
-          willSetLoadingFalse: !cancelled,
-        });
         if (!cancelled) {
           setError(e instanceof Error ? e.message : "Failed to load verses.");
-          logNoorMem("setLoading-false-from-step2-catch", {
-            sessionLoadId,
-            surahNumber,
-          });
           setLoading(false);
         }
       }
     })();
-    return () => {
-      cancelled = true;
-      logNoorMem("step2-cleanup-cancelled", {
-        sessionLoadId,
-        surahNumber,
-      });
-    };
+    return () => { cancelled = true; };
   }, [sessionRequested, sessionLoadId, surahNumber, reciterId, chaptersMap, ayahStart, ayahEnd]);
 
   // Fetch Mushaf page data when switching to Full Mushaf mode
@@ -1356,7 +1125,7 @@ export default function MemorizationScreen() {
       }
     })();
     return () => { cancelled = true; };
-  }, [viewMode, pageStart, pageEnd]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [viewMode, pageStart, pageEnd, sessionLoadId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Keep segsRef up-to-date for the RAF tick
   useEffect(() => {
@@ -2492,12 +2261,6 @@ export default function MemorizationScreen() {
     clearMushafAutoScrollRetry();
     setRevealedVerses(new Set());
     setError(null);
-    logNoorMem("setLoading-false-from-leave-without-saving", {
-      sessionLoadId,
-      surahNumber,
-      ayahStart,
-      ayahEnd,
-    });
     setLoading(false);
     setSessionRequested(false);
   }
@@ -2688,55 +2451,6 @@ export default function MemorizationScreen() {
         });
       }
 
-      logNoorMem("save-completion-cleanup-state", {
-        sessionLoadId,
-        cleanupCommandsAboutToRun: [
-          "setCompletionSheetOpen(false)",
-          "setSelectedQuality(null)",
-          "setRatingAyahEnd(null)",
-          "setRecitationCheckSource(teacher)",
-          "setRecitationScore(null)",
-          "setStartInRecitationCheck(false)",
-          "setSessionBookmark(null)",
-          "clearMemorizationSessionBookmark(childId)",
-          "setSessionRequested(false)",
-          "setLoading(false)",
-        ],
-        stateBeforeCleanup: {
-          viewMode,
-          currentVerse,
-          playingVerseNumber,
-          displayWordsMapSize: displayWordsMap.size,
-          pageWordsMapSize: pageWordsMap.size,
-          versePageMapSize: versePageMap.size,
-          chapterTimings: chapterTimings === null ? "null" : "present",
-          pageStart,
-          pageEnd,
-          displayedMushafPage,
-          sessionRequested,
-          internalPhase,
-          completionSheetOpen,
-          recitationCheckSource,
-          ratingAyahEnd,
-          selectedQuality,
-        },
-        refsBeforeCleanup: {
-          viewModeRef: viewModeRef.current,
-          currentVerseRef: currentVerseRef.current,
-          playingVerseNumberRef: playingVerseNumberRef.current,
-          displayedMushafPageRef: displayedMushafPageRef.current,
-          autoPlayRef: autoPlayRef.current,
-          isLoadingRef: isLoadingRef.current,
-          internalPhaseRef: internalPhaseRef.current,
-          cumAyahIdxRef: cumAyahIdxRef.current,
-          cumPassRef: cumPassRef.current,
-          cumUpToRef: cumUpToRef.current,
-          lineLayoutMapSize: lineLayoutMap.current.size,
-          pageBodyLayoutMapSize: pageBodyLayoutMap.current.size,
-          pageViewportHeightMapSize: pageViewportHeightMap.current.size,
-          mushafPageScrollRefsSize: mushafPageScrollRefs.current.size,
-        },
-      });
       setCompletionSheetOpen(false);
       setSelectedQuality(null);
       setRatingAyahEnd(null);
@@ -2746,44 +2460,6 @@ export default function MemorizationScreen() {
       setSessionBookmark(null);
       await clearMemorizationSessionBookmark(childId);
       setSessionRequested(false);
-      logNoorMem("setLoading-false-from-save-completion", {
-        sessionLoadId,
-        surahNumber,
-        completedThroughAyah,
-        status,
-      });
-      logNoorMem("post-save-state", {
-        sessionLoadId,
-        viewMode,
-        currentVerse,
-        playingVerseNumber,
-        displayWordsMapSize: displayWordsMap.size,
-        pageWordsMapSize: pageWordsMap.size,
-        versePageMapSize: versePageMap.size,
-        chapterTimings: chapterTimings === null ? "null" : "present",
-        pageStart,
-        pageEnd,
-        displayedMushafPage,
-        sessionRequested,
-        loading,
-        internalPhase,
-        refs: {
-          viewModeRef: viewModeRef.current,
-          currentVerseRef: currentVerseRef.current,
-          playingVerseNumberRef: playingVerseNumberRef.current,
-          displayedMushafPageRef: displayedMushafPageRef.current,
-          autoPlayRef: autoPlayRef.current,
-          isLoadingRef: isLoadingRef.current,
-          internalPhaseRef: internalPhaseRef.current,
-          cumAyahIdxRef: cumAyahIdxRef.current,
-          cumPassRef: cumPassRef.current,
-          cumUpToRef: cumUpToRef.current,
-          lineLayoutMapSize: lineLayoutMap.current.size,
-          pageBodyLayoutMapSize: pageBodyLayoutMap.current.size,
-          pageViewportHeightMapSize: pageViewportHeightMap.current.size,
-          mushafPageScrollRefsSize: mushafPageScrollRefs.current.size,
-        },
-      });
       setLoading(false);
       if (nextCelebration && confettiEnabled) {
         setCelebration(nextCelebration);
@@ -3431,35 +3107,8 @@ export default function MemorizationScreen() {
 
   function renderMushafPage(pageNum: number, pageWidth: number) {
     const verses = pageWordsMap.get(pageNum);
-    const versesOnThisPage = verses?.length ?? 0;
-    logNoorMem("page-render-attempt", {
-      sessionLoadId,
-      pageNumber: pageNum,
-      currentVerse,
-      playingVerseNumber,
-      viewMode,
-      pageWordsMapSize: pageWordsMap.size,
-      hasPageWordsMapEntry: Boolean(verses),
-      versesOnThisPage,
-      displayWordsMapSize: displayWordsMap.size,
-      chapterTimings: chapterTimings === null ? "null" : "present",
-      pageStart,
-      pageEnd,
-      displayedMushafPage,
-      mushafPageWidth: pageWidth,
-    });
 
     if (!verses) {
-      logNoorMem("page-render-bailout", {
-        sessionLoadId,
-        pageNumber: pageNum,
-        reason: "pageWordsMap-missing-page",
-        currentVerse,
-        viewMode,
-        pageWordsMapSize: pageWordsMap.size,
-        pageStart,
-        pageEnd,
-      });
       return (
         <View key={pageNum} style={[styles.mushafPageFrame, { width: pageWidth }]}>
           <ScrollView
@@ -3522,15 +3171,6 @@ export default function MemorizationScreen() {
 
     const juz = getJuzForPage(pageNum);
     const lineNums = [...lineMap.keys()].sort((a, b) => a - b);
-    if (lineNums.length === 0) {
-      logNoorMem("page-render-empty-lines", {
-        sessionLoadId,
-        pageNumber: pageNum,
-        versesOnThisPage,
-        currentVerse,
-        viewMode,
-      });
-    }
 
     return (
       <View key={pageNum} style={[styles.mushafPageFrame, { width: pageWidth }]}>
@@ -4262,19 +3902,6 @@ export default function MemorizationScreen() {
     );
   }
 
-  if (lastRenderLoadingLogRef.current !== loading) {
-    logNoorMem("render-decision", {
-      loading,
-      displayWordsMapSize: displayWordsMap.size,
-      chapterTimings: chapterTimings === null ? "null" : "present",
-      surahNumber,
-      ayahStart,
-      ayahEnd,
-      sessionLoadId,
-    });
-    lastRenderLoadingLogRef.current = loading;
-  }
-
   if (loading) {
     return (
       <View style={[styles.container, styles.centered]}>
@@ -4292,43 +3919,6 @@ export default function MemorizationScreen() {
         </Pressable>
       </View>
     );
-  }
-
-  if (viewMode === "page" && sessionMushafPages.length > 0) {
-    const totalPages =
-      pageStart !== null && pageEnd !== null
-        ? pageEnd - pageStart + 1
-        : sessionMushafPages.length;
-    const currentVerseDerivedPage = versePageMap.get(currentVerse) ?? activeMushafPage ?? null;
-    const flatListLogKey = [
-      sessionLoadId,
-      pageStart ?? "x",
-      pageEnd ?? "x",
-      sessionMushafPages.join(","),
-      mushafInitialPageIndex,
-      currentVerse,
-      currentVerseDerivedPage ?? "x",
-      pageWordsMap.size,
-    ].join("|");
-    if (lastFullMushafFlatListLogKeyRef.current !== flatListLogKey) {
-      logNoorMem("full-mushaf-flatlist-render", {
-        sessionLoadId,
-        pageStart,
-        pageEnd,
-        totalPages,
-        sessionMushafPages,
-        initialScrollIndex: mushafInitialPageIndex,
-        currentVerse,
-        currentVerseDerivedPage,
-        activeMushafPage,
-        displayedMushafPage,
-        displayedMushafPageIndex,
-        pageWordsMapSize: pageWordsMap.size,
-        displayWordsMapSize: displayWordsMap.size,
-        chapterTimings: chapterTimings === null ? "null" : "present",
-      });
-      lastFullMushafFlatListLogKeyRef.current = flatListLogKey;
-    }
   }
 
   return (
