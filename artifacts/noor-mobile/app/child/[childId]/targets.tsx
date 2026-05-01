@@ -182,6 +182,13 @@ const VIEW_MODE_OPTIONS: Array<{ value: ProfileSettings["viewMode"]; label: stri
   { value: "ayah", label: "Ayah view" },
   { value: "page", label: "Full Mushaf" },
 ];
+const MUSHAF_VIEW_MODE_OPTIONS: Array<{
+  value: ProfileSettings["mushafViewMode"];
+  label: string;
+}> = [
+  { value: "swipe", label: "Swipe" },
+  { value: "scroll", label: "Scroll" },
+];
 const THEME_OPTIONS = Object.keys(THEMES) as ThemeKey[];
 
 function clamp(value: number, min: number, max: number) {
@@ -237,6 +244,7 @@ function normalizeProfileDefaults(settings: ProfileSettings): ProfileSettings {
     themeKey,
     reciterId,
     viewMode: settings.viewMode === "page" ? "page" : "ayah",
+    mushafViewMode: settings.mushafViewMode === "scroll" ? "scroll" : "swipe",
   };
 }
 
@@ -911,6 +919,36 @@ export default function TargetsScreen() {
                     style={[styles.optionButton, active && styles.memorizationOptionActive]}
                     onPress={() =>
                       updateProfileDefaults({ viewMode: option.value }, "profile:viewMode")
+                    }
+                  >
+                    <Text
+                      style={[
+                        styles.optionText,
+                        active && styles.memorizationOptionTextActive,
+                      ]}
+                    >
+                      {option.label}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+
+          <View>
+            <Text style={styles.settingGroupLabel}>Mushaf view</Text>
+            <View style={styles.optionGrid}>
+              {MUSHAF_VIEW_MODE_OPTIONS.map((option) => {
+                const active = profileDefaults.mushafViewMode === option.value;
+                return (
+                  <Pressable
+                    key={option.value}
+                    style={[styles.optionButton, active && styles.memorizationOptionActive]}
+                    onPress={() =>
+                      updateProfileDefaults(
+                        { mushafViewMode: option.value },
+                        "profile:mushafViewMode",
+                      )
                     }
                   >
                     <Text

@@ -2,20 +2,45 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import type { ThemeKey } from "@/src/lib/mushaf-theme";
 
 // Profile-level memorization preferences persisted across sessions.
+export type MemorizationViewMode = "ayah" | "page";
+export type MushafViewMode = "swipe" | "scroll";
+
 export type ProfileSettings = {
   themeKey: ThemeKey;
   reciterId: string;
-  viewMode: "ayah" | "page";
+  viewMode: MemorizationViewMode;
+  mushafViewMode: MushafViewMode;
 };
 
 export const DEFAULT_PROFILE_SETTINGS: ProfileSettings = {
   themeKey: "madinah_day",
   reciterId: "husary",
   viewMode: "ayah",
+  mushafViewMode: "swipe",
 };
 
 function profileKey(childId: string): string {
   return `noorpath:profile:${childId}`;
+}
+
+function normalizeProfileSettings(
+  settings: Partial<ProfileSettings>,
+): ProfileSettings {
+  return {
+    themeKey:
+      typeof settings.themeKey === "string"
+        ? (settings.themeKey as ThemeKey)
+        : DEFAULT_PROFILE_SETTINGS.themeKey,
+    reciterId:
+      typeof settings.reciterId === "string" && settings.reciterId.length > 0
+        ? settings.reciterId
+        : DEFAULT_PROFILE_SETTINGS.reciterId,
+    viewMode: settings.viewMode === "page" ? "page" : DEFAULT_PROFILE_SETTINGS.viewMode,
+    mushafViewMode:
+      settings.mushafViewMode === "scroll"
+        ? "scroll"
+        : DEFAULT_PROFILE_SETTINGS.mushafViewMode,
+  };
 }
 
 export async function loadProfileSettings(childId: string): Promise<ProfileSettings> {
@@ -23,7 +48,7 @@ export async function loadProfileSettings(childId: string): Promise<ProfileSetti
     const raw = await AsyncStorage.getItem(profileKey(childId));
     if (!raw) return DEFAULT_PROFILE_SETTINGS;
     const parsed = JSON.parse(raw) as Partial<ProfileSettings>;
-    return { ...DEFAULT_PROFILE_SETTINGS, ...parsed };
+    return normalizeProfileSettings(parsed);
   } catch {
     return DEFAULT_PROFILE_SETTINGS;
   }
@@ -31,7 +56,7 @@ export async function loadProfileSettings(childId: string): Promise<ProfileSetti
 
 export async function saveProfileSettings(childId: string, settings: ProfileSettings): Promise<void> {
   try {
-    await AsyncStorage.setItem(profileKey(childId), JSON.stringify(settings));
+    await AsyncStorage.setItem(profileKey(childId), JSON.stringify(normalizeProfileSettings(settings)));
   } catch {
     // best-effort
   }

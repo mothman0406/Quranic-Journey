@@ -3,6 +3,7 @@ import {
   ActivityIndicator,
   Alert,
   Dimensions,
+  FlatList,
   Image,
   Modal,
   Pressable,
@@ -18,10 +19,18 @@ import { mushafPageUrl } from "@/src/lib/mushaf";
 import { ayahAudioUrl } from "@/src/lib/audio";
 import { DEFAULT_RECITER_ID, findReciter, RECITERS } from "@/src/lib/reciters";
 import { submitReview } from "@/src/lib/reviews";
-import { loadProfileSettings } from "@/src/lib/settings";
+import { fetchAyahTranslation, fetchSurahVerses, type ApiVerse } from "@/src/lib/quran";
+import {
+  DEFAULT_PROFILE_SETTINGS,
+  loadProfileSettings,
+  saveProfileSettings,
+  type MushafViewMode,
+  type ProfileSettings,
+} from "@/src/lib/settings";
 
 const PAGE_ASPECT_RATIO = 1.45;
 const PLAYBACK_RATES = [0.75, 0.85, 1.0, 1.15, 1.25, 1.5] as const;
+const AYAH_STRIP_ITEM_WIDTH = 52;
 
 const QUALITY_OPTIONS: { rating: number; label: string; color: string }[] = [
   { rating: 0, label: "Forgot completely", color: "#dc2626" },
@@ -43,6 +52,14 @@ type ReviewSessionQueueItem = {
   pageEnd: number;
   chunkIndex: number;
   chunkCount: number;
+};
+
+type ReviewTranslationPopup = {
+  verseKey: string;
+  ayahNumber: number;
+  arabic: string;
+  translation: string;
+  loading: boolean;
 };
 
 function finiteNumber(value: unknown, fallback: number) {
@@ -106,6 +123,15 @@ function formatRate(rate: number) {
 function reciterShortName(fullName: string) {
   const parts = fullName.split(" ").filter(Boolean);
   return parts.length > 0 ? parts[parts.length - 1]! : fullName;
+}
+
+function buildNumberRange(start: number, end: number) {
+  return Array.from({ length: Math.max(0, end - start + 1) }, (_, index) => start + index);
+}
+
+function toArabicIndic(value: number) {
+  const digits = ["٠", "١", "٢", "٣", "٤", "٥", "٦", "٧", "٨", "٩"];
+  return String(value).replace(/\d/g, (digit) => digits[Number(digit)] ?? digit);
 }
 
 export default function ReviewSession() {
@@ -176,8 +202,11 @@ export default function ReviewSession() {
   const screenW = Dimensions.get("window").width;
   const imageWidth = screenW - 32;
   const imageHeight = imageWidth * PAGE_ASPECT_RATIO;
+  const pageSlideWidth = screenW;
 
   const soundRef = useRef<Audio.Sound | null>(null);
+  const ayahStripRef = useRef<FlatList<number>>(null);
+  const pageListRef = useRef<FlatList<number>>(null);
   const currentAyahRef = useRef(ayahStartN);
   const playbackRateRef = useRef<number>(1);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -186,7 +215,14 @@ export default function ReviewSession() {
   const [currentAyah, setCurrentAyah] = useState(ayahStartN);
   const [reciterId, setReciterId] = useState(DEFAULT_RECITER_ID);
   const [playbackRate, setPlaybackRate] = useState<number>(1);
+  const [profileSettings, setProfileSettings] =
+    useState<ProfileSettings>(DEFAULT_PROFILE_SETTINGS);
+  const [mushafViewMode, setMushafViewMode] =
+    useState<MushafViewMode>(DEFAULT_PROFILE_SETTINGS.mushafViewMode);
+  const [mushafDefaultSaved, setMushafDefaultSaved] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [reviewVerses, setReviewVerses] = useState<ApiVerse[]>([]);
+  const [translationPopup, setTranslationPopup] = useState<ReviewTranslationPopup | null>(null);
 
   const [ratingModalVisible, setRatingModalVisible] = useState(false);
   const [selectedRating, setSelectedRating] = useState<number | null>(null);
@@ -194,6 +230,34 @@ export default function ReviewSession() {
   const [submitError, setSubmitError] = useState<string | null>(null);
 
   const selectedReciter = findReciter(reciterId);
+  const ayahNumbers = useMemo(() => buildNumberRange(ayahStartN, ayahEndN), [ayahStartN, ayahEndN]);
+  const mushafPages = useMemo(
+    () => buildNumberRange(pageStartN, pageEndN),
+    [pageStartN, pageEndN],
+  );
+  const ayahTextMap = useMemo(() => {
+    const map = new Map<number, string>();
+    for (const verse of reviewVerses) {
+      map.set(verse.verse_number, verse.text_uthmani);
+    }
+    return map;
+  }, [reviewVerses]);
+  const ayahPageMap = useMemo(() => {
+    const map = new Map<number, number>();
+    for (const verse of reviewVerses) {
+      if (typeof verse.page_number === "number") {
+        map.set(verse.verse_number, verse.page_number);
+      }
+    }
+    return map;
+  }, [reviewVerses]);
+  const activePage = useMemo(() => {
+    const mapped = ayahPageMap.get(currentAyah);
+    if (mapped !== undefined && mapped >= pageStartN && mapped <= pageEndN) return mapped;
+    if (pageStartN === pageEndN) return pageStartN;
+    if (currentAyah >= ayahEndN) return pageEndN;
+    return pageStartN;
+  }, [ayahEndN, ayahPageMap, currentAyah, pageEndN, pageStartN]);
 
   useEffect(() => {
     setSessionQueue(routeQueue);
@@ -211,6 +275,7 @@ export default function ReviewSession() {
     setSubmitError(null);
     setSelectedRating(null);
     setRatingModalVisible(false);
+    setTranslationPopup(null);
     void stopAudio();
   }, [ayahStartN, ayahEndN, pageStartN, pageEndN, surahIdN]);
 
@@ -226,13 +291,73 @@ export default function ReviewSession() {
     (async () => {
       const profileSettings = await loadProfileSettings(childId);
       if (!cancelled) {
+        setProfileSettings(profileSettings);
         setReciterId(profileSettings.reciterId);
+        setMushafViewMode(profileSettings.mushafViewMode);
       }
     })();
     return () => {
       cancelled = true;
     };
   }, [childId]);
+
+  useEffect(() => {
+    setMushafDefaultSaved(false);
+  }, [mushafViewMode]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setReviewVerses([]);
+    (async () => {
+      try {
+        const verses = await fetchSurahVerses(surahNumberN);
+        if (!cancelled) {
+          setReviewVerses(
+            verses.filter(
+              (verse) =>
+                verse.verse_number >= ayahStartN && verse.verse_number <= ayahEndN,
+            ),
+          );
+        }
+      } catch {
+        if (!cancelled) setReviewVerses([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [ayahEndN, ayahStartN, surahNumberN]);
+
+  useEffect(() => {
+    const index = Math.max(0, currentAyah - ayahStartN);
+    const offset = Math.max(
+      0,
+      index * AYAH_STRIP_ITEM_WIDTH - screenW / 2 + AYAH_STRIP_ITEM_WIDTH / 2,
+    );
+    try {
+      ayahStripRef.current?.scrollToOffset({ offset, animated: true });
+    } catch {
+      // Best-effort while the strip is mounting.
+    }
+  }, [ayahStartN, currentAyah, screenW]);
+
+  useEffect(() => {
+    if (mushafViewMode !== "swipe") return;
+    const index = mushafPages.indexOf(activePage);
+    if (index < 0) return;
+    try {
+      pageListRef.current?.scrollToIndex({ index, animated: true });
+    } catch {
+      try {
+        pageListRef.current?.scrollToOffset({
+          offset: Math.max(0, index * pageSlideWidth),
+          animated: true,
+        });
+      } catch {
+        // Best-effort while the page list is measuring.
+      }
+    }
+  }, [activePage, mushafPages, mushafViewMode, pageSlideWidth]);
 
   useEffect(() => {
     Audio.setAudioModeAsync({
@@ -269,6 +394,8 @@ export default function ReviewSession() {
   async function playAyah(ayahNumber: number) {
     setAudioError(null);
     setIsAudioLoading(true);
+    setCurrentAyah(ayahNumber);
+    currentAyahRef.current = ayahNumber;
 
     const previousSound = soundRef.current;
     soundRef.current = null;
@@ -307,6 +434,52 @@ export default function ReviewSession() {
     } finally {
       setIsAudioLoading(false);
     }
+  }
+
+  async function handleSeekAyah(ayahNumber: number) {
+    if (isAudioLoading) return;
+    await playAyah(ayahNumber);
+  }
+
+  function openTranslationForAyah(ayahNumber: number) {
+    const verseKey = `${surahNumberN}:${ayahNumber}`;
+    setTranslationPopup({
+      verseKey,
+      ayahNumber,
+      arabic: ayahTextMap.get(ayahNumber) ?? "",
+      translation: "Loading translation...",
+      loading: true,
+    });
+    fetchAyahTranslation(verseKey, 20)
+      .then((translation) => {
+        setTranslationPopup((current) =>
+          current?.verseKey === verseKey
+            ? {
+                ...current,
+                translation,
+                loading: false,
+              }
+            : current,
+        );
+      })
+      .catch(() => {
+        setTranslationPopup((current) =>
+          current?.verseKey === verseKey
+            ? {
+                ...current,
+                translation: "Translation could not load.",
+                loading: false,
+              }
+            : current,
+        );
+      });
+  }
+
+  async function saveMushafViewAsDefault() {
+    const next = { ...profileSettings, mushafViewMode };
+    setProfileSettings(next);
+    await saveProfileSettings(childId, next);
+    setMushafDefaultSaved(true);
   }
 
   async function handlePlayPause() {
@@ -365,9 +538,9 @@ export default function ReviewSession() {
   }
 
   const currentSurahName = currentQueueItem.surahName || `Surah ${surahNumberN}`;
-  const headerTitle = `${currentSurahName} · Ayahs ${ayahStartN}-${ayahEndN}`;
   const pageLabel =
     pageStartN === pageEndN ? `Page ${pageStartN}` : `Pages ${pageStartN}-${pageEndN}`;
+  const headerDetail = `Ayahs ${ayahStartN}-${ayahEndN} · ${pageLabel}`;
   const currentAyahIndex = Math.max(1, currentAyah - ayahStartN + 1);
 
   return (
@@ -376,9 +549,14 @@ export default function ReviewSession() {
         <Pressable onPress={() => router.back()}>
           <Text style={styles.back}>← Back</Text>
         </Pressable>
-        <Text style={styles.headerTitle} numberOfLines={1}>
-          {headerTitle}
-        </Text>
+        <View style={styles.headerCenter}>
+          <Text style={styles.headerTitle} numberOfLines={1}>
+            {currentSurahName}
+          </Text>
+          <Text style={styles.headerDetail} numberOfLines={1}>
+            {headerDetail}
+          </Text>
+        </View>
         {isBatchSession ? (
           <Text style={styles.headerQueue}>
             {queuePosition}/{queueTotal}
@@ -388,22 +566,7 @@ export default function ReviewSession() {
         )}
       </View>
 
-      <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent}>
-        <View style={styles.sessionCard}>
-          <View style={styles.sessionIcon}>
-            <Ionicons name="book-outline" size={20} color="#2563eb" />
-          </View>
-          <View style={styles.sessionText}>
-            <Text style={styles.sessionKicker}>
-              {isBatchSession ? `Review ${queuePosition} of ${queueTotal}` : "Review range"}
-            </Text>
-            <Text style={styles.sessionTitle}>{currentSurahName}</Text>
-            <Text style={styles.sessionDetail}>
-              Ayahs {ayahStartN}-{ayahEndN} · {pageLabel}
-            </Text>
-          </View>
-        </View>
-
+      <View style={styles.sessionTopPanel}>
         {nextQueueItem && (
           <View style={styles.nextQueueCard}>
             <Ionicons name="arrow-forward-circle-outline" size={18} color="#2563eb" />
@@ -413,34 +576,107 @@ export default function ReviewSession() {
           </View>
         )}
 
+        <FlatList
+          ref={ayahStripRef}
+          data={ayahNumbers}
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          keyExtractor={(item) => String(item)}
+          contentContainerStyle={styles.ayahStripContent}
+          getItemLayout={(_data, index) => ({
+            length: AYAH_STRIP_ITEM_WIDTH,
+            offset: AYAH_STRIP_ITEM_WIDTH * index,
+            index,
+          })}
+          renderItem={({ item }) => {
+            const active = item === currentAyah;
+            return (
+              <Pressable
+                onPress={() => {
+                  void handleSeekAyah(item);
+                }}
+                onLongPress={() => openTranslationForAyah(item)}
+                delayLongPress={420}
+                style={[
+                  styles.ayahCircle,
+                  active && styles.ayahCircleActive,
+                ]}
+                accessibilityRole="button"
+                accessibilityLabel={`Play ayah ${item}`}
+              >
+                <Text
+                  style={[
+                    styles.ayahCircleText,
+                    active && styles.ayahCircleTextActive,
+                  ]}
+                >
+                  {toArabicIndic(item)}
+                </Text>
+              </Pressable>
+            );
+          }}
+        />
+
         {audioError ? (
           <View style={styles.audioError}>
             <Ionicons name="alert-circle-outline" size={17} color="#dc2626" />
             <Text style={styles.audioErrorText}>{audioError}</Text>
           </View>
         ) : null}
+      </View>
 
-        {pageStartN === pageEndN ? (
-          <Image
-            source={{ uri: mushafPageUrl(pageStartN) }}
-            style={[styles.pageImage, { width: imageWidth, height: imageHeight }]}
-            resizeMode="contain"
+      <View style={styles.pageArea}>
+        {mushafViewMode === "swipe" ? (
+          <FlatList
+            key={`review-pages-swipe-${pageStartN}-${pageEndN}-${pageSlideWidth}`}
+            ref={pageListRef}
+            data={mushafPages}
+            keyExtractor={(item) => String(item)}
+            horizontal
+            pagingEnabled
+            inverted
+            showsHorizontalScrollIndicator={false}
+            initialScrollIndex={Math.max(0, mushafPages.indexOf(activePage))}
+            getItemLayout={(_data, index) => ({
+              length: pageSlideWidth,
+              offset: pageSlideWidth * index,
+              index,
+            })}
+            onScrollToIndexFailed={(info) => {
+              pageListRef.current?.scrollToOffset({
+                offset: Math.max(0, info.index * pageSlideWidth),
+                animated: true,
+              });
+            }}
+            renderItem={({ item }) => (
+              <View style={[styles.pageSlide, { width: pageSlideWidth }]}>
+                <ScrollView
+                  style={styles.pageSlideScroll}
+                  contentContainerStyle={styles.pageSlideContent}
+                  showsVerticalScrollIndicator={false}
+                >
+                  <Image
+                    source={{ uri: mushafPageUrl(item) }}
+                    style={[styles.pageImage, { width: imageWidth, height: imageHeight }]}
+                    resizeMode="contain"
+                  />
+                </ScrollView>
+              </View>
+            )}
           />
         ) : (
-          <>
-            <Image
-              source={{ uri: mushafPageUrl(pageStartN) }}
-              style={[styles.pageImage, { width: imageWidth, height: imageHeight }]}
-              resizeMode="contain"
-            />
-            <Image
-              source={{ uri: mushafPageUrl(pageEndN) }}
-              style={[styles.pageImage, { width: imageWidth, height: imageHeight }]}
-              resizeMode="contain"
-            />
-          </>
+          <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent}>
+            {mushafPages.map((pageNumber) => (
+              <Image
+                key={pageNumber}
+                source={{ uri: mushafPageUrl(pageNumber) }}
+                style={[styles.pageImage, { width: imageWidth, height: imageHeight }]}
+                resizeMode="contain"
+              />
+            ))}
+          </ScrollView>
         )}
-      </ScrollView>
+      </View>
 
       <View style={styles.stickyControls}>
         <View style={styles.controlStatus}>
@@ -491,6 +727,44 @@ export default function ReviewSession() {
         <Pressable style={styles.backdrop} onPress={() => setSettingsOpen(false)} />
         <View style={styles.sheet}>
           <Text style={styles.sheetTitle}>Review Audio</Text>
+
+          <Text style={styles.settingLabel}>Mushaf view</Text>
+          <View style={styles.viewModeSegment}>
+            {(["swipe", "scroll"] as const).map((mode) => {
+              const active = mushafViewMode === mode;
+              return (
+                <Pressable
+                  key={mode}
+                  onPress={() => setMushafViewMode(mode)}
+                  style={[
+                    styles.viewModePill,
+                    active && styles.viewModePillSelected,
+                  ]}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: active }}
+                >
+                  <Text
+                    style={[
+                      styles.viewModePillText,
+                      active && styles.viewModePillTextSelected,
+                    ]}
+                  >
+                    {mode === "swipe" ? "Swipe" : "Scroll"}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+          <Pressable
+            style={styles.saveDefaultButton}
+            onPress={() => {
+              void saveMushafViewAsDefault();
+            }}
+          >
+            <Text style={styles.saveDefaultText}>
+              {mushafDefaultSaved ? "Saved as default" : "Save as default"}
+            </Text>
+          </Pressable>
 
           <Text style={styles.settingLabel}>Playback speed</Text>
           <ScrollView
@@ -550,6 +824,37 @@ export default function ReviewSession() {
             <Text style={styles.sheetDoneText}>Done</Text>
           </Pressable>
         </View>
+      </Modal>
+
+      <Modal
+        visible={translationPopup !== null}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setTranslationPopup(null)}
+      >
+        <Pressable
+          style={styles.translationBackdrop}
+          onPress={() => setTranslationPopup(null)}
+        >
+          <Pressable style={styles.translationCard} onPress={() => {}}>
+            <Text style={styles.translationKicker}>
+              Ayah {translationPopup?.ayahNumber}
+            </Text>
+            {translationPopup?.arabic ? (
+              <Text style={styles.translationArabic}>{translationPopup.arabic}</Text>
+            ) : null}
+            {translationPopup?.loading ? (
+              <View style={styles.translationLoadingRow}>
+                <ActivityIndicator color="#2563eb" />
+                <Text style={styles.translationText}>{translationPopup.translation}</Text>
+              </View>
+            ) : (
+              <Text style={styles.translationText}>
+                {translationPopup?.translation ?? ""}
+              </Text>
+            )}
+          </Pressable>
+        </Pressable>
       </Modal>
 
       <Modal
@@ -628,7 +933,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingTop: 60,
     paddingHorizontal: 20,
-    paddingBottom: 16,
+    paddingBottom: 14,
     borderBottomWidth: 1,
     borderBottomColor: "#e2e8f0",
     backgroundColor: "#ffffff",
@@ -639,22 +944,48 @@ const styles = StyleSheet.create({
     fontWeight: "500",
     width: 60,
   },
-  headerTitle: {
+  headerCenter: {
     flex: 1,
+    alignItems: "center",
+    gap: 2,
+    minWidth: 0,
+  },
+  headerTitle: {
     textAlign: "center",
-    fontSize: 15,
-    fontWeight: "800",
+    fontSize: 19,
+    fontWeight: "900",
     color: "#111827",
+  },
+  headerDetail: {
+    textAlign: "center",
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: "700",
+    color: "#64748b",
   },
   headerQueue: {
     width: 60,
+    minHeight: 28,
     textAlign: "right",
     fontSize: 13,
     color: "#2563eb",
     fontWeight: "800",
+    borderRadius: 999,
+    overflow: "hidden",
+    backgroundColor: "#eff6ff",
+    paddingVertical: 6,
+    paddingHorizontal: 8,
   },
   headerSpacer: {
     width: 60,
+  },
+  sessionTopPanel: {
+    backgroundColor: "#ffffff",
+    borderBottomWidth: 1,
+    borderBottomColor: "#e2e8f0",
+    paddingTop: 10,
+    paddingBottom: 10,
+    gap: 10,
   },
   scroll: {
     flex: 1,
@@ -665,60 +996,16 @@ const styles = StyleSheet.create({
     gap: 14,
     paddingBottom: 20,
   },
-  sessionCard: {
-    width: "100%",
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    backgroundColor: "#ffffff",
-    borderColor: "#bfdbfe",
-    borderWidth: 1,
-    borderRadius: 12,
-    padding: 12,
-    shadowColor: "#0f172a",
-    shadowOpacity: 0.04,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 3 },
-    elevation: 1,
-  },
-  sessionIcon: {
-    width: 42,
-    height: 42,
-    borderRadius: 12,
-    backgroundColor: "#dbeafe",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  sessionText: {
-    flex: 1,
-    gap: 2,
-  },
-  sessionKicker: {
-    fontSize: 11,
-    color: "#1d4ed8",
-    fontWeight: "800",
-    textTransform: "uppercase",
-  },
-  sessionTitle: {
-    fontSize: 16,
-    color: "#111827",
-    fontWeight: "900",
-  },
-  sessionDetail: {
-    fontSize: 12,
-    color: "#555555",
-    fontWeight: "600",
-  },
   nextQueueCard: {
-    width: "100%",
+    marginHorizontal: 16,
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    borderRadius: 10,
+    borderRadius: 999,
     borderWidth: 1,
     borderColor: "#bfdbfe",
     backgroundColor: "#eff6ff",
-    paddingVertical: 10,
+    paddingVertical: 8,
     paddingHorizontal: 12,
   },
   nextQueueText: {
@@ -727,8 +1014,44 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "800",
   },
+  ayahStripContent: {
+    paddingHorizontal: 16,
+    gap: 8,
+  },
+  ayahCircle: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: "#cbd5e1",
+    backgroundColor: "#ffffff",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  ayahCircleActive: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    marginVertical: -2,
+    borderColor: "#2563eb",
+    backgroundColor: "#2563eb",
+    shadowColor: "#1d4ed8",
+    shadowOpacity: 0.18,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 3,
+  },
+  ayahCircleText: {
+    fontSize: 16,
+    lineHeight: 20,
+    color: "#64748b",
+    fontWeight: "900",
+  },
+  ayahCircleTextActive: {
+    color: "#ffffff",
+  },
   audioError: {
-    width: "100%",
+    marginHorizontal: 16,
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
@@ -743,6 +1066,20 @@ const styles = StyleSheet.create({
     color: "#dc2626",
     fontSize: 12,
     fontWeight: "600",
+  },
+  pageArea: {
+    flex: 1,
+  },
+  pageSlide: {
+    flex: 1,
+  },
+  pageSlideScroll: {
+    flex: 1,
+  },
+  pageSlideContent: {
+    flexGrow: 1,
+    alignItems: "center",
+    padding: 16,
   },
   pageImage: {
     borderRadius: 8,
@@ -863,6 +1200,44 @@ const styles = StyleSheet.create({
     fontWeight: "900",
     marginTop: 4,
   },
+  viewModeSegment: {
+    flexDirection: "row",
+    gap: 8,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+    backgroundColor: "#f8fafc",
+    padding: 4,
+  },
+  viewModePill: {
+    flex: 1,
+    minHeight: 38,
+    borderRadius: 999,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  viewModePillSelected: {
+    backgroundColor: "#2563eb",
+  },
+  viewModePillText: {
+    fontSize: 13,
+    fontWeight: "900",
+    color: "#475569",
+  },
+  viewModePillTextSelected: {
+    color: "#ffffff",
+  },
+  saveDefaultButton: {
+    alignSelf: "center",
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 999,
+  },
+  saveDefaultText: {
+    color: "#2563eb",
+    fontSize: 12,
+    fontWeight: "900",
+  },
   pillScroller: {
     gap: 8,
     paddingVertical: 4,
@@ -920,6 +1295,51 @@ const styles = StyleSheet.create({
     color: "#ffffff",
     fontSize: 16,
     fontWeight: "700",
+  },
+  translationBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(15, 23, 42, 0.42)",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 24,
+  },
+  translationCard: {
+    width: "100%",
+    maxWidth: 360,
+    borderRadius: 16,
+    backgroundColor: "#ffffff",
+    padding: 18,
+    gap: 10,
+    shadowColor: "#0f172a",
+    shadowOpacity: 0.18,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 8,
+  },
+  translationKicker: {
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: "900",
+    color: "#2563eb",
+    textTransform: "uppercase",
+  },
+  translationArabic: {
+    fontSize: 26,
+    lineHeight: 42,
+    color: "#111827",
+    fontFamily: "AmiriQuran",
+    textAlign: "right",
+  },
+  translationText: {
+    fontSize: 15,
+    lineHeight: 22,
+    color: "#334155",
+    fontWeight: "600",
+  },
+  translationLoadingRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
   },
   ratingRow: {
     flexDirection: "row",

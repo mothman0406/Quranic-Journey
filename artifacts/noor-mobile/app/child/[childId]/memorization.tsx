@@ -75,6 +75,7 @@ import {
   saveMemorizationSessionBookmark,
   saveProfileSettings,
   type MemorizationSessionBookmark,
+  type MushafViewMode,
 } from "@/src/lib/settings";
 import { extractTajweedColor } from "@/src/lib/tajweed";
 import { CelebrationOverlay } from "@/src/components/celebration-overlay";
@@ -662,6 +663,10 @@ export default function MemorizationScreen() {
   const [blindMode, setBlindMode] = useState<boolean>(DEFAULT_SESSION_SETTINGS.blindMode);
   const [blurMode, setBlurMode] = useState<boolean>(DEFAULT_SESSION_SETTINGS.blurMode);
   const [viewMode, setViewMode] = useState<"ayah" | "page">(routeViewMode ?? "ayah");
+  const [profileMushafViewMode, setProfileMushafViewMode] =
+    useState<MushafViewMode>("swipe");
+  const [mushafViewMode, setMushafViewMode] = useState<MushafViewMode>("swipe");
+  const [mushafDefaultSaved, setMushafDefaultSaved] = useState(false);
   const [themeKey, setThemeKey] = useState<ThemeKey>(DEFAULT_THEME_KEY);
   const [reciterId, setReciterId] = useState("husary");
   const [settingsLoaded, setSettingsLoaded] = useState(false);
@@ -752,9 +757,11 @@ export default function MemorizationScreen() {
   const advanceTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Layout refs for auto-scroll
   const mushafListRef = useRef<FlatList<number>>(null);
+  const mushafStackScrollRef = useRef<ScrollView | null>(null);
   const mushafPageScrollRefs = useRef<Map<number, ScrollView | null>>(new Map());
   const ayahListRef = useRef<FlatList<number>>(null);
   const lineLayoutMap = useRef<Map<string, number>>(new Map());
+  const pageStackLayoutMap = useRef<Map<number, number>>(new Map());
   const pageBodyLayoutMap = useRef<Map<number, number>>(new Map());
   const pageViewportHeightMap = useRef<Map<number, number>>(new Map());
   const qulMissingWordWarningKeys = useRef<Set<string>>(new Set());
@@ -834,6 +841,8 @@ export default function MemorizationScreen() {
       setThemeKey(p.themeKey);
       setReciterId(p.reciterId);
       setViewMode(routeViewMode ?? p.viewMode);
+      setProfileMushafViewMode(p.mushafViewMode);
+      setMushafViewMode(p.mushafViewMode);
       setSettingsLoaded(true);
     })();
     return () => {
@@ -893,8 +902,17 @@ export default function MemorizationScreen() {
   // Persist profile settings on change, skip during initial hydration.
   useEffect(() => {
     if (!settingsLoaded) return;
-    void saveProfileSettings(childId, { themeKey, reciterId, viewMode });
-  }, [childId, settingsLoaded, themeKey, reciterId, viewMode]);
+    void saveProfileSettings(childId, {
+      themeKey,
+      reciterId,
+      viewMode,
+      mushafViewMode: profileMushafViewMode,
+    });
+  }, [childId, profileMushafViewMode, settingsLoaded, themeKey, reciterId, viewMode]);
+
+  useEffect(() => {
+    setMushafDefaultSaved(false);
+  }, [mushafViewMode]);
 
   // Stop audio when reciter changes so next Play tap recreates sound with new URL
   useEffect(() => {
@@ -980,6 +998,17 @@ export default function MemorizationScreen() {
     });
   }
 
+  async function saveMushafViewAsDefault() {
+    setProfileMushafViewMode(mushafViewMode);
+    await saveProfileSettings(childId, {
+      themeKey,
+      reciterId,
+      viewMode,
+      mushafViewMode,
+    });
+    setMushafDefaultSaved(true);
+  }
+
   function startConfiguredSession(target: SessionTarget) {
     setPendingSessionTarget(null);
     beginSession(target);
@@ -999,6 +1028,8 @@ export default function MemorizationScreen() {
     const nextCurrent = clampNumber(target.currentAyah ?? nextStart, nextStart, nextEnd);
     setSessionRequested(true);
     setSessionLoadId((value) => value + 1);
+    setMushafViewMode(profileMushafViewMode);
+    setMushafDefaultSaved(false);
     setLoading(true);
     setError(null);
     setDisplayWordsMap(new Map());
@@ -1008,6 +1039,7 @@ export default function MemorizationScreen() {
     setDisplayedMushafPage(null);
     displayedMushafPageRef.current = null;
     lineLayoutMap.current.clear();
+    pageStackLayoutMap.current.clear();
     pageBodyLayoutMap.current.clear();
     pageViewportHeightMap.current.clear();
     mushafPageScrollRefs.current.clear();
@@ -1383,6 +1415,18 @@ export default function MemorizationScreen() {
 
     updateDisplayedMushafPage(targetPage);
 
+    if (mushafViewMode === "scroll") {
+      const y = pageStackLayoutMap.current.get(targetPage);
+      if (y !== undefined) {
+        try {
+          mushafStackScrollRef.current?.scrollTo({ y: Math.max(0, y - 8), animated });
+        } catch {
+          // Layout timing varies while the stacked pages mount.
+        }
+      }
+      return;
+    }
+
     try {
       mushafListRef.current?.scrollToIndex({ index: targetIndex, animated });
     } catch {
@@ -1409,7 +1453,9 @@ export default function MemorizationScreen() {
       }
     }
     const pageScrollRef =
-      target !== null ? mushafPageScrollRefs.current.get(target.pageNum) : null;
+      target !== null && mushafViewMode === "swipe"
+        ? mushafPageScrollRefs.current.get(target.pageNum)
+        : null;
     const pageBodyY =
       target !== null ? pageBodyLayoutMap.current.get(target.pageNum) : undefined;
     const pageViewportHeight =
@@ -1418,6 +1464,22 @@ export default function MemorizationScreen() {
       target?.lineNumber !== undefined
         ? lineLayoutMap.current.get(`page:${target.pageNum}:line:${target.lineNumber}`)
         : undefined;
+
+    if (target !== null && mushafViewMode === "scroll" && pageBodyY !== undefined) {
+      const pageY = pageStackLayoutMap.current.get(target.pageNum);
+      if (pageY !== undefined) {
+        const targetY = pageY + pageBodyY + (lineY ?? 0);
+        try {
+          mushafStackScrollRef.current?.scrollTo({
+            y: Math.max(0, targetY - 96),
+            animated: true,
+          });
+        } catch {
+          // Layout can disappear briefly while pages remount.
+        }
+        return;
+      }
+    }
 
     if (target !== null && pageScrollRef && pageBodyY !== undefined) {
       const targetY = lineY !== undefined ? pageBodyY + lineY : pageBodyY;
@@ -1449,7 +1511,7 @@ export default function MemorizationScreen() {
     clearMushafAutoScrollRetry();
     scrollMushafVerseIntoView(playingVerseNumber);
     return clearMushafAutoScrollRetry;
-  }, [playingVerseNumber, viewMode, pageStart, pageEnd, pageWordsMap, versePageMap, surahNumber]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [playingVerseNumber, viewMode, mushafViewMode, pageStart, pageEnd, pageWordsMap, versePageMap, surahNumber]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     clearAyahAutoScrollRetry();
@@ -2384,6 +2446,7 @@ export default function MemorizationScreen() {
     setDisplayedMushafPage(null);
     displayedMushafPageRef.current = null;
     lineLayoutMap.current.clear();
+    pageStackLayoutMap.current.clear();
     pageBodyLayoutMap.current.clear();
     pageViewportHeightMap.current.clear();
     mushafPageScrollRefs.current.clear();
@@ -3234,10 +3297,28 @@ export default function MemorizationScreen() {
 
   // ── Full Mushaf page renderer ────────────────────────────────────────────────
 
-  function renderMushafPage(pageNum: number, pageWidth: number) {
+  function renderMushafPage(pageNum: number, pageWidth: number, layoutMode: MushafViewMode = "swipe") {
     const verses = pageWordsMap.get(pageNum);
 
     if (!verses) {
+      if (layoutMode === "scroll") {
+        return (
+          <View
+            key={pageNum}
+            style={[styles.mushafPageFrame, styles.mushafPageFrameStacked, { width: pageWidth }]}
+            onLayout={(event) => {
+              pageStackLayoutMap.current.set(pageNum, event.nativeEvent.layout.y);
+            }}
+          >
+            <View style={styles.mushafPageScrollContent}>
+              <View style={[themedStyles.pageCard, styles.centered, styles.mushafPageLoadingCard]}>
+                <ActivityIndicator color={THEMES[themeKey].pageMuted} />
+              </View>
+            </View>
+          </View>
+        );
+      }
+
       return (
         <View key={pageNum} style={[styles.mushafPageFrame, { width: pageWidth }]}>
           <ScrollView
@@ -3556,20 +3637,8 @@ export default function MemorizationScreen() {
       );
     };
 
-    return (
-      <View key={pageNum} style={[styles.mushafPageFrame, { width: pageWidth }]}>
-        <ScrollView
-          ref={(ref) => {
-            mushafPageScrollRefs.current.set(pageNum, ref);
-          }}
-          style={styles.mushafPageScroll}
-          contentContainerStyle={styles.mushafPageScrollContent}
-          showsVerticalScrollIndicator={false}
-          onLayout={(e) => {
-            pageViewportHeightMap.current.set(pageNum, e.nativeEvent.layout.height);
-          }}
-      >
-          <View style={themedStyles.pageCard}>
+    const pageCard = (
+      <View style={themedStyles.pageCard}>
             {/* Header bar: surah names (left) + Juz label (right) */}
             <View style={themedStyles.pageHeader}>
               <Text style={themedStyles.pageHeaderNames} numberOfLines={1}>
@@ -3726,7 +3795,37 @@ export default function MemorizationScreen() {
             <View style={themedStyles.pageFooter}>
               <Text style={themedStyles.pageFooterText}>{pageNum}</Text>
             </View>
-          </View>
+      </View>
+    );
+
+    if (layoutMode === "scroll") {
+      return (
+        <View
+          key={pageNum}
+          style={[styles.mushafPageFrame, styles.mushafPageFrameStacked, { width: pageWidth }]}
+          onLayout={(event) => {
+            pageStackLayoutMap.current.set(pageNum, event.nativeEvent.layout.y);
+          }}
+        >
+          <View style={styles.mushafPageScrollContent}>{pageCard}</View>
+        </View>
+      );
+    }
+
+    return (
+      <View key={pageNum} style={[styles.mushafPageFrame, { width: pageWidth }]}>
+        <ScrollView
+          ref={(ref) => {
+            mushafPageScrollRefs.current.set(pageNum, ref);
+          }}
+          style={styles.mushafPageScroll}
+          contentContainerStyle={styles.mushafPageScrollContent}
+          showsVerticalScrollIndicator={false}
+          onLayout={(e) => {
+            pageViewportHeightMap.current.set(pageNum, e.nativeEvent.layout.height);
+          }}
+        >
+          {pageCard}
         </ScrollView>
       </View>
     );
@@ -3925,6 +4024,7 @@ export default function MemorizationScreen() {
     currentReciteExpectedIndex,
     currentReciteWordPage,
     currentVerse,
+    mushafViewMode,
     reciteMode,
     viewMode,
   ]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -4370,6 +4470,18 @@ export default function MemorizationScreen() {
             <View style={[themedStyles.pageCard, styles.centered, { minHeight: 200 }]}>
               <Text style={styles.errorText}>Page data not available.</Text>
             </View>
+          ) : mushafViewMode === "scroll" ? (
+            <ScrollView
+              key={`mushaf-stack-${sessionLoadId}-${pageStart ?? "x"}-${pageEnd ?? "x"}-${mushafPageWidth}`}
+              ref={mushafStackScrollRef}
+              style={styles.mushafStackScroll}
+              contentContainerStyle={styles.mushafStackContent}
+              showsVerticalScrollIndicator={false}
+            >
+              {sessionMushafPages.map((pageNumber) =>
+                renderMushafPage(pageNumber, mushafPageWidth, "scroll"),
+              )}
+            </ScrollView>
           ) : (
             <FlatList
               key={`mushaf-pager-${sessionLoadId}-${pageStart ?? "x"}-${pageEnd ?? "x"}-${mushafPageWidth}`}
@@ -4402,7 +4514,7 @@ export default function MemorizationScreen() {
                 tajweedEnabled,
                 themeKey,
               }}
-              renderItem={({ item }) => renderMushafPage(item, mushafPageWidth)}
+              renderItem={({ item }) => renderMushafPage(item, mushafPageWidth, "swipe")}
             />
           )}
         </View>
@@ -5051,6 +5163,45 @@ export default function MemorizationScreen() {
                   </Text>
                 </Pressable>
               </View>
+
+              <Text style={styles.settingsSectionTitle}>Mushaf view</Text>
+              <View style={styles.settingsSegment}>
+                {(["swipe", "scroll"] as const).map((mode) => {
+                  const active = mushafViewMode === mode;
+                  return (
+                    <Pressable
+                      key={mode}
+                      style={[
+                        styles.settingsSegmentPill,
+                        active && styles.settingsSegmentPillSelected,
+                      ]}
+                      onPress={() => setMushafViewMode(mode)}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected: active }}
+                    >
+                      <Text
+                        style={[
+                          styles.settingsSegmentText,
+                          active && styles.settingsSegmentTextSelected,
+                        ]}
+                      >
+                        {mode === "swipe" ? "Swipe" : "Scroll"}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+              <Pressable
+                style={styles.saveDefaultButton}
+                onPress={() => {
+                  void saveMushafViewAsDefault();
+                }}
+                accessibilityRole="button"
+              >
+                <Text style={styles.saveDefaultText}>
+                  {mushafDefaultSaved ? "Saved as default" : "Save as default"}
+                </Text>
+              </Pressable>
 
               <Pressable
                 style={styles.sessionSettingRow}
@@ -7811,6 +7962,13 @@ const styles = StyleSheet.create({
   mushafPagerList: {
     flex: 1,
   },
+  mushafStackScroll: {
+    flex: 1,
+  },
+  mushafStackContent: {
+    alignItems: "center",
+    paddingBottom: 16,
+  },
   mushafPageIndicatorWrap: {
     minHeight: 40,
     flexDirection: "row",
@@ -7854,6 +8012,11 @@ const styles = StyleSheet.create({
     flex: 1,
     height: "100%",
     backgroundColor: "#f8fafc",
+  },
+  mushafPageFrameStacked: {
+    flex: 0,
+    height: undefined,
+    minHeight: 0,
   },
   mushafPageScroll: {
     flex: 1,
@@ -8448,6 +8611,18 @@ const styles = StyleSheet.create({
   },
   settingsSegmentTextSelected: {
     color: "#ffffff",
+  },
+  saveDefaultButton: {
+    alignSelf: "center",
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+    borderRadius: 999,
+  },
+  saveDefaultText: {
+    color: "#2563eb",
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: "900",
   },
   sessionSettingRow: {
     minHeight: 54,
