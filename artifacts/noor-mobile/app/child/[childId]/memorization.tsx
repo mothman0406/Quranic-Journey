@@ -671,6 +671,55 @@ export default function MemorizationScreen() {
   const reciteWarmupWatchdogRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const reciteWarmupRestartDelayRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const reciteWarmupRestartingRef = useRef(false);
+  const previousCurrentVerseForReciteLogRef = useRef<number>(currentVerse);
+
+  function getReciteWordDiagnostic(verseNumber: number, wordIndex: number) {
+    const verseWords = displayWordsMapRef.current.get(verseNumber) ?? [];
+    const word = verseWords[wordIndex];
+    const raw = word?.text_uthmani ?? null;
+    return {
+      verseNumber,
+      wordIndex,
+      wordsInVerse: verseWords.length,
+      position: word?.position ?? null,
+      raw,
+      stripped: raw ? stripTashkeel(raw) : null,
+    };
+  }
+
+  function getReciteRefSnapshot() {
+    const activeVerse = currentVerseRef.current;
+    return {
+      currentVerse: activeVerse,
+      ayahStart: ayahStartRef.current,
+      ayahEnd: ayahEndRef.current,
+      surahNumber: surahNumberRef.current,
+      viewMode: viewModeRef.current,
+      reciteModeRef: reciteModeRef.current,
+      matchedWordCountRef: matchedWordCountRef.current,
+      reciteExpectedIdxRef: reciteExpectedIdxRef.current,
+      lastMatchedWordRef: lastMatchedWordRef.current,
+      lastMatchTimeRef: lastMatchTimeRef.current,
+      displayWordsMapSize: displayWordsMapRef.current.size,
+      activeVerseWordsCount: displayWordsMapRef.current.get(activeVerse)?.length ?? 0,
+      expectedByMatchedWordCount: getReciteWordDiagnostic(
+        activeVerse,
+        matchedWordCountRef.current,
+      ),
+      expectedByReciteExpectedIdx: getReciteWordDiagnostic(
+        activeVerse,
+        reciteExpectedIdxRef.current,
+      ),
+      playingVerseNumber: playingVerseNumberRef.current,
+      reciteWarmupRetryCountRef: reciteWarmupRetryCountRef.current,
+      reciteWarmupTokenRef: reciteWarmupTokenRef.current,
+      reciteTranscriptReceivedRef: reciteTranscriptReceivedRef.current,
+    };
+  }
+
+  function logReciteDiagnostic(label: string, details: Record<string, unknown> = {}) {
+    console.log("[noor-recite]", label, { ...getReciteRefSnapshot(), ...details });
+  }
 
   // Keep callback-visible refs in sync with state
   useEffect(() => { viewModeRef.current = viewMode; }, [viewMode]);
@@ -1020,7 +1069,7 @@ export default function MemorizationScreen() {
     }
 
     setStartInReciteMode(false);
-    void enterReciteMode(currentVerseRef.current || ayahStart);
+    void enterReciteMode(currentVerseRef.current || ayahStart, "route-param");
   }, [
     startInReciteMode,
     sessionRequested,
@@ -1348,6 +1397,21 @@ export default function MemorizationScreen() {
 
   // Cleanup + optional auto-play on verse change
   useEffect(() => {
+    const activeVerseBefore = previousCurrentVerseForReciteLogRef.current;
+    const activeVerseAfter = currentVerseRef.current;
+    const shouldLogActiveVerseChange = activeVerseBefore !== activeVerseAfter;
+    const displayWordsMapSizeBefore = displayWordsMapRef.current.size;
+    const matchedWordCountBefore = matchedWordCountRef.current;
+    const reciteExpectedIdxBefore = reciteExpectedIdxRef.current;
+    const expectedBeforeByCursor = getReciteWordDiagnostic(
+      activeVerseBefore,
+      reciteExpectedIdxBefore,
+    );
+    const expectedBeforeByMatchedCount = getReciteWordDiagnostic(
+      activeVerseBefore,
+      matchedWordCountBefore,
+    );
+
     setCurrentRepeat(1);
     if (advanceTimeoutRef.current) {
       clearTimeout(advanceTimeoutRef.current);
@@ -1384,6 +1448,32 @@ export default function MemorizationScreen() {
     lastMatchedWordRef.current = "";
     positionRef.current = 0;
     durationRef.current = 0;
+
+    if (shouldLogActiveVerseChange) {
+      logReciteDiagnostic("active-verse-change", {
+        source: "playingVerseNumber-effect",
+        activeVerseBefore,
+        activeVerseAfter,
+        playingVerseNumber,
+        displayWordsMapSizeBefore,
+        displayWordsMapSizeAfter: displayWordsMapRef.current.size,
+        matchedWordCountBefore,
+        matchedWordCountAfter: matchedWordCountRef.current,
+        reciteExpectedIdxBefore,
+        reciteExpectedIdxAfter: reciteExpectedIdxRef.current,
+        expectedBeforeByCursor,
+        expectedBeforeByMatchedCount,
+        expectedAfterByCursor: getReciteWordDiagnostic(
+          activeVerseAfter,
+          reciteExpectedIdxRef.current,
+        ),
+        expectedAfterByMatchedCount: getReciteWordDiagnostic(
+          activeVerseAfter,
+          matchedWordCountRef.current,
+        ),
+      });
+    }
+    previousCurrentVerseForReciteLogRef.current = activeVerseAfter;
 
     let cancelled = false;
     const doChange = async () => {
@@ -2297,11 +2387,20 @@ export default function MemorizationScreen() {
     });
   }
 
-  async function enterReciteMode(startVerse: number) {
+  async function enterReciteMode(startVerse: number, source = "direct") {
     if (ayahStart === null || ayahEnd === null || surahNumberRef.current === null) return;
     const boundedStart = Math.max(ayahStart, Math.min(startVerse, ayahEnd));
     const initialWords = displayWordsMapRef.current.get(boundedStart) ?? [];
     const initialExpectedIdx = getNextReciteWordIndex(initialWords, 0) ?? 0;
+    logReciteDiagnostic("enter-recitemode-prepare", {
+      source,
+      requestedStartVerse: startVerse,
+      boundedStart,
+      initialWordsCount: initialWords.length,
+      initialExpectedIdx,
+      initialExpectedWord: getReciteWordDiagnostic(boundedStart, initialExpectedIdx),
+      reciteModeBeforeSet: reciteModeRef.current,
+    });
 
     setTappedAyah(null);
     await stopAudioCompletely();
@@ -2326,7 +2425,12 @@ export default function MemorizationScreen() {
     setBlindMode((value) => !value);
   }
 
-  async function handleToggleReciteMode() {
+  async function handleToggleReciteMode(source = "unknown") {
+    logReciteDiagnostic("toggle-recitemode-entry", {
+      source,
+      action: reciteModeRef.current ? "disable" : "enable",
+      reciteModeBeforeFlip: reciteModeRef.current,
+    });
     if (reciteModeRef.current) {
       invalidateReciteWarmupWatchdog();
       reciteModeRef.current = false;
@@ -2340,7 +2444,7 @@ export default function MemorizationScreen() {
       ExpoSpeechRecognitionModule.stop();
       return;
     }
-    await enterReciteMode(currentVerseRef.current);
+    await enterReciteMode(currentVerseRef.current, source);
   }
 
   async function handleReciteToNoorPath() {
@@ -2351,7 +2455,7 @@ export default function MemorizationScreen() {
     setRatingAyahEnd(null);
     setRecitationCheckSource("noorpath");
     setRecitationScore(null);
-    await enterReciteMode(ayahStart);
+    await enterReciteMode(ayahStart, "ready-to-recite-noorpath");
   }
 
   function buildCompletionCelebration({
@@ -2626,10 +2730,16 @@ export default function MemorizationScreen() {
 
   function clearReciteWarmupTimers() {
     if (reciteWarmupWatchdogRef.current) {
+      logReciteDiagnostic("warmup-watchdog-cleared", {
+        reason: "clear-timers",
+      });
       clearTimeout(reciteWarmupWatchdogRef.current);
       reciteWarmupWatchdogRef.current = null;
     }
     if (reciteWarmupRestartDelayRef.current) {
+      logReciteDiagnostic("warmup-restart-delay-cleared", {
+        reason: "clear-timers",
+      });
       clearTimeout(reciteWarmupRestartDelayRef.current);
       reciteWarmupRestartDelayRef.current = null;
     }
@@ -2641,6 +2751,9 @@ export default function MemorizationScreen() {
     reciteWarmupRetryCountRef.current = 0;
     reciteWarmupRestartingRef.current = false;
     reciteWarmupTokenRef.current += 1;
+    logReciteDiagnostic("warmup-cycle-begin", {
+      token: reciteWarmupTokenRef.current,
+    });
     return reciteWarmupTokenRef.current;
   }
 
@@ -2648,33 +2761,92 @@ export default function MemorizationScreen() {
     clearReciteWarmupTimers();
     reciteWarmupRestartingRef.current = false;
     reciteWarmupTokenRef.current += 1;
+    logReciteDiagnostic("warmup-cycle-invalidated", {
+      token: reciteWarmupTokenRef.current,
+    });
   }
 
   function noteReciteTranscriptReceived() {
     reciteTranscriptReceivedRef.current = true;
+    logReciteDiagnostic("warmup-transcript-received", {
+      token: reciteWarmupTokenRef.current,
+    });
     clearReciteWarmupTimers();
   }
 
   function scheduleReciteWarmupWatchdog(token: number) {
-    if (reciteTranscriptReceivedRef.current) return;
+    if (reciteTranscriptReceivedRef.current) {
+      logReciteDiagnostic("warmup-watchdog-not-set", {
+        reason: "transcript-already-received",
+        token,
+      });
+      return;
+    }
     if (reciteWarmupWatchdogRef.current) {
+      logReciteDiagnostic("warmup-watchdog-cleared", {
+        reason: "replace-existing",
+        token,
+      });
       clearTimeout(reciteWarmupWatchdogRef.current);
     }
     reciteWarmupWatchdogRef.current = setTimeout(() => {
+      logReciteDiagnostic("warmup-watchdog-fired", {
+        token,
+        delayMs: RECITE_WARMUP_WATCHDOG_MS,
+      });
       reciteWarmupWatchdogRef.current = null;
       void handleReciteWarmupWatchdog(token);
     }, RECITE_WARMUP_WATCHDOG_MS);
+    logReciteDiagnostic("warmup-watchdog-set", {
+      token,
+      delayMs: RECITE_WARMUP_WATCHDOG_MS,
+      willFireAt: Date.now() + RECITE_WARMUP_WATCHDOG_MS,
+    });
   }
 
   async function handleReciteWarmupWatchdog(token: number) {
-    if (token !== reciteWarmupTokenRef.current) return;
-    if (!reciteModeRef.current) return;
-    if (reciteTranscriptReceivedRef.current) return;
-    if (matchedWordCountRef.current !== 0) return;
-    if (reciteWarmupRetryCountRef.current >= RECITE_WARMUP_MAX_RETRIES) return;
+    if (token !== reciteWarmupTokenRef.current) {
+      logReciteDiagnostic("warmup-watchdog-skipped", {
+        reason: "stale-token",
+        token,
+      });
+      return;
+    }
+    if (!reciteModeRef.current) {
+      logReciteDiagnostic("warmup-watchdog-skipped", {
+        reason: "recite-mode-off",
+        token,
+      });
+      return;
+    }
+    if (reciteTranscriptReceivedRef.current) {
+      logReciteDiagnostic("warmup-watchdog-skipped", {
+        reason: "transcript-received",
+        token,
+      });
+      return;
+    }
+    if (matchedWordCountRef.current !== 0) {
+      logReciteDiagnostic("warmup-watchdog-skipped", {
+        reason: "matcher-already-progressed",
+        token,
+      });
+      return;
+    }
+    if (reciteWarmupRetryCountRef.current >= RECITE_WARMUP_MAX_RETRIES) {
+      logReciteDiagnostic("warmup-watchdog-skipped", {
+        reason: "max-retries",
+        token,
+      });
+      return;
+    }
 
     reciteWarmupRetryCountRef.current += 1;
     reciteWarmupRestartingRef.current = true;
+    logReciteDiagnostic("warmup-watchdog-restart-requested", {
+      token,
+      retryCount: reciteWarmupRetryCountRef.current,
+    });
     try {
       ExpoSpeechRecognitionModule.stop();
     } catch {
@@ -2682,8 +2854,17 @@ export default function MemorizationScreen() {
     }
 
     reciteWarmupRestartDelayRef.current = setTimeout(() => {
+      logReciteDiagnostic("warmup-restart-delay-fired", {
+        token,
+        delayMs: RECITE_WARMUP_RESTART_DELAY_MS,
+      });
       reciteWarmupRestartDelayRef.current = null;
       if (token !== reciteWarmupTokenRef.current || !reciteModeRef.current) {
+        logReciteDiagnostic("warmup-restart-skipped", {
+          reason:
+            token !== reciteWarmupTokenRef.current ? "stale-token" : "recite-mode-off",
+          token,
+        });
         reciteWarmupRestartingRef.current = false;
         return;
       }
@@ -2694,6 +2875,11 @@ export default function MemorizationScreen() {
         }
       });
     }, RECITE_WARMUP_RESTART_DELAY_MS);
+    logReciteDiagnostic("warmup-restart-delay-set", {
+      token,
+      delayMs: RECITE_WARMUP_RESTART_DELAY_MS,
+      willFireAt: Date.now() + RECITE_WARMUP_RESTART_DELAY_MS,
+    });
   }
 
   async function startRecognition({
@@ -2703,8 +2889,16 @@ export default function MemorizationScreen() {
     warmupWatchdog?: boolean;
     warmupToken?: number;
   } = {}) {
+    logReciteDiagnostic("speech-start-entry", {
+      warmupWatchdog,
+      warmupToken,
+    });
     const { granted } = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
     if (!granted) {
+      logReciteDiagnostic("speech-start-permission-denied", {
+        warmupWatchdog,
+        warmupToken,
+      });
       invalidateReciteWarmupWatchdog();
       setReciteError("Microphone or speech recognition permission denied.");
       setReciteMode(false);
@@ -2714,16 +2908,68 @@ export default function MemorizationScreen() {
       );
       return;
     }
-    if (!reciteModeRef.current) return;
-    if (warmupWatchdog && warmupToken !== reciteWarmupTokenRef.current) return;
+    if (!reciteModeRef.current) {
+      logReciteDiagnostic("speech-start-skipped", {
+        reason: "recite-mode-off",
+        warmupWatchdog,
+        warmupToken,
+      });
+      return;
+    }
+    if (warmupWatchdog && warmupToken !== reciteWarmupTokenRef.current) {
+      logReciteDiagnostic("speech-start-skipped", {
+        reason: "stale-warmup-token",
+        warmupWatchdog,
+        warmupToken,
+      });
+      return;
+    }
 
-    ExpoSpeechRecognitionModule.start({
+    const recognitionOptions = {
       lang: "ar-SA",
       interimResults: true,
       continuous: true,
       requiresOnDeviceRecognition: false,
       maxAlternatives: 1,
+    };
+    logReciteDiagnostic("speech-start-before-call", {
+      warmupWatchdog,
+      warmupToken,
+      options: recognitionOptions,
     });
+    try {
+      const startResult = ExpoSpeechRecognitionModule.start(recognitionOptions);
+      logReciteDiagnostic("speech-start-called", {
+        warmupWatchdog,
+        warmupToken,
+        options: recognitionOptions,
+      });
+      void Promise.resolve(startResult).then(
+        () => {
+          logReciteDiagnostic("speech-start-resolved", {
+            warmupWatchdog,
+            warmupToken,
+            options: recognitionOptions,
+          });
+        },
+        (error: unknown) => {
+          logReciteDiagnostic("speech-start-rejected", {
+            warmupWatchdog,
+            warmupToken,
+            options: recognitionOptions,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        },
+      );
+    } catch (error) {
+      logReciteDiagnostic("speech-start-threw", {
+        warmupWatchdog,
+        warmupToken,
+        options: recognitionOptions,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      throw error;
+    }
     setReciteListening(true);
     setReciteError(null);
     if (warmupWatchdog && warmupToken === reciteWarmupTokenRef.current) {
@@ -2735,25 +2981,77 @@ export default function MemorizationScreen() {
     if (!reciteModeRef.current) return;
 
     const result = event.results?.[0];
-    if (!result) return;
+    if (!result) {
+      logReciteDiagnostic("transcript-outcome", {
+        outcome: "skipped",
+        reason: "missing-result",
+      });
+      return;
+    }
     const transcript = result.transcript ?? "";
-    if (!transcript) return;
-    noteReciteTranscriptReceived();
-
-    // Debounce: ignore rapid-fire interim events right after a successful match.
-    if (Date.now() - lastMatchTimeRef.current < 300) return;
-
     const isFinal = !!event.isFinal;
+    if (!transcript) {
+      logReciteDiagnostic("transcript-outcome", {
+        outcome: "skipped",
+        reason: "empty-transcript",
+        rawTranscript: transcript,
+        isFinal,
+        resultType: isFinal ? "final" : "interim",
+      });
+      return;
+    }
+    noteReciteTranscriptReceived();
 
     const heardNormFull = stripTashkeel(transcript);
     const heardTokens = tokenize(heardNormFull);
+    const verseNumberAtEvent = currentVerseRef.current;
+    const transcriptContext = {
+      rawTranscript: transcript,
+      isFinal,
+      resultType: isFinal ? "final" : "interim",
+      heardNormFull,
+      heardTokens,
+      verseNumberAtEvent,
+      matchedWordCountAtEvent: matchedWordCountRef.current,
+      reciteExpectedIdxAtEvent: reciteExpectedIdxRef.current,
+      expectedNextByMatchedWordCount: getReciteWordDiagnostic(
+        verseNumberAtEvent,
+        matchedWordCountRef.current,
+      ),
+      expectedNextByCursor: getReciteWordDiagnostic(
+        verseNumberAtEvent,
+        reciteExpectedIdxRef.current,
+      ),
+    };
+    logReciteDiagnostic("transcript-event", transcriptContext);
+
+    // Debounce: ignore rapid-fire interim events right after a successful match.
+    if (Date.now() - lastMatchTimeRef.current < 300) {
+      logReciteDiagnostic("transcript-outcome", {
+        ...transcriptContext,
+        outcome: "skipped",
+        reason: "debounce-after-recent-match",
+        msSinceLastMatch: Date.now() - lastMatchTimeRef.current,
+      });
+      return;
+    }
 
     const verseWords = displayWordsMapRef.current.get(currentVerseRef.current);
-    if (!verseWords) return;
+    if (!verseWords) {
+      logReciteDiagnostic("transcript-outcome", {
+        ...transcriptContext,
+        outcome: "skipped",
+        reason: "missing-active-verse-words",
+      });
+      return;
+    }
 
     let expectedIdx = reciteExpectedIdxRef.current;
     let advanced = false;
     let searchFrom = matchedWordCountRef.current;
+    let rejectionReason: string | null = heardTokens.length === 0 ? "no-heard-tokens" : null;
+    let stoppedAtExpected: Record<string, unknown> | null = null;
+    const skippedExpectedWords: Record<string, unknown>[] = [];
 
     // Walk forward through expected words, advancing as long as we keep finding
     // matches in the heard tokens. This handles iOS's growing partial transcript
@@ -2761,12 +3059,22 @@ export default function MemorizationScreen() {
     while (expectedIdx < verseWords.length) {
       const expectedRaw = verseWords[expectedIdx]?.text_uthmani ?? "";
       if (!expectedRaw || SKIP_CHARS.test(expectedRaw)) {
+        skippedExpectedWords.push({
+          expectedIdx,
+          raw: expectedRaw,
+          reason: !expectedRaw ? "empty-expected-word" : "skip-chars",
+        });
         expectedIdx++;
         continue;
       }
 
       const expectedNorm = stripTashkeel(expectedRaw);
       if (!expectedNorm) {
+        skippedExpectedWords.push({
+          expectedIdx,
+          raw: expectedRaw,
+          reason: "empty-after-strip-tashkeel",
+        });
         expectedIdx++;
         continue;
       }
@@ -2777,15 +3085,24 @@ export default function MemorizationScreen() {
       // Skip Uthmani words that strip to ≤2 chars of only ه/ا — ligature artifacts
       // speech recognition will never produce.
       if (expectedFinal.length <= 2 && /^[هاا]+$/.test(expectedFinal)) {
+        skippedExpectedWords.push({
+          expectedIdx,
+          raw: expectedRaw,
+          expectedNorm,
+          expectedFinal,
+          reason: "ligature-artifact",
+        });
         expectedIdx++;
         continue;
       }
 
       // Scan the heard transcript from searchFrom onward for any token matching expected
       let foundAt = -1;
+      let scannedTokenCount = 0;
       for (let i = searchFrom; i < heardTokens.length; i++) {
         const heardRaw = heardTokens[i];
         if (!heardRaw) continue;
+        scannedTokenCount++;
         const heardTry = stripAlPrefix(heardRaw);
         const heardFinal = heardTry.length >= 2 ? heardTry : heardRaw;
         if (wordMatches(heardFinal, expectedFinal, lastMatchedWordRef.current)) {
@@ -2794,7 +3111,24 @@ export default function MemorizationScreen() {
         }
       }
 
-      if (foundAt === -1) break; // no more expected matches in this transcript
+      if (foundAt === -1) {
+        rejectionReason =
+          heardTokens.length === 0
+            ? "no-heard-tokens"
+            : scannedTokenCount === 0
+              ? "no-heard-tokens-from-search-index"
+              : "no-token-matched-expected";
+        stoppedAtExpected = {
+          expectedIdx,
+          expectedRaw,
+          expectedNorm,
+          expectedFinal,
+          searchFrom,
+          scannedTokenCount,
+          heardTokensCount: heardTokens.length,
+        };
+        break; // no more expected matches in this transcript
+      }
 
       advanced = true;
       lastMatchTimeRef.current = Date.now();
@@ -2809,6 +3143,15 @@ export default function MemorizationScreen() {
     }
 
     if (advanced) {
+      logReciteDiagnostic("transcript-outcome", {
+        ...transcriptContext,
+        outcome: "accepted",
+        advanced,
+        expectedIdxAfterMatch: expectedIdx,
+        matchedWordCountAfterMatch: matchedWordCountRef.current,
+        lastMatchedWordAfterMatch: lastMatchedWordRef.current,
+        skippedExpectedWords,
+      });
       setReciteAttemptCount(0);
       if (expectedIdx >= verseWords.length) {
         advancePastCurrentReciteVerse(0);
@@ -2816,12 +3159,37 @@ export default function MemorizationScreen() {
         setReciteCursor(currentVerseRef.current, expectedIdx);
       }
     } else if (isFinal) {
+      logReciteDiagnostic("transcript-outcome", {
+        ...transcriptContext,
+        outcome: "rejected",
+        advanced,
+        reason:
+          rejectionReason ??
+          (expectedIdx >= verseWords.length ? "expected-words-exhausted" : "no-match"),
+        stoppedAtExpected,
+        skippedExpectedWords,
+      });
       addReciteAttempts(1);
+    } else {
+      logReciteDiagnostic("transcript-outcome", {
+        ...transcriptContext,
+        outcome: "rejected",
+        advanced,
+        reason:
+          rejectionReason ??
+          (expectedIdx >= verseWords.length ? "expected-words-exhausted" : "no-match"),
+        stoppedAtExpected,
+        skippedExpectedWords,
+      });
     }
 
     // Final result closes this utterance — reset search position so the
     // next utterance starts fresh from token 0.
     if (isFinal) {
+      logReciteDiagnostic("transcript-final-reset", {
+        ...transcriptContext,
+        matchedWordCountBeforeReset: matchedWordCountRef.current,
+      });
       matchedWordCountRef.current = 0;
     }
   });
@@ -3187,6 +3555,14 @@ export default function MemorizationScreen() {
     if (ayahStartRef.current === null || ayahEndRef.current === null) return;
     const nextVerse = clampNumber(verseNumber, ayahStartRef.current, ayahEndRef.current);
     if (nextVerse === playingVerseNumberRef.current) return;
+    logReciteDiagnostic("tap-to-jump", {
+      source: "ayah-list-row",
+      requestedVerseNumber: verseNumber,
+      nextVerse,
+      previousPlayingVerseNumber: playingVerseNumberRef.current,
+      previousCurrentVerse: currentVerseRef.current,
+      reciteModeAtTap: reciteModeRef.current,
+    });
 
     if (advanceTimeoutRef.current) {
       clearTimeout(advanceTimeoutRef.current);
@@ -4074,7 +4450,7 @@ export default function MemorizationScreen() {
               reciteMode && styles.sessionHeaderIconButtonActive,
             ]}
             onPress={() => {
-              void handleToggleReciteMode();
+              void handleToggleReciteMode("top-chrome");
             }}
             accessibilityRole="switch"
             accessibilityState={{ checked: reciteMode }}
@@ -4887,7 +5263,7 @@ export default function MemorizationScreen() {
               <Pressable
                 style={styles.sessionSettingRow}
                 onPress={() => {
-                  void handleToggleReciteMode();
+                  void handleToggleReciteMode("settings-sheet");
                 }}
                 accessibilityRole="switch"
                 accessibilityState={{ checked: reciteMode }}

@@ -50,6 +50,11 @@ function isSubsequence(short: string, long: string): boolean {
 
 const stripNW = (w: string): string => w.replace(/[نو]/g, "");
 
+function logWordMatchResult(result: boolean, details: Record<string, unknown>): boolean {
+  console.log("[noor-recite]", "wordMatches", { result, ...details });
+  return result;
+}
+
 // Multi-predicate match. Returns true if heard word looks like expected word
 // across any of: equality, substring (either direction), subsequence (either
 // direction), noun-vowel-stripped equality, or word-final ت→ه swap.
@@ -60,28 +65,99 @@ export function wordMatches(
   expectedNorm: string,
   lastMatched: string,
 ): boolean {
-  if (!heardNorm || !expectedNorm) return false;
+  if (!heardNorm || !expectedNorm) {
+    return logWordMatchResult(false, {
+      heardNorm,
+      expectedNorm,
+      lastMatched,
+      reason: "empty-input",
+    });
+  }
   // Reject 1-char matches unless equal — too noisy
-  if (heardNorm.length === 1 && heardNorm !== expectedNorm) return false;
+  if (heardNorm.length === 1 && heardNorm !== expectedNorm) {
+    return logWordMatchResult(false, {
+      heardNorm,
+      expectedNorm,
+      lastMatched,
+      reason: "one-char-mismatch",
+    });
+  }
   // Already counted this exact word
-  if (heardNorm === lastMatched) return false;
+  if (heardNorm === lastMatched) {
+    return logWordMatchResult(false, {
+      heardNorm,
+      expectedNorm,
+      lastMatched,
+      reason: "already-counted",
+    });
+  }
 
+  const exact = heardNorm === expectedNorm;
+  const heardIncludesExpected = heardNorm.includes(expectedNorm);
+  const expectedIncludesHeard = expectedNorm.includes(heardNorm);
+  const heardSubsequenceExpected = isSubsequence(heardNorm, expectedNorm);
+  const expectedSubsequenceHeard = isSubsequence(expectedNorm, heardNorm);
   if (
-    heardNorm === expectedNorm ||
-    heardNorm.includes(expectedNorm) ||
-    expectedNorm.includes(heardNorm) ||
-    isSubsequence(heardNorm, expectedNorm) ||
-    isSubsequence(expectedNorm, heardNorm)
-  ) return true;
+    exact ||
+    heardIncludesExpected ||
+    expectedIncludesHeard ||
+    heardSubsequenceExpected ||
+    expectedSubsequenceHeard
+  ) {
+    return logWordMatchResult(true, {
+      heardNorm,
+      expectedNorm,
+      lastMatched,
+      reason: "primary-predicate",
+      exact,
+      heardIncludesExpected,
+      expectedIncludesHeard,
+      heardSubsequenceExpected,
+      expectedSubsequenceHeard,
+    });
+  }
 
   const hStripped = stripNW(heardNorm);
   const eStripped = stripNW(expectedNorm);
-  if (hStripped.length > 0 && eStripped.length > 0 && hStripped === eStripped) return true;
+  const strippedEqual = hStripped.length > 0 && eStripped.length > 0 && hStripped === eStripped;
+  if (strippedEqual) {
+    return logWordMatchResult(true, {
+      heardNorm,
+      expectedNorm,
+      lastMatched,
+      reason: "noun-waw-stripped-equality",
+      hStripped,
+      eStripped,
+    });
+  }
 
   // Word-final ت → ه (handles Uthmani نعمت vs spoken نعمة)
   const hT = heardNorm.replace(/ت$/, "ه");
   const eT = expectedNorm.replace(/ت$/, "ه");
-  return hT === eT || hT.includes(eT) || eT.includes(hT);
+  const finalTaExact = hT === eT;
+  const finalTaHeardIncludesExpected = hT.includes(eT);
+  const finalTaExpectedIncludesHeard = eT.includes(hT);
+  const finalTaMatched =
+    finalTaExact || finalTaHeardIncludesExpected || finalTaExpectedIncludesHeard;
+  return logWordMatchResult(finalTaMatched, {
+    heardNorm,
+    expectedNorm,
+    lastMatched,
+    reason: finalTaMatched ? "final-ta-marbuta-swap" : "all-predicates-failed",
+    exact,
+    heardIncludesExpected,
+    expectedIncludesHeard,
+    heardSubsequenceExpected,
+    expectedSubsequenceHeard,
+    hStripped,
+    eStripped,
+    strippedEqual,
+    hT,
+    eT,
+    finalTaExact,
+    finalTaHeardIncludesExpected,
+    finalTaExpectedIncludesHeard,
+  });
 }
 
 // Strip leading "ال" if doing so leaves a meaningful root (≥2 chars).
