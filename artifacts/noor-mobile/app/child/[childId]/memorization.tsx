@@ -86,6 +86,9 @@ import {
 const PLAYBACK_RATES = [0.75, 0.85, 1.0, 1.15, 1.25, 1.5] as const;
 const AYAH_ROW_ESTIMATED_HEIGHT = 190;
 const SILENT_RECITE_ERROR_CODES = new Set(["no-speech", "no-match"]);
+const RECITE_WARMUP_WATCHDOG_MS = 3000;
+const RECITE_WARMUP_RESTART_DELAY_MS = 200;
+const RECITE_WARMUP_MAX_RETRIES = 2;
 type InternalPhase = "single" | "cumulative";
 type DiscoveryFilter = "all" | "current" | "in_progress" | "not_started" | "memorized" | "needs_review";
 type AyahTone = "white" | "red" | "orange" | "green";
@@ -662,6 +665,12 @@ export default function MemorizationScreen() {
   const matchedWordCountRef = useRef(0);
   const lastMatchedWordRef = useRef("");
   const lastMatchTimeRef = useRef(0);
+  const reciteTranscriptReceivedRef = useRef(false);
+  const reciteWarmupRetryCountRef = useRef(0);
+  const reciteWarmupTokenRef = useRef(0);
+  const reciteWarmupWatchdogRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const reciteWarmupRestartDelayRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const reciteWarmupRestartingRef = useRef(false);
 
   // Keep callback-visible refs in sync with state
   useEffect(() => { viewModeRef.current = viewMode; }, [viewMode]);
@@ -2067,6 +2076,7 @@ export default function MemorizationScreen() {
     setCompletionSheetOpen(true);
 
     if (source === "noorpath" || reciteModeRef.current) {
+      invalidateReciteWarmupWatchdog();
       reciteModeRef.current = false;
       setReciteMode(false);
       setReciteListening(false);
@@ -2233,6 +2243,7 @@ export default function MemorizationScreen() {
     pendingSeekPositionRef.current = null;
     matchedWordCountRef.current = 0;
     lastMatchedWordRef.current = "";
+    invalidateReciteWarmupWatchdog();
     reciteModeRef.current = false;
     setReciteMode(false);
     setReciteListening(false);
@@ -2303,6 +2314,7 @@ export default function MemorizationScreen() {
     currentVerseRef.current = boundedStart;
     matchedWordCountRef.current = 0;
     lastMatchedWordRef.current = "";
+    beginReciteWarmupWatchdogCycle();
     resetReciteAssistState();
     setReciteError(null);
     setReciteListening(false);
@@ -2316,6 +2328,7 @@ export default function MemorizationScreen() {
 
   async function handleToggleReciteMode() {
     if (reciteModeRef.current) {
+      invalidateReciteWarmupWatchdog();
       reciteModeRef.current = false;
       setReciteMode(false);
       setReciteListening(false);
@@ -2611,9 +2624,88 @@ export default function MemorizationScreen() {
     advancePastCurrentReciteVerse(nextAttempts);
   }
 
-  async function startRecognition() {
+  function clearReciteWarmupTimers() {
+    if (reciteWarmupWatchdogRef.current) {
+      clearTimeout(reciteWarmupWatchdogRef.current);
+      reciteWarmupWatchdogRef.current = null;
+    }
+    if (reciteWarmupRestartDelayRef.current) {
+      clearTimeout(reciteWarmupRestartDelayRef.current);
+      reciteWarmupRestartDelayRef.current = null;
+    }
+  }
+
+  function beginReciteWarmupWatchdogCycle() {
+    clearReciteWarmupTimers();
+    reciteTranscriptReceivedRef.current = false;
+    reciteWarmupRetryCountRef.current = 0;
+    reciteWarmupRestartingRef.current = false;
+    reciteWarmupTokenRef.current += 1;
+    return reciteWarmupTokenRef.current;
+  }
+
+  function invalidateReciteWarmupWatchdog() {
+    clearReciteWarmupTimers();
+    reciteWarmupRestartingRef.current = false;
+    reciteWarmupTokenRef.current += 1;
+  }
+
+  function noteReciteTranscriptReceived() {
+    reciteTranscriptReceivedRef.current = true;
+    clearReciteWarmupTimers();
+  }
+
+  function scheduleReciteWarmupWatchdog(token: number) {
+    if (reciteTranscriptReceivedRef.current) return;
+    if (reciteWarmupWatchdogRef.current) {
+      clearTimeout(reciteWarmupWatchdogRef.current);
+    }
+    reciteWarmupWatchdogRef.current = setTimeout(() => {
+      reciteWarmupWatchdogRef.current = null;
+      void handleReciteWarmupWatchdog(token);
+    }, RECITE_WARMUP_WATCHDOG_MS);
+  }
+
+  async function handleReciteWarmupWatchdog(token: number) {
+    if (token !== reciteWarmupTokenRef.current) return;
+    if (!reciteModeRef.current) return;
+    if (reciteTranscriptReceivedRef.current) return;
+    if (matchedWordCountRef.current !== 0) return;
+    if (reciteWarmupRetryCountRef.current >= RECITE_WARMUP_MAX_RETRIES) return;
+
+    reciteWarmupRetryCountRef.current += 1;
+    reciteWarmupRestartingRef.current = true;
+    try {
+      ExpoSpeechRecognitionModule.stop();
+    } catch {
+      // Some platforms throw if the recognizer has already ended.
+    }
+
+    reciteWarmupRestartDelayRef.current = setTimeout(() => {
+      reciteWarmupRestartDelayRef.current = null;
+      if (token !== reciteWarmupTokenRef.current || !reciteModeRef.current) {
+        reciteWarmupRestartingRef.current = false;
+        return;
+      }
+
+      void startRecognition({ warmupWatchdog: true, warmupToken: token }).finally(() => {
+        if (token === reciteWarmupTokenRef.current) {
+          reciteWarmupRestartingRef.current = false;
+        }
+      });
+    }, RECITE_WARMUP_RESTART_DELAY_MS);
+  }
+
+  async function startRecognition({
+    warmupWatchdog = false,
+    warmupToken = reciteWarmupTokenRef.current,
+  }: {
+    warmupWatchdog?: boolean;
+    warmupToken?: number;
+  } = {}) {
     const { granted } = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
     if (!granted) {
+      invalidateReciteWarmupWatchdog();
       setReciteError("Microphone or speech recognition permission denied.");
       setReciteMode(false);
       Alert.alert(
@@ -2622,6 +2714,9 @@ export default function MemorizationScreen() {
       );
       return;
     }
+    if (!reciteModeRef.current) return;
+    if (warmupWatchdog && warmupToken !== reciteWarmupTokenRef.current) return;
+
     ExpoSpeechRecognitionModule.start({
       lang: "ar-SA",
       interimResults: true,
@@ -2631,18 +2726,23 @@ export default function MemorizationScreen() {
     });
     setReciteListening(true);
     setReciteError(null);
+    if (warmupWatchdog && warmupToken === reciteWarmupTokenRef.current) {
+      scheduleReciteWarmupWatchdog(warmupToken);
+    }
   }
 
   useSpeechRecognitionEvent("result", (event) => {
     if (!reciteModeRef.current) return;
 
-    // Debounce: ignore rapid-fire interim events right after a successful match.
-    if (Date.now() - lastMatchTimeRef.current < 300) return;
-
     const result = event.results?.[0];
     if (!result) return;
     const transcript = result.transcript ?? "";
     if (!transcript) return;
+    noteReciteTranscriptReceived();
+
+    // Debounce: ignore rapid-fire interim events right after a successful match.
+    if (Date.now() - lastMatchTimeRef.current < 300) return;
+
     const isFinal = !!event.isFinal;
 
     const heardNormFull = stripTashkeel(transcript);
@@ -2731,13 +2831,15 @@ export default function MemorizationScreen() {
     const errorCode = getRecognitionErrorCode(event.error);
     if (errorCode && SILENT_RECITE_ERROR_CODES.has(errorCode)) return;
 
+    clearReciteWarmupTimers();
     setReciteError(event.error ?? "Recognition error");
     setReciteListening(false);
   });
 
   useSpeechRecognitionEvent("end", () => {
+    if (reciteWarmupRestartingRef.current) return;
     if (reciteModeRef.current) {
-      startRecognition();
+      void startRecognition();
     } else {
       setReciteListening(false);
     }
@@ -2745,12 +2847,17 @@ export default function MemorizationScreen() {
 
   useEffect(() => {
     if (reciteMode) {
-      startRecognition();
+      void startRecognition({
+        warmupWatchdog: true,
+        warmupToken: reciteWarmupTokenRef.current,
+      });
     } else {
+      invalidateReciteWarmupWatchdog();
       ExpoSpeechRecognitionModule.stop();
       setReciteListening(false);
     }
     return () => {
+      invalidateReciteWarmupWatchdog();
       ExpoSpeechRecognitionModule.stop();
     };
   }, [reciteMode]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -3674,7 +3781,7 @@ export default function MemorizationScreen() {
       active && reciteMode ? getNextReciteWordIndex(rowWords, reciteExpectedIdx) : null;
 
     return (
-      <View style={[styles.wordContainer, !active && styles.ayahRowDimmedText]}>
+      <View style={[styles.wordContainer, !active && !reciteMode && styles.ayahRowDimmedText]}>
         {rowWords.map((word, idx) => {
           const tajweedColor = tajweedEnabled ? extractTajweedColor(word.text_uthmani_tajweed) : null;
           const isSkippedWord = isSkippedReciteWord(word);
@@ -3693,12 +3800,12 @@ export default function MemorizationScreen() {
             isCurrentReciteWord &&
             revealedReciteWords.has(makeReciteWordKey(verseNumber, idx));
           const hideWordForRecite =
-            active &&
             reciteMode &&
-            rowReciteExpectedIndex !== null &&
             !isSkippedWord &&
-            !isPastReciteWord &&
-            (!isCurrentReciteWord || !reciteWordRevealed);
+            (!active ||
+              (rowReciteExpectedIndex !== null &&
+                !isPastReciteWord &&
+                (!isCurrentReciteWord || !reciteWordRevealed)));
           const hiddenByBlind = rowVerseHidden && !reciteWordRevealed;
           const reciteBlurTextStyle = hideWordForRecite
             ? isCurrentReciteWord
@@ -3716,6 +3823,8 @@ export default function MemorizationScreen() {
                   style={[
                     styles.arabicWord,
                     tajweedColor ? { color: tajweedColor } : undefined,
+                    reciteBlurTextStyle,
+                    reciteBlurShadowStyle,
                   ]}
                 >
                   {hiddenByBlind ? "••••" : word.text_uthmani}
