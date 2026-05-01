@@ -85,6 +85,7 @@ import {
 
 const PLAYBACK_RATES = [0.75, 0.85, 1.0, 1.15, 1.25, 1.5] as const;
 const AYAH_ROW_ESTIMATED_HEIGHT = 190;
+const SILENT_RECITE_ERROR_CODES = new Set(["no-speech", "no-match"]);
 type InternalPhase = "single" | "cumulative";
 type DiscoveryFilter = "all" | "current" | "in_progress" | "not_started" | "memorized" | "needs_review";
 type AyahTone = "white" | "red" | "orange" | "green";
@@ -235,6 +236,15 @@ function getRecitationScoreLabel(score: number) {
   if (score >= 70) return "Good";
   if (score >= 50) return "Needs Work";
   return "Keep Practicing";
+}
+
+function getRecognitionErrorCode(error: unknown) {
+  if (typeof error === "string") return error.toLowerCase().replace(/[_\s]+/g, "-");
+  if (error && typeof error === "object" && "code" in error) {
+    const code = (error as { code?: unknown }).code;
+    return typeof code === "string" ? code.toLowerCase().replace(/[_\s]+/g, "-") : null;
+  }
+  return null;
 }
 
 function getStatusCopy(status: MemorizationStatus) {
@@ -2300,10 +2310,21 @@ export default function MemorizationScreen() {
     setReciteMode(true);
   }
 
+  function handleToggleBlindMode() {
+    setBlindMode((value) => !value);
+  }
+
   async function handleToggleReciteMode() {
-    if (reciteMode) {
+    if (reciteModeRef.current) {
+      reciteModeRef.current = false;
       setReciteMode(false);
+      setReciteListening(false);
+      setReciteError(null);
+      setReciteExpectedIdx(0);
+      matchedWordCountRef.current = 0;
+      lastMatchedWordRef.current = "";
       resetReciteAssistState();
+      ExpoSpeechRecognitionModule.stop();
       return;
     }
     await enterReciteMode(currentVerseRef.current);
@@ -2707,6 +2728,9 @@ export default function MemorizationScreen() {
 
   useSpeechRecognitionEvent("error", (event) => {
     if (!reciteModeRef.current) return;
+    const errorCode = getRecognitionErrorCode(event.error);
+    if (errorCode && SILENT_RECITE_ERROR_CODES.has(errorCode)) return;
+
     setReciteError(event.error ?? "Recognition error");
     setReciteListening(false);
   });
@@ -3405,6 +3429,7 @@ export default function MemorizationScreen() {
     : null;
   const verseIndex = ayahStart !== null ? currentVerse - ayahStart + 1 : 1;
   const totalVerses = ayahStart !== null && ayahEnd !== null ? ayahEnd - ayahStart + 1 : 0;
+  const sessionHeaderTitleMaxWidth = Math.max(88, screenWidth - 280);
   const sessionAyahNumbers = useMemo(
     () => (ayahStart !== null && ayahEnd !== null ? buildAyahRange(ayahStart, ayahEnd) : []),
     [ayahStart, ayahEnd],
@@ -3895,11 +3920,20 @@ export default function MemorizationScreen() {
   return (
     <View style={styles.container}>
       {/* Header */}
-      <View style={styles.header}>
-        <Pressable onPress={handleRequestSessionLeave}>
+      <View style={styles.sessionHeader}>
+        <Pressable
+          style={styles.sessionBackButton}
+          onPress={handleRequestSessionLeave}
+          accessibilityRole="button"
+          accessibilityLabel="Leave memorization session"
+        >
           <Text style={styles.back}>← Back</Text>
         </Pressable>
-        <Text style={styles.headerTitle}>
+        <Text
+          style={[styles.sessionHeaderTitle, { maxWidth: sessionHeaderTitleMaxWidth }]}
+          numberOfLines={1}
+          ellipsizeMode="tail"
+        >
           {reciteMode
             ? `Recite Verse ${verseIndex} of ${totalVerses}`
             : internalPhase === "cumulative" && ayahStart !== null
@@ -3908,12 +3942,50 @@ export default function MemorizationScreen() {
                 ? `Pass ${singleRepeatPass}/${repeatCount} · Verse ${verseIndex} of ${totalVerses}`
               : `Verse ${verseIndex} of ${totalVerses}`}
         </Text>
-        <Pressable
-          style={styles.headerButton}
-          onPress={() => setSettingsOpen(true)}
-        >
-          <Text style={styles.headerButtonIcon}>⚙</Text>
-        </Pressable>
+        <View style={styles.sessionHeaderActions}>
+          <Pressable
+            style={[
+              styles.sessionHeaderIconButton,
+              blindMode && styles.sessionHeaderIconButtonActive,
+            ]}
+            onPress={handleToggleBlindMode}
+            accessibilityRole="switch"
+            accessibilityState={{ checked: blindMode }}
+            accessibilityLabel={blindMode ? "Turn off Blind mode" : "Turn on Blind mode"}
+          >
+            <Ionicons
+              name={blindMode ? "eye-off-outline" : "eye-outline"}
+              size={20}
+              color={blindMode ? "#2563eb" : "#6b7280"}
+            />
+          </Pressable>
+          <Pressable
+            style={[
+              styles.sessionHeaderIconButton,
+              reciteMode && styles.sessionHeaderIconButtonActive,
+            ]}
+            onPress={() => {
+              void handleToggleReciteMode();
+            }}
+            accessibilityRole="switch"
+            accessibilityState={{ checked: reciteMode }}
+            accessibilityLabel={reciteMode ? "Turn off Recite mode" : "Turn on Recite mode"}
+          >
+            <Ionicons
+              name={reciteMode ? "mic" : "mic-outline"}
+              size={20}
+              color={reciteMode ? "#2563eb" : "#6b7280"}
+            />
+          </Pressable>
+          <Pressable
+            style={styles.sessionHeaderIconButton}
+            onPress={() => setSettingsOpen(true)}
+            accessibilityRole="button"
+            accessibilityLabel="Open session settings"
+          >
+            <Ionicons name="settings-outline" size={21} color="#2563eb" />
+          </Pressable>
+        </View>
       </View>
 
       {/* Scrollable content — flex: 1 so controls island stays pinned below */}
@@ -4687,7 +4759,7 @@ export default function MemorizationScreen() {
 
               <Pressable
                 style={styles.sessionSettingRow}
-                onPress={() => setBlindMode(!blindMode)}
+                onPress={handleToggleBlindMode}
                 accessibilityRole="switch"
                 accessibilityState={{ checked: blindMode }}
                 accessibilityLabel="Blind mode"
@@ -7326,6 +7398,52 @@ const styles = StyleSheet.create({
   headerButtonIcon: {
     fontSize: 22,
     color: "#2563eb",
+  },
+  sessionHeader: {
+    position: "relative",
+    alignItems: "center",
+    justifyContent: "center",
+    minHeight: 104,
+    paddingTop: 60,
+    paddingHorizontal: 16,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "#e2e8f0",
+    backgroundColor: "#ffffff",
+  },
+  sessionBackButton: {
+    position: "absolute",
+    left: 16,
+    bottom: 12,
+    minHeight: 40,
+    justifyContent: "center",
+    zIndex: 2,
+  },
+  sessionHeaderTitle: {
+    textAlign: "center",
+    fontSize: 15,
+    fontWeight: "800",
+    color: "#111827",
+  },
+  sessionHeaderActions: {
+    position: "absolute",
+    right: 16,
+    bottom: 12,
+    minHeight: 40,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    zIndex: 2,
+  },
+  sessionHeaderIconButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  sessionHeaderIconButtonActive: {
+    backgroundColor: "#dbeafe",
   },
   toggleContainer: {
     flexDirection: "row",
