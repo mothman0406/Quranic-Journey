@@ -10,6 +10,8 @@ The current Quran.com public v4 endpoints I could reach do not expose page-image
 
 Conclusion: a Tarteel-style image Mushaf with word-level taps/highlights needs a separate coordinate source. The best Quran.com-adjacent lead is the `quran/quran.com-images` generator/database schema, which has bbox tables, but the public SQL dump I inspected has those bbox tables empty and no public API endpoint serving them.
 
+2026-05-01 production note: the text-based Full Mushaf path on `main` was upgraded in Slice 2L.0.n to use QUL KFGQPC V4 canonical line layout data, so printed-Mushaf line fidelity is no longer blocked on this image experiment. Keep `experiment/image-mushaf` on hold until we decide whether pixel-perfect page typography and image-coordinate hit testing are still worth pursuing.
+
 ## Question 1: Word-level bounding boxes
 
 ### Tested Quran.com endpoints
