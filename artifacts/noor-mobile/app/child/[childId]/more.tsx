@@ -1,5 +1,5 @@
 import { useCallback, useEffect, type ComponentProps, useState } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter, type Href } from "expo-router";
 import { ChildBottomNav } from "@/src/components/child-bottom-nav";
@@ -151,6 +151,10 @@ export default function MoreScreen() {
     } as Href);
   }
 
+  function openExperimentalPrototype() {
+    router.push("/experimental/mushaf-image-prototype" as Href);
+  }
+
   const displayName = child?.name ?? name ?? "Child";
 
   return (
@@ -193,6 +197,18 @@ export default function MoreScreen() {
               );
             })}
           </CardGroup>
+
+          <SectionLabel>Experiment</SectionLabel>
+          <Pressable style={styles.experimentalButton} onPress={openExperimentalPrototype}>
+            <View style={styles.experimentalIcon}>
+              <Ionicons name="warning-outline" size={21} color="#b91c1c" />
+            </View>
+            <View style={styles.experimentalText}>
+              <Text style={styles.experimentalTitle}>[EXPERIMENTAL] Image Mushaf</Text>
+              <Text style={styles.experimentalDetail}>Hardware test route for image highlight animation</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color="#b91c1c" />
+          </Pressable>
 
           <SectionLabel>Next</SectionLabel>
           <CardGroup>
@@ -269,5 +285,41 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: "#d1d5db",
     fontWeight: "600",
+  },
+  experimentalButton: {
+    minHeight: 68,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderWidth: 2,
+    borderColor: "#ef4444",
+    borderRadius: 12,
+    backgroundColor: "#fff7f7",
+  },
+  experimentalIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#fee2e2",
+  },
+  experimentalText: {
+    flex: 1,
+    minWidth: 0,
+  },
+  experimentalTitle: {
+    color: "#991b1b",
+    fontSize: 15,
+    fontWeight: "900",
+  },
+  experimentalDetail: {
+    color: "#b91c1c",
+    fontSize: 13,
+    fontWeight: "700",
+    lineHeight: 18,
+    marginTop: 2,
   },
 });
