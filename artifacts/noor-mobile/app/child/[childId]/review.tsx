@@ -1194,6 +1194,31 @@ export default function ReviewScreen() {
                 return currentIds;
               });
             };
+            const hasTomorrowItems = tomorrowUpcoming.length > 0;
+            const willRenderUpcoming = upcoming.length > 0;
+
+            console.log("[noor-review-queue] section-decisions", {
+              dueTodayCount: dueToday.length,
+              reviewedTodayCount: reviewedToday.length,
+              upcomingCount: tomorrowUpcoming.length,
+              celebrationCardCondition: {
+                dueTodayEmpty: dueToday.length === 0,
+                hasReviewedToday: reviewedToday.length > 0,
+                hasTomorrowItems,
+              },
+              willRenderCelebrationCard: showCompletionCelebration,
+            });
+            console.log("[noor-review-queue] upcoming-decision", {
+              dueTodayCount: dueToday.length,
+              hasTomorrowItems,
+              willRenderUpcoming,
+            });
+            if (promoteTomorrow) {
+              console.log("[noor-review-queue] promote-tomorrow-result", {
+                dueTodayCountAfterPromotion: dueToday.length,
+                tomorrowItemsCount: tomorrowUpcoming.length,
+              });
+            }
 
             return (
               <>
@@ -1263,14 +1288,28 @@ export default function ReviewScreen() {
                   </>
                 )}
 
-                {showCompletionCelebration && (
-                  <CompletionCelebrationCard
-                    reviewedCount={reviewedToday.length}
-                    tomorrowCount={tomorrowUpcoming.length}
-                    onStartTomorrow={handleStartTomorrowEarly}
-                    onDismiss={() => setCompletionDismissed(true)}
-                  />
-                )}
+                {showCompletionCelebration &&
+                  (() => {
+                    console.log("[noor-review-queue] celebration-render", {
+                      message: "celebration-card-rendered",
+                      tomorrowItemsCount: tomorrowUpcoming.length,
+                      isPromoted: startTomorrowEarly,
+                    });
+                    return (
+                      <CompletionCelebrationCard
+                        reviewedCount={reviewedToday.length}
+                        tomorrowCount={tomorrowUpcoming.length}
+                        onStartTomorrow={() => {
+                          console.log("[noor-review-queue] promote-tomorrow-tap", {
+                            tomorrowItemsCount: tomorrowUpcoming.length,
+                            action: "setStartTomorrowEarly(true)",
+                          });
+                          handleStartTomorrowEarly();
+                        }}
+                        onDismiss={() => setCompletionDismissed(true)}
+                      />
+                    );
+                  })()}
 
                 {hasFutureReviews && (
                   <DayStateCard

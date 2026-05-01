@@ -129,6 +129,11 @@ function buildNumberRange(start: number, end: number) {
   return Array.from({ length: Math.max(0, end - start + 1) }, (_, index) => start + index);
 }
 
+function previewAyahNumbers(values: number[]) {
+  if (values.length <= 6) return values;
+  return [...values.slice(0, 5), values[values.length - 1]!];
+}
+
 function toArabicIndic(value: number) {
   const digits = ["٠", "١", "٢", "٣", "٤", "٥", "٦", "٧", "٨", "٩"];
   return String(value).replace(/\d/g, (digit) => digits[Number(digit)] ?? digit);
@@ -209,6 +214,8 @@ export default function ReviewSession() {
   const pageListRef = useRef<FlatList<number>>(null);
   const currentAyahRef = useRef(ayahStartN);
   const playbackRateRef = useRef<number>(1);
+  const stripPreRenderCountRef = useRef(0);
+  const stripFirstItemRenderKeyRef = useRef<string | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isAudioLoading, setIsAudioLoading] = useState(false);
   const [audioError, setAudioError] = useState<string | null>(null);
@@ -258,6 +265,38 @@ export default function ReviewSession() {
     if (currentAyah >= ayahEndN) return pageEndN;
     return pageStartN;
   }, [ayahEndN, ayahPageMap, currentAyah, pageEndN, pageStartN]);
+
+  console.log("[noor-review] session-render", {
+    childId,
+    route: {
+      surahNumber,
+      ayahStart,
+      ayahEnd,
+      pageStart,
+      pageEnd,
+      reviewDate,
+      hasBatchQueue: !!batchQueue,
+    },
+    surahNumberN,
+    ayahStartN,
+    ayahEndN,
+    pageStartN,
+    pageEndN,
+    sessionQueueLength: sessionQueue.length,
+    queueIndex,
+    isBatchSession,
+    mushafViewMode,
+  });
+
+  useEffect(() => {
+    console.log("[noor-review] ayah-strip-data-built", {
+      ayahStartN,
+      ayahEndN,
+      totalAyahs,
+      ayahNumbersLength: ayahNumbers.length,
+      ayahNumbers: previewAyahNumbers(ayahNumbers),
+    });
+  }, [ayahNumbers, ayahEndN, ayahStartN]);
 
   useEffect(() => {
     setSessionQueue(routeQueue);
@@ -334,6 +373,12 @@ export default function ReviewSession() {
       0,
       index * AYAH_STRIP_ITEM_WIDTH - screenW / 2 + AYAH_STRIP_ITEM_WIDTH / 2,
     );
+    console.log("[noor-review] strip-auto-scroll", {
+      currentAyah,
+      ayahStartN,
+      index,
+      offset,
+    });
     try {
       ayahStripRef.current?.scrollToOffset({ offset, animated: true });
     } catch {
@@ -392,6 +437,13 @@ export default function ReviewSession() {
   }
 
   async function playAyah(ayahNumber: number) {
+    console.log("[noor-review] play-ayah-entry", {
+      ayahNumber,
+      surahNumberN,
+      currentReciter: reciterId,
+      ayahStartN,
+      ayahEndN,
+    });
     setAudioError(null);
     setIsAudioLoading(true);
     setCurrentAyah(ayahNumber);
@@ -428,7 +480,14 @@ export default function ReviewSession() {
       await sound.setRateAsync(playbackRateRef.current, true).catch(() => {});
       await sound.playAsync();
       setIsPlaying(true);
+      console.log("[noor-review] play-ayah-started", {
+        ayahNumber,
+        soundCreated: true,
+      });
     } catch (e) {
+      console.log("[noor-review] play-ayah-error", {
+        message: e instanceof Error ? e.message : "Audio could not start",
+      });
       setAudioError(e instanceof Error ? e.message : "Audio could not start");
       setIsPlaying(false);
     } finally {
@@ -437,12 +496,23 @@ export default function ReviewSession() {
   }
 
   async function handleSeekAyah(ayahNumber: number) {
+    console.log("[noor-review] handle-seek-entry", {
+      ayahNumber,
+      currentAyah,
+      currentAyahRef: currentAyahRef.current,
+      isAudioLoading,
+    });
     if (isAudioLoading) return;
     await playAyah(ayahNumber);
   }
 
   function openTranslationForAyah(ayahNumber: number) {
     const verseKey = `${surahNumberN}:${ayahNumber}`;
+    console.log("[noor-review] open-translation-entry", {
+      ayahNumber,
+      verseKey,
+      hasAyahText: ayahTextMap.has(ayahNumber),
+    });
     setTranslationPopup({
       verseKey,
       ayahNumber,
@@ -542,6 +612,26 @@ export default function ReviewSession() {
     pageStartN === pageEndN ? `Page ${pageStartN}` : `Pages ${pageStartN}-${pageEndN}`;
   const headerDetail = `Ayahs ${ayahStartN}-${ayahEndN} · ${pageLabel}`;
   const currentAyahIndex = Math.max(1, currentAyah - ayahStartN + 1);
+  const ayahStripData = ayahNumbers;
+  stripPreRenderCountRef.current += 1;
+  const shouldLogStripDetail =
+    stripPreRenderCountRef.current === 1 || stripPreRenderCountRef.current % 5 === 0;
+
+  console.log("[noor-review] strip-pre-render", {
+    length: ayahStripData.length,
+    ...(shouldLogStripDetail
+      ? {
+          message: "ayahNumbers being passed to strip",
+          renderCount: stripPreRenderCountRef.current,
+          ayahNumbers: previewAyahNumbers(ayahStripData),
+          firstAyah: ayahStripData[0] ?? null,
+          lastAyah: ayahStripData[ayahStripData.length - 1] ?? null,
+          currentAyah,
+          ayahStartN,
+          ayahEndN,
+        }
+      : {}),
+  });
 
   return (
     <View style={styles.container}>
@@ -578,7 +668,7 @@ export default function ReviewSession() {
 
         <FlatList
           ref={ayahStripRef}
-          data={ayahNumbers}
+          data={ayahStripData}
           horizontal
           showsHorizontalScrollIndicator={false}
           keyExtractor={(item) => String(item)}
@@ -590,6 +680,18 @@ export default function ReviewSession() {
           })}
           renderItem={({ item }) => {
             const active = item === currentAyah;
+            const renderKey = `${surahNumberN}:${ayahStartN}:${ayahEndN}:${queueIndex}`;
+            if (
+              item === ayahStripData[0] &&
+              stripFirstItemRenderKeyRef.current !== renderKey
+            ) {
+              stripFirstItemRenderKeyRef.current = renderKey;
+              console.log("[noor-review] strip-first-item-render", {
+                message: "first ayah strip item rendered",
+                ayahNumber: item,
+                active,
+              });
+            }
             return (
               <Pressable
                 onPress={() => {
