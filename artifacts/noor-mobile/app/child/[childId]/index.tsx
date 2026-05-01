@@ -10,7 +10,7 @@ import {
   View,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { useFocusEffect, useLocalSearchParams, useRouter, type Href } from "expo-router";
+import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { ChildBottomNav } from "@/src/components/child-bottom-nav";
 import { ApiError, apiFetch } from "@/src/lib/api";
 import { fetchReviewQueue, type ReviewQueueItem, type ReviewQueueResponse } from "@/src/lib/reviews";
@@ -649,14 +649,12 @@ function GoalsAchievementsCard({
   onTabChange,
   goal,
   achievements,
-  onOpenGoals,
   onOpenAchievements,
 }: {
   activeTab: GoalsPanelTab;
   onTabChange: (tab: GoalsPanelTab) => void;
   goal: Goal | null;
   achievements: Achievement[];
-  onOpenGoals: () => void;
   onOpenAchievements: () => void;
 }) {
   return (
@@ -681,8 +679,16 @@ function GoalsAchievementsCard({
       {activeTab === "goals" ? (
         <View style={styles.combinedBody}>
           <GoalFocus goal={goal} />
-          <Pressable style={styles.combinedLinkRow} onPress={onOpenGoals}>
-            <Text style={styles.combinedLinkText}>View all goals →</Text>
+          <Pressable
+            style={[styles.combinedLinkRow, styles.combinedLinkRowDisabled]}
+            disabled
+            accessibilityRole="button"
+            accessibilityLabel="Goals plan coming soon"
+            accessibilityState={{ disabled: true }}
+          >
+            <Text style={[styles.combinedLinkText, styles.combinedLinkTextDisabled]}>
+              Coming soon
+            </Text>
           </Pressable>
         </View>
       ) : (
@@ -713,21 +719,42 @@ function QuickAction({
   iconName,
   color,
   onPress,
+  disabled = false,
 }: {
   title: string;
   detail: string;
   iconName: IconName;
   color: string;
   onPress: () => void;
+  disabled?: boolean;
 }) {
+  const actionColor = disabled ? "#94a3b8" : color;
+  const iconBackground = disabled ? "#f1f5f9" : `${color}14`;
+
   return (
-    <Pressable style={styles.quickAction} onPress={onPress}>
-      <View style={[styles.quickIcon, { backgroundColor: `${color}14` }]}>
-        <Ionicons name={iconName} size={18} color={color} />
+    <Pressable
+      style={[styles.quickAction, disabled && styles.quickActionDisabled]}
+      onPress={onPress}
+      disabled={disabled}
+      accessibilityRole="button"
+      accessibilityState={disabled ? { disabled: true } : undefined}
+    >
+      <View style={[styles.quickIcon, { backgroundColor: iconBackground }]}>
+        <Ionicons name={iconName} size={18} color={actionColor} />
       </View>
       <View style={styles.quickText}>
-        <Text style={styles.quickTitle} numberOfLines={1}>{title}</Text>
-        <Text style={styles.quickDetail} numberOfLines={1}>{detail}</Text>
+        <Text
+          style={[styles.quickTitle, disabled && styles.quickTitleDisabled]}
+          numberOfLines={1}
+        >
+          {title}
+        </Text>
+        <Text
+          style={[styles.quickDetail, disabled && styles.quickDetailDisabled]}
+          numberOfLines={1}
+        >
+          {detail}
+        </Text>
       </View>
     </Pressable>
   );
@@ -1147,6 +1174,7 @@ export default function ChildDashboard() {
       | "/child/[childId]/mushaf"
       | "/child/[childId]/targets"
       | "/child/[childId]/profile"
+      | "/child/[childId]/progress"
       | "/child/[childId]/more",
     displayName = name ?? "",
   ) {
@@ -1155,12 +1183,6 @@ export default function ChildDashboard() {
       pathname,
       params: { childId, name: displayName },
     });
-  }
-
-  function openFutureChildRoute(segment: "plan" | "progress", displayName = name ?? "") {
-    if (!isValidChildId(childId)) return;
-    const nameQuery = displayName ? `?name=${encodeURIComponent(displayName)}` : "";
-    router.push(`/child/${childId}/${segment}${nameQuery}` as Href);
   }
 
   function renderContent() {
@@ -1473,25 +1495,25 @@ export default function ChildDashboard() {
           onTabChange={setGoalsPanelTab}
           goal={urgentGoal}
           achievements={dashboardAchievements}
-          onOpenGoals={() => openFutureChildRoute("plan", child.name)}
-          onOpenAchievements={() => openFutureChildRoute("progress", child.name)}
+          onOpenAchievements={() => openChildRoute("/child/[childId]/progress", child.name)}
         />
 
         <SectionHeader title="Quick Actions" />
         <View style={styles.quickGrid}>
           <QuickAction
             title="Plan"
-            detail="Goals"
+            detail="Coming soon"
             iconName="map-outline"
             color="#2563eb"
-            onPress={() => openFutureChildRoute("plan", child.name)}
+            onPress={() => undefined}
+            disabled
           />
           <QuickAction
             title="Progress"
             detail="Stats"
             iconName="bar-chart-outline"
             color="#16a34a"
-            onPress={() => openFutureChildRoute("progress", child.name)}
+            onPress={() => openChildRoute("/child/[childId]/progress", child.name)}
           />
           <QuickAction
             title="More"
@@ -2259,10 +2281,16 @@ const styles = StyleSheet.create({
   combinedLinkRow: {
     alignSelf: "flex-start",
   },
+  combinedLinkRowDisabled: {
+    opacity: 0.72,
+  },
   combinedLinkText: {
     color: "#2563eb",
     fontSize: 13,
     fontWeight: "900",
+  },
+  combinedLinkTextDisabled: {
+    color: "#94a3b8",
   },
   combinedEmpty: {
     minHeight: 52,
@@ -2290,6 +2318,11 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: 7,
   },
+  quickActionDisabled: {
+    backgroundColor: "#f8fafc",
+    borderColor: "#e5e7eb",
+    opacity: 0.78,
+  },
   quickIcon: {
     width: 36,
     height: 36,
@@ -2307,12 +2340,18 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     textAlign: "center",
   },
+  quickTitleDisabled: {
+    color: "#94a3b8",
+  },
   quickDetail: {
     color: "#666666",
     fontSize: 11,
     fontWeight: "600",
     marginTop: 2,
     textAlign: "center",
+  },
+  quickDetailDisabled: {
+    color: "#94a3b8",
   },
   sheetBackdrop: {
     flex: 1,
