@@ -87,6 +87,10 @@ const PLAYBACK_RATES = [0.75, 0.85, 1.0, 1.15, 1.25, 1.5] as const;
 const AYAH_ROW_ESTIMATED_HEIGHT = 190;
 const SILENT_RECITE_ERROR_CODES = new Set(["no-speech", "no-match"]);
 const MUSHAF_BISMILLAH_TEXT = "بِسْمِ ٱللَّهِ ٱلرَّحْمَٰنِ ٱلرَّحِيمِ";
+const MUSHAF_WORD_FONT_SIZE = 20;
+const MUSHAF_END_MARKER_FONT_SIZE = 16;
+const MUSHAF_LINE_HEIGHT = 38;
+const MUSHAF_LINE_FIT_INSET = 2;
 type InternalPhase = "single" | "cumulative";
 type DiscoveryFilter = "all" | "current" | "in_progress" | "not_started" | "memorized" | "needs_review";
 type AyahTone = "white" | "red" | "orange" | "green";
@@ -135,6 +139,9 @@ type TappedWordTarget = {
 };
 
 type MushafLineItem = { word: ApiWord; verseKey: string };
+type MushafSyntheticLine =
+  | { kind: "surahTitle"; surahNumber: number }
+  | { kind: "bismillah"; surahNumber: number };
 type MushafLineRenderUnit =
   | { kind: "single"; item: MushafLineItem; index: number }
   | {
@@ -176,6 +183,67 @@ function buildMushafLineRenderUnits(lineItems: MushafLineItem[]): MushafLineRend
   }
 
   return units;
+}
+
+function MushafAutoFitLine({
+  children,
+  itemCount,
+  onLineLayout,
+}: {
+  children: (fontScale: number, keyPrefix: string) => React.ReactNode;
+  itemCount: number;
+  onLineLayout?: (y: number) => void;
+}) {
+  const [containerWidth, setContainerWidth] = useState(0);
+  const [naturalWidth, setNaturalWidth] = useState(0);
+  const fitWidth = Math.max(1, containerWidth - MUSHAF_LINE_FIT_INSET);
+  const fontScale =
+    naturalWidth > 0 && containerWidth > 0
+      ? Math.min(1, fitWidth / naturalWidth)
+      : 1;
+  const roundedScale = Math.round(fontScale * 1000) / 1000;
+  const scaledWidth = naturalWidth * roundedScale;
+  const shouldJustify = itemCount > 1 && scaledWidth < fitWidth;
+
+  return (
+    <View
+      style={styles.mushafLineFrame}
+      onLayout={(event) => {
+        const nextWidth = Math.round(event.nativeEvent.layout.width);
+        setContainerWidth((previousWidth) =>
+          Math.abs(previousWidth - nextWidth) > 0 ? nextWidth : previousWidth,
+        );
+        onLineLayout?.(event.nativeEvent.layout.y);
+      }}
+    >
+      <View
+        pointerEvents="none"
+        accessibilityElementsHidden
+        importantForAccessibility="no-hide-descendants"
+        style={styles.mushafLineMeasureLayer}
+      >
+        <View
+          style={styles.mushafLineMeasureRow}
+          onLayout={(event) => {
+            const nextWidth = Math.ceil(event.nativeEvent.layout.width);
+            setNaturalWidth((previousWidth) =>
+              Math.abs(previousWidth - nextWidth) > 0 ? nextWidth : previousWidth,
+            );
+          }}
+        >
+          {children(1, "measure")}
+        </View>
+      </View>
+      <View
+        style={[
+          styles.mushafLine,
+          shouldJustify ? styles.mushafLineJustified : styles.mushafLineCentered,
+        ]}
+      >
+        {children(roundedScale, "visible")}
+      </View>
+    </View>
+  );
 }
 
 const DISCOVERY_FILTERS: Array<{ key: DiscoveryFilter; label: string }> = [
@@ -3175,35 +3243,57 @@ export default function MemorizationScreen() {
       );
     }
 
-    // Group all words (including end markers) by line_number
     const lineMap = new Map<number, MushafLineItem[]>();
     for (const verse of verses) {
       for (const word of verse.words) {
-        const ln = word.line_number;
-        if (!lineMap.has(ln)) lineMap.set(ln, []);
-        lineMap.get(ln)!.push({ word, verseKey: verse.verse_key });
+        const lineNumber = Number(word.line_number);
+        if (!Number.isFinite(lineNumber) || lineNumber < 1) continue;
+        if (!lineMap.has(lineNumber)) lineMap.set(lineNumber, []);
+        lineMap.get(lineNumber)!.push({ word, verseKey: verse.verse_key });
       }
     }
 
-    // Surah banners: injected before the first line of each new surah on the page
     let prevSurah: number | null = null;
-    const bannerBeforeLine = new Map<number, number>(); // lineNum → surahNumber
-    const bismillahBeforeLine = new Map<number, string>();
+    const syntheticLineMap = new Map<number, MushafSyntheticLine>();
     for (const verse of verses) {
       if (!verse.words.length) continue;
       const ci = verse.verse_key.indexOf(":");
       const vSurah = Number(verse.verse_key.slice(0, ci));
       const vVerse = Number(verse.verse_key.slice(ci + 1));
-      const firstWord = verse.words[0];
+      const firstWord = verse.words.find((word) => Number.isFinite(Number(word.line_number)));
       if (!firstWord) continue;
+      const firstLine = Number(firstWord.line_number);
 
       const startsSurahOnPage =
         (prevSurah === null && vVerse === 1) || (prevSurah !== null && vSurah !== prevSurah);
 
       if (startsSurahOnPage) {
-        bannerBeforeLine.set(firstWord.line_number, vSurah);
-        if (vVerse === 1 && shouldRenderBismillahHeader(vSurah)) {
-          bismillahBeforeLine.set(firstWord.line_number, MUSHAF_BISMILLAH_TEXT);
+        const firstVerseIncludesBismillah =
+          vVerse === 1 &&
+          shouldRenderBismillahHeader(vSurah) &&
+          verse.words.some((word) => word.text_uthmani.includes("بِسْم"));
+        let bismillahLine: number | null = null;
+
+        if (
+          vVerse === 1 &&
+          shouldRenderBismillahHeader(vSurah) &&
+          !firstVerseIncludesBismillah &&
+          firstLine > 1
+        ) {
+          const candidateLine = firstLine - 1;
+          if (!lineMap.has(candidateLine) && !syntheticLineMap.has(candidateLine)) {
+            bismillahLine = candidateLine;
+            syntheticLineMap.set(candidateLine, { kind: "bismillah", surahNumber: vSurah });
+          }
+        }
+
+        const titleLine = firstLine - (bismillahLine === null ? 1 : 2);
+        if (
+          titleLine >= 1 &&
+          !lineMap.has(titleLine) &&
+          !syntheticLineMap.has(titleLine)
+        ) {
+          syntheticLineMap.set(titleLine, { kind: "surahTitle", surahNumber: vSurah });
         }
       }
       prevSurah = vSurah;
@@ -3221,9 +3311,15 @@ export default function MemorizationScreen() {
       .join(" · ");
 
     const juz = getJuzForPage(pageNum);
-    const lineNums = [...lineMap.keys()].sort((a, b) => a - b);
+    const maxLineNumber = Math.max(0, ...lineMap.keys(), ...syntheticLineMap.keys());
+    const lineNums = Array.from({ length: maxLineNumber }, (_, index) => index + 1);
 
-    const renderMushafEndMarker = (item: MushafLineItem, idx: number) => {
+    const renderMushafEndMarker = (
+      item: MushafLineItem,
+      idx: number,
+      fontScale = 1,
+      keyPrefix = "visible",
+    ) => {
       const ci = item.verseKey.indexOf(":");
       const vSurah = Number(item.verseKey.slice(0, ci));
       const vVerse = Number(item.verseKey.slice(ci + 1));
@@ -3237,10 +3333,27 @@ export default function MemorizationScreen() {
       const markerHiddenByBlind = inScope && blindMode && !revealedVerses.has(item.verseKey);
       const canOpenAyahSheet = inScope && !reciteMode && !markerHiddenByBlind;
       const pageVerse = verses.find((verse) => verse.verse_key === item.verseKey);
+      const markerPressableScaleStyle =
+        fontScale === 1
+          ? undefined
+          : {
+              minWidth: 30 * fontScale,
+              minHeight: 30 * fontScale,
+              borderRadius: 15 * fontScale,
+              marginHorizontal: 2 * fontScale,
+            };
+      const markerTextScaleStyle =
+        fontScale === 1
+          ? undefined
+          : {
+              fontSize: MUSHAF_END_MARKER_FONT_SIZE * fontScale,
+              lineHeight: MUSHAF_LINE_HEIGHT * fontScale,
+              marginHorizontal: 4 * fontScale,
+            };
 
       return (
         <Pressable
-          key={`${item.verseKey}-${item.word.position}-${idx}`}
+          key={`${keyPrefix}-${item.verseKey}-${item.word.position}-${idx}`}
           accessibilityRole={canOpenAyahSheet ? "button" : undefined}
           accessibilityLabel={`Ayah ${vVerse} actions`}
           disabled={!canOpenAyahSheet}
@@ -3255,13 +3368,16 @@ export default function MemorizationScreen() {
           }}
           style={({ pressed }) => [
             styles.mushafEndMarkerPressable,
+            markerPressableScaleStyle,
             canOpenAyahSheet && styles.mushafEndMarkerInteractive,
             pressed && styles.mushafEndMarkerPressed,
           ]}
         >
           <Text
+            numberOfLines={1}
             style={[
               themedStyles.mushafEndMarker,
+              markerTextScaleStyle,
               !inScope && themedStyles.mushafWordDimmed,
               markerHiddenByBlind && styles.mushafEndMarkerDisabledText,
             ]}
@@ -3272,7 +3388,12 @@ export default function MemorizationScreen() {
       );
     };
 
-    const renderMushafWord = (item: MushafLineItem, idx: number) => {
+    const renderMushafWord = (
+      item: MushafLineItem,
+      idx: number,
+      fontScale = 1,
+      keyPrefix = "visible",
+    ) => {
       const ci = item.verseKey.indexOf(":");
       const vSurah = Number(item.verseKey.slice(0, ci));
       const vVerse = Number(item.verseKey.slice(ci + 1));
@@ -3341,10 +3462,18 @@ export default function MemorizationScreen() {
       const wordBlurShadowStyle = wordBlurTextStyle
         ? { textShadowColor: tajweedColor ?? THEMES[themeKey].pageText }
         : undefined;
+      const wordScaleStyle =
+        fontScale === 1
+          ? undefined
+          : {
+              fontSize: MUSHAF_WORD_FONT_SIZE * fontScale,
+              lineHeight: MUSHAF_LINE_HEIGHT * fontScale,
+              marginHorizontal: Math.max(0.5, fontScale),
+            };
 
       return (
         <Pressable
-          key={`${item.verseKey}-${item.word.position}-${idx}`}
+          key={`${keyPrefix}-${item.verseKey}-${item.word.position}-${idx}`}
           style={[
             styles.mushafWordPressable,
             isHighlighted && themedStyles.mushafWordHighlighted,
@@ -3387,8 +3516,10 @@ export default function MemorizationScreen() {
           delayLongPress={400}
         >
           <Text
+            numberOfLines={1}
             style={[
               themedStyles.mushafWord,
+              wordScaleStyle,
               !inScope && themedStyles.mushafWordDimmed,
               tajweedColor ? { color: tajweedColor } : undefined,
               wordBlurTextStyle,
@@ -3398,6 +3529,32 @@ export default function MemorizationScreen() {
             {hiddenByBlind ? "••••" : item.word.text_uthmani}
           </Text>
         </Pressable>
+      );
+    };
+
+    const renderMushafSpecialItem = (
+      item: MushafLineItem,
+      idx: number,
+      fontScale = 1,
+      keyPrefix = "visible",
+    ) => {
+      const textScaleStyle =
+        fontScale === 1
+          ? undefined
+          : {
+              fontSize: MUSHAF_WORD_FONT_SIZE * fontScale,
+              lineHeight: MUSHAF_LINE_HEIGHT * fontScale,
+              marginHorizontal: Math.max(0.5, fontScale),
+            };
+
+      return (
+        <Text
+          key={`${keyPrefix}-special-${item.verseKey}-${item.word.position}-${idx}`}
+          numberOfLines={1}
+          style={[themedStyles.mushafWord, textScaleStyle]}
+        >
+          {item.word.text_uthmani}
+        </Text>
       );
     };
 
@@ -3423,7 +3580,7 @@ export default function MemorizationScreen() {
               <Text style={themedStyles.pageHeaderJuz}>{`JUZ ${juz}`}</Text>
             </View>
 
-            {/* Page body: lines with surah banners injected at surah transitions */}
+            {/* Page body: canonical Madani lines from Quran.com line_number metadata */}
             <View
               style={styles.pageBody}
               onLayout={(e) => {
@@ -3431,65 +3588,134 @@ export default function MemorizationScreen() {
               }}
             >
               {lineNums.map((lineNum) => {
-                const lineItems = lineMap.get(lineNum)!;
-                const lineUnits = buildMushafLineRenderUnits(lineItems);
-                const bannerSurahNum = bannerBeforeLine.get(lineNum);
-                const bannerName =
-                  bannerSurahNum !== undefined
-                    ? (chaptersMap.get(bannerSurahNum)?.name_arabic ?? "")
-                    : null;
-                const bismillahText = bismillahBeforeLine.get(lineNum);
+                const syntheticLine = syntheticLineMap.get(lineNum);
+                const lineItems = lineMap.get(lineNum) ?? [];
+                const lineLayoutKey = `page:${pageNum}:line:${lineNum}`;
 
-                return (
-                  <React.Fragment key={lineNum}>
-                    {bannerSurahNum !== undefined && (
-                      <View style={styles.surahBanner}>
-                        <View style={themedStyles.surahBannerRule} />
-                        <View style={styles.surahBannerLabel}>
-                          <Text style={themedStyles.surahBannerText}>{bannerName}</Text>
-                        </View>
-                        <View style={themedStyles.surahBannerRule} />
-                      </View>
-                    )}
-                    {bismillahText ? (
-                      <View style={styles.mushafBismillahHeader}>
-                        <Text style={themedStyles.mushafBismillahText}>{bismillahText}</Text>
-                      </View>
-                    ) : null}
-                    {/*
-                     * One canonical Mushaf line may wrap to 2+ visual lines on phones.
-                     * Real per-page typography is a later phase.
-                     */}
+                if (lineItems.length === 0 && syntheticLine?.kind === "surahTitle") {
+                  const bannerName =
+                    chaptersMap.get(syntheticLine.surahNumber)?.name_arabic ??
+                    `سورة ${syntheticLine.surahNumber}`;
+
+                  return (
                     <View
-                      style={styles.mushafLine}
-                      onLayout={(e) => {
-                        lineLayoutMap.current.set(
-                          `page:${pageNum}:line:${lineNum}`,
-                          e.nativeEvent.layout.y,
-                        );
+                      key={`title-${lineNum}`}
+                      style={styles.surahBanner}
+                      onLayout={(event) => {
+                        lineLayoutMap.current.set(lineLayoutKey, event.nativeEvent.layout.y);
                       }}
                     >
-                      {lineUnits.map((unit) => {
+                      <View style={themedStyles.surahBannerRule} />
+                      <View style={styles.surahBannerLabel}>
+                        <Text numberOfLines={1} style={themedStyles.surahBannerText}>
+                          {bannerName}
+                        </Text>
+                      </View>
+                      <View style={themedStyles.surahBannerRule} />
+                    </View>
+                  );
+                }
+
+                if (lineItems.length === 0 && syntheticLine?.kind === "bismillah") {
+                  return (
+                    <MushafAutoFitLine
+                      key={`bismillah-${lineNum}`}
+                      itemCount={1}
+                      onLineLayout={(lineY) => {
+                        lineLayoutMap.current.set(lineLayoutKey, lineY);
+                      }}
+                    >
+                      {(fontScale, keyPrefix) => {
+                        const bismillahScaleStyle =
+                          fontScale === 1
+                            ? undefined
+                            : {
+                                fontSize: MUSHAF_WORD_FONT_SIZE * fontScale,
+                                lineHeight: MUSHAF_LINE_HEIGHT * fontScale,
+                              };
+
+                        return (
+                          <Text
+                            key={`${keyPrefix}-bismillah-${lineNum}`}
+                            numberOfLines={1}
+                            style={[themedStyles.mushafBismillahText, bismillahScaleStyle]}
+                          >
+                            {MUSHAF_BISMILLAH_TEXT}
+                          </Text>
+                        );
+                      }}
+                    </MushafAutoFitLine>
+                  );
+                }
+
+                if (lineItems.length === 0) {
+                  return (
+                    <View
+                      key={`empty-${lineNum}`}
+                      style={styles.mushafEmptyCanonicalLine}
+                      onLayout={(event) => {
+                        lineLayoutMap.current.set(lineLayoutKey, event.nativeEvent.layout.y);
+                      }}
+                    />
+                  );
+                }
+
+                const lineUnits = buildMushafLineRenderUnits(lineItems);
+
+                return (
+                  <MushafAutoFitLine
+                    key={`line-${lineNum}`}
+                    itemCount={lineUnits.length}
+                    onLineLayout={(lineY) => {
+                      lineLayoutMap.current.set(lineLayoutKey, lineY);
+                    }}
+                  >
+                    {(fontScale, keyPrefix) =>
+                      lineUnits.map((unit) => {
                         if (unit.kind === "wordWithEnd") {
                           return (
                             <View
-                              key={`${unit.wordItem.verseKey}-${unit.wordItem.word.position}-${unit.endItem.word.position}-end-unit`}
+                              key={`${keyPrefix}-${unit.wordItem.verseKey}-${unit.wordItem.word.position}-${unit.endItem.word.position}-end-unit`}
                               style={styles.mushafVerseEndUnit}
                             >
-                              {renderMushafWord(unit.wordItem, unit.wordIndex)}
-                              {renderMushafEndMarker(unit.endItem, unit.endIndex)}
+                              {renderMushafWord(
+                                unit.wordItem,
+                                unit.wordIndex,
+                                fontScale,
+                                keyPrefix,
+                              )}
+                              {renderMushafEndMarker(
+                                unit.endItem,
+                                unit.endIndex,
+                                fontScale,
+                                keyPrefix,
+                              )}
                             </View>
                           );
                         }
 
                         if (unit.item.word.char_type_name === "end") {
-                          return renderMushafEndMarker(unit.item, unit.index);
+                          return renderMushafEndMarker(
+                            unit.item,
+                            unit.index,
+                            fontScale,
+                            keyPrefix,
+                          );
                         }
 
-                        return renderMushafWord(unit.item, unit.index);
-                      })}
-                    </View>
-                  </React.Fragment>
+                        if (unit.item.word.char_type_name !== "word") {
+                          return renderMushafSpecialItem(
+                            unit.item,
+                            unit.index,
+                            fontScale,
+                            keyPrefix,
+                          );
+                        }
+
+                        return renderMushafWord(unit.item, unit.index, fontScale, keyPrefix);
+                      })
+                    }
+                  </MushafAutoFitLine>
                 );
               })}
             </View>
@@ -6501,22 +6727,22 @@ function makeThemedStyles(theme: MushafTheme) {
     },
     mushafWord: {
       fontFamily: "AmiriQuran",
-      fontSize: 20,
-      lineHeight: 38,
+      fontSize: MUSHAF_WORD_FONT_SIZE,
+      lineHeight: MUSHAF_LINE_HEIGHT,
       color: theme.pageText,
       marginHorizontal: 1,
     },
     mushafBismillahText: {
       fontFamily: "AmiriQuran",
-      fontSize: 20,
-      lineHeight: 38,
+      fontSize: MUSHAF_WORD_FONT_SIZE,
+      lineHeight: MUSHAF_LINE_HEIGHT,
       color: theme.pageText,
       textAlign: "center",
     },
     mushafEndMarker: {
       fontFamily: "AmiriQuran",
-      fontSize: 16,
-      lineHeight: 38,
+      fontSize: MUSHAF_END_MARKER_FONT_SIZE,
+      lineHeight: MUSHAF_LINE_HEIGHT,
       color: theme.pageText,
       marginHorizontal: 4,
     },
@@ -7806,26 +8032,56 @@ const styles = StyleSheet.create({
   },
   // ── Surah banner (static parts) ─────────────────────────────────────────────
   surahBanner: {
+    minHeight: MUSHAF_LINE_HEIGHT,
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 8,
     paddingHorizontal: 4,
   },
   surahBannerLabel: {
     paddingHorizontal: 12,
   },
   mushafBismillahHeader: {
+    minHeight: MUSHAF_LINE_HEIGHT,
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: 8,
-    paddingBottom: 2,
   },
   // ── Mushaf line words (static parts) ────────────────────────────────────────
-  mushafLine: {
-    flexDirection: "row-reverse",
-    flexWrap: "wrap",
-    alignItems: "center",
+  mushafLineFrame: {
+    width: "100%",
+    minHeight: MUSHAF_LINE_HEIGHT,
     justifyContent: "center",
+    overflow: "visible",
+  },
+  mushafLineMeasureLayer: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    opacity: 0,
+    alignItems: "flex-start",
+  },
+  mushafLineMeasureRow: {
+    flexDirection: "row-reverse",
+    flexWrap: "nowrap",
+    alignItems: "center",
+    alignSelf: "flex-start",
+  },
+  mushafLine: {
+    width: "100%",
+    minHeight: MUSHAF_LINE_HEIGHT,
+    flexDirection: "row-reverse",
+    alignItems: "center",
+    overflow: "visible",
+  },
+  mushafLineJustified: {
+    justifyContent: "space-between",
+  },
+  mushafLineCentered: {
+    justifyContent: "center",
+  },
+  mushafEmptyCanonicalLine: {
+    minHeight: MUSHAF_LINE_HEIGHT,
   },
   mushafVerseEndUnit: {
     flexDirection: "row-reverse",

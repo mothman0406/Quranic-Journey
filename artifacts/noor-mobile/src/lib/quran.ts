@@ -3,7 +3,7 @@ export type ApiWord = {
   text_uthmani: string;
   text_uthmani_tajweed?: string;
   translation?: { text: string; language_name: string } | string;
-  char_type_name: "word" | "end";
+  char_type_name: "word" | "end" | string;
   line_number: number;
 };
 
