@@ -331,15 +331,8 @@ function nextScheduledReviewDate(activeLocalDate: string, upcoming: ReviewQueueI
   );
 }
 
-async function resolveNextOpenReviewDate(
-  childId: string,
-  activeLocalDate: string,
-  upcoming: ReviewQueueItem[],
-) {
-  const nextScheduledDate = nextScheduledReviewDate(activeLocalDate, upcoming);
-  if (nextScheduledDate) return nextScheduledDate;
-
-  let candidate = addDaysToLocalDate(activeLocalDate, 1);
+async function findNextOpenReviewDate(childId: string, startDate: string) {
+  let candidate = startDate;
   for (let offset = 0; offset < REVIEW_LOOKAHEAD_DAYS; offset += 1) {
     const session = await loadStoredReviewSession(childId, candidate);
     if (!isStoredReviewSessionComplete(session)) return candidate;
@@ -347,6 +340,20 @@ async function resolveNextOpenReviewDate(
   }
 
   return candidate;
+}
+
+async function resolveNextOpenReviewDate(
+  childId: string,
+  activeLocalDate: string,
+  upcoming: ReviewQueueItem[],
+) {
+  const nextOpenStoredDate = await findNextOpenReviewDate(
+    childId,
+    addDaysToLocalDate(activeLocalDate, 1),
+  );
+  const nextScheduledDate = nextScheduledReviewDate(activeLocalDate, upcoming);
+
+  return nextScheduledDate ?? nextOpenStoredDate;
 }
 
 async function loadCompletedDaySections(
@@ -514,13 +521,18 @@ function QueueSummary({
   upcomingCount: number;
   activeDateLabel: string;
 }) {
+  const activeDateInSentence = formatReviewDayInSentence(activeDateLabel);
   const summaryCopy =
     dueCount > 0
-      ? `${dueCount} review${dueCount === 1 ? "" : "s"} ready for ${formatReviewDayInSentence(activeDateLabel)}.`
+      ? reviewedCount > 0
+        ? `${reviewedCount} review${reviewedCount === 1 ? "" : "s"} done, ${dueCount} remaining for ${activeDateInSentence}.`
+        : `${dueCount} review${dueCount === 1 ? "" : "s"} ready for ${activeDateInSentence}.`
       : reviewedCount > 0
-      ? `${activeDateLabel}'s review queue is complete.`
+      ? activeDateLabel === "Today"
+        ? "Today's review queue is complete."
+        : `Review queue complete for ${activeDateInSentence}.`
       : upcomingCount > 0
-      ? `No reviews due for ${formatReviewDayInSentence(activeDateLabel)}. The next queue is visible below.`
+      ? `No reviews due for ${activeDateInSentence}. The next queue is visible below.`
       : "No reviews are scheduled yet.";
 
   return (
@@ -546,13 +558,13 @@ function QueueSummary({
 
 function CompletionCelebrationCard({
   reviewedCount,
-  tomorrowCount,
-  onStartTomorrow,
+  activeDateLabel,
+  onContinue,
   onDismiss,
 }: {
   reviewedCount: number;
-  tomorrowCount: number;
-  onStartTomorrow: () => void;
+  activeDateLabel: string;
+  onContinue: () => void;
   onDismiss: () => void;
 }) {
   return (
@@ -562,16 +574,13 @@ function CompletionCelebrationCard({
       </View>
       <Text style={styles.celebrationTitle}>All caught up!</Text>
       <Text style={styles.celebrationDetail}>
-        Great work - {reviewedCount} review{reviewedCount === 1 ? "" : "s"} done today.
+        Great work - {reviewedCount} review{reviewedCount === 1 ? "" : "s"} done for{" "}
+        {formatReviewDayInSentence(activeDateLabel)}.
       </Text>
-      {tomorrowCount > 0 && (
-        <Pressable style={styles.celebrationPrimaryButton} onPress={onStartTomorrow}>
-          <Text style={styles.celebrationPrimaryButtonText}>
-            Start tomorrow's reviews early
-          </Text>
-          <Ionicons name="arrow-forward" size={16} color="#ffffff" />
-        </Pressable>
-      )}
+      <Pressable style={styles.celebrationPrimaryButton} onPress={onContinue}>
+        <Text style={styles.celebrationPrimaryButtonText}>Continue Reviewing →</Text>
+        <Ionicons name="arrow-forward" size={16} color="#ffffff" />
+      </Pressable>
       <Pressable style={styles.celebrationDismissButton} onPress={onDismiss}>
         <Text style={styles.celebrationDismissText}>Done for today</Text>
       </Pressable>
@@ -910,7 +919,6 @@ export default function ReviewScreen() {
   >([]);
   const [nextOpenReviewDate, setNextOpenReviewDate] = useState<string | null>(null);
   const [selectedMushafSurahIds, setSelectedMushafSurahIds] = useState<number[]>([]);
-  const [startTomorrowEarly, setStartTomorrowEarly] = useState(false);
   const [completionDismissed, setCompletionDismissed] = useState(false);
 
   const [state, setState] = useState<
@@ -1021,19 +1029,14 @@ export default function ReviewScreen() {
     });
   }
 
-  function handleContinueReviewing(nextDate: string) {
-    setStartTomorrowEarly(false);
+  async function handleContinueReviewing(upcoming: ReviewQueueItem[] = []) {
     setCompletionDismissed(false);
     setSelectedMushafSurahIds([]);
+    const currentDate = activeDateRef.current;
+    const nextDate = await resolveNextOpenReviewDate(childId, currentDate, upcoming);
     activeDateRef.current = nextDate;
     setActiveLocalDate(nextDate);
-    void load("initial", nextDate);
-  }
-
-  function handleStartTomorrowEarly() {
-    setStartTomorrowEarly(true);
-    setCompletionDismissed(false);
-    setSelectedMushafSurahIds([]);
+    await load("initial", nextDate);
   }
 
   return (
@@ -1073,7 +1076,7 @@ export default function ReviewScreen() {
               activeLocalDate,
             );
             const reviewedSurahIds = new Set(reviewedToday.map((item) => item.surahId));
-            const baseDueToday = (state.data.dueToday ?? []).filter(
+            const dueToday = (state.data.dueToday ?? []).filter(
               (item) => !reviewedSurahIds.has(item.surahId),
             );
             const rawUpcoming = state.data.upcoming ?? [];
@@ -1082,36 +1085,25 @@ export default function ReviewScreen() {
               (item) =>
                 item.dueDate === tomorrowDate && !reviewedSurahIds.has(item.surahId),
             );
-            const promoteTomorrow =
-              activeLocalDate === todayLocal &&
-              startTomorrowEarly &&
-              baseDueToday.length === 0;
-            const promotedTomorrow = promoteTomorrow ? tomorrowUpcoming : [];
-            const dueToday = promoteTomorrow
-              ? [...baseDueToday, ...promotedTomorrow]
-              : baseDueToday;
             const upcoming = dueToday.length === 0 ? tomorrowUpcoming : [];
             const nextRawUpcoming = rawUpcoming
               .map((item) => item.dueDate)
               .filter((dueDate) => dueDate > activeLocalDate)
               .sort()[0];
             const activeDateLabel = formatReviewDayLabel(activeLocalDate);
-            const nextOpenReviewLabel = nextOpenReviewDate
-              ? formatReviewDayLabel(nextOpenReviewDate)
-              : null;
             const isFullyEmpty =
               dueToday.length === 0 &&
               reviewedToday.length === 0 &&
               rawUpcoming.length === 0;
-            const isCompleteToday = dueToday.length === 0 && reviewedToday.length > 0;
+            const isReviewDayComplete =
+              dueToday.length === 0 && reviewedToday.length > 0;
             const showCompletionCelebration =
-              activeLocalDate === todayLocal && isCompleteToday && !completionDismissed;
+              isReviewDayComplete && !completionDismissed;
             const hasFutureReviews =
               dueToday.length === 0 &&
               reviewedToday.length === 0 &&
               rawUpcoming.length > 0;
-            const upcomingCount =
-              promoteTomorrow && promotedTomorrow.length > 0 ? 0 : tomorrowUpcoming.length;
+            const upcomingCount = tomorrowUpcoming.length;
             const pendingIds = new Set(dueToday.map((item) => item.surahId));
             const activeSelectedIds = selectedMushafSurahIds.filter((surahId) =>
               pendingIds.has(surahId),
@@ -1194,31 +1186,6 @@ export default function ReviewScreen() {
                 return currentIds;
               });
             };
-            const hasTomorrowItems = tomorrowUpcoming.length > 0;
-            const willRenderUpcoming = upcoming.length > 0;
-
-            console.log("[noor-review-queue] section-decisions", {
-              dueTodayCount: dueToday.length,
-              reviewedTodayCount: reviewedToday.length,
-              upcomingCount: tomorrowUpcoming.length,
-              celebrationCardCondition: {
-                dueTodayEmpty: dueToday.length === 0,
-                hasReviewedToday: reviewedToday.length > 0,
-                hasTomorrowItems,
-              },
-              willRenderCelebrationCard: showCompletionCelebration,
-            });
-            console.log("[noor-review-queue] upcoming-decision", {
-              dueTodayCount: dueToday.length,
-              hasTomorrowItems,
-              willRenderUpcoming,
-            });
-            if (promoteTomorrow) {
-              console.log("[noor-review-queue] promote-tomorrow-result", {
-                dueTodayCountAfterPromotion: dueToday.length,
-                tomorrowItemsCount: tomorrowUpcoming.length,
-              });
-            }
 
             return (
               <>
@@ -1288,28 +1255,16 @@ export default function ReviewScreen() {
                   </>
                 )}
 
-                {showCompletionCelebration &&
-                  (() => {
-                    console.log("[noor-review-queue] celebration-render", {
-                      message: "celebration-card-rendered",
-                      tomorrowItemsCount: tomorrowUpcoming.length,
-                      isPromoted: startTomorrowEarly,
-                    });
-                    return (
-                      <CompletionCelebrationCard
-                        reviewedCount={reviewedToday.length}
-                        tomorrowCount={tomorrowUpcoming.length}
-                        onStartTomorrow={() => {
-                          console.log("[noor-review-queue] promote-tomorrow-tap", {
-                            tomorrowItemsCount: tomorrowUpcoming.length,
-                            action: "setStartTomorrowEarly(true)",
-                          });
-                          handleStartTomorrowEarly();
-                        }}
-                        onDismiss={() => setCompletionDismissed(true)}
-                      />
-                    );
-                  })()}
+                {showCompletionCelebration && (
+                  <CompletionCelebrationCard
+                    reviewedCount={reviewedToday.length}
+                    activeDateLabel={activeDateLabel}
+                    onContinue={() => {
+                      void handleContinueReviewing(rawUpcoming);
+                    }}
+                    onDismiss={() => setCompletionDismissed(true)}
+                  />
+                )}
 
                 {hasFutureReviews && (
                   <DayStateCard
@@ -1322,18 +1277,12 @@ export default function ReviewScreen() {
                             nextRawUpcoming ? formatDueDate(nextRawUpcoming) : "soon"
                           }.`
                     }
-                    actionLabel={
-                      upcoming.length > 0
-                        ? "Start tomorrow's reviews early"
-                        : nextOpenReviewLabel
-                        ? `Continue Reviewing ${nextOpenReviewLabel}`
-                        : undefined
-                    }
+                    actionLabel={nextOpenReviewDate ? "Continue Reviewing →" : undefined}
                     onAction={
-                      upcoming.length > 0
-                        ? handleStartTomorrowEarly
-                        : nextOpenReviewDate
-                        ? () => handleContinueReviewing(nextOpenReviewDate)
+                      nextOpenReviewDate
+                        ? () => {
+                            void handleContinueReviewing(rawUpcoming);
+                          }
                         : undefined
                     }
                   />
