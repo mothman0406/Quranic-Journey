@@ -86,6 +86,7 @@ import {
 const PLAYBACK_RATES = [0.75, 0.85, 1.0, 1.15, 1.25, 1.5] as const;
 const AYAH_ROW_ESTIMATED_HEIGHT = 190;
 const SILENT_RECITE_ERROR_CODES = new Set(["no-speech", "no-match"]);
+const MUSHAF_BISMILLAH_TEXT = "بِسْمِ ٱللَّهِ ٱلرَّحْمَٰنِ ٱلرَّحِيمِ";
 type InternalPhase = "single" | "cumulative";
 type DiscoveryFilter = "all" | "current" | "in_progress" | "not_started" | "memorized" | "needs_review";
 type AyahTone = "white" | "red" | "orange" | "green";
@@ -132,6 +133,50 @@ type TappedWordTarget = {
   ayahNumber: number;
   position: number;
 };
+
+type MushafLineItem = { word: ApiWord; verseKey: string };
+type MushafLineRenderUnit =
+  | { kind: "single"; item: MushafLineItem; index: number }
+  | {
+      kind: "wordWithEnd";
+      wordItem: MushafLineItem;
+      endItem: MushafLineItem;
+      wordIndex: number;
+      endIndex: number;
+    };
+
+function shouldRenderBismillahHeader(surahNumber: number) {
+  return surahNumber !== 1 && surahNumber !== 9;
+}
+
+function buildMushafLineRenderUnits(lineItems: MushafLineItem[]): MushafLineRenderUnit[] {
+  const units: MushafLineRenderUnit[] = [];
+
+  for (let index = 0; index < lineItems.length; index += 1) {
+    const item = lineItems[index];
+    const nextItem = lineItems[index + 1];
+
+    if (
+      item.word.char_type_name === "word" &&
+      nextItem?.word.char_type_name === "end" &&
+      nextItem.verseKey === item.verseKey
+    ) {
+      units.push({
+        kind: "wordWithEnd",
+        wordItem: item,
+        endItem: nextItem,
+        wordIndex: index,
+        endIndex: index + 1,
+      });
+      index += 1;
+      continue;
+    }
+
+    units.push({ kind: "single", item, index });
+  }
+
+  return units;
+}
 
 const DISCOVERY_FILTERS: Array<{ key: DiscoveryFilter; label: string }> = [
   { key: "all", label: "All" },
@@ -3131,7 +3176,7 @@ export default function MemorizationScreen() {
     }
 
     // Group all words (including end markers) by line_number
-    const lineMap = new Map<number, Array<{ word: ApiWord; verseKey: string }>>();
+    const lineMap = new Map<number, MushafLineItem[]>();
     for (const verse of verses) {
       for (const word of verse.words) {
         const ln = word.line_number;
@@ -3143,6 +3188,7 @@ export default function MemorizationScreen() {
     // Surah banners: injected before the first line of each new surah on the page
     let prevSurah: number | null = null;
     const bannerBeforeLine = new Map<number, number>(); // lineNum → surahNumber
+    const bismillahBeforeLine = new Map<number, string>();
     for (const verse of verses) {
       if (!verse.words.length) continue;
       const ci = verse.verse_key.indexOf(":");
@@ -3150,10 +3196,15 @@ export default function MemorizationScreen() {
       const vVerse = Number(verse.verse_key.slice(ci + 1));
       const firstWord = verse.words[0];
       if (!firstWord) continue;
-      if (prevSurah === null && vVerse === 1) {
+
+      const startsSurahOnPage =
+        (prevSurah === null && vVerse === 1) || (prevSurah !== null && vSurah !== prevSurah);
+
+      if (startsSurahOnPage) {
         bannerBeforeLine.set(firstWord.line_number, vSurah);
-      } else if (prevSurah !== null && vSurah !== prevSurah) {
-        bannerBeforeLine.set(firstWord.line_number, vSurah);
+        if (vVerse === 1 && shouldRenderBismillahHeader(vSurah)) {
+          bismillahBeforeLine.set(firstWord.line_number, MUSHAF_BISMILLAH_TEXT);
+        }
       }
       prevSurah = vSurah;
     }
@@ -3171,6 +3222,184 @@ export default function MemorizationScreen() {
 
     const juz = getJuzForPage(pageNum);
     const lineNums = [...lineMap.keys()].sort((a, b) => a - b);
+
+    const renderMushafEndMarker = (item: MushafLineItem, idx: number) => {
+      const ci = item.verseKey.indexOf(":");
+      const vSurah = Number(item.verseKey.slice(0, ci));
+      const vVerse = Number(item.verseKey.slice(ci + 1));
+      const inScope =
+        surahNumber !== null &&
+        ayahStart !== null &&
+        ayahEnd !== null &&
+        vSurah === surahNumber &&
+        vVerse >= ayahStart &&
+        vVerse <= ayahEnd;
+      const markerHiddenByBlind = inScope && blindMode && !revealedVerses.has(item.verseKey);
+      const canOpenAyahSheet = inScope && !reciteMode && !markerHiddenByBlind;
+      const pageVerse = verses.find((verse) => verse.verse_key === item.verseKey);
+
+      return (
+        <Pressable
+          key={`${item.verseKey}-${item.word.position}-${idx}`}
+          accessibilityRole={canOpenAyahSheet ? "button" : undefined}
+          accessibilityLabel={`Ayah ${vVerse} actions`}
+          disabled={!canOpenAyahSheet}
+          onPress={() => {
+            openAyahSheet({
+              verseKey: item.verseKey,
+              surahNumber: vSurah,
+              ayahNumber: vVerse,
+              pageNumber: pageNum,
+              textUthmani: pageVerse?.text_uthmani ?? "",
+            });
+          }}
+          style={({ pressed }) => [
+            styles.mushafEndMarkerPressable,
+            canOpenAyahSheet && styles.mushafEndMarkerInteractive,
+            pressed && styles.mushafEndMarkerPressed,
+          ]}
+        >
+          <Text
+            style={[
+              themedStyles.mushafEndMarker,
+              !inScope && themedStyles.mushafWordDimmed,
+              markerHiddenByBlind && styles.mushafEndMarkerDisabledText,
+            ]}
+          >
+            {item.word.text_uthmani}
+          </Text>
+        </Pressable>
+      );
+    };
+
+    const renderMushafWord = (item: MushafLineItem, idx: number) => {
+      const ci = item.verseKey.indexOf(":");
+      const vSurah = Number(item.verseKey.slice(0, ci));
+      const vVerse = Number(item.verseKey.slice(ci + 1));
+      const inScope =
+        surahNumber !== null &&
+        ayahStart !== null &&
+        ayahEnd !== null &&
+        vSurah === surahNumber &&
+        vVerse >= ayahStart &&
+        vVerse <= ayahEnd;
+      const isHighlighted =
+        highlightedPage?.verseKey === item.verseKey &&
+        highlightedPage?.position === item.word.position;
+      const verseHidden = inScope && blindMode && !revealedVerses.has(item.verseKey);
+      const isCurrentlyPlayingVerse =
+        isPlaying && item.verseKey === `${surahNumber}:${playingVerseNumber}`;
+      const canShowWordTooltip =
+        inScope &&
+        !blindMode &&
+        !reciteMode &&
+        item.verseKey === `${surahNumber}:${playingVerseNumber}`;
+      const isBlurred = blurMode && isPlaying && inScope && !isCurrentlyPlayingVerse;
+      const pageWordIndex =
+        Number.isFinite(item.word.position) && item.word.position > 0
+          ? item.word.position - 1
+          : -1;
+      const isSkippedPageWord = isSkippedReciteWord(item.word);
+      const isCurrentReciteVerse = reciteMode && inScope && vVerse === currentVerse;
+      const isFutureReciteVerse = reciteMode && inScope && vVerse > currentVerse;
+      const isPastReciteVerse = reciteMode && inScope && vVerse < currentVerse;
+      const isCurrentReciteWord =
+        isCurrentReciteVerse &&
+        pageWordIndex >= 0 &&
+        currentReciteExpectedIndex !== null &&
+        pageWordIndex === currentReciteExpectedIndex &&
+        !isSkippedPageWord;
+      const reciteWordRevealed =
+        isCurrentReciteWord && revealedReciteWords.has(makeReciteWordKey(vVerse, pageWordIndex));
+      const isPastReciteWord =
+        isPastReciteVerse ||
+        (isCurrentReciteVerse &&
+          currentReciteExpectedIndex !== null &&
+          pageWordIndex >= 0 &&
+          pageWordIndex < currentReciteExpectedIndex);
+      const hideWordForRecite =
+        reciteMode &&
+        inScope &&
+        pageWordIndex >= 0 &&
+        !isSkippedPageWord &&
+        !isPastReciteWord &&
+        (isFutureReciteVerse ||
+          (isCurrentReciteVerse &&
+            currentReciteExpectedIndex !== null &&
+            pageWordIndex >= currentReciteExpectedIndex &&
+            (!isCurrentReciteWord || !reciteWordRevealed)));
+      const hiddenByBlind = verseHidden && !reciteWordRevealed;
+      const tajweedColor =
+        tajweedEnabled && inScope ? extractTajweedColor(item.word.text_uthmani_tajweed) : null;
+      const wordBlurTextStyle = hideWordForRecite
+        ? isCurrentReciteWord
+          ? styles.wordBlurSoftText
+          : styles.wordBlurStrongText
+        : isBlurred
+          ? styles.wordBlurStrongText
+          : undefined;
+      const wordBlurShadowStyle = wordBlurTextStyle
+        ? { textShadowColor: tajweedColor ?? THEMES[themeKey].pageText }
+        : undefined;
+
+      return (
+        <Pressable
+          key={`${item.verseKey}-${item.word.position}-${idx}`}
+          style={[
+            styles.mushafWordPressable,
+            isHighlighted && themedStyles.mushafWordHighlighted,
+            isCurrentReciteWord && styles.reciteMushafWordCurrent,
+            hideWordForRecite && !isCurrentReciteWord && styles.reciteMushafWordPending,
+          ]}
+          onPress={
+            inScope
+              ? () => {
+                  if (blindMode) {
+                    setTappedWord(null);
+                    toggleVerseReveal(item.verseKey);
+                    return;
+                  }
+                  void handlePageWordTap(item.verseKey, item.word.position);
+                  if (canShowWordTooltip) {
+                    openTappedWordTooltip({
+                      verseKey: item.verseKey,
+                      word: item.word,
+                      fallbackPosition: item.word.position,
+                    });
+                  }
+                }
+              : undefined
+          }
+          onLongPress={
+            inScope
+              ? () => {
+                  setTappedWord(null);
+                  const translation = getTranslationText(item.word.translation);
+                  if (translation) {
+                    setTranslationPopup({
+                      arabic: item.word.text_uthmani,
+                      translation,
+                    });
+                  }
+                }
+              : undefined
+          }
+          delayLongPress={400}
+        >
+          <Text
+            style={[
+              themedStyles.mushafWord,
+              !inScope && themedStyles.mushafWordDimmed,
+              tajweedColor ? { color: tajweedColor } : undefined,
+              wordBlurTextStyle,
+              wordBlurShadowStyle,
+            ]}
+          >
+            {hiddenByBlind ? "••••" : item.word.text_uthmani}
+          </Text>
+        </Pressable>
+      );
+    };
 
     return (
       <View key={pageNum} style={[styles.mushafPageFrame, { width: pageWidth }]}>
@@ -3202,214 +3431,66 @@ export default function MemorizationScreen() {
               }}
             >
               {lineNums.map((lineNum) => {
-            const lineItems = lineMap.get(lineNum)!;
-            const bannerSurahNum = bannerBeforeLine.get(lineNum);
-            const bannerName =
-              bannerSurahNum !== undefined
-                ? (chaptersMap.get(bannerSurahNum)?.name_arabic ?? "")
-                : null;
+                const lineItems = lineMap.get(lineNum)!;
+                const lineUnits = buildMushafLineRenderUnits(lineItems);
+                const bannerSurahNum = bannerBeforeLine.get(lineNum);
+                const bannerName =
+                  bannerSurahNum !== undefined
+                    ? (chaptersMap.get(bannerSurahNum)?.name_arabic ?? "")
+                    : null;
+                const bismillahText = bismillahBeforeLine.get(lineNum);
 
-            return (
-              <React.Fragment key={lineNum}>
-                {bannerSurahNum !== undefined && (
-                  <View style={styles.surahBanner}>
-                    <View style={themedStyles.surahBannerRule} />
-                    <View style={styles.surahBannerLabel}>
-                      <Text style={themedStyles.surahBannerText}>{bannerName}</Text>
+                return (
+                  <React.Fragment key={lineNum}>
+                    {bannerSurahNum !== undefined && (
+                      <View style={styles.surahBanner}>
+                        <View style={themedStyles.surahBannerRule} />
+                        <View style={styles.surahBannerLabel}>
+                          <Text style={themedStyles.surahBannerText}>{bannerName}</Text>
+                        </View>
+                        <View style={themedStyles.surahBannerRule} />
+                      </View>
+                    )}
+                    {bismillahText ? (
+                      <View style={styles.mushafBismillahHeader}>
+                        <Text style={themedStyles.mushafBismillahText}>{bismillahText}</Text>
+                      </View>
+                    ) : null}
+                    {/*
+                     * One canonical Mushaf line may wrap to 2+ visual lines on phones.
+                     * Real per-page typography is a later phase.
+                     */}
+                    <View
+                      style={styles.mushafLine}
+                      onLayout={(e) => {
+                        lineLayoutMap.current.set(
+                          `page:${pageNum}:line:${lineNum}`,
+                          e.nativeEvent.layout.y,
+                        );
+                      }}
+                    >
+                      {lineUnits.map((unit) => {
+                        if (unit.kind === "wordWithEnd") {
+                          return (
+                            <View
+                              key={`${unit.wordItem.verseKey}-${unit.wordItem.word.position}-${unit.endItem.word.position}-end-unit`}
+                              style={styles.mushafVerseEndUnit}
+                            >
+                              {renderMushafWord(unit.wordItem, unit.wordIndex)}
+                              {renderMushafEndMarker(unit.endItem, unit.endIndex)}
+                            </View>
+                          );
+                        }
+
+                        if (unit.item.word.char_type_name === "end") {
+                          return renderMushafEndMarker(unit.item, unit.index);
+                        }
+
+                        return renderMushafWord(unit.item, unit.index);
+                      })}
                     </View>
-                    <View style={themedStyles.surahBannerRule} />
-                  </View>
-                )}
-                {/*
-                 * One canonical Mushaf line may wrap to 2+ visual lines on phones.
-                 * Real per-page typography is a later phase.
-                 */}
-                <View
-                  style={styles.mushafLine}
-                  onLayout={(e) => {
-                    lineLayoutMap.current.set(
-                      `page:${pageNum}:line:${lineNum}`,
-                      e.nativeEvent.layout.y,
-                    );
-                  }}
-                >
-                  {lineItems.map((item, idx) => {
-                    const ci = item.verseKey.indexOf(":");
-                    const vSurah = Number(item.verseKey.slice(0, ci));
-                    const vVerse = Number(item.verseKey.slice(ci + 1));
-                    const inScope =
-                      surahNumber !== null &&
-                      ayahStart !== null &&
-                      ayahEnd !== null &&
-                      vSurah === surahNumber &&
-                      vVerse >= ayahStart &&
-                      vVerse <= ayahEnd;
-
-                    if (item.word.char_type_name === "end") {
-                      const markerHiddenByBlind =
-                        inScope && blindMode && !revealedVerses.has(item.verseKey);
-                      const canOpenAyahSheet = inScope && !reciteMode && !markerHiddenByBlind;
-                      const pageVerse = verses.find((verse) => verse.verse_key === item.verseKey);
-                      return (
-                        <Pressable
-                          key={`${item.verseKey}-${item.word.position}-${idx}`}
-                          accessibilityRole={canOpenAyahSheet ? "button" : undefined}
-                          accessibilityLabel={`Ayah ${vVerse} actions`}
-                          disabled={!canOpenAyahSheet}
-                          onPress={() => {
-                            openAyahSheet({
-                              verseKey: item.verseKey,
-                              surahNumber: vSurah,
-                              ayahNumber: vVerse,
-                              pageNumber: pageNum,
-                              textUthmani: pageVerse?.text_uthmani ?? "",
-                            });
-                          }}
-                          style={({ pressed }) => [
-                            styles.mushafEndMarkerPressable,
-                            canOpenAyahSheet && styles.mushafEndMarkerInteractive,
-                            pressed && styles.mushafEndMarkerPressed,
-                          ]}
-                        >
-                          <Text
-                            style={[
-                              themedStyles.mushafEndMarker,
-                              !inScope && themedStyles.mushafWordDimmed,
-                              markerHiddenByBlind && styles.mushafEndMarkerDisabledText,
-                            ]}
-                          >
-                            {item.word.text_uthmani}
-                          </Text>
-                        </Pressable>
-                      );
-                    }
-
-                    const isHighlighted =
-                      highlightedPage?.verseKey === item.verseKey &&
-                      highlightedPage?.position === item.word.position;
-                    const verseHidden = inScope && blindMode && !revealedVerses.has(item.verseKey);
-                    const isCurrentlyPlayingVerse =
-                      isPlaying && item.verseKey === `${surahNumber}:${playingVerseNumber}`;
-                    const canShowWordTooltip =
-                      inScope &&
-                      !blindMode &&
-                      !reciteMode &&
-                      item.verseKey === `${surahNumber}:${playingVerseNumber}`;
-                    const isBlurred =
-                      blurMode && isPlaying && inScope && !isCurrentlyPlayingVerse;
-                    const pageWordIndex =
-                      Number.isFinite(item.word.position) && item.word.position > 0
-                        ? item.word.position - 1
-                        : -1;
-                    const isSkippedPageWord = isSkippedReciteWord(item.word);
-                    const isCurrentReciteVerse =
-                      reciteMode && inScope && vVerse === currentVerse;
-                    const isFutureReciteVerse =
-                      reciteMode && inScope && vVerse > currentVerse;
-                    const isPastReciteVerse =
-                      reciteMode && inScope && vVerse < currentVerse;
-                    const isCurrentReciteWord =
-                      isCurrentReciteVerse &&
-                      pageWordIndex >= 0 &&
-                      currentReciteExpectedIndex !== null &&
-                      pageWordIndex === currentReciteExpectedIndex &&
-                      !isSkippedPageWord;
-                    const reciteWordRevealed =
-                      isCurrentReciteWord &&
-                      revealedReciteWords.has(makeReciteWordKey(vVerse, pageWordIndex));
-                    const isPastReciteWord =
-                      isPastReciteVerse ||
-                      (isCurrentReciteVerse &&
-                        currentReciteExpectedIndex !== null &&
-                        pageWordIndex >= 0 &&
-                        pageWordIndex < currentReciteExpectedIndex);
-                    const hideWordForRecite =
-                      reciteMode &&
-                      inScope &&
-                      pageWordIndex >= 0 &&
-                      !isSkippedPageWord &&
-                      !isPastReciteWord &&
-                      (isFutureReciteVerse ||
-                        (isCurrentReciteVerse &&
-                          currentReciteExpectedIndex !== null &&
-                          pageWordIndex >= currentReciteExpectedIndex &&
-                          (!isCurrentReciteWord || !reciteWordRevealed)));
-                    const hiddenByBlind = verseHidden && !reciteWordRevealed;
-                    const tajweedColor =
-                      tajweedEnabled && inScope
-                        ? extractTajweedColor(item.word.text_uthmani_tajweed)
-                        : null;
-                    const wordBlurTextStyle = hideWordForRecite
-                      ? isCurrentReciteWord
-                        ? styles.wordBlurSoftText
-                        : styles.wordBlurStrongText
-                      : isBlurred
-                        ? styles.wordBlurStrongText
-                      : undefined;
-                    const wordBlurShadowStyle = wordBlurTextStyle
-                      ? { textShadowColor: tajweedColor ?? THEMES[themeKey].pageText }
-                      : undefined;
-                    return (
-                      <Pressable
-                        key={`${item.verseKey}-${item.word.position}-${idx}`}
-                        style={[
-                          styles.mushafWordPressable,
-                          isHighlighted && themedStyles.mushafWordHighlighted,
-                          isCurrentReciteWord && styles.reciteMushafWordCurrent,
-                          hideWordForRecite && !isCurrentReciteWord && styles.reciteMushafWordPending,
-                        ]}
-                        onPress={
-                          inScope
-                            ? () => {
-                                if (blindMode) {
-                                  setTappedWord(null);
-                                  toggleVerseReveal(item.verseKey);
-                                  return;
-                                }
-                                void handlePageWordTap(item.verseKey, item.word.position);
-                                if (canShowWordTooltip) {
-                                  openTappedWordTooltip({
-                                    verseKey: item.verseKey,
-                                    word: item.word,
-                                    fallbackPosition: item.word.position,
-                                  });
-                                }
-                              }
-                            : undefined
-                        }
-                        onLongPress={
-                          inScope
-                            ? () => {
-                                setTappedWord(null);
-                                const translation = getTranslationText(item.word.translation);
-                                if (translation) {
-                                  setTranslationPopup({
-                                    arabic: item.word.text_uthmani,
-                                    translation,
-                                  });
-                                }
-                              }
-                            : undefined
-                        }
-                        delayLongPress={400}
-                      >
-                        <Text
-                          style={[
-                            themedStyles.mushafWord,
-                            !inScope && themedStyles.mushafWordDimmed,
-                            tajweedColor ? { color: tajweedColor } : undefined,
-                            wordBlurTextStyle,
-                            wordBlurShadowStyle,
-                          ]}
-                        >
-                          {hiddenByBlind ? "••••" : item.word.text_uthmani}
-                        </Text>
-                      </Pressable>
-                    );
-                  })}
-                </View>
-              </React.Fragment>
-            );
+                  </React.Fragment>
+                );
               })}
             </View>
 
@@ -6425,6 +6506,13 @@ function makeThemedStyles(theme: MushafTheme) {
       color: theme.pageText,
       marginHorizontal: 1,
     },
+    mushafBismillahText: {
+      fontFamily: "AmiriQuran",
+      fontSize: 20,
+      lineHeight: 38,
+      color: theme.pageText,
+      textAlign: "center",
+    },
     mushafEndMarker: {
       fontFamily: "AmiriQuran",
       fontSize: 16,
@@ -7726,12 +7814,23 @@ const styles = StyleSheet.create({
   surahBannerLabel: {
     paddingHorizontal: 12,
   },
+  mushafBismillahHeader: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 8,
+    paddingBottom: 2,
+  },
   // ── Mushaf line words (static parts) ────────────────────────────────────────
   mushafLine: {
     flexDirection: "row-reverse",
     flexWrap: "wrap",
     alignItems: "center",
     justifyContent: "center",
+  },
+  mushafVerseEndUnit: {
+    flexDirection: "row-reverse",
+    alignItems: "center",
+    flexShrink: 0,
   },
   mushafWordPressable: {
     position: "relative",
