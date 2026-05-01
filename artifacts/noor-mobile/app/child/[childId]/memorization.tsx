@@ -82,6 +82,11 @@ import {
   saveMushafAyahBookmark,
   type MushafAyahTarget,
 } from "@/src/lib/mushaf-annotations";
+import {
+  compareWordKeys,
+  getCanonicalPageLayout,
+  getCanonicalWordKeysInRange,
+} from "@/src/lib/qul-layout";
 
 const PLAYBACK_RATES = [0.75, 0.85, 1.0, 1.15, 1.25, 1.5] as const;
 const AYAH_ROW_ESTIMATED_HEIGHT = 190;
@@ -139,9 +144,6 @@ type TappedWordTarget = {
 };
 
 type MushafLineItem = { word: ApiWord; verseKey: string };
-type MushafSyntheticLine =
-  | { kind: "surahTitle"; surahNumber: number }
-  | { kind: "bismillah"; surahNumber: number };
 type MushafLineRenderUnit =
   | { kind: "single"; item: MushafLineItem; index: number }
   | {
@@ -151,10 +153,6 @@ type MushafLineRenderUnit =
       wordIndex: number;
       endIndex: number;
     };
-
-function shouldRenderBismillahHeader(surahNumber: number) {
-  return surahNumber !== 1 && surahNumber !== 9;
-}
 
 function buildMushafLineRenderUnits(lineItems: MushafLineItem[]): MushafLineRenderUnit[] {
   const units: MushafLineRenderUnit[] = [];
@@ -188,10 +186,12 @@ function buildMushafLineRenderUnits(lineItems: MushafLineItem[]): MushafLineRend
 function MushafAutoFitLine({
   children,
   itemCount,
+  isCentered,
   onLineLayout,
 }: {
   children: (fontScale: number, keyPrefix: string) => React.ReactNode;
   itemCount: number;
+  isCentered: boolean;
   onLineLayout?: (y: number) => void;
 }) {
   const [containerWidth, setContainerWidth] = useState(0);
@@ -202,8 +202,7 @@ function MushafAutoFitLine({
       ? Math.min(1, fitWidth / naturalWidth)
       : 1;
   const roundedScale = Math.round(fontScale * 1000) / 1000;
-  const scaledWidth = naturalWidth * roundedScale;
-  const shouldJustify = itemCount > 1 && scaledWidth < fitWidth;
+  const shouldJustify = !isCentered && itemCount > 1;
 
   return (
     <View
@@ -758,6 +757,7 @@ export default function MemorizationScreen() {
   const lineLayoutMap = useRef<Map<string, number>>(new Map());
   const pageBodyLayoutMap = useRef<Map<number, number>>(new Map());
   const pageViewportHeightMap = useRef<Map<number, number>>(new Map());
+  const qulMissingWordWarningKeys = useRef<Set<string>>(new Set());
   const autoScrollRetryRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const ayahAutoScrollRetryRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const ayahViewabilityConfigRef = useRef({
@@ -1310,7 +1310,7 @@ export default function MemorizationScreen() {
   function resolveMushafScrollTarget(verseNumber: number) {
     if (pageStart === null || pageEnd === null || surahNumber === null) return null;
     const reciteWordIndex =
-      reciteModeRef.current && verseNumber === currentVerseRef.current
+      reciteModeRef.current && verseNumber === playingVerseNumberRef.current
         ? getNextReciteWordIndex(
             displayWordsMapRef.current.get(verseNumber) ?? [],
             reciteExpectedIdxRef.current,
@@ -1340,9 +1340,25 @@ export default function MemorizationScreen() {
           reciteWord ??
           verse.words.find((word) => word.char_type_name === "word") ??
           verse.words[0];
+        const firstWordKey =
+          firstWord && Number.isFinite(firstWord.position)
+            ? `${verse.verse_key}:${firstWord.position}`
+            : null;
+        const canonicalLine =
+          firstWordKey === null
+            ? null
+            : getCanonicalPageLayout(pageNum).find(
+                (line) =>
+                  line.lineType === "ayah" &&
+                  line.firstWordKey !== null &&
+                  line.lastWordKey !== null &&
+                  compareWordKeys(firstWordKey, line.firstWordKey) >= 0 &&
+                  compareWordKeys(firstWordKey, line.lastWordKey) <= 0,
+              );
+
         return {
           pageNum,
-          lineNumber: firstWord?.line_number,
+          lineNumber: canonicalLine?.lineNumber,
         };
       }
     }
@@ -3243,60 +3259,17 @@ export default function MemorizationScreen() {
       );
     }
 
-    const lineMap = new Map<number, MushafLineItem[]>();
+    const canonicalLines = getCanonicalPageLayout(pageNum);
+    const pageItemsByWordKey = new Map<string, MushafLineItem>();
+
     for (const verse of verses) {
       for (const word of verse.words) {
-        const lineNumber = Number(word.line_number);
-        if (!Number.isFinite(lineNumber) || lineNumber < 1) continue;
-        if (!lineMap.has(lineNumber)) lineMap.set(lineNumber, []);
-        lineMap.get(lineNumber)!.push({ word, verseKey: verse.verse_key });
+        if (!Number.isFinite(word.position) || word.position < 1) continue;
+        pageItemsByWordKey.set(`${verse.verse_key}:${word.position}`, {
+          word,
+          verseKey: verse.verse_key,
+        });
       }
-    }
-
-    let prevSurah: number | null = null;
-    const syntheticLineMap = new Map<number, MushafSyntheticLine>();
-    for (const verse of verses) {
-      if (!verse.words.length) continue;
-      const ci = verse.verse_key.indexOf(":");
-      const vSurah = Number(verse.verse_key.slice(0, ci));
-      const vVerse = Number(verse.verse_key.slice(ci + 1));
-      const firstWord = verse.words.find((word) => Number.isFinite(Number(word.line_number)));
-      if (!firstWord) continue;
-      const firstLine = Number(firstWord.line_number);
-
-      const startsSurahOnPage =
-        (prevSurah === null && vVerse === 1) || (prevSurah !== null && vSurah !== prevSurah);
-
-      if (startsSurahOnPage) {
-        const firstVerseIncludesBismillah =
-          vVerse === 1 &&
-          shouldRenderBismillahHeader(vSurah) &&
-          verse.words.some((word) => word.text_uthmani.includes("بِسْم"));
-        let bismillahLine: number | null = null;
-
-        if (
-          vVerse === 1 &&
-          shouldRenderBismillahHeader(vSurah) &&
-          !firstVerseIncludesBismillah &&
-          firstLine > 1
-        ) {
-          const candidateLine = firstLine - 1;
-          if (!lineMap.has(candidateLine) && !syntheticLineMap.has(candidateLine)) {
-            bismillahLine = candidateLine;
-            syntheticLineMap.set(candidateLine, { kind: "bismillah", surahNumber: vSurah });
-          }
-        }
-
-        const titleLine = firstLine - (bismillahLine === null ? 1 : 2);
-        if (
-          titleLine >= 1 &&
-          !lineMap.has(titleLine) &&
-          !syntheticLineMap.has(titleLine)
-        ) {
-          syntheticLineMap.set(titleLine, { kind: "surahTitle", surahNumber: vSurah });
-        }
-      }
-      prevSurah = vSurah;
     }
 
     const uniqueSurahs: number[] = [];
@@ -3311,8 +3284,33 @@ export default function MemorizationScreen() {
       .join(" · ");
 
     const juz = getJuzForPage(pageNum);
-    const maxLineNumber = Math.max(0, ...lineMap.keys(), ...syntheticLineMap.keys());
-    const lineNums = Array.from({ length: maxLineNumber }, (_, index) => index + 1);
+
+    const getCanonicalLineItems = (line: (typeof canonicalLines)[number]) => {
+      const expectedWordKeys = getCanonicalWordKeysInRange(line.firstWordKey, line.lastWordKey);
+      const lineItems: MushafLineItem[] = [];
+      const missingWordKeys: string[] = [];
+
+      for (const wordKey of expectedWordKeys) {
+        const item = pageItemsByWordKey.get(wordKey);
+        if (item) {
+          lineItems.push(item);
+        } else {
+          missingWordKeys.push(wordKey);
+        }
+      }
+
+      if (__DEV__ && missingWordKeys.length > 0) {
+        const warningKey = `${pageNum}:${line.lineNumber}:${missingWordKeys.join(",")}`;
+        if (!qulMissingWordWarningKeys.current.has(warningKey)) {
+          qulMissingWordWarningKeys.current.add(warningKey);
+          console.warn(
+            `[noor-mem] QUL layout word mismatch on page ${pageNum}, line ${line.lineNumber}; missing Quran.com words: ${missingWordKeys.join(", ")}`,
+          );
+        }
+      }
+
+      return lineItems;
+    };
 
     const renderMushafEndMarker = (
       item: MushafLineItem,
@@ -3421,9 +3419,9 @@ export default function MemorizationScreen() {
           ? item.word.position - 1
           : -1;
       const isSkippedPageWord = isSkippedReciteWord(item.word);
-      const isCurrentReciteVerse = reciteMode && inScope && vVerse === currentVerse;
-      const isFutureReciteVerse = reciteMode && inScope && vVerse > currentVerse;
-      const isPastReciteVerse = reciteMode && inScope && vVerse < currentVerse;
+      const isCurrentReciteVerse = reciteMode && inScope && vVerse === playingVerseNumber;
+      const isFutureReciteVerse = reciteMode && inScope && vVerse > playingVerseNumber;
+      const isPastReciteVerse = reciteMode && inScope && vVerse < playingVerseNumber;
       const isCurrentReciteWord =
         isCurrentReciteVerse &&
         pageWordIndex >= 0 &&
@@ -3580,22 +3578,22 @@ export default function MemorizationScreen() {
               <Text style={themedStyles.pageHeaderJuz}>{`JUZ ${juz}`}</Text>
             </View>
 
-            {/* Page body: canonical Madani lines from Quran.com line_number metadata */}
+            {/* Page body: canonical KFGQPC V4 lines from bundled QUL layout data */}
             <View
               style={styles.pageBody}
               onLayout={(e) => {
                 pageBodyLayoutMap.current.set(pageNum, e.nativeEvent.layout.y);
               }}
             >
-              {lineNums.map((lineNum) => {
-                const syntheticLine = syntheticLineMap.get(lineNum);
-                const lineItems = lineMap.get(lineNum) ?? [];
+              {canonicalLines.map((line) => {
+                const lineNum = line.lineNumber;
                 const lineLayoutKey = `page:${pageNum}:line:${lineNum}`;
 
-                if (lineItems.length === 0 && syntheticLine?.kind === "surahTitle") {
+                if (line.lineType === "surah_name") {
+                  const surahNumberForLine = line.surahNumber ?? 0;
                   const bannerName =
-                    chaptersMap.get(syntheticLine.surahNumber)?.name_arabic ??
-                    `سورة ${syntheticLine.surahNumber}`;
+                    chaptersMap.get(surahNumberForLine)?.name_arabic ??
+                    `سورة ${surahNumberForLine}`;
 
                   return (
                     <View
@@ -3616,11 +3614,12 @@ export default function MemorizationScreen() {
                   );
                 }
 
-                if (lineItems.length === 0 && syntheticLine?.kind === "bismillah") {
+                if (line.lineType === "basmallah") {
                   return (
                     <MushafAutoFitLine
                       key={`bismillah-${lineNum}`}
                       itemCount={1}
+                      isCentered={line.isCentered}
                       onLineLayout={(lineY) => {
                         lineLayoutMap.current.set(lineLayoutKey, lineY);
                       }}
@@ -3648,6 +3647,8 @@ export default function MemorizationScreen() {
                   );
                 }
 
+                const lineItems = getCanonicalLineItems(line);
+
                 if (lineItems.length === 0) {
                   return (
                     <View
@@ -3666,6 +3667,7 @@ export default function MemorizationScreen() {
                   <MushafAutoFitLine
                     key={`line-${lineNum}`}
                     itemCount={lineUnits.length}
+                    isCentered={line.isCentered}
                     onLineLayout={(lineY) => {
                       lineLayoutMap.current.set(lineLayoutKey, lineY);
                     }}
@@ -3815,7 +3817,7 @@ export default function MemorizationScreen() {
       pageStart !== null &&
       pageEnd !== null
     ) {
-      const currentVerseKey = `${surahNumber}:${currentVerse}`;
+      const currentVerseKey = `${surahNumber}:${playingVerseNumber}`;
       for (let pageNum = pageStart; pageNum <= pageEnd; pageNum += 1) {
         const pageVerse = pageWordsMap
           .get(pageNum)
@@ -3830,14 +3832,14 @@ export default function MemorizationScreen() {
         if (hasCurrentWord) return clampMushafPage(pageNum);
       }
     }
-    return versePageMap.get(currentVerse) ?? activeMushafPage;
+    return versePageMap.get(playingVerseNumber) ?? activeMushafPage;
   }, [
     activeMushafPage,
     currentReciteExpectedIndex,
-    currentVerse,
     pageEnd,
     pageStart,
     pageWordsMap,
+    playingVerseNumber,
     reciteMode,
     surahNumber,
     versePageMap,
