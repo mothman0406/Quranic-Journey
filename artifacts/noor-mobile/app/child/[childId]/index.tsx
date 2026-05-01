@@ -10,7 +10,7 @@ import {
   View,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
+import { useFocusEffect, useLocalSearchParams, useRouter, type Href } from "expo-router";
 import { ChildBottomNav } from "@/src/components/child-bottom-nav";
 import { ApiError, apiFetch } from "@/src/lib/api";
 import { fetchReviewQueue, type ReviewQueueItem, type ReviewQueueResponse } from "@/src/lib/reviews";
@@ -97,6 +97,7 @@ type Achievement = {
   description: string;
   icon: string;
   earned: boolean;
+  earnedAt?: string | null;
   progress?: number | null;
   target?: number | null;
 };
@@ -174,6 +175,8 @@ type CardTone = {
   border: string;
   soft: string;
 };
+
+type GoalsPanelTab = "goals" | "achievements";
 
 const CARD_TONES: Record<"memorization" | "review" | "reading", CardTone> = {
   memorization: {
@@ -272,6 +275,76 @@ function formatScrubberDate(value: string) {
     month: "short",
     day: "numeric",
   });
+}
+
+function getGoalPercent(goal: Goal) {
+  return formatPercent(goal.currentCount ?? 0, goal.targetSurahCount ?? 0);
+}
+
+function getGoalTimestamp(goal: Goal) {
+  if (!goal.targetDate) return null;
+  const date = parseLocalDate(goal.targetDate);
+  return Number.isNaN(date.getTime()) ? null : date.getTime();
+}
+
+function isGoalActive(goal: Goal) {
+  const target = goal.targetSurahCount ?? 0;
+  return target <= 0 || (goal.currentCount ?? 0) < target;
+}
+
+function pickUrgentGoal(goals: Goal[]) {
+  if (goals.length === 0) return null;
+
+  const activeGoals = goals.filter(isGoalActive);
+  const pool = activeGoals.length > 0 ? activeGoals : goals;
+  const datedGoals = pool.filter((goal) => getGoalTimestamp(goal) != null);
+
+  if (datedGoals.length === 0) return pool[0] ?? null;
+
+  return [...datedGoals].sort((a, b) => {
+    return (getGoalTimestamp(a) ?? Number.MAX_SAFE_INTEGER) -
+      (getGoalTimestamp(b) ?? Number.MAX_SAFE_INTEGER);
+  })[0] ?? null;
+}
+
+function getGoalDaysLeft(goal: Goal) {
+  if (!goal.targetDate) return null;
+  const targetDate = parseLocalDate(goal.targetDate);
+  const today = parseLocalDate(getLocalDateValue());
+  if (Number.isNaN(targetDate.getTime()) || Number.isNaN(today.getTime())) return null;
+  return Math.round((targetDate.getTime() - today.getTime()) / 86_400_000);
+}
+
+function formatDaysLeft(days: number | null) {
+  if (days == null) return "No date";
+  if (days === 0) return "Due today";
+  if (days < 0) return `${Math.abs(days)} day${days === -1 ? "" : "s"} late`;
+  return `${days} day${days === 1 ? "" : "s"} left`;
+}
+
+function getAchievementPercent(achievement: Achievement) {
+  const progress = achievement.progress ?? 0;
+  const target = achievement.target ?? 0;
+  return achievement.earned ? 100 : target > 0 ? formatPercent(progress, target) : 0;
+}
+
+function getAchievementTimestamp(achievement: Achievement) {
+  if (!achievement.earnedAt) return null;
+  const date = new Date(achievement.earnedAt);
+  return Number.isNaN(date.getTime()) ? null : date.getTime();
+}
+
+function pickDashboardAchievements(achievements: Achievement[]) {
+  const earned = achievements
+    .filter((achievement) => achievement.earned)
+    .sort((a, b) => {
+      return (getAchievementTimestamp(b) ?? 0) - (getAchievementTimestamp(a) ?? 0);
+    })[0];
+  const inProgress = achievements
+    .filter((achievement) => !achievement.earned && (achievement.target ?? 0) > 0)
+    .sort((a, b) => getAchievementPercent(b) - getAchievementPercent(a));
+
+  return earned ? [earned, ...inProgress.slice(0, 2)] : inProgress.slice(0, 3);
 }
 
 function formatAge(age: number | undefined) {
@@ -438,7 +511,15 @@ function SectionHeader({
   );
 }
 
-function StatTile({
+function PrimarySectionHeader({ title }: { title: string }) {
+  return (
+    <View style={styles.primarySectionHeader}>
+      <Text style={styles.primarySectionTitle}>{title}</Text>
+    </View>
+  );
+}
+
+function StatBannerItem({
   label,
   value,
   iconName,
@@ -450,12 +531,18 @@ function StatTile({
   color: string;
 }) {
   return (
-    <View style={styles.statTile}>
-      <View style={[styles.statIcon, { backgroundColor: `${color}14` }]}>
-        <Ionicons name={iconName} size={17} color={color} />
+    <View style={styles.statBannerItem}>
+      <View style={[styles.statBannerIcon, { backgroundColor: `${color}14` }]}>
+        <Ionicons name={iconName} size={14} color={color} />
       </View>
-      <Text style={[styles.statValue, { color }]}>{value}</Text>
-      <Text style={styles.statLabel}>{label}</Text>
+      <View style={styles.statBannerText}>
+        <Text style={[styles.statBannerValue, { color }]} numberOfLines={1}>
+          {value}
+        </Text>
+        <Text style={styles.statBannerLabel} numberOfLines={1}>
+          {label}
+        </Text>
+      </View>
     </View>
   );
 }
@@ -470,35 +557,6 @@ function ProgressBar({
   return (
     <View style={styles.progressTrack}>
       <View style={[styles.progressFill, { width: `${value}%`, backgroundColor: color }]} />
-    </View>
-  );
-}
-
-function GoalPreview({ goal }: { goal: Goal }) {
-  const current = goal.currentCount ?? 0;
-  const target = goal.targetSurahCount ?? 0;
-  const percent = target > 0 ? formatPercent(current, target) : 0;
-  const dateLabel = formatGoalDate(goal.targetDate);
-
-  return (
-    <View style={styles.goalRow}>
-      <View style={styles.goalText}>
-        <Text style={styles.goalTitle}>{goal.title}</Text>
-        <Text style={styles.goalDetail} numberOfLines={2}>
-          {goal.description}
-        </Text>
-        {target > 0 ? (
-          <Text style={styles.goalMeta}>
-            {current}/{target} surahs{dateLabel ? ` · by ${dateLabel}` : ""}
-          </Text>
-        ) : null}
-      </View>
-      {target > 0 ? (
-        <View style={styles.goalProgress}>
-          <Text style={styles.goalPercent}>{percent}%</Text>
-          <ProgressBar value={percent} color="#2563eb" />
-        </View>
-      ) : null}
     </View>
   );
 }
@@ -533,7 +591,7 @@ function AchievementPreview({ achievement }: { achievement: Achievement }) {
   );
 }
 
-function SuggestionCard({
+function CompactSuggestionCard({
   title,
   detail,
   iconName,
@@ -550,21 +608,130 @@ function SuggestionCard({
 }) {
   return (
     <Pressable
-      style={[styles.suggestionCard, { borderColor: `${color}33`, backgroundColor: `${color}0d` }]}
+      style={[styles.compactSuggestionCard, { borderColor: `${color}33`, backgroundColor: `${color}0d` }]}
       onPress={onPress}
     >
-      <View style={[styles.suggestionIcon, { backgroundColor: `${color}18` }]}>
-        <Ionicons name={iconName} size={18} color={color} />
+      <View style={[styles.compactSuggestionIcon, { backgroundColor: `${color}18` }]}>
+        <Ionicons name={iconName} size={16} color={color} />
       </View>
-      <View style={styles.suggestionText}>
-        <Text style={styles.suggestionTitle}>{title}</Text>
-        <Text style={styles.suggestionDetail} numberOfLines={2}>
+      <View style={styles.compactSuggestionText}>
+        <Text style={styles.compactSuggestionTitle} numberOfLines={1}>
+          {title}
+        </Text>
+        <Text style={styles.compactSuggestionDetail} numberOfLines={1}>
           {detail}
         </Text>
         {children}
       </View>
-      <Text style={[styles.suggestionAction, { color }]}>More</Text>
     </Pressable>
+  );
+}
+
+function GoalFocus({ goal }: { goal: Goal | null }) {
+  if (!goal) {
+    return (
+      <View style={styles.combinedEmpty}>
+        <Text style={styles.combinedEmptyText}>No active goals yet.</Text>
+      </View>
+    );
+  }
+
+  const current = goal.currentCount ?? 0;
+  const target = goal.targetSurahCount ?? 0;
+  const percent = getGoalPercent(goal);
+  const dateLabel = formatGoalDate(goal.targetDate);
+  const daysLeft = getGoalDaysLeft(goal);
+
+  return (
+    <View style={styles.goalFocus}>
+      <View style={styles.goalFocusHeader}>
+        <Text style={styles.goalFocusTitle} numberOfLines={2}>
+          {goal.title}
+        </Text>
+        <View style={styles.daysBadge}>
+          <Text style={styles.daysBadgeText}>{formatDaysLeft(daysLeft)}</Text>
+        </View>
+      </View>
+      <Text style={styles.goalFocusDetail} numberOfLines={2}>
+        {goal.description}
+      </Text>
+      <View style={styles.goalFocusProgressHeader}>
+        <Text style={styles.goalFocusMeta}>
+          {target > 0 ? `${current}/${target} surahs` : "Progress"}
+        </Text>
+        <Text style={styles.goalFocusPercent}>{percent}%</Text>
+      </View>
+      <ProgressBar value={percent} color="#2563eb" />
+      <View style={styles.goalFocusDateRow}>
+        <Ionicons name="calendar-outline" size={14} color="#64748b" />
+        <Text style={styles.goalFocusDateText}>
+          {dateLabel ? `Target ${dateLabel}` : "No target date set"}
+        </Text>
+      </View>
+    </View>
+  );
+}
+
+function GoalsAchievementsCard({
+  activeTab,
+  onTabChange,
+  goal,
+  achievements,
+  onOpenGoals,
+  onOpenAchievements,
+}: {
+  activeTab: GoalsPanelTab;
+  onTabChange: (tab: GoalsPanelTab) => void;
+  goal: Goal | null;
+  achievements: Achievement[];
+  onOpenGoals: () => void;
+  onOpenAchievements: () => void;
+}) {
+  return (
+    <View style={styles.combinedCard}>
+      <View style={styles.combinedTabs}>
+        {(["goals", "achievements"] as const).map((tab) => {
+          const selected = activeTab === tab;
+          return (
+            <Pressable
+              key={tab}
+              style={[styles.combinedTab, selected && styles.combinedTabActive]}
+              onPress={() => onTabChange(tab)}
+            >
+              <Text style={[styles.combinedTabText, selected && styles.combinedTabTextActive]}>
+                {tab === "goals" ? "Goals" : "Achievements"}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
+
+      {activeTab === "goals" ? (
+        <View style={styles.combinedBody}>
+          <GoalFocus goal={goal} />
+          <Pressable style={styles.combinedLinkRow} onPress={onOpenGoals}>
+            <Text style={styles.combinedLinkText}>View all goals →</Text>
+          </Pressable>
+        </View>
+      ) : (
+        <View style={styles.combinedBody}>
+          {achievements.length > 0 ? (
+            <View style={styles.combinedRows}>
+              {achievements.map((achievement) => (
+                <AchievementPreview key={achievement.id} achievement={achievement} />
+              ))}
+            </View>
+          ) : (
+            <View style={styles.combinedEmpty}>
+              <Text style={styles.combinedEmptyText}>No achievements in progress yet.</Text>
+            </View>
+          )}
+          <Pressable style={styles.combinedLinkRow} onPress={onOpenAchievements}>
+            <Text style={styles.combinedLinkText}>View all →</Text>
+          </Pressable>
+        </View>
+      )}
+    </View>
   );
 }
 
@@ -587,8 +754,8 @@ function QuickAction({
         <Ionicons name={iconName} size={18} color={color} />
       </View>
       <View style={styles.quickText}>
-        <Text style={styles.quickTitle}>{title}</Text>
-        <Text style={styles.quickDetail}>{detail}</Text>
+        <Text style={styles.quickTitle} numberOfLines={1}>{title}</Text>
+        <Text style={styles.quickDetail} numberOfLines={1}>{detail}</Text>
       </View>
     </Pressable>
   );
@@ -789,11 +956,12 @@ export default function ChildDashboard() {
   const [switcherError, setSwitcherError] = useState<string | null>(null);
   const [switcherLoading, setSwitcherLoading] = useState(false);
   const [readOnlyNotice, setReadOnlyNotice] = useState<string | null>(null);
+  const [goalsPanelTab, setGoalsPanelTab] = useState<GoalsPanelTab>("goals");
   const navChildId = typeof childId === "string" ? childId : undefined;
   const navName = typeof name === "string" ? name : "";
   const todayDate = getLocalDateValue();
   const isViewingToday = selectedDate === todayDate;
-  const dateLabel = isViewingToday ? "Today" : formatScrubberDate(selectedDate);
+  const dateLabel = formatScrubberDate(selectedDate);
   const navReviewCount =
     state.status === "ok"
       ? state.reviews?.dueToday.length ?? state.dashboard.reviewsDueToday
@@ -1017,6 +1185,12 @@ export default function ChildDashboard() {
     });
   }
 
+  function openFutureChildRoute(segment: "plan" | "progress", displayName = name ?? "") {
+    if (!isValidChildId(childId)) return;
+    const nameQuery = displayName ? `?name=${encodeURIComponent(displayName)}` : "";
+    router.push(`/child/${childId}/${segment}${nameQuery}` as Href);
+  }
+
   function renderContent() {
     if (state.status === "loading") {
       return (
@@ -1044,6 +1218,8 @@ export default function ChildDashboard() {
     const goals = dashboard.goals ?? [];
     const achievements = dashboard.achievements ?? [];
     const earnedAchievements = achievements.filter((achievement) => achievement.earned);
+    const urgentGoal = pickUrgentGoal(goals);
+    const dashboardAchievements = pickDashboardAchievements(achievements);
     const todayProgress = dashboard.todayProgress;
     const dayCopy = isViewingToday ? "today" : "this day";
     const memStatus = todayProgress?.memStatus ?? "not_started";
@@ -1186,20 +1362,22 @@ export default function ChildDashboard() {
           </View>
         )}
 
-        <View style={styles.statsGrid}>
-          <StatTile
+        <View style={styles.statsBanner}>
+          <StatBannerItem
             label="Surahs"
             value={stats?.totalSurahsMemorized ?? 0}
             iconName="library-outline"
             color="#2563eb"
           />
-          <StatTile
+          <View style={styles.statsDivider} />
+          <StatBannerItem
             label="Verses"
             value={stats?.totalVersesMemorized ?? 0}
             iconName="text-outline"
             color="#d97706"
           />
-          <StatTile
+          <View style={styles.statsDivider} />
+          <StatBannerItem
             label="Badges"
             value={earnedAchievements.length}
             iconName="trophy-outline"
@@ -1232,7 +1410,7 @@ export default function ChildDashboard() {
           </View>
         )}
 
-        <SectionHeader title={isViewingToday ? "Today's Work" : "Planned Work"} />
+        <PrimarySectionHeader title={isViewingToday ? "Today's Work" : "Planned Work"} />
 
         <WorkCard
           title="Memorization"
@@ -1294,6 +1472,29 @@ export default function ChildDashboard() {
           status={readingEnabled ? readingStatus : undefined}
         />
 
+        {hasContentSuggestions && (
+          <View style={styles.contentPair}>
+            {story && (
+              <CompactSuggestionCard
+                title="Story"
+                detail={story.title}
+                iconName="sparkles-outline"
+                color="#2563eb"
+                onPress={() => openChildRoute("/child/[childId]/more", child.name)}
+              />
+            )}
+            {dua && (
+              <CompactSuggestionCard
+                title="Du'a"
+                detail={dua.translation}
+                iconName="heart-outline"
+                color="#be123c"
+                onPress={() => openChildRoute("/child/[childId]/more", child.name)}
+              />
+            )}
+          </View>
+        )}
+
         {nextWorkTitle && nextWorkDetail && (
           <>
             <SectionHeader title="Up Next" />
@@ -1319,88 +1520,30 @@ export default function ChildDashboard() {
           </>
         )}
 
-        {goals.length > 0 && (
-          <>
-            <SectionHeader
-              title="Goals"
-              action="Settings"
-              onPress={handleTargetsPress}
-            />
-            <View style={styles.panel}>
-              {goals.slice(0, 2).map((goal) => (
-                <GoalPreview key={goal.id} goal={goal} />
-              ))}
-            </View>
-          </>
-        )}
-
-        {achievements.length > 0 && (
-          <>
-            <SectionHeader
-              title="Achievements"
-              action="More"
-              onPress={() => openChildRoute("/child/[childId]/more", child.name)}
-            />
-            <View style={styles.panel}>
-              {achievements.slice(0, 3).map((achievement) => (
-                <AchievementPreview key={achievement.id} achievement={achievement} />
-              ))}
-            </View>
-          </>
-        )}
-
-        {hasContentSuggestions && (
-          <>
-            <SectionHeader title="Gentle Extras" />
-            <View style={styles.suggestionList}>
-              {story && (
-                <SuggestionCard
-                  title="Today's Story"
-                  detail={story.title}
-                  iconName="sparkles-outline"
-                  color="#2563eb"
-                  onPress={() => openChildRoute("/child/[childId]/more", child.name)}
-                />
-              )}
-              {dua && (
-                <SuggestionCard
-                  title="Today's Du'a"
-                  detail={dua.translation}
-                  iconName="heart-outline"
-                  color="#be123c"
-                  onPress={() => openChildRoute("/child/[childId]/more", child.name)}
-                >
-                  <Text style={styles.duaArabic} numberOfLines={1}>
-                    {dua.arabic}
-                  </Text>
-                </SuggestionCard>
-              )}
-            </View>
-          </>
-        )}
+        <GoalsAchievementsCard
+          activeTab={goalsPanelTab}
+          onTabChange={setGoalsPanelTab}
+          goal={urgentGoal}
+          achievements={dashboardAchievements}
+          onOpenGoals={() => openFutureChildRoute("plan", child.name)}
+          onOpenAchievements={() => openFutureChildRoute("progress", child.name)}
+        />
 
         <SectionHeader title="Quick Actions" />
         <View style={styles.quickGrid}>
           <QuickAction
-            title="Settings"
-            detail="Targets & defaults"
-            iconName="flag-outline"
+            title="Plan"
+            detail="Goals"
+            iconName="map-outline"
             color="#2563eb"
-            onPress={handleTargetsPress}
+            onPress={() => openFutureChildRoute("plan", child.name)}
           />
           <QuickAction
-            title="Full Quran"
-            detail="Read pages"
-            iconName="reader-outline"
-            color="#0f766e"
-            onPress={() => handleCardPress("reading")}
-          />
-          <QuickAction
-            title="Profile"
-            detail="Settings"
-            iconName="settings-outline"
-            color="#4f46e5"
-            onPress={() => openChildRoute("/child/[childId]/profile", child.name)}
+            title="Progress"
+            detail="Stats"
+            iconName="bar-chart-outline"
+            color="#16a34a"
+            onPress={() => openFutureChildRoute("progress", child.name)}
           />
           <QuickAction
             title="More"
@@ -1455,18 +1598,6 @@ export default function ChildDashboard() {
         <View style={styles.dateSide}>
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="Reset dashboard date to today"
-            style={[
-              styles.todayResetButton,
-              isViewingToday && styles.todayResetButtonHidden,
-            ]}
-            disabled={isViewingToday}
-            onPress={resetToToday}
-          >
-            <Text style={styles.todayResetText}>Today</Text>
-          </Pressable>
-          <Pressable
-            accessibilityRole="button"
             accessibilityLabel="Previous day"
             hitSlop={8}
             style={styles.dateArrow}
@@ -1478,10 +1609,15 @@ export default function ChildDashboard() {
 
         <View style={styles.dateCenter}>
           <Text style={styles.dateLabel}>{dateLabel}</Text>
-          {isViewingToday && (
-            <View style={styles.todayPill}>
-              <Text style={styles.todayPillText}>Today</Text>
-            </View>
+          {!isViewingToday && (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Reset dashboard date to today"
+              style={styles.todayResetButton}
+              onPress={resetToToday}
+            >
+              <Text style={styles.todayResetText}>Today</Text>
+            </Pressable>
           )}
         </View>
 
@@ -1495,7 +1631,6 @@ export default function ChildDashboard() {
           >
             <Ionicons name="chevron-forward" size={18} color="#111827" />
           </Pressable>
-          <View style={styles.todayResetSpacer} />
         </View>
       </View>
 
@@ -1581,10 +1716,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   dateSide: {
-    width: 94,
+    width: 44,
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
   },
   dateSideRight: {
     justifyContent: "flex-end",
@@ -1612,40 +1746,20 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "900",
   },
-  todayPill: {
-    borderWidth: 1,
-    borderColor: "#bfdbfe",
-    borderRadius: 999,
-    backgroundColor: "#eff6ff",
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-  },
-  todayPillText: {
-    color: "#2563eb",
-    fontSize: 11,
-    fontWeight: "800",
-  },
   todayResetButton: {
-    minWidth: 52,
-    minHeight: 30,
+    minHeight: 28,
     borderRadius: 999,
     backgroundColor: "#f8fafc",
     borderWidth: 1,
     borderColor: "#e5e7eb",
     alignItems: "center",
     justifyContent: "center",
-    paddingHorizontal: 9,
-  },
-  todayResetButtonHidden: {
-    opacity: 0,
+    paddingHorizontal: 10,
   },
   todayResetText: {
     color: "#2563eb",
     fontSize: 12,
     fontWeight: "800",
-  },
-  todayResetSpacer: {
-    width: 52,
   },
   back: {
     fontSize: 16,
@@ -1785,37 +1899,51 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     fontWeight: "700",
   },
-  statsGrid: {
-    flexDirection: "row",
-    gap: 10,
-  },
-  statTile: {
-    flex: 1,
-    minHeight: 96,
+  statsBanner: {
+    minHeight: 56,
     backgroundColor: "#ffffff",
     borderWidth: 1,
-    borderColor: "#e2e8f0",
+    borderColor: "#e5e7eb",
     borderRadius: 12,
-    padding: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    overflow: "hidden",
+    paddingVertical: 8,
+  },
+  statBannerItem: {
+    flex: 1,
+    minWidth: 0,
+    flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 5,
+    gap: 7,
+    paddingHorizontal: 8,
   },
-  statIcon: {
-    width: 30,
-    height: 30,
-    borderRadius: 9,
+  statBannerIcon: {
+    width: 26,
+    height: 26,
+    borderRadius: 8,
     alignItems: "center",
     justifyContent: "center",
   },
-  statValue: {
-    fontSize: 20,
+  statBannerText: {
+    minWidth: 0,
+  },
+  statBannerValue: {
+    fontSize: 16,
+    fontWeight: "900",
+    lineHeight: 18,
+  },
+  statBannerLabel: {
+    fontSize: 10,
+    color: "#64748b",
     fontWeight: "800",
+    lineHeight: 13,
   },
-  statLabel: {
-    fontSize: 12,
-    color: "#666666",
-    fontWeight: "700",
+  statsDivider: {
+    width: 1,
+    height: 32,
+    backgroundColor: "#e5e7eb",
   },
   dayStateBanner: {
     borderWidth: 1,
@@ -1855,6 +1983,15 @@ const styles = StyleSheet.create({
     color: "#2563eb",
     fontSize: 13,
     fontWeight: "800",
+  },
+  primarySectionHeader: {
+    marginTop: 6,
+  },
+  primarySectionTitle: {
+    color: "#111827",
+    fontSize: 26,
+    lineHeight: 31,
+    fontWeight: "900",
   },
   card: {
     backgroundColor: "#ffffff",
@@ -2011,52 +2148,6 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: "700",
   },
-  panel: {
-    backgroundColor: "#ffffff",
-    borderWidth: 1,
-    borderColor: "#e2e8f0",
-    borderRadius: 12,
-    overflow: "hidden",
-  },
-  goalRow: {
-    padding: 14,
-    flexDirection: "row",
-    gap: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: "#f3f4f6",
-  },
-  goalText: {
-    flex: 1,
-    minWidth: 0,
-  },
-  goalTitle: {
-    color: "#111827",
-    fontSize: 14,
-    fontWeight: "800",
-  },
-  goalDetail: {
-    color: "#666666",
-    fontSize: 12,
-    lineHeight: 17,
-    marginTop: 3,
-  },
-  goalMeta: {
-    color: "#2563eb",
-    fontSize: 12,
-    fontWeight: "700",
-    marginTop: 5,
-  },
-  goalProgress: {
-    width: 76,
-    alignItems: "flex-end",
-    justifyContent: "center",
-    gap: 6,
-  },
-  goalPercent: {
-    color: "#2563eb",
-    fontSize: 13,
-    fontWeight: "800",
-  },
   progressTrack: {
     width: "100%",
     height: 6,
@@ -2122,67 +2213,180 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: "800",
   },
-  suggestionList: {
+  contentPair: {
+    flexDirection: "row",
     gap: 10,
   },
-  suggestionCard: {
-    borderWidth: 1,
-    borderRadius: 12,
-    padding: 14,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-  },
-  suggestionIcon: {
-    width: 38,
-    height: 38,
-    borderRadius: 11,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  suggestionText: {
+  compactSuggestionCard: {
     flex: 1,
     minWidth: 0,
-  },
-  suggestionTitle: {
-    color: "#111827",
-    fontSize: 14,
-    fontWeight: "800",
-  },
-  suggestionDetail: {
-    color: "#555555",
-    fontSize: 12,
-    lineHeight: 17,
-    marginTop: 2,
-  },
-  suggestionAction: {
-    fontSize: 13,
-    fontWeight: "800",
-  },
-  duaArabic: {
-    color: "#111827",
-    fontSize: 15,
-    lineHeight: 22,
-    marginTop: 4,
-    textAlign: "right",
-  },
-  quickGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 10,
-  },
-  quickAction: {
-    flexBasis: "48%",
-    flexGrow: 1,
-    minHeight: 76,
-    backgroundColor: "#ffffff",
+    minHeight: 70,
     borderWidth: 1,
-    borderColor: "#e2e8f0",
     borderRadius: 12,
     padding: 12,
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
+  },
+  compactSuggestionIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  compactSuggestionText: {
+    flex: 1,
+    minWidth: 0,
+  },
+  compactSuggestionTitle: {
+    color: "#111827",
+    fontSize: 13,
+    fontWeight: "900",
+  },
+  compactSuggestionDetail: {
+    color: "#475569",
+    fontSize: 12,
+    lineHeight: 16,
+    marginTop: 2,
+  },
+  combinedCard: {
+    backgroundColor: "#ffffff",
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+    borderRadius: 12,
+    overflow: "hidden",
+  },
+  combinedTabs: {
+    flexDirection: "row",
+    gap: 6,
+    padding: 6,
+    backgroundColor: "#f8fafc",
+    borderBottomWidth: 1,
+    borderBottomColor: "#e5e7eb",
+  },
+  combinedTab: {
+    flex: 1,
+    minHeight: 34,
+    borderRadius: 8,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  combinedTabActive: {
+    backgroundColor: "#ffffff",
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+  },
+  combinedTabText: {
+    color: "#64748b",
+    fontSize: 13,
+    fontWeight: "900",
+  },
+  combinedTabTextActive: {
+    color: "#111827",
+  },
+  combinedBody: {
+    padding: 14,
+    gap: 12,
+  },
+  goalFocus: {
+    gap: 9,
+  },
+  goalFocusHeader: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 10,
+  },
+  goalFocusTitle: {
+    flex: 1,
+    minWidth: 0,
+    color: "#111827",
+    fontSize: 15,
+    lineHeight: 19,
+    fontWeight: "900",
+  },
+  daysBadge: {
+    borderRadius: 999,
+    backgroundColor: "#eff6ff",
+    borderWidth: 1,
+    borderColor: "#bfdbfe",
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+  },
+  daysBadgeText: {
+    color: "#2563eb",
+    fontSize: 11,
+    fontWeight: "900",
+  },
+  goalFocusDetail: {
+    color: "#475569",
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: "600",
+  },
+  goalFocusProgressHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  goalFocusMeta: {
+    color: "#475569",
+    fontSize: 12,
+    fontWeight: "800",
+  },
+  goalFocusPercent: {
+    color: "#2563eb",
+    fontSize: 13,
+    fontWeight: "900",
+  },
+  goalFocusDateRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  goalFocusDateText: {
+    color: "#64748b",
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  combinedRows: {
+    marginHorizontal: -14,
+    marginTop: -4,
+    marginBottom: -4,
+  },
+  combinedLinkRow: {
+    alignSelf: "flex-start",
+  },
+  combinedLinkText: {
+    color: "#2563eb",
+    fontSize: 13,
+    fontWeight: "900",
+  },
+  combinedEmpty: {
+    minHeight: 52,
+    justifyContent: "center",
+  },
+  combinedEmptyText: {
+    color: "#64748b",
+    fontSize: 13,
+    fontWeight: "700",
+  },
+  quickGrid: {
+    flexDirection: "row",
+    gap: 10,
+  },
+  quickAction: {
+    flex: 1,
+    minWidth: 0,
+    minHeight: 74,
+    backgroundColor: "#ffffff",
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    borderRadius: 12,
+    padding: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 7,
   },
   quickIcon: {
     width: 36,
@@ -2192,19 +2396,21 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   quickText: {
-    flex: 1,
     minWidth: 0,
+    alignItems: "center",
   },
   quickTitle: {
     color: "#111827",
     fontSize: 13,
     fontWeight: "800",
+    textAlign: "center",
   },
   quickDetail: {
     color: "#666666",
     fontSize: 11,
     fontWeight: "600",
     marginTop: 2,
+    textAlign: "center",
   },
   sheetBackdrop: {
     flex: 1,
