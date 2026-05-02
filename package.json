@@ -9,7 +9,8 @@
     "generate:mushaf-tables": "node scripts/generate-mushaf-tables.mjs",
     "typecheck:libs": "tsc --build",
     "typecheck": "pnpm run typecheck:libs && pnpm -r --filter \"./artifacts/**\" --filter \"./scripts\" --if-present run typecheck",
-    "verify:db-pages": "node scripts/verify-db-page-numbers.mjs"
+    "verify:db-pages": "node scripts/verify-db-page-numbers.mjs",
+    "sync:db-pages": "node scripts/sync-db-page-numbers.mjs"
   },
   "pnpm": {
     "overrides": {
