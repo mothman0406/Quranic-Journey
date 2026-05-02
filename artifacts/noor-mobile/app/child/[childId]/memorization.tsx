@@ -2832,14 +2832,15 @@ export default function MemorizationScreen() {
   useSpeechRecognitionEvent("result", (event) => {
     if (!reciteModeRef.current) return;
 
-    // Debounce: ignore rapid-fire interim events right after a successful match.
-    if (Date.now() - lastMatchTimeRef.current < 300) return;
-
     const result = event.results?.[0];
     if (!result) return;
     const transcript = result.transcript ?? "";
     const isFinal = !!event.isFinal;
     if (!transcript) return;
+
+    // Debounce only interim events. Final events are authoritative for an utterance
+    // and must always run so iOS can commit the last word of an ayah.
+    if (!isFinal && Date.now() - lastMatchTimeRef.current < 150) return;
 
     const heardNormFull = stripTashkeel(transcript);
     const heardTokens = tokenize(heardNormFull);
