@@ -1047,6 +1047,23 @@ router.get("/children/:childId/dashboard", async (req, res) => {
       isEnabled: child.readPagesPerDay > 0,
     },
     upNextMemorization: (() => {
+      const buildNextUpMemorization = (surah: (typeof SURAHS_IN_ORDER)[number], ayahStart: number) => {
+        const nextUpTarget = resolveStrictSurahScopedPageTarget(surah.number, ayahStart, child.memorizePagePerDay);
+        const ayahEnd = Math.min(nextUpTarget.endAyah, surah.verseCount);
+
+        return {
+          surahName: surah.nameTransliteration,
+          surahNumber: surah.number,
+          ayahStart,
+          ayahEnd,
+          pageStart: getPageForVerse(surah.number, ayahStart),
+          pageEnd: getPageForVerse(surah.number, ayahEnd),
+          workType: "new_memorization",
+          workLabel: "New Memorization",
+          isReviewOnly: false,
+        };
+      };
+
       if (upcomingWorkflowItem) {
         return {
           surahName: upcomingWorkflowItem.surahName,
@@ -1059,6 +1076,21 @@ router.get("/children/:childId/dashboard", async (req, res) => {
           workLabel: upcomingWorkflowItem.workLabel,
           isReviewOnly: upcomingWorkflowItem.isReviewOnly,
         };
+      }
+
+      const todayTargetSurah = todayProgress.memTargetSurah;
+      const todayTargetEndSurah = todayProgress.memTargetEndSurah ?? todayTargetSurah;
+      if (todayTargetSurah != null && todayTargetEndSurah === todayTargetSurah) {
+        const targetSurah = SURAHS_IN_ORDER.find((surah) => surah.number === todayTargetSurah);
+        const targetAyahEnd = todayProgress.memTargetAyahEnd;
+        if (targetSurah && targetAyahEnd != null && targetAyahEnd < targetSurah.verseCount) {
+          const targetProgress = memProgress.find((progress) => progress.surahId === targetSurah.id);
+          const contiguousEnd = getConsecutiveMemorizedAyahEnd(targetProgress, targetSurah.verseCount);
+          const ayahStart = Math.max(targetAyahEnd + 1, contiguousEnd + 1);
+          if (ayahStart <= targetSurah.verseCount) {
+            return buildNextUpMemorization(targetSurah, ayahStart);
+          }
+        }
       }
 
       const completedTodayTargetNumbers = new Set<number>();
@@ -1082,20 +1114,7 @@ router.get("/children/:childId/dashboard", async (req, res) => {
         const ayahStart = nextUpProgress && nextUpProgress.status === "in_progress"
           ? getNextContiguousAyahStart(nextUpProgress, nextSurahExcludingCurrent.verseCount)
           : 1;
-        const nextUpTarget = resolveStrictSurahScopedPageTarget(nextSurahExcludingCurrent.number, ayahStart, child.memorizePagePerDay);
-        const ayahEnd = Math.min(nextUpTarget.endAyah, nextSurahExcludingCurrent.verseCount);
-
-        return {
-          surahName: nextSurahExcludingCurrent.nameTransliteration,
-          surahNumber: nextSurahExcludingCurrent.number,
-          ayahStart,
-          ayahEnd,
-          pageStart: getPageForVerse(nextSurahExcludingCurrent.number, ayahStart),
-          pageEnd: getPageForVerse(nextSurahExcludingCurrent.number, ayahEnd),
-          workType: "new_memorization",
-          workLabel: "New Memorization",
-          isReviewOnly: false,
-        };
+        return buildNextUpMemorization(nextSurahExcludingCurrent, ayahStart);
       }
 
       const nextUp = SURAHS_IN_ORDER.find(s => !isDoneOrCompletedToday(s));
@@ -1105,20 +1124,7 @@ router.get("/children/:childId/dashboard", async (req, res) => {
       const ayahStart = nextUpProgress && nextUpProgress.status === "in_progress"
         ? getNextContiguousAyahStart(nextUpProgress, nextUp.verseCount)
         : 1;
-      const nextUpTarget = resolveStrictSurahScopedPageTarget(nextUp.number, ayahStart, child.memorizePagePerDay);
-      const ayahEnd = Math.min(nextUpTarget.endAyah, nextUp.verseCount);
-
-      return {
-        surahName: nextUp.nameTransliteration,
-        surahNumber: nextUp.number,
-        ayahStart,
-        ayahEnd,
-        pageStart: getPageForVerse(nextUp.number, ayahStart),
-        pageEnd: getPageForVerse(nextUp.number, ayahEnd),
-        workType: "new_memorization",
-        workLabel: "New Memorization",
-        isReviewOnly: false,
-      };
+      return buildNextUpMemorization(nextUp, ayahStart);
     })(),
   });
 });
