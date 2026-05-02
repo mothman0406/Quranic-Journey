@@ -1152,13 +1152,8 @@ export default function ReviewScreen() {
         >
           {(() => {
             const reviewedToday = state.data.reviewedToday ?? [];
-            const reviewedSurahIds = new Set(reviewedToday.map((item) => item.surahId));
-            const dueToday = (state.data.dueToday ?? []).filter(
-              (item) => !reviewedSurahIds.has(item.surahId),
-            );
-            const upcoming = (state.data.upcoming ?? []).filter(
-              (item) => !reviewedSurahIds.has(item.surahId),
-            );
+            const dueToday = state.data.dueToday ?? [];
+            const upcoming = state.data.upcoming ?? [];
             const activeDateLabel = formatReviewDayLabel(todayLocal);
             const isFullyEmpty =
               dueToday.length === 0 &&

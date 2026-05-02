@@ -928,6 +928,27 @@ router.get("/children/:childId/reviews", async (req, res) => {
     frozenCandidates = pickWrapFallback(reviewableWithSchedule);
   }
 
+  const reviewedTodaySurahIdsForWrapCheck = new Set(
+    reviewableWithSchedule
+      .filter((item) => item.schedule.lastReviewedLocalDate === today)
+      .map((item) => item.surah.id),
+  );
+  // If the candidate set is only surahs reviewed today, the user has lapped;
+  // start a fresh canonical wrap-order pass instead of returning an empty day.
+  if (
+    continueOffset > 0 &&
+    frozenCandidates.length > 0 &&
+    frozenCandidates.every((item) =>
+      reviewedTodaySurahIdsForWrapCheck.has(item.surah.id),
+    )
+  ) {
+    const wrapLapSorted = sortByCanonicalPriority(reviewableWithSchedule);
+    frozenCandidates = budgetReviewItems(wrapLapSorted, reviewBudget);
+    if (frozenCandidates.length === 0) {
+      frozenCandidates = pickWrapFallback(reviewableWithSchedule);
+    }
+  }
+
   const readFrozenSurahIds = async (localDate: string): Promise<number[]> => {
     const [frozen] = await db.select()
       .from(reviewDailySetTable)
@@ -1002,6 +1023,19 @@ router.get("/children/:childId/reviews", async (req, res) => {
       let intermediateBudgeted = budgetReviewItems(intermediateCandidates, reviewBudget);
       if (intermediateBudgeted.length === 0) {
         intermediateBudgeted = pickWrapFallback(reviewableWithSchedule);
+      }
+      // Keep multi-tap Continue Reviewing from getting stuck on lapped days.
+      if (
+        intermediateBudgeted.length > 0 &&
+        intermediateBudgeted.every((item) =>
+          reviewedTodaySurahIdsForWrapCheck.has(item.surah.id),
+        )
+      ) {
+        const wrapLapSorted = sortByCanonicalPriority(reviewableWithSchedule);
+        intermediateBudgeted = budgetReviewItems(wrapLapSorted, reviewBudget);
+        if (intermediateBudgeted.length === 0) {
+          intermediateBudgeted = pickWrapFallback(reviewableWithSchedule);
+        }
       }
       for (const item of intermediateBudgeted) {
         merged.set(item.surah.id, item);
