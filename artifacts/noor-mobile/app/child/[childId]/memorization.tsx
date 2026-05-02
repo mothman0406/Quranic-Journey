@@ -758,6 +758,8 @@ export default function MemorizationScreen() {
   const segsRef = useRef<Segment[]>([]);
   const autoPlayRef = useRef(false);
   const isLoadingRef = useRef(false);
+  // Supersedes late Audio.Sound.createAsync completions after rapid ayah navigation.
+  const playbackRequestIdRef = useRef(0);
   const completionSheetOpenRef = useRef(false);
   const suppressPlaybackForNavigationRef = useRef(false);
 
@@ -852,6 +854,22 @@ export default function MemorizationScreen() {
   useEffect(() => { playbackRateRef.current = playbackRate; }, [playbackRate]);
   useEffect(() => { readyToReciteSheetOpenRef.current = readyToReciteSheetOpen; }, [readyToReciteSheetOpen]);
   useEffect(() => { completionSheetOpenRef.current = completionSheetOpen; }, [completionSheetOpen]);
+
+  function setCurrentVerseImmediate(next: number | ((current: number) => number)) {
+    const rawNext =
+      typeof next === "function" ? next(currentVerseRef.current) : next;
+    const minVerse = ayahStartRef.current ?? 1;
+    const maxVerse = ayahEndRef.current ?? rawNext;
+    const boundedNext = clampNumber(rawNext, minVerse, maxVerse);
+    currentVerseRef.current = boundedNext;
+    setCurrentVerse(boundedNext);
+    return boundedNext;
+  }
+
+  function invalidatePlaybackRequest() {
+    playbackRequestIdRef.current += 1;
+    isLoadingRef.current = false;
+  }
 
   // Apply playback rate changes to the currently-playing sound
   useEffect(() => {
@@ -1200,7 +1218,11 @@ export default function MemorizationScreen() {
   useEffect(() => {
     if (!sessionRequested) return;
     if (surahNumber !== null && ayahStart !== null && ayahEnd !== null) {
-      setCurrentVerse((value) => clampNumber(value, ayahStart, ayahEnd));
+      setCurrentVerse((value) => {
+        const boundedValue = clampNumber(value, ayahStart, ayahEnd);
+        currentVerseRef.current = boundedValue;
+        return boundedValue;
+      });
       return;
     }
     (async () => {
@@ -1220,6 +1242,7 @@ export default function MemorizationScreen() {
         setAyahEnd(ae);
         setSessionReviewOnly(Boolean(nm.isReviewOnly));
         setCurrentVerse(as);
+        currentVerseRef.current = as;
         setPageStart(nm.pageStart);
         setPageEnd(nm.pageEnd);
       } catch (e) {
@@ -1683,26 +1706,29 @@ export default function MemorizationScreen() {
   // ── Audio helpers ────────────────────────────────────────────────────────────
 
   async function stopAudioCompletely() {
+    invalidatePlaybackRequest();
     cancelAnimationFrame(rafIdRef.current);
     if (advanceTimeoutRef.current) {
       clearTimeout(advanceTimeoutRef.current);
       advanceTimeoutRef.current = null;
     }
-    if (soundRef.current) {
+    const sessionSound = soundRef.current;
+    if (sessionSound) {
       try {
-        await soundRef.current.unloadAsync();
+        await sessionSound.unloadAsync();
       } catch {
         // ignore — already unloaded or in bad state
       }
-      soundRef.current = null;
+      if (soundRef.current === sessionSound) soundRef.current = null;
     }
-    if (wordAudioSoundRef.current) {
+    const wordSound = wordAudioSoundRef.current;
+    if (wordSound) {
       try {
-        await wordAudioSoundRef.current.unloadAsync();
+        await wordSound.unloadAsync();
       } catch {
         // ignore — word audio is best-effort
       }
-      wordAudioSoundRef.current = null;
+      if (wordAudioSoundRef.current === wordSound) wordAudioSoundRef.current = null;
     }
     setWordAudioLoadingKey(null);
     isPlayingRef.current = false;
@@ -1792,7 +1818,7 @@ export default function MemorizationScreen() {
         if (shouldAutoAdvance) {
           scheduleNext(() => {
             autoPlayRef.current = true;
-            setCurrentVerse((v) => v + 1);
+            setCurrentVerseImmediate((v) => v + 1);
           });
         }
         return;
@@ -1829,7 +1855,7 @@ export default function MemorizationScreen() {
       setCurrentRepeat(1);
       scheduleNext(() => {
         autoPlayRef.current = true;
-        setCurrentVerse((v) => v + 1);
+        setCurrentVerseImmediate((v) => v + 1);
       });
     } else {
       handleSessionComplete();
@@ -1839,30 +1865,51 @@ export default function MemorizationScreen() {
   async function playVerse(verseNum: number) {
     if (reciteModeRef.current) return;
     if (!surahNumber) return;
-    if (isLoadingRef.current) return;
+    const requestId = playbackRequestIdRef.current + 1;
+    playbackRequestIdRef.current = requestId;
     isLoadingRef.current = true;
     try {
-      if (soundRef.current) {
-        await soundRef.current.unloadAsync();
-        soundRef.current = null;
+      const previousSound = soundRef.current;
+      if (previousSound) {
+        await previousSound.unloadAsync();
+        if (soundRef.current === previousSound) soundRef.current = null;
       }
+      cancelAnimationFrame(rafIdRef.current);
       const url = ayahAudioUrl(reciter, surahNumber, verseNum);
+      let createdSound: Audio.Sound | null = null;
       const { sound } = await Audio.Sound.createAsync(
         { uri: url },
-        { shouldPlay: true },
+        { shouldPlay: false },
         (status) => {
           if (!status.isLoaded) return;
           positionRef.current = status.positionMillis;
           if (status.durationMillis) durationRef.current = status.durationMillis;
           if (status.didJustFinish) {
+            const finishedSound = createdSound;
+            if (
+              !finishedSound ||
+              requestId !== playbackRequestIdRef.current ||
+              soundRef.current !== finishedSound
+            ) {
+              void finishedSound?.unloadAsync().catch(() => {});
+              return;
+            }
             // During cumulative phase each verse plays once (no per-verse repeats).
             const effectiveRepeatCount =
               internalPhaseRef.current === "cumulative" ? 1 : repeatCountRef.current;
             if (currentRepeatRef.current < effectiveRepeatCount) {
               setCurrentRepeat(currentRepeatRef.current + 1);
-              soundRef.current
+              finishedSound
                 ?.setPositionAsync(0)
-                .then(() => soundRef.current?.playAsync())
+                .then(() => {
+                  if (
+                    requestId === playbackRequestIdRef.current &&
+                    soundRef.current === finishedSound
+                  ) {
+                    return finishedSound.playAsync();
+                  }
+                  return undefined;
+                })
                 .catch(() => {});
               return;
             }
@@ -1876,9 +1923,9 @@ export default function MemorizationScreen() {
 
             // Unload the just-finished sound so the next playVerse creates a fresh instance.
             void (async () => {
-              if (soundRef.current) {
+              if (soundRef.current === finishedSound) {
                 try {
-                  await soundRef.current.unloadAsync();
+                  await finishedSound?.unloadAsync();
                 } catch {
                   // already gone
                 }
@@ -1889,18 +1936,26 @@ export default function MemorizationScreen() {
           }
         },
       );
-      soundRef.current = sound;
-      if (suppressPlaybackForNavigationRef.current) {
+      createdSound = sound;
+      if (
+        requestId !== playbackRequestIdRef.current ||
+        verseNum !== playingVerseNumberRef.current ||
+        suppressPlaybackForNavigationRef.current
+      ) {
+        const isCurrentRequest = requestId === playbackRequestIdRef.current;
         try {
           await sound.unloadAsync();
         } catch {
-          // ignore — this is only guarding a late audio load during navigation
+          // ignore stale audio loads superseded by a newer verse request
         }
-        soundRef.current = null;
-        isPlayingRef.current = false;
-        setIsPlaying(false);
+        if (soundRef.current === sound) soundRef.current = null;
+        if (isCurrentRequest) {
+          isPlayingRef.current = false;
+          setIsPlaying(false);
+        }
         return;
       }
+      soundRef.current = sound;
       // Ensure max volume — different everyayah recordings have very different
       // mastered loudness levels (Afasy is significantly quieter than Husary).
       try {
@@ -1914,11 +1969,31 @@ export default function MemorizationScreen() {
       } catch {
         // best-effort; some sound states may reject setRateAsync
       }
+      if (
+        requestId !== playbackRequestIdRef.current ||
+        verseNum !== playingVerseNumberRef.current
+      ) {
+        const isCurrentRequest = requestId === playbackRequestIdRef.current;
+        try {
+          await sound.unloadAsync();
+        } catch {
+          // ignore stale audio loads superseded during setup
+        }
+        if (soundRef.current === sound) soundRef.current = null;
+        if (isCurrentRequest) {
+          isPlayingRef.current = false;
+          setIsPlaying(false);
+        }
+        return;
+      }
+      await sound.playAsync();
       isPlayingRef.current = true;
       setIsPlaying(true);
       startRAF();
     } finally {
-      isLoadingRef.current = false;
+      if (requestId === playbackRequestIdRef.current) {
+        isLoadingRef.current = false;
+      }
     }
   }
 
@@ -1990,7 +2065,7 @@ export default function MemorizationScreen() {
       // Switch to the tapped verse, then seek to the tapped word after load
       pendingSeekPositionRef.current = position;
       autoPlayRef.current = true;
-      setCurrentVerse(vVerse);
+      setCurrentVerseImmediate(vVerse);
       return;
     }
 
@@ -2037,7 +2112,7 @@ export default function MemorizationScreen() {
       currentVerseRef.current < ayahEndRef.current
     ) {
       autoPlayRef.current = true;
-      setCurrentVerse((v) => v + 1);
+      setCurrentVerseImmediate((v) => v + 1);
     } else {
       handleSessionComplete();
     }
@@ -2109,7 +2184,7 @@ export default function MemorizationScreen() {
 
     if (currentVerseRef.current < ayahEndRef.current) {
       autoPlayRef.current = true;
-      setCurrentVerse((v) => v + 1);
+      setCurrentVerseImmediate((v) => v + 1);
       return;
     }
 
@@ -2129,7 +2204,7 @@ export default function MemorizationScreen() {
     }
     if (ayahStart === null || currentVerse <= ayahStart) return;
     autoPlayRef.current = true;
-    setCurrentVerse((v) => v - 1);
+    setCurrentVerseImmediate((v) => v - 1);
   }
 
   function handleNext() {
@@ -2147,7 +2222,7 @@ export default function MemorizationScreen() {
         currentVerseRef.current < ayahEndRef.current
       ) {
         autoPlayRef.current = true;
-        setCurrentVerse((v) => v + 1);
+        setCurrentVerseImmediate((v) => v + 1);
       } else {
         handleSessionComplete();
       }
@@ -2179,7 +2254,7 @@ export default function MemorizationScreen() {
       return;
     }
     autoPlayRef.current = true;
-    setCurrentVerse((v) => v + 1);
+    setCurrentVerseImmediate((v) => v + 1);
   }
 
   async function refreshDiscoverySnapshot() {
@@ -2468,6 +2543,7 @@ export default function MemorizationScreen() {
     setAyahStart(null);
     setAyahEnd(null);
     setCurrentVerse(1);
+    currentVerseRef.current = 1;
     setPageStart(null);
     setPageEnd(null);
     setDisplayWordsMap(new Map());
