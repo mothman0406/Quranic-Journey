@@ -37,6 +37,7 @@ export const reviewScheduleTable = pgTable("review_schedule", {
   easeFactor: real("ease_factor").notNull().default(2.5),
   repetitionCount: integer("repetition_count").notNull().default(0),
   lastReviewed: timestamp("last_reviewed"),
+  lastReviewedLocalDate: text("last_reviewed_local_date"), // YYYY-MM-DD in user's local TZ
   lastReviewedChunkAyahStart: integer("last_reviewed_chunk_ayah_start"),
   lastReviewedChunkAyahEnd: integer("last_reviewed_chunk_ayah_end"),
   createdAt: timestamp("created_at").defaultNow().notNull(),

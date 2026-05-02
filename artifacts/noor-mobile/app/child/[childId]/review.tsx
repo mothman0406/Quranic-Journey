@@ -1342,11 +1342,11 @@ export default function ReviewScreen() {
                   </>
                 )}
 
-                {upcoming.length > 0 && (
+                {dueToday.length === 0 && upcoming.length > 0 && (
                   <>
                     <View
                       style={
-                        dueToday.length > 0 || reviewedToday.length > 0
+                        reviewedToday.length > 0
                           ? styles.sectionWithSpace
                           : undefined
                       }

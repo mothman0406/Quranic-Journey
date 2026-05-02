@@ -4,7 +4,7 @@ import { childrenTable, memorizationProgressTable, reviewScheduleTable, reviewDa
 import { eq, and, desc } from "drizzle-orm";
 import { SURAHS } from "../data/surahs.js";
 import { getPageForVerse } from "../data/quran-meta.js";
-import { addDaysToLocalDate, getRequestLocalDate, localDateStr } from "../lib/local-date.js";
+import { addDaysToLocalDate, getRequestLocalDate } from "../lib/local-date.js";
 import {
   buildSurahPageChunks,
   buildSurahMemorizationWorkflow,
@@ -968,11 +968,7 @@ router.get("/children/:childId/reviews", async (req, res) => {
 
   const reviewedTodaySurahIds = new Set(
     reviewableWithSchedule
-      .filter(
-        (item) =>
-          item.schedule.lastReviewed != null &&
-          localDateStr(item.schedule.lastReviewed) === today,
-      )
+      .filter((item) => item.schedule.lastReviewedLocalDate === today)
       .map((item) => item.surah.id),
   );
 
@@ -1083,8 +1079,7 @@ router.get("/children/:childId/reviews", async (req, res) => {
   const reviewedToday = reviewableWithSchedule
     .filter(
       (item) =>
-        item.schedule.lastReviewed != null &&
-        localDateStr(item.schedule.lastReviewed) === today &&
+        item.schedule.lastReviewedLocalDate === today &&
         item.reviewedChunk != null,
     )
     .map((item) => {
@@ -1179,6 +1174,7 @@ router.post("/children/:childId/reviews", async (req, res) => {
         ? (review.repetitionCount || 0) + 1
         : review.repetitionCount,
       lastReviewed: now,
+      lastReviewedLocalDate: today,
       lastReviewedChunkAyahStart: reviewChunkState.activeChunk.ayahStart,
       lastReviewedChunkAyahEnd: reviewChunkState.activeChunk.ayahEnd,
     }).where(eq(reviewScheduleTable.id, review.id)).returning();
@@ -1192,6 +1188,7 @@ router.post("/children/:childId/reviews", async (req, res) => {
       easeFactor: isFinalChunk ? easeFactor : 2.5,
       repetitionCount: isFinalChunk ? 1 : 0,
       lastReviewed: now,
+      lastReviewedLocalDate: today,
       lastReviewedChunkAyahStart: reviewChunkState.activeChunk.ayahStart,
       lastReviewedChunkAyahEnd: reviewChunkState.activeChunk.ayahEnd,
     }).returning();
