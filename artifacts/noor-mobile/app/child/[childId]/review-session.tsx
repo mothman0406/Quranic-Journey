@@ -27,10 +27,21 @@ import {
   type MushafViewMode,
   type ProfileSettings,
 } from "@/src/lib/settings";
+import {
+  getCanonicalPageLayout,
+  getCanonicalWordKeysInRange,
+} from "@/src/lib/qul-layout";
 
 const PAGE_ASPECT_RATIO = 1.45;
 const PLAYBACK_RATES = [0.75, 0.85, 1.0, 1.15, 1.25, 1.5] as const;
 const AYAH_STRIP_ITEM_WIDTH = 52;
+const QUL_PAGE_LINE_COUNT = 15;
+const QUL_LINE_TOP_RATIO = 0.055;
+const QUL_LINE_BOTTOM_RATIO = 0.925;
+const QUL_LINE_TAP_HEIGHT_RATIO = 0.046;
+const QUL_JUSTIFIED_LINE_INSET_RATIO = 0.07;
+const QUL_CENTERED_LINE_MIN_WIDTH_RATIO = 0.34;
+const QUL_CENTERED_LINE_WORD_WIDTH_RATIO = 0.075;
 
 const QUALITY_OPTIONS: { rating: number; label: string; color: string }[] = [
   { rating: 0, label: "Forgot completely", color: "#dc2626" },
@@ -60,6 +71,15 @@ type ReviewTranslationPopup = {
   arabic: string;
   translation: string;
   loading: boolean;
+};
+
+type ReviewAyahOverlay = {
+  ayahNumber: number;
+  lineNumber: number;
+  leftRatio: number;
+  topRatio: number;
+  widthRatio: number;
+  heightRatio: number;
 };
 
 function finiteNumber(value: unknown, fallback: number) {
@@ -137,6 +157,112 @@ function previewAyahNumbers(values: number[]) {
 function toArabicIndic(value: number) {
   const digits = ["٠", "١", "٢", "٣", "٤", "٥", "٦", "٧", "٨", "٩"];
   return String(value).replace(/\d/g, (digit) => digits[Number(digit)] ?? digit);
+}
+
+function parseWordKey(value: string) {
+  const [surah, ayah] = value.split(":").map(Number);
+  if (!Number.isFinite(surah) || !Number.isFinite(ayah)) return null;
+  return { surah, ayah };
+}
+
+function clampRatio(value: number) {
+  return Math.max(0, Math.min(1, value));
+}
+
+function ratioPercent(value: number): `${number}%` {
+  return `${Math.round(clampRatio(value) * 1000) / 10}%` as `${number}%`;
+}
+
+function getQulLineTopRatio(lineNumber: number) {
+  const usableHeight = QUL_LINE_BOTTOM_RATIO - QUL_LINE_TOP_RATIO;
+  const lineStep = usableHeight / QUL_PAGE_LINE_COUNT;
+  return clampRatio(QUL_LINE_TOP_RATIO + (lineNumber - 0.5) * lineStep - QUL_LINE_TAP_HEIGHT_RATIO / 2);
+}
+
+function getQulLineFrame(
+  wordCount: number,
+  isCentered: boolean,
+): { leftRatio: number; widthRatio: number } {
+  if (!isCentered) {
+    const widthRatio = 1 - QUL_JUSTIFIED_LINE_INSET_RATIO * 2;
+    return { leftRatio: QUL_JUSTIFIED_LINE_INSET_RATIO, widthRatio };
+  }
+
+  const widthRatio = Math.min(
+    1 - QUL_JUSTIFIED_LINE_INSET_RATIO * 2,
+    Math.max(QUL_CENTERED_LINE_MIN_WIDTH_RATIO, wordCount * QUL_CENTERED_LINE_WORD_WIDTH_RATIO),
+  );
+  return { leftRatio: (1 - widthRatio) / 2, widthRatio };
+}
+
+function buildReviewAyahOverlays(
+  pageNumber: number,
+  surahNumber: number,
+  ayahStart: number,
+  ayahEnd: number,
+): ReviewAyahOverlay[] {
+  const overlays: ReviewAyahOverlay[] = [];
+
+  for (const line of getCanonicalPageLayout(pageNumber)) {
+    if (line.lineType !== "ayah") continue;
+
+    const lineWordKeys = getCanonicalWordKeysInRange(line.firstWordKey, line.lastWordKey);
+    if (lineWordKeys.length === 0) continue;
+
+    const { leftRatio: lineLeft, widthRatio: lineWidth } = getQulLineFrame(
+      lineWordKeys.length,
+      line.isCentered,
+    );
+    let segmentStartIndex: number | null = null;
+    let segmentAyah: number | null = null;
+
+    const pushSegment = (endIndexExclusive: number) => {
+      if (segmentStartIndex === null || segmentAyah === null) return;
+
+      const segmentWordCount = Math.max(1, endIndexExclusive - segmentStartIndex);
+      const rtlLeft =
+        lineLeft +
+        lineWidth * (1 - (segmentStartIndex + segmentWordCount) / lineWordKeys.length);
+      const rawWidth = lineWidth * (segmentWordCount / lineWordKeys.length);
+      const widthRatio = Math.min(lineWidth, rawWidth + 0.018);
+
+      overlays.push({
+        ayahNumber: segmentAyah,
+        lineNumber: line.lineNumber,
+        leftRatio: clampRatio(rtlLeft - 0.009),
+        topRatio: getQulLineTopRatio(line.lineNumber),
+        widthRatio: clampRatio(widthRatio),
+        heightRatio: QUL_LINE_TAP_HEIGHT_RATIO,
+      });
+    };
+
+    lineWordKeys.forEach((wordKey, index) => {
+      const parts = parseWordKey(wordKey);
+      const ayah =
+        parts?.surah === surahNumber &&
+        parts.ayah >= ayahStart &&
+        parts.ayah <= ayahEnd
+          ? parts.ayah
+          : null;
+
+      if (ayah === null) {
+        pushSegment(index);
+        segmentStartIndex = null;
+        segmentAyah = null;
+        return;
+      }
+
+      if (segmentAyah !== ayah) {
+        pushSegment(index);
+        segmentStartIndex = index;
+        segmentAyah = ayah;
+      }
+    });
+
+    pushSegment(lineWordKeys.length);
+  }
+
+  return overlays;
 }
 
 export default function ReviewSession() {
@@ -244,6 +370,16 @@ export default function ReviewSession() {
     () => buildNumberRange(pageStartN, pageEndN),
     [pageStartN, pageEndN],
   );
+  const ayahOverlaysByPage = useMemo(() => {
+    const map = new Map<number, ReviewAyahOverlay[]>();
+    for (const pageNumber of mushafPages) {
+      map.set(
+        pageNumber,
+        buildReviewAyahOverlays(pageNumber, surahNumberN, ayahStartN, ayahEndN),
+      );
+    }
+    return map;
+  }, [ayahEndN, ayahStartN, mushafPages, surahNumberN]);
   const ayahTextMap = useMemo(() => {
     const map = new Map<number, string>();
     for (const verse of reviewVerses) {
@@ -615,6 +751,44 @@ export default function ReviewSession() {
     }
   }
 
+  function renderMushafPage(pageNumber: number) {
+    const overlays = ayahOverlaysByPage.get(pageNumber) ?? [];
+
+    return (
+      <View style={[styles.pageImageFrame, { width: imageWidth, height: imageHeight }]}>
+        <Image
+          source={{ uri: mushafPageUrl(pageNumber) }}
+          style={styles.pageImage}
+          resizeMode="contain"
+        />
+        {overlays.map((overlay, index) => {
+          const active = overlay.ayahNumber === currentAyah;
+          return (
+            <Pressable
+              key={`${pageNumber}-${overlay.ayahNumber}-${overlay.lineNumber}-${index}`}
+              onPress={() => {
+                void handleSeekAyah(overlay.ayahNumber);
+              }}
+              style={({ pressed }) => [
+                styles.ayahImageHotspot,
+                {
+                  left: ratioPercent(overlay.leftRatio),
+                  top: ratioPercent(overlay.topRatio),
+                  width: ratioPercent(overlay.widthRatio),
+                  height: ratioPercent(overlay.heightRatio),
+                },
+                active && styles.ayahImageHotspotActive,
+                pressed && styles.ayahImageHotspotPressed,
+              ]}
+              accessibilityRole="button"
+              accessibilityLabel={`Play ayah ${overlay.ayahNumber}`}
+            />
+          );
+        })}
+      </View>
+    );
+  }
+
   const currentSurahName = currentQueueItem.surahName || `Surah ${surahNumberN}`;
   const pageLabel =
     pageStartN === pageEndN ? `Page ${pageStartN}` : `Pages ${pageStartN}-${pageEndN}`;
@@ -765,11 +939,7 @@ export default function ReviewSession() {
                   contentContainerStyle={styles.pageSlideContent}
                   showsVerticalScrollIndicator={false}
                 >
-                  <Image
-                    source={{ uri: mushafPageUrl(item) }}
-                    style={[styles.pageImage, { width: imageWidth, height: imageHeight }]}
-                    resizeMode="contain"
-                  />
+                  {renderMushafPage(item)}
                 </ScrollView>
               </View>
             )}
@@ -777,12 +947,7 @@ export default function ReviewSession() {
         ) : (
           <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent}>
             {mushafPages.map((pageNumber) => (
-              <Image
-                key={pageNumber}
-                source={{ uri: mushafPageUrl(pageNumber) }}
-                style={[styles.pageImage, { width: imageWidth, height: imageHeight }]}
-                resizeMode="contain"
-              />
+              <View key={pageNumber}>{renderMushafPage(pageNumber)}</View>
             ))}
           </ScrollView>
         )}
@@ -1191,11 +1356,28 @@ const styles = StyleSheet.create({
     alignItems: "center",
     padding: 16,
   },
-  pageImage: {
+  pageImageFrame: {
     borderRadius: 8,
     backgroundColor: "#f9fafb",
     borderWidth: 1,
     borderColor: "#e2e8f0",
+    overflow: "hidden",
+  },
+  pageImage: {
+    width: "100%",
+    height: "100%",
+  },
+  ayahImageHotspot: {
+    position: "absolute",
+    borderRadius: 999,
+  },
+  ayahImageHotspotActive: {
+    backgroundColor: "rgba(37, 99, 235, 0.22)",
+    borderWidth: 2,
+    borderColor: "rgba(37, 99, 235, 0.52)",
+  },
+  ayahImageHotspotPressed: {
+    backgroundColor: "rgba(37, 99, 235, 0.28)",
   },
   stickyControls: {
     borderTopWidth: 1,
