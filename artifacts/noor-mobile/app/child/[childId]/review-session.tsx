@@ -152,6 +152,7 @@ export default function ReviewSession() {
     pageEnd,
     reviewDate,
     batchQueue,
+    isAdHoc,
   } = useLocalSearchParams<{
     childId: string;
     surahId: string;
@@ -165,6 +166,7 @@ export default function ReviewSession() {
     chunkCount: string;
     reviewDate?: string;
     batchQueue?: string;
+    isAdHoc?: string;
   }>();
 
   const fallbackQueueItem = useMemo<ReviewSessionQueueItem>(
@@ -587,7 +589,13 @@ export default function ReviewSession() {
     setSubmitting(true);
     setSubmitError(null);
     try {
-      await submitReview(childId, surahIdN, selectedRating, reviewDate);
+      await submitReview(
+        childId,
+        surahIdN,
+        selectedRating,
+        reviewDate,
+        isAdHoc === "true" ? { ayahStart: ayahStartN, ayahEnd: ayahEndN } : {},
+      );
       await stopAudio();
       setRatingModalVisible(false);
       setSelectedRating(null);

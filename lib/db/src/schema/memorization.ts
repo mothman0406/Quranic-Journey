@@ -1,7 +1,8 @@
-import { pgTable, serial, integer, text, timestamp, date, real } from "drizzle-orm/pg-core";
+import { pgTable, serial, integer, text, timestamp, date, real, uniqueIndex } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { pgEnum } from "drizzle-orm/pg-core";
+import { childrenTable } from "./children";
 
 export const memorizationStatusEnum = pgEnum("memorization_status", [
   "not_started",
@@ -41,6 +42,16 @@ export const reviewScheduleTable = pgTable("review_schedule", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+export const reviewDailySetTable = pgTable("review_daily_set", {
+  id: serial("id").primaryKey(),
+  childId: integer("child_id").notNull().references(() => childrenTable.id, { onDelete: "cascade" }),
+  localDate: text("local_date").notNull(),
+  surahIds: text("surah_ids").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex("review_daily_set_child_date_unique").on(table.childId, table.localDate),
+]);
+
 export const quranVersesTable = pgTable("quran_verses", {
   id: serial("id").primaryKey(),
   surahNumber: integer("surah_number").notNull(),
@@ -79,3 +90,4 @@ export const insertMemorizationSchema = createInsertSchema(memorizationProgressT
 export type InsertMemorization = z.infer<typeof insertMemorizationSchema>;
 export type MemorizationProgress = typeof memorizationProgressTable.$inferSelect;
 export type ReviewSchedule = typeof reviewScheduleTable.$inferSelect;
+export type ReviewDailySet = typeof reviewDailySetTable.$inferSelect;

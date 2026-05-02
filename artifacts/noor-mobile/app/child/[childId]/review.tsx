@@ -1,9 +1,13 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  ActivityIndicator,
+  Modal,
   Pressable,
   RefreshControl,
+  ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
@@ -20,6 +24,8 @@ import {
   ScreenScrollView,
   SectionLabel,
 } from "@/src/components/screen-primitives";
+import { fetchMemorizationProgress, type MemorizationProgress } from "@/src/lib/memorization";
+import { MUSHAF_SURAHS } from "@/src/lib/mushaf";
 import { fetchReviewQueue, ReviewQueueItem, ReviewQueueResponse } from "@/src/lib/reviews";
 import { getReviewPriorityStyle } from "@/src/lib/review-priority";
 
@@ -42,14 +48,6 @@ type StoredReviewSession = {
   sessionTotal?: number;
   updatedAt?: number;
 };
-
-type CompletedDaySection = {
-  date: string;
-  items: CompletedReviewItem[];
-  sessionTotal: number;
-};
-
-const REVIEW_LOOKAHEAD_DAYS = 45;
 
 function serializableReviewItem(item: ReviewQueueItem) {
   return {
@@ -95,21 +93,11 @@ function startOfToday() {
   return new Date(now.getFullYear(), now.getMonth(), now.getDate());
 }
 
-function tomorrowLocalDate() {
-  const tomorrow = startOfToday();
-  tomorrow.setDate(tomorrow.getDate() + 1);
-  return getLocalDateHeaderValue(tomorrow);
-}
-
 function getLocalDateHeaderValue(date = new Date()) {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");
   const day = String(date.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
-}
-
-function isLocalDateValue(value: unknown): value is string {
-  return typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value);
 }
 
 function addDaysToLocalDate(value: string, days: number) {
@@ -157,12 +145,19 @@ function itemKey(prefix: string, item: ReviewQueueItem, index: number) {
   return `${prefix}-${item.id}-${item.surahId}-${item.ayahStart}-${index}`;
 }
 
-function activeReviewDateKey(childId: string) {
-  return `noorpath:review-active-date:${childId}`;
-}
-
 function reviewSessionKey(childId: string, reviewDate: string) {
   return `noorpath:review-session:${childId}:${reviewDate}`;
+}
+
+function continueReviewingKey(childId: string, todayLocal: string) {
+  return `noorpath:review-continue:${childId}:${todayLocal}`;
+}
+
+function parseContinueOffset(raw: string | null) {
+  if (!raw) return 0;
+  if (raw === "true") return 1;
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) && parsed > 0 ? Math.round(parsed) : 0;
 }
 
 function numberOrUndefined(value: unknown) {
@@ -302,90 +297,6 @@ async function saveStoredReviewSession(
   } catch {
     return null;
   }
-}
-
-async function loadStoredActiveReviewDate(childId: string, todayLocal: string) {
-  try {
-    const storedDate = await AsyncStorage.getItem(activeReviewDateKey(childId));
-    if (!isLocalDateValue(storedDate) || storedDate < todayLocal) return todayLocal;
-    return storedDate;
-  } catch {
-    return todayLocal;
-  }
-}
-
-async function saveStoredActiveReviewDate(childId: string, reviewDate: string) {
-  try {
-    await AsyncStorage.setItem(activeReviewDateKey(childId), reviewDate);
-  } catch {
-    // best-effort persistence only
-  }
-}
-
-function nextScheduledReviewDate(activeLocalDate: string, upcoming: ReviewQueueItem[]) {
-  return (
-    upcoming
-      .map((item) => item.dueDate)
-      .filter((dueDate) => dueDate > activeLocalDate)
-      .sort()[0] ?? null
-  );
-}
-
-async function findNextOpenReviewDate(childId: string, startDate: string) {
-  let candidate = startDate;
-  for (let offset = 0; offset < REVIEW_LOOKAHEAD_DAYS; offset += 1) {
-    const session = await loadStoredReviewSession(childId, candidate);
-    if (!isStoredReviewSessionComplete(session)) return candidate;
-    candidate = addDaysToLocalDate(candidate, 1);
-  }
-
-  return candidate;
-}
-
-async function resolveNextOpenReviewDate(
-  childId: string,
-  activeLocalDate: string,
-  upcoming: ReviewQueueItem[],
-) {
-  const nextOpenStoredDate = await findNextOpenReviewDate(
-    childId,
-    addDaysToLocalDate(activeLocalDate, 1),
-  );
-  const nextScheduledDate = nextScheduledReviewDate(activeLocalDate, upcoming);
-
-  return nextScheduledDate ?? nextOpenStoredDate;
-}
-
-async function loadCompletedDaySections(
-  childId: string,
-  todayLocal: string,
-  activeLocalDate: string,
-): Promise<CompletedDaySection[]> {
-  if (activeLocalDate <= todayLocal) return [];
-
-  const sections: CompletedDaySection[] = [];
-  let candidate = todayLocal;
-
-  for (
-    let offset = 0;
-    offset < REVIEW_LOOKAHEAD_DAYS && candidate < activeLocalDate;
-    offset += 1
-  ) {
-    const session = await loadStoredReviewSession(childId, candidate);
-    const items = session?.completedItemsData ?? [];
-
-    if (isStoredReviewSessionComplete(session) && items.length > 0) {
-      sections.push({
-        date: candidate,
-        items,
-        sessionTotal: Number(session?.sessionTotal ?? items.length),
-      });
-    }
-
-    candidate = addDaysToLocalDate(candidate, 1);
-  }
-
-  return sections;
 }
 
 async function saveReviewSessionFromQueue(
@@ -556,131 +467,338 @@ function QueueSummary({
   );
 }
 
-function CompletionCelebrationCard({
-  reviewedCount,
-  activeDateLabel,
-  onContinue,
-  onDismiss,
-}: {
-  reviewedCount: number;
-  activeDateLabel: string;
-  onContinue: () => void;
-  onDismiss: () => void;
-}) {
+function TodaysWorkCompletePanel() {
   return (
-    <View style={styles.celebrationCard}>
-      <View style={styles.celebrationIcon}>
-        <Ionicons name="checkmark-circle" size={44} color="#16a34a" />
-      </View>
-      <Text style={styles.celebrationTitle}>All caught up!</Text>
-      <Text style={styles.celebrationDetail}>
-        Great work - {reviewedCount} review{reviewedCount === 1 ? "" : "s"} done for{" "}
-        {formatReviewDayInSentence(activeDateLabel)}.
-      </Text>
-      <Pressable style={styles.celebrationPrimaryButton} onPress={onContinue}>
-        <Text style={styles.celebrationPrimaryButtonText}>Continue Reviewing →</Text>
-        <Ionicons name="arrow-forward" size={16} color="#ffffff" />
-      </Pressable>
-      <Pressable style={styles.celebrationDismissButton} onPress={onDismiss}>
-        <Text style={styles.celebrationDismissText}>Done for today</Text>
-      </Pressable>
+    <View style={styles.completePanel}>
+      <Ionicons name="checkmark-circle" size={32} color="#16a34a" />
+      <Text style={styles.completePanelTitle}>Today's work complete!</Text>
     </View>
   );
 }
 
-function DayStateCard({
-  tone,
-  title,
-  detail,
-  actionLabel,
-  onAction,
-}: {
-  tone: "complete" | "clear";
-  title: string;
-  detail: string;
-  actionLabel?: string;
-  onAction?: () => void;
-}) {
-  const isComplete = tone === "complete";
-  const color = isComplete ? "#047857" : "#0f766e";
+function ContinueReviewingButton({ onPress }: { onPress: () => void }) {
   return (
-    <View
-      style={[
-        styles.dayStateCard,
-        isComplete ? styles.dayStateComplete : styles.dayStateClear,
-      ]}
-    >
-      <Ionicons
-        name={isComplete ? "checkmark-circle-outline" : "leaf-outline"}
-        size={22}
-        color={color}
-      />
-      <View style={styles.dayStateText}>
-        <Text style={[styles.dayStateTitle, { color }]}>{title}</Text>
-        <Text style={styles.dayStateDetail}>{detail}</Text>
-        {actionLabel && onAction ? (
-          <Pressable style={styles.dayStateAction} onPress={onAction}>
-            <Text style={styles.dayStateActionText}>{actionLabel}</Text>
-            <Ionicons name="arrow-forward" size={15} color="#ffffff" />
-          </Pressable>
-        ) : null}
+    <Pressable style={styles.continueReviewingButton} onPress={onPress}>
+      <Text style={styles.continueReviewingButtonText}>Continue Reviewing →</Text>
+      <Ionicons name="arrow-forward" size={16} color="#ffffff" />
+    </Pressable>
+  );
+}
+
+function ReviewSpecificSurahCard({ onPress }: { onPress: () => void }) {
+  return (
+    <Pressable style={styles.specificSurahCard} onPress={onPress}>
+      <View style={styles.specificSurahIcon}>
+        <Ionicons name="search" size={20} color="#2563eb" />
+      </View>
+      <View style={styles.specificSurahText}>
+        <Text style={styles.specificSurahTitle}>Review Specific Surah</Text>
+        <Text style={styles.specificSurahDetail}>Pick any memorized surah</Text>
+      </View>
+      <Ionicons name="chevron-forward" size={18} color="#94a3b8" />
+    </Pressable>
+  );
+}
+
+function canonicalReviewSurahOrder(surahNumber: number) {
+  if (surahNumber === 1) return 0;
+  return 115 - surahNumber;
+}
+
+function getMemorizationReviewPriority(progress: MemorizationProgress) {
+  const memorizedAyahs =
+    progress.memorizedAyahs.length > 0
+      ? progress.memorizedAyahs
+      : Array.from({ length: progress.versesMemorized }, (_, index) => index + 1);
+  const hasRedAyah = memorizedAyahs.some(
+    (ayah) => (progress.ayahStrengths?.[String(ayah)] ?? progress.strength ?? 3) <= 1,
+  );
+  if (hasRedAyah) return "red";
+  if (memorizedAyahs.length < progress.totalVerses) return "orange";
+  const hasOrangeAyah = memorizedAyahs.some(
+    (ayah) => (progress.ayahStrengths?.[String(ayah)] ?? progress.strength ?? 3) <= 3,
+  );
+  return hasOrangeAyah ? "orange" : "green";
+}
+
+function isMemorizedForReview(progress: MemorizationProgress) {
+  return (
+    progress.status === "memorized" ||
+    progress.status === "needs_review" ||
+    (progress.status === "in_progress" && progress.versesMemorized >= progress.totalVerses)
+  );
+}
+
+function getApproxPageForVerse(surahNumber: number, ayah: number) {
+  const surah = MUSHAF_SURAHS.find((item) => item.number === surahNumber);
+  if (!surah) return 1;
+  if (surah.startPage === surah.endPage || surah.verseCount <= 1) return surah.startPage;
+  const boundedAyah = Math.max(1, Math.min(surah.verseCount, ayah));
+  const ratio = (boundedAyah - 1) / Math.max(1, surah.verseCount - 1);
+  return Math.max(
+    surah.startPage,
+    Math.min(surah.endPage, Math.floor(surah.startPage + ratio * (surah.endPage - surah.startPage))),
+  );
+}
+
+function VerseStepper({
+  label,
+  value,
+  min,
+  max,
+  onChange,
+}: {
+  label: string;
+  value: number;
+  min: number;
+  max: number;
+  onChange: (value: number) => void;
+}) {
+  return (
+    <View style={styles.rangeStepper}>
+      <Text style={styles.rangeStepperLabel}>{label}</Text>
+      <View style={styles.rangeStepperControls}>
+        <Pressable
+          style={[styles.rangeStepperButton, value <= min && styles.rangeStepperButtonDisabled]}
+          onPress={() => onChange(Math.max(min, value - 1))}
+          disabled={value <= min}
+        >
+          <Ionicons name="remove" size={16} color={value <= min ? "#94a3b8" : "#2563eb"} />
+        </Pressable>
+        <Text style={styles.rangeStepperValue}>{value}</Text>
+        <Pressable
+          style={[styles.rangeStepperButton, value >= max && styles.rangeStepperButtonDisabled]}
+          onPress={() => onChange(Math.min(max, value + 1))}
+          disabled={value >= max}
+        >
+          <Ionicons name="add" size={16} color={value >= max ? "#94a3b8" : "#2563eb"} />
+        </Pressable>
       </View>
     </View>
   );
 }
 
-function CompletedDaySectionsCard({ sections }: { sections: CompletedDaySection[] }) {
-  if (sections.length === 0) return null;
+function ReviewSpecificSurahSheet({
+  visible,
+  childId,
+  name,
+  todayLocal,
+  onClose,
+}: {
+  visible: boolean;
+  childId: string;
+  name: string;
+  todayLocal: string;
+  onClose: () => void;
+}) {
+  const router = useRouter();
+  const [progress, setProgress] = useState<MemorizationProgress[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
+  const [selected, setSelected] = useState<MemorizationProgress | null>(null);
+  const [fromAyah, setFromAyah] = useState(1);
+  const [toAyah, setToAyah] = useState(1);
+
+  useEffect(() => {
+    if (!visible) return;
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+    setSearch("");
+    setSelected(null);
+
+    fetchMemorizationProgress(childId)
+      .then((items) => {
+        if (!cancelled) setProgress(items);
+      })
+      .catch((e) => {
+        if (!cancelled) {
+          setProgress([]);
+          setError(e instanceof Error ? e.message : "Memorized surahs could not load.");
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [childId, visible]);
+
+  const memorizedSurahs = useMemo(
+    () =>
+      progress
+        .filter(isMemorizedForReview)
+        .sort(
+          (a, b) =>
+            canonicalReviewSurahOrder(a.surahNumber) -
+            canonicalReviewSurahOrder(b.surahNumber),
+        ),
+    [progress],
+  );
+  const filteredSurahs = useMemo(() => {
+    const normalized = search.trim().toLowerCase();
+    if (!normalized) return memorizedSurahs;
+    return memorizedSurahs.filter((item) =>
+      `${item.surahNumber} ${item.surahName}`.toLowerCase().includes(normalized),
+    );
+  }, [memorizedSurahs, search]);
+
+  function chooseSurah(item: MemorizationProgress) {
+    setSelected(item);
+    setFromAyah(1);
+    setToAyah(item.totalVerses);
+  }
+
+  function updateFromAyah(next: number) {
+    const bounded = Math.max(1, Math.min(next, selected?.totalVerses ?? 1));
+    setFromAyah(bounded);
+    setToAyah((current) => Math.max(current, bounded));
+  }
+
+  function updateToAyah(next: number) {
+    const bounded = Math.max(1, Math.min(next, selected?.totalVerses ?? 1));
+    setToAyah(bounded);
+    setFromAyah((current) => Math.min(current, bounded));
+  }
+
+  function startSpecificReview() {
+    if (!selected) return;
+    const pageStart = getApproxPageForVerse(selected.surahNumber, fromAyah);
+    const pageEnd = getApproxPageForVerse(selected.surahNumber, toAyah);
+    onClose();
+    router.push({
+      pathname: "/child/[childId]/review-session",
+      params: {
+        childId,
+        name,
+        surahId: String(selected.surahId),
+        surahNumber: String(selected.surahNumber),
+        surahName: selected.surahName,
+        ayahStart: String(fromAyah),
+        ayahEnd: String(toAyah),
+        pageStart: String(Math.min(pageStart, pageEnd)),
+        pageEnd: String(Math.max(pageStart, pageEnd)),
+        chunkIndex: "1",
+        chunkCount: "1",
+        reviewDate: todayLocal,
+        isAdHoc: "true",
+      },
+    });
+  }
 
   return (
-    <View style={styles.completedDaysCard}>
-      <View style={styles.completedDaysHeader}>
-        <View style={styles.completedDaysTitleWrap}>
-          <Text style={styles.completedDaysTitle}>Completed Review Days</Text>
-          <Text style={styles.completedDaysDetail}>
-            Ahead-day work stays grouped by the day it belonged to.
-          </Text>
-        </View>
-        <View style={styles.completedDaysBadge}>
-          <Text style={styles.completedDaysBadgeText}>
-            {sections.length} {sections.length === 1 ? "day" : "days"}
-          </Text>
-        </View>
-      </View>
-
-      {sections.map((section) => (
-        <View key={section.date} style={styles.completedDayGroup}>
-          <View style={styles.completedDayGroupHeader}>
-            <View>
-              <Text style={styles.completedDayGroupTitle}>
-                {formatReviewDayLabel(section.date)}
-              </Text>
-              <Text style={styles.completedDayGroupDate}>{section.date}</Text>
-            </View>
-            <Text style={styles.completedDayGroupCount}>
-              {section.items.length}/{section.sessionTotal} done
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      <View style={styles.sheetOverlay}>
+        <Pressable style={styles.sheetBackdrop} onPress={onClose} />
+        <View style={styles.specificSheet}>
+          <View style={styles.sheetHandle} />
+          <View style={styles.sheetHeader}>
+            {selected ? (
+              <Pressable style={styles.sheetIconButton} onPress={() => setSelected(null)}>
+                <Ionicons name="arrow-back" size={19} color="#334155" />
+              </Pressable>
+            ) : (
+              <View style={styles.sheetIconButtonPlaceholder} />
+            )}
+            <Text style={styles.sheetTitle}>
+              {selected ? selected.surahName : "Review Specific Surah"}
             </Text>
+            <Pressable style={styles.sheetIconButton} onPress={onClose}>
+              <Ionicons name="close" size={19} color="#334155" />
+            </Pressable>
           </View>
-          {section.items.map((item) => (
-            <View
-              key={`${section.date}-${item.surahId}-${item.ayahStart ?? 0}`}
-              style={styles.completedDayRow}
-            >
-              <Ionicons name="checkmark-circle" size={17} color="#16a34a" />
-              <View style={styles.completedDayRowText}>
-                <Text style={styles.completedDayRowTitle} numberOfLines={1}>
-                  {item.surahName ?? `Surah ${item.surahNumber}`}
-                </Text>
-                <Text style={styles.completedDayRowDetail}>
-                  {formatAyahRange(completedItemToReviewQueueItem(item, section.date, 0))}
-                </Text>
+
+          {!selected ? (
+            <>
+              <View style={styles.surahSearchBox}>
+                <Ionicons name="search" size={17} color="#64748b" />
+                <TextInput
+                  style={styles.surahSearchInput}
+                  value={search}
+                  onChangeText={setSearch}
+                  placeholder="Search memorized surahs"
+                  placeholderTextColor="#94a3b8"
+                  returnKeyType="search"
+                />
               </View>
-              <Text style={styles.completedDayRowStatus}>Reviewed</Text>
+              {loading ? (
+                <View style={styles.sheetState}>
+                  <ActivityIndicator color="#2563eb" />
+                  <Text style={styles.sheetStateText}>Loading memorized surahs...</Text>
+                </View>
+              ) : error ? (
+                <View style={styles.sheetState}>
+                  <Text style={styles.sheetErrorText}>{error}</Text>
+                </View>
+              ) : filteredSurahs.length === 0 ? (
+                <View style={styles.sheetState}>
+                  <Text style={styles.sheetStateText}>No memorized surahs found.</Text>
+                </View>
+              ) : (
+                <ScrollView style={styles.surahPickerList} keyboardShouldPersistTaps="handled">
+                  {filteredSurahs.map((item) => {
+                    const priority = getMemorizationReviewPriority(item);
+                    const priorityStyle = getReviewPriorityStyle(priority);
+                    return (
+                      <Pressable
+                        key={item.surahId}
+                        style={styles.surahPickerRow}
+                        onPress={() => chooseSurah(item)}
+                      >
+                        <View
+                          style={[
+                            styles.surahPriorityDot,
+                            { backgroundColor: priorityStyle.text },
+                          ]}
+                        />
+                        <View style={styles.surahPickerText}>
+                          <Text style={styles.surahPickerTitle} numberOfLines={1}>
+                            {item.surahNumber}. {item.surahName}
+                          </Text>
+                          <Text style={styles.surahPickerDetail}>
+                            {item.totalVerses} ayah{item.totalVerses === 1 ? "" : "s"}
+                          </Text>
+                        </View>
+                        <Ionicons name="chevron-forward" size={17} color="#94a3b8" />
+                      </Pressable>
+                    );
+                  })}
+                </ScrollView>
+              )}
+            </>
+          ) : (
+            <View style={styles.rangePanel}>
+              <Text style={styles.rangeDetail}>
+                {selected.totalVerses} ayah{selected.totalVerses === 1 ? "" : "s"}
+              </Text>
+              <View style={styles.rangeSteppers}>
+                <VerseStepper
+                  label="From"
+                  value={fromAyah}
+                  min={1}
+                  max={toAyah}
+                  onChange={updateFromAyah}
+                />
+                <VerseStepper
+                  label="To"
+                  value={toAyah}
+                  min={fromAyah}
+                  max={selected.totalVerses}
+                  onChange={updateToAyah}
+                />
+              </View>
+              <Pressable style={styles.startSpecificButton} onPress={startSpecificReview}>
+                <Text style={styles.startSpecificButtonText}>Start Review</Text>
+                <Ionicons name="arrow-forward" size={16} color="#ffffff" />
+              </Pressable>
             </View>
-          ))}
+          )}
         </View>
-      ))}
-    </View>
+      </View>
+    </Modal>
   );
 }
 
@@ -911,15 +1029,8 @@ export default function ReviewScreen() {
   const { childId, name } = useLocalSearchParams<{ childId: string; name: string }>();
   const router = useRouter();
   const todayLocal = getLocalDateHeaderValue();
-  const [activeLocalDate, setActiveLocalDate] = useState(todayLocal);
-  const [currentStoredSession, setCurrentStoredSession] =
-    useState<StoredReviewSession | null>(null);
-  const [completedDaySections, setCompletedDaySections] = useState<
-    CompletedDaySection[]
-  >([]);
-  const [nextOpenReviewDate, setNextOpenReviewDate] = useState<string | null>(null);
   const [selectedMushafSurahIds, setSelectedMushafSurahIds] = useState<number[]>([]);
-  const [completionDismissed, setCompletionDismissed] = useState(false);
+  const [pickerOpen, setPickerOpen] = useState(false);
 
   const [state, setState] = useState<
     | { status: "loading" }
@@ -928,20 +1039,15 @@ export default function ReviewScreen() {
   >({ status: "loading" });
   const [refreshing, setRefreshing] = useState(false);
   const hasLoadedRef = useRef(false);
-  const activeDateRef = useRef(todayLocal);
   const loadRequestRef = useRef(0);
   const navChildId = typeof childId === "string" ? childId : undefined;
   const navName = typeof name === "string" ? name : "";
   const navReviewCount = state.status === "ok" ? state.data.dueToday.length : undefined;
 
-  useEffect(() => {
-    activeDateRef.current = activeLocalDate;
-  }, [activeLocalDate]);
-
   const load = useCallback(
     async (
       mode: "initial" | "refresh" = "initial",
-      reviewDate = activeDateRef.current,
+      reviewDate = todayLocal,
     ) => {
       const requestId = loadRequestRef.current + 1;
       loadRequestRef.current = requestId;
@@ -952,19 +1058,16 @@ export default function ReviewScreen() {
         setRefreshing(true);
       }
       try {
-        await saveStoredActiveReviewDate(childId, reviewDate);
-        const data = await fetchReviewQueue(childId, reviewDate);
-        const storedSession = await saveReviewSessionFromQueue(childId, reviewDate, data);
-        const [sections, nextDate] = await Promise.all([
-          loadCompletedDaySections(childId, todayLocal, reviewDate),
-          resolveNextOpenReviewDate(childId, reviewDate, data.upcoming ?? []),
-        ]);
+        const continueOffset = parseContinueOffset(
+          await AsyncStorage.getItem(continueReviewingKey(childId, todayLocal)),
+        );
+        const data = await fetchReviewQueue(childId, reviewDate, {
+          continueIntoTomorrow: continueOffset > 0,
+          continueOffset,
+        });
 
         if (loadRequestRef.current !== requestId) return;
 
-        setCurrentStoredSession(storedSession);
-        setCompletedDaySections(sections);
-        setNextOpenReviewDate(nextDate);
         setState({ status: "ok", data });
       } catch (e) {
         if (loadRequestRef.current !== requestId) return;
@@ -985,23 +1088,8 @@ export default function ReviewScreen() {
     useCallback(() => {
       const mode = hasLoadedRef.current ? "refresh" : "initial";
       hasLoadedRef.current = true;
-      let cancelled = false;
-
-      void (async () => {
-        const storedActiveDate = await loadStoredActiveReviewDate(childId, todayLocal);
-        if (cancelled) return;
-
-        if (storedActiveDate !== activeDateRef.current) {
-          activeDateRef.current = storedActiveDate;
-          setActiveLocalDate(storedActiveDate);
-        }
-        await load(mode, storedActiveDate);
-      })();
-
-      return () => {
-        cancelled = true;
-      };
-    }, [childId, load, todayLocal]),
+      void load(mode, todayLocal);
+    }, [load, todayLocal]),
   );
 
   function handleCardPress(item: ReviewQueueItem, batchItems?: ReviewQueueItem[]) {
@@ -1017,7 +1105,7 @@ export default function ReviewScreen() {
       pageEnd: String(item.pageEnd),
       chunkIndex: String(item.chunkIndex),
       chunkCount: String(item.chunkCount),
-      reviewDate: activeLocalDate,
+      reviewDate: todayLocal,
     };
     if (batchItems && batchItems.length > 1) {
       params.batchQueue = JSON.stringify(batchItems.map(serializableReviewItem));
@@ -1029,14 +1117,12 @@ export default function ReviewScreen() {
     });
   }
 
-  async function handleContinueReviewing(upcoming: ReviewQueueItem[] = []) {
-    setCompletionDismissed(false);
+  async function handleContinueReviewing() {
     setSelectedMushafSurahIds([]);
-    const currentDate = activeDateRef.current;
-    const nextDate = await resolveNextOpenReviewDate(childId, currentDate, upcoming);
-    activeDateRef.current = nextDate;
-    setActiveLocalDate(nextDate);
-    await load("initial", nextDate);
+    const key = continueReviewingKey(childId, todayLocal);
+    const currentOffset = parseContinueOffset(await AsyncStorage.getItem(key));
+    await AsyncStorage.setItem(key, String(currentOffset + 1));
+    await load("initial", todayLocal);
   }
 
   return (
@@ -1050,7 +1136,7 @@ export default function ReviewScreen() {
       {state.status === "error" && (
         <ErrorState
           message={`Review queue could not load. ${state.message}`}
-          onRetry={() => load("initial", activeLocalDate)}
+          onRetry={() => load("initial", todayLocal)}
         />
       )}
 
@@ -1060,50 +1146,28 @@ export default function ReviewScreen() {
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
-              onRefresh={() => load("refresh", activeLocalDate)}
+              onRefresh={() => load("refresh", todayLocal)}
               tintColor="#2563eb"
             />
           }
         >
           {(() => {
-            const storedCompletedItems =
-              currentStoredSession?.date === activeLocalDate
-                ? currentStoredSession.completedItemsData ?? []
-                : [];
-            const reviewedToday = mergeReviewedQueueItems(
-              storedCompletedItems,
-              state.data.reviewedToday ?? [],
-              activeLocalDate,
-            );
+            const reviewedToday = state.data.reviewedToday ?? [];
             const reviewedSurahIds = new Set(reviewedToday.map((item) => item.surahId));
             const dueToday = (state.data.dueToday ?? []).filter(
               (item) => !reviewedSurahIds.has(item.surahId),
             );
-            const rawUpcoming = state.data.upcoming ?? [];
-            const tomorrowDate = tomorrowLocalDate();
-            const tomorrowUpcoming = rawUpcoming.filter(
-              (item) =>
-                item.dueDate === tomorrowDate && !reviewedSurahIds.has(item.surahId),
+            const upcoming = (state.data.upcoming ?? []).filter(
+              (item) => !reviewedSurahIds.has(item.surahId),
             );
-            const upcoming = dueToday.length === 0 ? tomorrowUpcoming : [];
-            const nextRawUpcoming = rawUpcoming
-              .map((item) => item.dueDate)
-              .filter((dueDate) => dueDate > activeLocalDate)
-              .sort()[0];
-            const activeDateLabel = formatReviewDayLabel(activeLocalDate);
+            const activeDateLabel = formatReviewDayLabel(todayLocal);
             const isFullyEmpty =
               dueToday.length === 0 &&
               reviewedToday.length === 0 &&
-              rawUpcoming.length === 0;
+              upcoming.length === 0;
             const isReviewDayComplete =
               dueToday.length === 0 && reviewedToday.length > 0;
-            const showCompletionCelebration =
-              isReviewDayComplete && !completionDismissed;
-            const hasFutureReviews =
-              dueToday.length === 0 &&
-              reviewedToday.length === 0 &&
-              rawUpcoming.length > 0;
-            const upcomingCount = tomorrowUpcoming.length;
+            const upcomingCount = upcoming.length;
             const pendingIds = new Set(dueToday.map((item) => item.surahId));
             const activeSelectedIds = selectedMushafSurahIds.filter((surahId) =>
               pendingIds.has(surahId),
@@ -1196,15 +1260,11 @@ export default function ReviewScreen() {
                   activeDateLabel={activeDateLabel}
                 />
 
-                <CompletedDaySectionsCard sections={completedDaySections} />
+                <ReviewSpecificSurahCard onPress={() => setPickerOpen(true)} />
 
                 {dueToday.length > 0 && (
                   <>
-                    <SectionLabel>
-                      {activeLocalDate === todayLocal
-                        ? "Due Today"
-                        : `Due ${activeDateLabel}`}
-                    </SectionLabel>
+                    <SectionLabel>Due Today</SectionLabel>
                     {dueToday.length > 1 && (
                       <ReviewBatchPicker
                         selectedCount={activeSelectedIds.length}
@@ -1255,47 +1315,22 @@ export default function ReviewScreen() {
                   </>
                 )}
 
-                {showCompletionCelebration && (
-                  <CompletionCelebrationCard
-                    reviewedCount={reviewedToday.length}
-                    activeDateLabel={activeDateLabel}
-                    onContinue={() => {
-                      void handleContinueReviewing(rawUpcoming);
-                    }}
-                    onDismiss={() => setCompletionDismissed(true)}
-                  />
+                {isReviewDayComplete && (
+                  <TodaysWorkCompletePanel />
                 )}
 
-                {hasFutureReviews && (
-                  <DayStateCard
-                    tone="clear"
-                    title={`No reviews due ${formatReviewDayInSentence(activeDateLabel)}`}
-                    detail={
-                      upcoming.length > 0
-                        ? "Tomorrow's reviews are ready when you want them."
-                        : `Next scheduled review: ${
-                            nextRawUpcoming ? formatDueDate(nextRawUpcoming) : "soon"
-                          }.`
-                    }
-                    actionLabel={nextOpenReviewDate ? "Continue Reviewing →" : undefined}
-                    onAction={
-                      nextOpenReviewDate
-                        ? () => {
-                            void handleContinueReviewing(rawUpcoming);
-                          }
-                        : undefined
-                    }
+                {dueToday.length === 0 && (
+                  <ContinueReviewingButton
+                    onPress={() => {
+                      void handleContinueReviewing();
+                    }}
                   />
                 )}
 
                 {reviewedToday.length > 0 && (
                   <>
                     <View style={dueToday.length > 0 ? styles.sectionWithSpace : undefined}>
-                      <SectionLabel>
-                        {activeLocalDate === todayLocal
-                          ? "Reviewed Today"
-                          : `Reviewed ${activeDateLabel}`}
-                      </SectionLabel>
+                      <SectionLabel>Reviewed Today</SectionLabel>
                     </View>
                     {reviewedToday.map((item, index) => (
                       <ReviewCard
@@ -1344,6 +1379,14 @@ export default function ReviewScreen() {
           })()}
         </ScreenScrollView>
       )}
+
+      <ReviewSpecificSurahSheet
+        visible={pickerOpen}
+        childId={childId}
+        name={navName}
+        todayLocal={todayLocal}
+        onClose={() => setPickerOpen(false)}
+      />
 
       <ChildBottomNav
         active="review"
@@ -1425,207 +1468,258 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     marginTop: 2,
   },
-  celebrationCard: {
+  completePanel: {
     alignItems: "center",
-    borderRadius: 16,
+    justifyContent: "center",
+    flexDirection: "row",
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: "#bbf7d0",
     backgroundColor: "#f0fdf4",
-    paddingVertical: 22,
-    paddingHorizontal: 18,
-    gap: 8,
+    paddingVertical: 16,
+    paddingHorizontal: 14,
+    gap: 10,
   },
-  celebrationIcon: {
-    width: 58,
-    height: 58,
-    borderRadius: 29,
-    backgroundColor: "#ffffff",
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 2,
-  },
-  celebrationTitle: {
+  completePanelTitle: {
     color: "#064e3b",
-    fontSize: 21,
+    fontSize: 16,
     fontWeight: "900",
-    textAlign: "center",
   },
-  celebrationDetail: {
-    color: "#047857",
-    fontSize: 13,
-    fontWeight: "700",
-    lineHeight: 18,
-    textAlign: "center",
-  },
-  celebrationPrimaryButton: {
+  continueReviewingButton: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 7,
-    backgroundColor: "#16a34a",
-    borderRadius: 999,
-    paddingVertical: 11,
+    gap: 8,
+    backgroundColor: "#2563eb",
+    borderRadius: 12,
+    paddingVertical: 14,
     paddingHorizontal: 16,
-    marginTop: 8,
   },
-  celebrationPrimaryButtonText: {
+  continueReviewingButtonText: {
     color: "#ffffff",
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "900",
   },
-  celebrationDismissButton: {
-    paddingVertical: 7,
-    paddingHorizontal: 10,
-  },
-  celebrationDismissText: {
-    color: "#047857",
-    fontSize: 12,
-    fontWeight: "800",
-  },
-  dayStateCard: {
-    flexDirection: "row",
-    gap: 10,
-    borderRadius: 12,
-    borderWidth: 1,
-    padding: 13,
-  },
-  dayStateComplete: {
-    backgroundColor: "#ecfdf5",
-    borderColor: "#a7f3d0",
-  },
-  dayStateClear: {
-    backgroundColor: "#f0fdfa",
-    borderColor: "#99f6e4",
-  },
-  dayStateText: {
-    flex: 1,
-    gap: 3,
-  },
-  dayStateTitle: {
-    fontSize: 14,
-    fontWeight: "800",
-  },
-  dayStateDetail: {
-    color: "#555555",
-    fontSize: 12,
-    lineHeight: 17,
-    fontWeight: "600",
-  },
-  dayStateAction: {
-    alignSelf: "flex-start",
+  specificSurahCard: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
-    marginTop: 8,
-    backgroundColor: "#111111",
-    borderRadius: 999,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-  },
-  dayStateActionText: {
-    color: "#ffffff",
-    fontSize: 12,
-    fontWeight: "800",
-  },
-  completedDaysCard: {
-    backgroundColor: "#ecfdf5",
+    gap: 12,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#a7f3d0",
+    borderColor: "#dbeafe",
+    backgroundColor: "#ffffff",
     padding: 14,
-    gap: 12,
+    shadowColor: "#0f172a",
+    shadowOpacity: 0.035,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 1,
   },
-  completedDaysHeader: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    justifyContent: "space-between",
-    gap: 10,
+  specificSurahIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: "#eff6ff",
+    alignItems: "center",
+    justifyContent: "center",
   },
-  completedDaysTitleWrap: {
+  specificSurahText: {
     flex: 1,
     gap: 2,
   },
-  completedDaysTitle: {
-    color: "#064e3b",
-    fontSize: 14,
-    fontWeight: "800",
+  specificSurahTitle: {
+    color: "#111827",
+    fontSize: 15,
+    fontWeight: "900",
   },
-  completedDaysDetail: {
-    color: "#047857",
+  specificSurahDetail: {
+    color: "#64748b",
     fontSize: 12,
-    fontWeight: "600",
-    lineHeight: 16,
+    fontWeight: "700",
   },
-  completedDaysBadge: {
+  sheetOverlay: {
+    flex: 1,
+    justifyContent: "flex-end",
+    backgroundColor: "rgba(15, 23, 42, 0.42)",
+  },
+  sheetBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  specificSheet: {
+    maxHeight: "82%",
     backgroundColor: "#ffffff",
-    borderColor: "#a7f3d0",
-    borderWidth: 1,
+    borderTopLeftRadius: 22,
+    borderTopRightRadius: 22,
+    paddingHorizontal: 18,
+    paddingTop: 10,
+    paddingBottom: 24,
+    gap: 12,
+  },
+  sheetHandle: {
+    alignSelf: "center",
+    width: 44,
+    height: 4,
     borderRadius: 999,
-    paddingVertical: 5,
-    paddingHorizontal: 9,
+    backgroundColor: "#cbd5e1",
+    marginBottom: 2,
   },
-  completedDaysBadgeText: {
-    color: "#047857",
-    fontSize: 11,
-    fontWeight: "800",
-  },
-  completedDayGroup: {
-    backgroundColor: "#ffffff",
-    borderRadius: 11,
-    borderWidth: 1,
-    borderColor: "#bbf7d0",
-    padding: 11,
-    gap: 9,
-  },
-  completedDayGroupHeader: {
+  sheetHeader: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    gap: 10,
+    gap: 12,
   },
-  completedDayGroupTitle: {
-    color: "#064e3b",
-    fontSize: 13,
-    fontWeight: "800",
+  sheetTitle: {
+    flex: 1,
+    color: "#111827",
+    fontSize: 17,
+    fontWeight: "900",
+    textAlign: "center",
   },
-  completedDayGroupDate: {
-    color: "#047857",
-    fontSize: 11,
-    fontWeight: "600",
-    marginTop: 1,
+  sheetIconButton: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: "#f1f5f9",
+    alignItems: "center",
+    justifyContent: "center",
   },
-  completedDayGroupCount: {
-    color: "#047857",
-    fontSize: 12,
-    fontWeight: "800",
+  sheetIconButtonPlaceholder: {
+    width: 34,
+    height: 34,
   },
-  completedDayRow: {
+  surahSearchBox: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 9,
-    backgroundColor: "#f0fdf4",
-    borderRadius: 9,
-    paddingVertical: 9,
-    paddingHorizontal: 10,
+    gap: 8,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    borderRadius: 12,
+    backgroundColor: "#f8fafc",
+    paddingHorizontal: 12,
   },
-  completedDayRowText: {
+  surahSearchInput: {
     flex: 1,
-    gap: 1,
+    minHeight: 44,
+    color: "#111827",
+    fontSize: 14,
+    fontWeight: "700",
   },
-  completedDayRowTitle: {
-    color: "#064e3b",
+  sheetState: {
+    minHeight: 160,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
+  },
+  sheetStateText: {
+    color: "#64748b",
     fontSize: 13,
     fontWeight: "700",
   },
-  completedDayRowDetail: {
-    color: "#047857",
-    fontSize: 11,
-    fontWeight: "600",
+  sheetErrorText: {
+    color: "#b91c1c",
+    fontSize: 13,
+    fontWeight: "700",
+    textAlign: "center",
   },
-  completedDayRowStatus: {
-    color: "#16a34a",
-    fontSize: 11,
+  surahPickerList: {
+    maxHeight: 430,
+  },
+  surahPickerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 11,
+    borderBottomWidth: 1,
+    borderBottomColor: "#f1f5f9",
+    paddingVertical: 12,
+  },
+  surahPriorityDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+  },
+  surahPickerText: {
+    flex: 1,
+    gap: 2,
+  },
+  surahPickerTitle: {
+    color: "#111827",
+    fontSize: 14,
+    fontWeight: "900",
+  },
+  surahPickerDetail: {
+    color: "#64748b",
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  rangePanel: {
+    gap: 14,
+  },
+  rangeDetail: {
+    color: "#64748b",
+    fontSize: 13,
+    fontWeight: "700",
+    textAlign: "center",
+  },
+  rangeSteppers: {
+    flexDirection: "row",
+    gap: 12,
+  },
+  rangeStepper: {
+    flex: 1,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    backgroundColor: "#f8fafc",
+    padding: 12,
+    gap: 10,
+  },
+  rangeStepperLabel: {
+    color: "#64748b",
+    fontSize: 12,
     fontWeight: "800",
+    textAlign: "center",
+  },
+  rangeStepperControls: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
+  },
+  rangeStepperButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "#bfdbfe",
+    backgroundColor: "#eff6ff",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  rangeStepperButtonDisabled: {
+    borderColor: "#e2e8f0",
+    backgroundColor: "#f1f5f9",
+  },
+  rangeStepperValue: {
+    minWidth: 30,
+    color: "#111827",
+    fontSize: 18,
+    fontWeight: "900",
+    textAlign: "center",
+  },
+  startSpecificButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    backgroundColor: "#2563eb",
+    borderRadius: 12,
+    paddingVertical: 14,
+  },
+  startSpecificButtonText: {
+    color: "#ffffff",
+    fontSize: 14,
+    fontWeight: "900",
   },
   batchCard: {
     backgroundColor: "#ffffff",

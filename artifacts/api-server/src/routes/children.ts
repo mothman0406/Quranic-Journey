@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { db } from "@workspace/db";
-import { childrenTable, memorizationProgressTable, reviewScheduleTable, learningSessionsTable, childDuasTable, dailyProgressTable } from "@workspace/db/schema";
+import { childrenTable, memorizationProgressTable, reviewScheduleTable, reviewDailySetTable, learningSessionsTable, childDuasTable, dailyProgressTable } from "@workspace/db/schema";
 import { eq, desc, and, sql, gte, lte } from "drizzle-orm";
 import { SURAHS } from "../data/surahs.js";
 import { resolvePageTarget, resolveStrictSurahScopedPageTarget, getPageForVerse } from "../data/quran-meta.js";
@@ -1232,6 +1232,7 @@ router.delete("/children/:childId", async (req, res) => {
 
   await db.delete(memorizationProgressTable).where(eq(memorizationProgressTable.childId, childId));
   await db.delete(reviewScheduleTable).where(eq(reviewScheduleTable.childId, childId));
+  await db.delete(reviewDailySetTable).where(eq(reviewDailySetTable.childId, childId));
   await db.delete(learningSessionsTable).where(eq(learningSessionsTable.childId, childId));
   await db.delete(childDuasTable).where(eq(childDuasTable.childId, childId));
   await db.delete(childrenTable).where(eq(childrenTable.id, childId));

@@ -33,8 +33,17 @@ function localDateHeaders(localDate?: string): HeadersInit | undefined {
 export async function fetchReviewQueue(
   childId: string,
   localDate?: string,
+  opts: { continueIntoTomorrow?: boolean; continueOffset?: number } = {},
 ): Promise<ReviewQueueResponse> {
-  return apiFetch<ReviewQueueResponse>(`/api/children/${childId}/reviews`, {
+  const params = new URLSearchParams();
+  if (opts.continueIntoTomorrow) {
+    params.set("continueIntoTomorrow", "true");
+    if (opts.continueOffset && opts.continueOffset > 1) {
+      params.set("continueOffset", String(Math.round(opts.continueOffset)));
+    }
+  }
+  const query = params.toString();
+  return apiFetch<ReviewQueueResponse>(`/api/children/${childId}/reviews${query ? `?${query}` : ""}`, {
     headers: localDateHeaders(localDate),
   });
 }
@@ -44,6 +53,7 @@ export async function submitReview(
   surahId: number,
   qualityRating: number,
   localDate?: string,
+  opts: { ayahStart?: number; ayahEnd?: number } = {},
 ): Promise<void> {
   await apiFetch(`/api/children/${childId}/reviews`, {
     method: "POST",
@@ -52,6 +62,9 @@ export async function submitReview(
       surahId,
       qualityRating,
       durationMinutes: 5,
+      ...(opts.ayahStart && opts.ayahEnd
+        ? { ayahStart: opts.ayahStart, ayahEnd: opts.ayahEnd }
+        : {}),
     }),
   });
 }

@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { db } from "@workspace/db";
-import { childrenTable, memorizationProgressTable, reviewScheduleTable, dailyProgressTable } from "@workspace/db/schema";
+import { childrenTable, memorizationProgressTable, reviewScheduleTable, reviewDailySetTable, dailyProgressTable } from "@workspace/db/schema";
 import { eq, and, desc } from "drizzle-orm";
 import { SURAHS } from "../data/surahs.js";
 import { getPageForVerse } from "../data/quran-meta.js";
@@ -240,7 +240,11 @@ function isFullyDoneReviewSurah(
   const surah = SURAHS.find((s) => s.id === progress.surahId);
   if (!surah) return false;
 
-  return progress.versesMemorized >= surah.verseCount;
+  return (
+    progress.status === "memorized" ||
+    progress.status === "needs_review" ||
+    (progress.status === "in_progress" && progress.versesMemorized >= surah.verseCount)
+  );
 }
 
 function getReviewPriorityFromMemProgress(
@@ -331,6 +335,90 @@ function prioritizeReviewableWithSchedule<
   };
 }
 
+function colorRank(priority: ReviewPriority): number {
+  return priority === "red" ? 0 : priority === "orange" ? 1 : 2;
+}
+
+function canonicalWrapOrder(surahNumber: number): number {
+  if (surahNumber === 1) return 0;
+  return 115 - surahNumber;
+}
+
+function sortByCanonicalPriority<T extends { mem: MemProgressRow; surah: SurahMeta }>(
+  items: T[],
+): T[] {
+  return [...items].sort((a, b) => {
+    const priorityDelta =
+      colorRank(getReviewPriorityFromMemProgress(a.mem)) -
+      colorRank(getReviewPriorityFromMemProgress(b.mem));
+    if (priorityDelta !== 0) return priorityDelta;
+    return canonicalWrapOrder(a.surah.number) - canonicalWrapOrder(b.surah.number);
+  });
+}
+
+function pickWrapFallback(
+  reviewable: ReviewableWithScheduleItem[],
+): ReviewableWithScheduleItem[] {
+  if (reviewable.length === 0) return [];
+  const sorted = sortByCanonicalPriority(reviewable);
+  const topPriority = colorRank(getReviewPriorityFromMemProgress(sorted[0]!.mem));
+  const topBand = sorted.filter(
+    (item) => colorRank(getReviewPriorityFromMemProgress(item.mem)) === topPriority,
+  );
+  topBand.sort((a, b) => {
+    const aTime = a.schedule.lastReviewed?.getTime() ?? 0;
+    const bTime = b.schedule.lastReviewed?.getTime() ?? 0;
+    if (aTime !== bTime) return aTime - bTime;
+    return canonicalWrapOrder(a.surah.number) - canonicalWrapOrder(b.surah.number);
+  });
+  return topBand[0] ? [topBand[0]] : [];
+}
+
+function parseFrozenSurahIds(raw: string | null | undefined): number[] {
+  if (!raw) return [];
+
+  try {
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.map(Number).filter(Number.isInteger);
+  } catch {
+    return [];
+  }
+}
+
+function budgetReviewItems(
+  items: ReviewableWithScheduleItem[],
+  reviewBudget: number,
+): ReviewableWithScheduleItem[] {
+  const budgeted: ReviewableWithScheduleItem[] = [];
+  const covered = new Set<number>();
+  let blocked = false;
+
+  for (const item of items) {
+    if (blocked) break;
+
+    const chunkPages = new Set<number>();
+    for (let page = item.activeChunk.pageStart; page <= item.activeChunk.pageEnd; page += 1) {
+      chunkPages.add(page);
+    }
+
+    const newPages = [...chunkPages].filter((page) => !covered.has(page));
+    const currentUnder = reviewBudget - covered.size;
+    const wouldBeOver = (covered.size + newPages.length) - reviewBudget;
+    const closerToInclude = newPages.length > 0 && wouldBeOver <= currentUnder;
+    const include = covered.size < reviewBudget || newPages.length === 0 || closerToInclude;
+
+    if (include) {
+      newPages.forEach((page) => covered.add(page));
+      budgeted.push(item);
+    } else {
+      blocked = true;
+    }
+  }
+
+  return budgeted;
+}
+
 function formatDate(date: Date): string {
   return date.toISOString().split("T")[0];
 }
@@ -416,7 +504,13 @@ function getReviewedChunk(
         chunk.ayahEnd === schedule.lastReviewedChunkAyahEnd,
     ) ??
     chunks.find((chunk) => chunk.ayahStart === schedule.lastReviewedChunkAyahStart) ??
-    null
+    {
+      index: 0,
+      ayahStart: schedule.lastReviewedChunkAyahStart,
+      ayahEnd: schedule.lastReviewedChunkAyahEnd,
+      pageStart: getPageForVerse(surah.number, schedule.lastReviewedChunkAyahStart),
+      pageEnd: getPageForVerse(surah.number, schedule.lastReviewedChunkAyahEnd),
+    }
   );
 }
 
@@ -806,74 +900,105 @@ router.get("/children/:childId/reviews", async (req, res) => {
     })
     .filter((item): item is ReviewableWithScheduleItem => item != null);
 
-  const dueReviewableWithSchedule = reviewableWithSchedule.filter(
-    ({ schedule }) => schedule.dueDate <= today,
+  if (reviewableWithSchedule.length === 0) {
+    res.json({ dueToday: [], upcoming: [], todayRange: null, reviewedToday: [] });
+    return;
+  }
+
+  const continueIntoTomorrow = req.query.continueIntoTomorrow === "true";
+  const requestedContinueOffset = Number(req.query.continueOffset);
+  const continueOffset = continueIntoTomorrow
+    ? Math.max(
+        1,
+        Math.min(
+          30,
+          Number.isFinite(requestedContinueOffset)
+            ? Math.round(requestedContinueOffset)
+            : 1,
+        ),
+      )
+    : 0;
+  const queryDate = addDaysToLocalDate(today, continueOffset);
+
+  const candidatesForQueryDate = sortByCanonicalPriority(
+    reviewableWithSchedule.filter(({ schedule }) => schedule.dueDate <= queryDate),
   );
-  const futureReviewableWithSchedule = reviewableWithSchedule.filter(
-    ({ schedule }) => schedule.dueDate > today,
-  );
+  let frozenCandidates = budgetReviewItems(candidatesForQueryDate, reviewBudget);
+  if (frozenCandidates.length === 0) {
+    frozenCandidates = pickWrapFallback(reviewableWithSchedule);
+  }
 
-  const {
-    redSurahs,
-    orangeSurahs,
-    greenSurahs,
-    orderedQueue,
-  } = prioritizeReviewableWithSchedule(dueReviewableWithSchedule);
-  const { orderedQueue: futureQueue } = prioritizeReviewableWithSchedule(
-    futureReviewableWithSchedule,
-  );
-
-  const withinBudget: ReviewableWithScheduleItem[] = [];
-  const overBudget: ReviewableWithScheduleItem[] = [];
-  const coveredPages = new Set<number>();
-
-  console.log('[review budget] reviewBudget:', reviewBudget,
-    'red:', redSurahs.map(x => { const s = SURAHS.find(s2 => s2.id === x.schedule.surahId); const mem = memProgress.find(m => m.surahId === x.schedule.surahId); return `${s?.number}(${mem?.status},str=${mem?.strength})`; }),
-    'orange:', orangeSurahs.map(x => { const s = SURAHS.find(s2 => s2.id === x.schedule.surahId); const mem = memProgress.find(m => m.surahId === x.schedule.surahId); return `${s?.number}(${mem?.status},str=${mem?.strength})`; }),
-    'green:', greenSurahs.map(x => { const s = SURAHS.find(s2 => s2.id === x.schedule.surahId); const mem = memProgress.find(m => m.surahId === x.schedule.surahId); return `${s?.number}(${mem?.status},str=${mem?.strength})`; }));
-
-  const tryIncludeInQueue = (
-    item: ReviewableWithScheduleItem,
-    group: ReviewPriority,
-  ) => {
-    const chunkPageSet = new Set<number>();
-    for (let p = item.activeChunk.pageStart; p <= item.activeChunk.pageEnd; p += 1) {
-      chunkPageSet.add(p);
-    }
-    const newPages = [...chunkPageSet].filter((p) => !coveredPages.has(p));
-    const currentUnder = reviewBudget - coveredPages.size;
-    const wouldBeOver = (coveredPages.size + newPages.length) - reviewBudget;
-    const closerToInclude = newPages.length > 0 && wouldBeOver <= currentUnder;
-    const include = coveredPages.size < reviewBudget || newPages.length === 0 || closerToInclude;
-    console.log(
-      `[review budget] ${group} surah ${item.surah.number}: ayahs=${item.activeChunk.ayahStart}-${item.activeChunk.ayahEnd} pages=${item.activeChunk.pageStart}-${item.activeChunk.pageEnd} newPages=${newPages.length} coveredSize=${coveredPages.size} → ${include ? "INCLUDE" : "SKIP"}`,
-    );
-    if (include) {
-      newPages.forEach((p) => coveredPages.add(p));
-      withinBudget.push(item);
-      return true;
-    } else {
-      overBudget.push(item);
-      return false;
-    }
+  const readFrozenSurahIds = async (localDate: string): Promise<number[]> => {
+    const [frozen] = await db.select()
+      .from(reviewDailySetTable)
+      .where(and(
+        eq(reviewDailySetTable.childId, childId),
+        eq(reviewDailySetTable.localDate, localDate),
+      ));
+    return parseFrozenSurahIds(frozen?.surahIds);
   };
 
-  // Step 5b — Walk the queue in canonical priority order and never skip ahead.
-  let queueBlocked = false;
-  for (const item of orderedQueue) {
-    const { schedule: r, mem } = item;
-    const priority = getReviewPriorityFromMemProgress(mem);
-    const surah = item.surah;
-    if (queueBlocked) {
-      if (surah) {
-        console.log(`[review budget] ${priority} surah ${surah.number}: SKIP (earlier queue item was excluded)`);
+  const [existingFrozen] = await db.select()
+    .from(reviewDailySetTable)
+    .where(and(
+      eq(reviewDailySetTable.childId, childId),
+      eq(reviewDailySetTable.localDate, queryDate),
+    ));
+
+  let frozenSurahIds: number[];
+  if (existingFrozen) {
+    frozenSurahIds = parseFrozenSurahIds(existingFrozen.surahIds);
+    if (frozenSurahIds.length === 0) {
+      frozenSurahIds = frozenCandidates.map((item) => item.surah.id);
+    }
+  } else {
+    frozenSurahIds = frozenCandidates.map((item) => item.surah.id);
+    if (frozenSurahIds.length > 0) {
+      try {
+        await db.insert(reviewDailySetTable).values({
+          childId,
+          localDate: queryDate,
+          surahIds: JSON.stringify(frozenSurahIds),
+        });
+      } catch {
+        // Another request may have frozen the same local date first.
       }
-      overBudget.push(item);
-      continue;
     }
-    if (!tryIncludeInQueue(item, priority)) {
-      queueBlocked = true;
+  }
+
+  const reviewedTodaySurahIds = new Set(
+    reviewableWithSchedule
+      .filter(
+        (item) =>
+          item.schedule.lastReviewed != null &&
+          localDateStr(item.schedule.lastReviewed) === today,
+      )
+      .map((item) => item.surah.id),
+  );
+
+  const frozenItemMap = new Map(reviewableWithSchedule.map((item) => [item.surah.id, item]));
+  const dueTodayItems = frozenSurahIds
+    .map((id) => frozenItemMap.get(id))
+    .filter((item): item is ReviewableWithScheduleItem => item != null)
+    .filter((item) => !reviewedTodaySurahIds.has(item.surah.id));
+
+  let mergedDueTodayItems = dueTodayItems;
+  if (continueIntoTomorrow) {
+    const merged = new Map<number, ReviewableWithScheduleItem>();
+    for (let offset = 0; offset < continueOffset; offset += 1) {
+      const localDate = addDaysToLocalDate(today, offset);
+      const previousFrozenSurahIds = await readFrozenSurahIds(localDate);
+      for (const surahId of previousFrozenSurahIds) {
+        const item = frozenItemMap.get(surahId);
+        if (item && !reviewedTodaySurahIds.has(item.surah.id)) {
+          merged.set(item.surah.id, item);
+        }
+      }
     }
+    for (const item of dueTodayItems) {
+      merged.set(item.surah.id, item);
+    }
+    mergedDueTodayItems = Array.from(merged.values());
   }
 
   // Step 6 — Format response
@@ -909,11 +1034,11 @@ router.get("/children/:childId/reviews", async (req, res) => {
     };
   };
 
-  // Build todayRange from first ayah of first within-budget surah to last ayah of last
+  // Build todayRange from first ayah of first due surah to last ayah of last
   let todayRange: { fromSurah: number; fromAyah: number; toSurah: number; toAyah: number } | null = null;
-  if (withinBudget.length > 0) {
-    const firstItem = withinBudget[0];
-    const lastItem = withinBudget[withinBudget.length - 1];
+  if (mergedDueTodayItems.length > 0) {
+    const firstItem = mergedDueTodayItems[0];
+    const lastItem = mergedDueTodayItems[mergedDueTodayItems.length - 1];
     const firstSurah = firstItem?.surah;
     const lastSurah = lastItem?.surah;
     if (firstSurah && lastSurah) {
@@ -926,7 +1051,7 @@ router.get("/children/:childId/reviews", async (req, res) => {
     }
   }
 
-  const dueToday = withinBudget.map((item) => {
+  const dueToday = mergedDueTodayItems.map((item) => {
     const mem = memProgress.find((m) => m.surahId === item.schedule.surahId);
     return formatReview(
       item,
@@ -937,28 +1062,23 @@ router.get("/children/:childId/reviews", async (req, res) => {
     );
   });
 
-  const upcoming = [...overBudget]
-    .map((item) => {
-      const mem = memProgress.find((m) => m.surahId === item.schedule.surahId);
-      return formatReview(
-        item,
-        item.activeChunk,
-        item.activeChunkIndex,
-        false,
-        mem ? getReviewPriorityFromMemProgress(mem) : "green",
-      );
-    })
-    .concat(
-      futureQueue.map((item) =>
-        formatReview(
-          item,
-          item.activeChunk,
-          item.activeChunkIndex,
-          false,
-          getReviewPriorityFromMemProgress(item.mem),
-        ),
-      ),
+  const dueTodaySurahIds = new Set(mergedDueTodayItems.map((item) => item.surah.id));
+  const upcoming = sortByCanonicalPriority(
+    reviewableWithSchedule.filter(
+      (item) =>
+        !dueTodaySurahIds.has(item.surah.id) &&
+        !reviewedTodaySurahIds.has(item.surah.id),
+    ),
+  ).map((item) => {
+    const mem = memProgress.find((m) => m.surahId === item.schedule.surahId);
+    return formatReview(
+      item,
+      item.activeChunk,
+      item.activeChunkIndex,
+      item.schedule.dueDate < today,
+      mem ? getReviewPriorityFromMemProgress(mem) : "green",
     );
+  });
 
   const reviewedToday = reviewableWithSchedule
     .filter(
@@ -984,7 +1104,7 @@ router.get("/children/:childId/reviews", async (req, res) => {
 router.post("/children/:childId/reviews", async (req, res) => {
   const childId = parseInt(req.params.childId);
   if (!await ownsChild(req.user.id, childId)) { res.status(403).json({ error: "Forbidden" }); return; }
-  const { surahId, qualityRating, durationMinutes } = req.body;
+  const { surahId, qualityRating, durationMinutes, ayahStart, ayahEnd } = req.body;
 
   const [child] = await db.select({ reviewPagesPerDay: childrenTable.reviewPagesPerDay })
     .from(childrenTable).where(eq(childrenTable.id, childId));
@@ -998,9 +1118,38 @@ router.post("/children/:childId/reviews", async (req, res) => {
   const now = new Date();
   const today = getRequestLocalDate(req);
   const reviewPagesPerDay = child?.reviewPagesPerDay ?? 2.0;
-  const reviewChunkState = review
-    ? getActiveReviewChunk(surah, review, reviewPagesPerDay)
-    : resolveChunkByStartAyah(getReviewChunksForSurah(surah, reviewPagesPerDay), 1);
+  const requestedAyahStart = Number(ayahStart);
+  const requestedAyahEnd = Number(ayahEnd);
+  const hasAdHocRange =
+    Number.isInteger(requestedAyahStart) &&
+    Number.isInteger(requestedAyahEnd) &&
+    requestedAyahStart >= 1 &&
+    requestedAyahEnd >= requestedAyahStart &&
+    requestedAyahEnd <= surah.verseCount;
+  const reviewChunkState: ReviewChunkState = hasAdHocRange
+    ? {
+        chunks: [
+          {
+            index: 0,
+            ayahStart: requestedAyahStart,
+            ayahEnd: requestedAyahEnd,
+            pageStart: getPageForVerse(surah.number, requestedAyahStart),
+            pageEnd: getPageForVerse(surah.number, requestedAyahEnd),
+          },
+        ],
+        activeChunk: {
+          index: 0,
+          ayahStart: requestedAyahStart,
+          ayahEnd: requestedAyahEnd,
+          pageStart: getPageForVerse(surah.number, requestedAyahStart),
+          pageEnd: getPageForVerse(surah.number, requestedAyahEnd),
+        },
+        activeChunkIndex: 0,
+        nextChunk: null,
+      }
+    : review
+      ? getActiveReviewChunk(surah, review, reviewPagesPerDay)
+      : resolveChunkByStartAyah(getReviewChunksForSurah(surah, reviewPagesPerDay), 1);
   const reviewedAyahs = Array.from(
     {
       length:
