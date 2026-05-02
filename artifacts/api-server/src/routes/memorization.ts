@@ -938,32 +938,36 @@ router.get("/children/:childId/reviews", async (req, res) => {
     return parseFrozenSurahIds(frozen?.surahIds);
   };
 
-  const [existingFrozen] = await db.select()
-    .from(reviewDailySetTable)
-    .where(and(
-      eq(reviewDailySetTable.childId, childId),
-      eq(reviewDailySetTable.localDate, queryDate),
-    ));
-
   let frozenSurahIds: number[];
-  if (existingFrozen) {
-    frozenSurahIds = parseFrozenSurahIds(existingFrozen.surahIds);
-    if (frozenSurahIds.length === 0) {
+  if (continueOffset === 0) {
+    const [existingFrozen] = await db.select()
+      .from(reviewDailySetTable)
+      .where(and(
+        eq(reviewDailySetTable.childId, childId),
+        eq(reviewDailySetTable.localDate, today),
+      ));
+
+    if (existingFrozen) {
+      frozenSurahIds = parseFrozenSurahIds(existingFrozen.surahIds);
+      if (frozenSurahIds.length === 0) {
+        frozenSurahIds = frozenCandidates.map((item) => item.surah.id);
+      }
+    } else {
       frozenSurahIds = frozenCandidates.map((item) => item.surah.id);
+      if (frozenSurahIds.length > 0) {
+        try {
+          await db.insert(reviewDailySetTable).values({
+            childId,
+            localDate: today,
+            surahIds: JSON.stringify(frozenSurahIds),
+          });
+        } catch {
+          // Another request may have frozen today's set first.
+        }
+      }
     }
   } else {
     frozenSurahIds = frozenCandidates.map((item) => item.surah.id);
-    if (frozenSurahIds.length > 0) {
-      try {
-        await db.insert(reviewDailySetTable).values({
-          childId,
-          localDate: queryDate,
-          surahIds: JSON.stringify(frozenSurahIds),
-        });
-      } catch {
-        // Another request may have frozen the same local date first.
-      }
-    }
   }
 
   const reviewedTodaySurahIds = new Set(
@@ -976,21 +980,34 @@ router.get("/children/:childId/reviews", async (req, res) => {
   const dueTodayItems = frozenSurahIds
     .map((id) => frozenItemMap.get(id))
     .filter((item): item is ReviewableWithScheduleItem => item != null)
-    .filter((item) => !reviewedTodaySurahIds.has(item.surah.id));
+    .filter((item) => continueOffset > 0 || !reviewedTodaySurahIds.has(item.surah.id));
 
   let mergedDueTodayItems = dueTodayItems;
   if (continueIntoTomorrow) {
     const merged = new Map<number, ReviewableWithScheduleItem>();
-    for (let offset = 0; offset < continueOffset; offset += 1) {
-      const localDate = addDaysToLocalDate(today, offset);
-      const previousFrozenSurahIds = await readFrozenSurahIds(localDate);
-      for (const surahId of previousFrozenSurahIds) {
-        const item = frozenItemMap.get(surahId);
-        if (item && !reviewedTodaySurahIds.has(item.surah.id)) {
-          merged.set(item.surah.id, item);
-        }
+
+    const todayFrozenSurahIds = await readFrozenSurahIds(today);
+    for (const surahId of todayFrozenSurahIds) {
+      const item = frozenItemMap.get(surahId);
+      if (item && !reviewedTodaySurahIds.has(item.surah.id)) {
+        merged.set(item.surah.id, item);
       }
     }
+
+    for (let offset = 1; offset < continueOffset; offset += 1) {
+      const intermediateDate = addDaysToLocalDate(today, offset);
+      const intermediateCandidates = sortByCanonicalPriority(
+        reviewableWithSchedule.filter(({ schedule }) => schedule.dueDate <= intermediateDate),
+      );
+      let intermediateBudgeted = budgetReviewItems(intermediateCandidates, reviewBudget);
+      if (intermediateBudgeted.length === 0) {
+        intermediateBudgeted = pickWrapFallback(reviewableWithSchedule);
+      }
+      for (const item of intermediateBudgeted) {
+        merged.set(item.surah.id, item);
+      }
+    }
+
     for (const item of dueTodayItems) {
       merged.set(item.surah.id, item);
     }

@@ -480,7 +480,6 @@ function ContinueReviewingButton({ onPress }: { onPress: () => void }) {
   return (
     <Pressable style={styles.continueReviewingButton} onPress={onPress}>
       <Text style={styles.continueReviewingButtonText}>Continue Reviewing →</Text>
-      <Ionicons name="arrow-forward" size={16} color="#ffffff" />
     </Pressable>
   );
 }
@@ -1342,32 +1341,6 @@ export default function ReviewScreen() {
                   </>
                 )}
 
-                {dueToday.length === 0 && upcoming.length > 0 && (
-                  <>
-                    <View
-                      style={
-                        reviewedToday.length > 0
-                          ? styles.sectionWithSpace
-                          : undefined
-                      }
-                    >
-                      <SectionLabel>Upcoming Reviews</SectionLabel>
-                    </View>
-                    {upcoming.slice(0, 8).map((item, index) => (
-                      <ReviewCard
-                        key={itemKey("upcoming", item, index)}
-                        item={item}
-                        variant="upcoming"
-                      />
-                    ))}
-                    {upcoming.length > 8 && (
-                      <Text style={styles.moreQueuedText}>
-                        +{upcoming.length - 8} more scheduled reviews
-                      </Text>
-                    )}
-                  </>
-                )}
-
                 {isFullyEmpty && (
                   <EmptyState
                     title="No reviews scheduled yet"
@@ -1489,7 +1462,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 8,
     backgroundColor: "#2563eb",
     borderRadius: 12,
     paddingVertical: 14,
@@ -1995,12 +1967,5 @@ const styles = StyleSheet.create({
   },
   batchCardHintSelected: {
     color: "#1d4ed8",
-  },
-  moreQueuedText: {
-    textAlign: "center",
-    color: "#666666",
-    fontSize: 12,
-    fontWeight: "700",
-    paddingVertical: 6,
   },
 });
