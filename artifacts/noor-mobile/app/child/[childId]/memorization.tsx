@@ -51,6 +51,7 @@ import {
   fetchAyahTranslation,
   fetchSurahVerses,
   fetchVersesByPage,
+  fetchVersesByKeys,
   fetchAllChapters,
   type ApiWord,
   type ApiPageVerse,
@@ -499,6 +500,36 @@ function buildFullWorkTarget(work: NewMemorization): SessionTarget {
     pageEnd: work.pageEnd,
     isReviewOnly: work.isReviewOnly,
   };
+}
+
+function getCanonicalVerseKeysForPage(pageNumber: number) {
+  const seen = new Set<string>();
+  const verseKeys: string[] = [];
+
+  for (const line of getCanonicalPageLayout(pageNumber)) {
+    if (line.lineType !== "ayah") continue;
+
+    for (const wordKey of getCanonicalWordKeysInRange(line.firstWordKey, line.lastWordKey)) {
+      const [surah, ayah] = wordKey.split(":");
+      if (!surah || !ayah) continue;
+
+      const verseKey = `${surah}:${ayah}`;
+      if (!seen.has(verseKey)) {
+        seen.add(verseKey);
+        verseKeys.push(verseKey);
+      }
+    }
+  }
+
+  return verseKeys;
+}
+
+async function fetchMushafPageVerses(pageNumber: number) {
+  const verseKeys = getCanonicalVerseKeysForPage(pageNumber);
+  // QUL owns page boundaries; Quran.com's by_page endpoint can disagree on late Juz Amma pages.
+  return verseKeys.length > 0
+    ? fetchVersesByKeys(verseKeys)
+    : fetchVersesByPage(pageNumber);
 }
 
 function buildBookmarkTarget(bookmark: MemorizationSessionBookmark): SessionTarget {
@@ -1258,7 +1289,7 @@ export default function MemorizationScreen() {
     let cancelled = false;
     (async () => {
       try {
-        const results = await Promise.all(pagesToFetch.map((p) => fetchVersesByPage(p)));
+        const results = await Promise.all(pagesToFetch.map((p) => fetchMushafPageVerses(p)));
         if (cancelled) return;
         setPageWordsMap((prev) => {
           const next = new Map(prev);

@@ -97,6 +97,38 @@ export async function fetchVersesByPage(pageNumber: number): Promise<ApiPageVers
   }
 }
 
+export async function fetchVersesByKeys(verseKeys: string[]): Promise<ApiPageVerse[]> {
+  const orderedKeys = Array.from(new Set(verseKeys));
+  const keysByChapter = new Map<number, string[]>();
+
+  for (const verseKey of orderedKeys) {
+    const [chapter] = verseKey.split(":").map(Number);
+    if (!Number.isInteger(chapter) || chapter < 1) continue;
+
+    const chapterKeys = keysByChapter.get(chapter) ?? [];
+    chapterKeys.push(verseKey);
+    keysByChapter.set(chapter, chapterKeys);
+  }
+
+  const versesByKey = new Map<string, ApiPageVerse>();
+  await Promise.all(
+    Array.from(keysByChapter.entries()).map(async ([chapter, chapterKeys]) => {
+      const keySet = new Set(chapterKeys);
+      const verses = await fetchSurahVerses(chapter);
+      for (const verse of verses) {
+        if (keySet.has(verse.verse_key)) {
+          versesByKey.set(verse.verse_key, verse);
+        }
+      }
+    }),
+  );
+
+  return orderedKeys.flatMap((verseKey) => {
+    const verse = versesByKey.get(verseKey);
+    return verse ? [verse] : [];
+  });
+}
+
 export type ApiChapter = {
   id: number;
   name_arabic: string;
