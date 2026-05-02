@@ -4,7 +4,6 @@ import {
   Alert,
   Dimensions,
   FlatList,
-  Image,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -20,6 +19,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
 import { Audio } from "expo-av";
 import { useLocalSearchParams, useRouter } from "expo-router";
+import { BayaanMushafPage } from "@/src/components/bayaan-mushaf-page";
 import { apiFetch } from "@/src/lib/api";
 import { ayahAudioUrl } from "@/src/lib/audio";
 import {
@@ -42,7 +42,6 @@ import {
   clampMushafPage,
   getJuzForMushafPage,
   getMushafSurahForPage,
-  mushafPageUrl,
   searchMushafSurahs,
   TOTAL_MUSHAF_PAGES,
   type MushafJuz,
@@ -384,61 +383,88 @@ function PageView({
   width,
   toolMode,
   blindRevealed,
+  selectedVerseKeys,
+  highlightedVerseKeys,
+  activeVerseKey,
   onRevealBlindPage,
   onOpenAyahList,
+  onOpenAyah,
 }: {
   pageNumber: number;
   width: number;
   toolMode: ToolMode;
   blindRevealed: boolean;
+  selectedVerseKeys: Set<string>;
+  highlightedVerseKeys: Set<string>;
+  activeVerseKey: string | null;
   onRevealBlindPage: () => void;
   onOpenAyahList: () => void;
+  onOpenAyah: (target: PageAyahTarget) => void;
 }) {
-  const [loaded, setLoaded] = useState(false);
+  const [pageVerses, setPageVerses] = useState<ApiPageVerse[]>([]);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const height = width * PAGE_ASPECT_RATIO;
+  const pageWidth = width - 32;
+  const pageHeight = height - 80;
   const isBlindHidden = toolMode === "blind" && !blindRevealed;
   const canOpenAyahList = toolMode === "select" || toolMode === "recite";
 
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+    setPageVerses([]);
+
+    fetchVersesByPage(pageNumber)
+      .then((verses) => {
+        if (cancelled) return;
+        setPageVerses(verses);
+        setLoading(false);
+      })
+      .catch((loadError) => {
+        if (cancelled) return;
+        setError(loadError instanceof Error ? loadError.message : "Page could not load.");
+        setLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [pageNumber]);
+
   return (
     <View style={[styles.pageWrap, { width }]}>
-      <Pressable
-        style={[styles.pageCard, { width: width - 32, height: height - 80 }]}
-        onPress={
+      <BayaanMushafPage
+        pageNumber={pageNumber}
+        verses={pageVerses}
+        width={pageWidth}
+        height={pageHeight}
+        loading={loading}
+        error={error}
+        hidden={isBlindHidden}
+        activeVerseKey={activeVerseKey}
+        selectedVerseKeys={selectedVerseKeys}
+        highlightedVerseKeys={highlightedVerseKeys}
+        onPressPage={
           isBlindHidden
             ? onRevealBlindPage
             : canOpenAyahList
               ? onOpenAyahList
               : undefined
         }
-      >
-        {!loaded && !error && (
-          <View style={styles.loadingOverlay}>
-            <ActivityIndicator size="small" color="#2563eb" />
-            <Text style={styles.loadingText}>page {pageNumber}</Text>
-          </View>
-        )}
-        {error && (
-          <View style={styles.errorOverlay}>
-            <Text style={styles.errorTitle}>Failed</Text>
-            <Text style={styles.errorBody}>{error}</Text>
-          </View>
-        )}
-        <Image
-          source={{ uri: mushafPageUrl(pageNumber) }}
-          style={styles.pageImage}
-          resizeMode="contain"
-          onLoad={() => setLoaded(true)}
-          onError={(e) => setError(e.nativeEvent.error ?? "unknown error")}
-        />
-        {isBlindHidden ? (
-          <View style={styles.blindOverlay}>
-            <Ionicons name="eye-off-outline" size={28} color="#ffffff" />
-            <Text style={styles.blindOverlayTitle}>Blind mode</Text>
-            <Text style={styles.blindOverlayText}>Tap to reveal this page when ready</Text>
-          </View>
-        ) : canOpenAyahList ? (
-          <View style={styles.modeOverlayHint}>
+        onPressWord={canOpenAyahList ? onOpenAyahList : undefined}
+        onLongPressWord={canOpenAyahList ? undefined : onOpenAyah}
+        onPressEndMarker={(target) => {
+          if (canOpenAyahList) {
+            onOpenAyahList();
+            return;
+          }
+          onOpenAyah(target);
+        }}
+        modeHint={
+          canOpenAyahList ? (
+            <>
             <Ionicons
               name={toolMode === "select" ? "checkmark-circle-outline" : "mic-outline"}
               size={15}
@@ -452,9 +478,10 @@ function PageView({
             >
               Tap page to choose ayah
             </Text>
-          </View>
-        ) : null}
-      </Pressable>
+            </>
+          ) : null
+        }
+      />
       <Text style={styles.pageNumberLabel}>
         {pageNumber} / {TOTAL_MUSHAF_PAGES}
       </Text>
@@ -1599,6 +1626,15 @@ export default function MushafScreen() {
       }),
     [pageAyahs, selectedVerseKeys],
   );
+  const activeAudioTarget = audioPlayer?.queue[audioPlayer.index] ?? null;
+  const activeVerseKey =
+    audioPlayer?.status === "playing" || audioPlayer?.status === "loading"
+      ? activeAudioTarget?.verseKey ?? null
+      : null;
+  const highlightedVerseKeys = useMemo(
+    () => new Set(Object.keys(annotations.highlights)),
+    [annotations.highlights],
+  );
   const ayahBookmarkEntries = useMemo(
     () =>
       Object.values(annotations.bookmarks).sort((a, b) => {
@@ -2610,8 +2646,12 @@ export default function MushafScreen() {
               width={screenW}
               toolMode={toolMode}
               blindRevealed={blindRevealed}
+              selectedVerseKeys={selectedVerseKeys}
+              highlightedVerseKeys={highlightedVerseKeys}
+              activeVerseKey={activeVerseKey}
               onRevealBlindPage={() => setBlindRevealed(true)}
               onOpenAyahList={() => setAyahListOpen(true)}
+              onOpenAyah={openAyahActions}
             />
           )}
         />
