@@ -14,21 +14,20 @@ import {
   Text,
   TextInput,
   View,
+  type LayoutChangeEvent,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
 import { Audio } from "expo-av";
+import { Image } from "expo-image";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { BayaanMushafPage } from "@/src/components/bayaan-mushaf-page";
 import { apiFetch } from "@/src/lib/api";
 import { ayahAudioUrl } from "@/src/lib/audio";
 import {
-  fetchDashboard,
-  fetchMemorizationProgress,
-  submitDailyProgress,
-  submitMemorization,
-  type DashboardResponse as MemorizationDashboardResponse,
-} from "@/src/lib/memorization";
+  KING_FAHD_PAGE_SPECS,
+  getAyahCoordsForPage,
+} from "@/src/lib/king-fahd-ayah-coords";
+import { getKingFahdPageImage } from "@/src/lib/king-fahd-page-images";
 import {
   cleanTranslationHtml,
   fetchAyahTranslation,
@@ -57,8 +56,6 @@ import {
   type MushafHighlightColor as HighlightColor,
 } from "@/src/lib/mushaf-annotations";
 
-const PAGE_ASPECT_RATIO = 1.45;
-const PRESET_PAGES = [1, 50, 300, TOTAL_MUSHAF_PAGES] as const;
 const BOOKMARK_LIMIT = 12;
 const RECENT_READ_LIMIT = 5;
 const QURAN_API = "https://api.quran.com/api/v4";
@@ -67,7 +64,7 @@ const MUSHAF_AUDIO_AYAH_REPEATS = [1, 2, 3, 5] as const;
 const MUSHAF_AUDIO_RANGE_REPEATS = [1, 2, 3] as const;
 
 type ReadingStatus = "not_started" | "in_progress" | "completed";
-type ToolMode = "none" | "blind" | "select" | "recite";
+type ToolMode = "none" | "blind" | "recite";
 type AyahSheetView = "main" | "highlight" | "note" | "translation" | "tafseer" | "wbw";
 
 type ReadingGoal = {
@@ -90,7 +87,6 @@ type ReadingProgressResponse = {
 
 type SaveStatus = "idle" | "saving" | "saved" | "error";
 type SearchParamValue = string | string[] | undefined;
-type PageVerseStatus = "idle" | "loading" | "ready" | "error";
 type AudioPlayerStatus = "loading" | "playing" | "paused";
 
 type RecentRead = {
@@ -128,6 +124,22 @@ type MushafAudioPlayer = {
   ayahRepeatPass: number;
   rangeRepeatPass: number;
   sourceLabel: string;
+};
+
+type PageImageLayout = {
+  width: number;
+  height: number;
+};
+
+type PageOverlayRect = {
+  key: string;
+  verseKey: string;
+  surahNumber: number;
+  ayahNumber: number;
+  top: number;
+  left: number;
+  width: number;
+  height: number;
 };
 
 const HIGHLIGHT_COLORS: Record<HighlightColor, { bg: string; dot: string; label: string }> = {
@@ -188,26 +200,6 @@ function normalizeAudioSettings(raw: string | null): MushafAudioSettings {
   }
 }
 
-function formatPageCount(value: number) {
-  const formatted = Number.isInteger(value) ? String(value) : String(value).replace(/\.0$/, "");
-  return `${formatted} page${value === 1 ? "" : "s"}`;
-}
-
-function formatGoalCopy(goal: ReadingGoal | null) {
-  if (!goal?.isEnabled) return "No reading target set";
-  const completed = goal.completedPages ?? 0;
-  const target = goal.targetPages ?? 0;
-  if (goal.status === "completed") {
-    return `Target complete: ${formatPageCount(completed)} of ${formatPageCount(target)} counted today`;
-  }
-  return `Today counted: ${formatPageCount(completed)} of ${formatPageCount(target)}`;
-}
-
-function progressRatio(goal: ReadingGoal | null) {
-  if (!goal?.isEnabled || goal.targetPages <= 0) return 0;
-  return Math.max(0, Math.min(1, (goal.completedPages ?? 0) / goal.targetPages));
-}
-
 function parsePositiveInteger(value: string) {
   const trimmed = value.trim();
   if (!/^\d+$/.test(trimmed)) return null;
@@ -245,6 +237,146 @@ function pageVerseToTarget(verse: ApiPageVerse, pageNumber: number): PageAyahTar
   };
 }
 
+function verseKeyFor(surahNumber: number, ayahNumber: number) {
+  return `${surahNumber}:${ayahNumber}`;
+}
+
+function isKnownAyah(surahNumber: number, ayahNumber: number) {
+  const surah = MUSHAF_SURAHS[surahNumber - 1];
+  return !!surah && ayahNumber >= 1 && ayahNumber <= surah.verseCount;
+}
+
+function pushOverlayRect(
+  rects: PageOverlayRect[],
+  {
+    pageNumber,
+    surahNumber,
+    ayahNumber,
+    top,
+    left,
+    width,
+    height,
+    layout,
+    suffix,
+  }: {
+    pageNumber: number;
+    surahNumber: number;
+    ayahNumber: number;
+    top: number;
+    left: number;
+    width: number;
+    height: number;
+    layout: PageImageLayout;
+    suffix: string;
+  },
+) {
+  if (!isKnownAyah(surahNumber, ayahNumber)) return;
+  if (top >= layout.height || top + height <= 0 || left >= layout.width || left + width <= 0) {
+    return;
+  }
+
+  const clampedTop = Math.max(0, top);
+  const clampedLeft = Math.max(0, left);
+  const clampedHeight = Math.max(0, Math.min(height, layout.height - clampedTop));
+  const clampedWidth = Math.max(0, Math.min(width, layout.width - clampedLeft));
+  if (clampedHeight < 6 || clampedWidth < 8) return;
+
+  rects.push({
+    key: `${pageNumber}:${surahNumber}:${ayahNumber}:${suffix}:${Math.round(clampedTop)}:${Math.round(clampedLeft)}`,
+    verseKey: verseKeyFor(surahNumber, ayahNumber),
+    surahNumber,
+    ayahNumber,
+    top: clampedTop,
+    left: clampedLeft,
+    width: clampedWidth,
+    height: clampedHeight,
+  });
+}
+
+function buildKingFahdOverlayRects(pageNumber: number, layout: PageImageLayout): PageOverlayRect[] {
+  if (layout.width <= 0 || layout.height <= 0) return [];
+
+  const coords = getAyahCoordsForPage(pageNumber);
+  if (coords.length === 0) return [];
+
+  const specs = KING_FAHD_PAGE_SPECS;
+  const heightCoeff = layout.height / specs.defaultPageHeight;
+  const widthCoeff = layout.width / specs.defaultPageWidth;
+  const lineHeight = specs.defaultLineHeight * heightCoeff;
+  const isFirstSpreadPage = pageNumber <= 2;
+  const pageWidth = (
+    isFirstSpreadPage ? specs.defaultFirstPagesWidth : specs.defaultPageWidth
+  ) * widthCoeff;
+  const horizontalMargin = (
+    isFirstSpreadPage ? specs.defaultFirstPagesMarginY : specs.defaultMarginY
+  ) * widthCoeff;
+  const sourceTopMargin = isFirstSpreadPage
+    ? specs.defaultFirstPagesMarginX
+    : specs.defaultMarginX;
+  const sourceLeftMargin = isFirstSpreadPage
+    ? specs.defaultFirstPagesMarginX
+    : specs.defaultMarginY;
+  const samePageAyahs = new Set(coords.map(([surah, ayah]) => verseKeyFor(surah, ayah)));
+  const rects: PageOverlayRect[] = [];
+  let previousTop = 0;
+
+  coords.forEach(([surahNumber, ayahNumber, sourceTop, sourceLeft], index) => {
+    const top = (sourceTop - sourceTopMargin) * heightCoeff;
+    const left = (sourceLeft - sourceLeftMargin) * widthCoeff;
+
+    pushOverlayRect(rects, {
+      pageNumber,
+      surahNumber,
+      ayahNumber,
+      top,
+      left,
+      width: pageWidth - left,
+      height: lineHeight,
+      layout,
+      suffix: `after-marker-${index}`,
+    });
+
+    const nextAyahNumber = ayahNumber + 1;
+    if (left > 93 * widthCoeff && samePageAyahs.has(verseKeyFor(surahNumber, nextAyahNumber))) {
+      pushOverlayRect(rects, {
+        pageNumber,
+        surahNumber,
+        ayahNumber: nextAyahNumber,
+        top,
+        left: horizontalMargin,
+        width: left - horizontalMargin,
+        height: lineHeight,
+        layout,
+        suffix: `before-marker-${index}`,
+      });
+    }
+
+    const numberOfLines = Math.ceil((top - previousTop - lineHeight) / lineHeight);
+    if (numberOfLines > 1) {
+      for (let line = 0; line < numberOfLines - 1; line += 1) {
+        const lineTop = top - lineHeight * (line + 1);
+        if (lineTop >= lineHeight) {
+          pushOverlayRect(rects, {
+            pageNumber,
+            surahNumber,
+            ayahNumber,
+            top: lineTop,
+            left: horizontalMargin,
+            width: pageWidth - horizontalMargin,
+            height: lineHeight,
+            layout,
+            suffix: `carry-${index}-${line}`,
+          });
+        }
+      }
+    }
+
+    previousTop = top;
+  });
+
+  return rects;
+}
+
 function sortAyahTargets(targets: PageAyahTarget[]) {
   return [...targets].sort((a, b) => {
     if (a.surahNumber !== b.surahNumber) return a.surahNumber - b.surahNumber;
@@ -264,31 +396,6 @@ function formatTargetRange(targets: PageAyahTarget[]) {
     return `Quran ${first.surahNumber}:${first.ayahNumber}-${last.ayahNumber}`;
   }
   return `Quran ${formatVerseLabel(first)}-${formatVerseLabel(last)}`;
-}
-
-function mergeMemorizedAyahs(existingAyahs: number[] | undefined, newAyahs: number[], totalVerses: number) {
-  return Array.from(new Set([...(existingAyahs ?? []), ...newAyahs]))
-    .filter((ayah) => Number.isInteger(ayah) && ayah >= 1 && ayah <= totalVerses)
-    .sort((a, b) => a - b);
-}
-
-function hasFullSurahMemorized(memorizedAyahs: number[], totalVerses: number) {
-  if (totalVerses <= 0) return false;
-  const memorizedSet = new Set(memorizedAyahs);
-  for (let ayah = 1; ayah <= totalVerses; ayah += 1) {
-    if (!memorizedSet.has(ayah)) return false;
-  }
-  return true;
-}
-
-function contiguousMemorizedThrough(start: number, end: number, memorizedAyahs: number[]) {
-  const memorizedSet = new Set(memorizedAyahs);
-  let completed = start - 1;
-  for (let ayah = start; ayah <= end; ayah += 1) {
-    if (!memorizedSet.has(ayah)) break;
-    completed = ayah;
-  }
-  return completed >= start ? completed : null;
 }
 
 function formatVerseLabel(target: Pick<PageAyahTarget, "surahNumber" | "ayahNumber">) {
@@ -361,54 +468,42 @@ function normalizeRecentReads(raw: string | null): RecentRead[] {
   }
 }
 
-function buildMemorizationContext({
-  fromMemorization,
-  surahNumber,
-  ayahNumber,
-}: {
-  fromMemorization: SearchParamValue;
-  surahNumber: SearchParamValue;
-  ayahNumber: SearchParamValue;
-}) {
-  if (singleParam(fromMemorization) !== "1") return null;
-  const surah = parsePositiveInteger(singleParam(surahNumber) ?? "");
-  const ayah = parsePositiveInteger(singleParam(ayahNumber) ?? "");
-  if (surah === null || ayah === null) return "Opened from Memorization";
-  const surahMeta = MUSHAF_SURAHS.find((item) => item.number === surah);
-  return `From Memorization · ${surahMeta?.name ?? `Surah ${surah}`} ${surah}:${ayah}`;
-}
-
 function PageView({
   pageNumber,
   width,
   toolMode,
   blindRevealed,
-  selectedVerseKeys,
   highlightedVerseKeys,
   activeVerseKey,
   onRevealBlindPage,
-  onOpenAyahList,
   onOpenAyah,
+  onStartRecite,
 }: {
   pageNumber: number;
   width: number;
   toolMode: ToolMode;
   blindRevealed: boolean;
-  selectedVerseKeys: Set<string>;
   highlightedVerseKeys: Set<string>;
   activeVerseKey: string | null;
   onRevealBlindPage: () => void;
-  onOpenAyahList: () => void;
   onOpenAyah: (target: PageAyahTarget) => void;
+  onStartRecite: (target: PageAyahTarget) => void;
 }) {
   const [pageVerses, setPageVerses] = useState<ApiPageVerse[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const height = width * PAGE_ASPECT_RATIO;
-  const pageWidth = width - 32;
-  const pageHeight = height - 80;
+  const [imageLayout, setImageLayout] = useState<PageImageLayout>({ width: 0, height: 0 });
+  const imageSource = getKingFahdPageImage(pageNumber);
   const isBlindHidden = toolMode === "blind" && !blindRevealed;
-  const canOpenAyahList = toolMode === "select" || toolMode === "recite";
+  const verseByKey = useMemo(() => {
+    const map = new Map<string, ApiPageVerse>();
+    for (const verse of pageVerses) map.set(verse.verse_key, verse);
+    return map;
+  }, [pageVerses]);
+  const overlayRects = useMemo(
+    () => buildKingFahdOverlayRects(pageNumber, imageLayout),
+    [imageLayout, pageNumber],
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -433,55 +528,120 @@ function PageView({
     };
   }, [pageNumber]);
 
+  function handleImageLayout(event: LayoutChangeEvent) {
+    const { width: renderedWidth, height: renderedHeight } = event.nativeEvent.layout;
+    setImageLayout((current) =>
+      Math.abs(current.width - renderedWidth) < 0.5 &&
+      Math.abs(current.height - renderedHeight) < 0.5
+        ? current
+        : { width: renderedWidth, height: renderedHeight },
+    );
+  }
+
+  function targetFromRect(rect: PageOverlayRect): PageAyahTarget {
+    const verse = verseByKey.get(rect.verseKey);
+    return {
+      verseKey: rect.verseKey,
+      surahNumber: rect.surahNumber,
+      ayahNumber: rect.ayahNumber,
+      pageNumber,
+      textUthmani: verse?.text_uthmani ?? "",
+    };
+  }
+
+  function handleAyahPress(rect: PageOverlayRect) {
+    const target = targetFromRect(rect);
+    if (toolMode === "recite") {
+      onStartRecite(target);
+      return;
+    }
+    onOpenAyah(target);
+  }
+
+  function handlePagePress() {
+    if (isBlindHidden) onRevealBlindPage();
+  }
+
   return (
     <View style={[styles.pageWrap, { width }]}>
-      <BayaanMushafPage
-        pageNumber={pageNumber}
-        verses={pageVerses}
-        width={pageWidth}
-        height={pageHeight}
-        loading={loading}
-        error={error}
-        hidden={isBlindHidden}
-        activeVerseKey={activeVerseKey}
-        selectedVerseKeys={selectedVerseKeys}
-        highlightedVerseKeys={highlightedVerseKeys}
-        onPressPage={
-          isBlindHidden
-            ? onRevealBlindPage
-            : canOpenAyahList
-              ? onOpenAyahList
-              : undefined
-        }
-        onPressWord={canOpenAyahList ? onOpenAyahList : undefined}
-        onLongPressWord={canOpenAyahList ? undefined : onOpenAyah}
-        onPressEndMarker={(target) => {
-          if (canOpenAyahList) {
-            onOpenAyahList();
-            return;
-          }
-          onOpenAyah(target);
-        }}
-        modeHint={
-          canOpenAyahList ? (
-            <>
-            <Ionicons
-              name={toolMode === "select" ? "checkmark-circle-outline" : "mic-outline"}
-              size={15}
-              color={toolMode === "select" ? "#047857" : "#be123c"}
-            />
-            <Text
-              style={[
-                styles.modeOverlayHintText,
-                toolMode === "recite" && styles.modeOverlayHintTextRecite,
-              ]}
-            >
-              Tap page to choose ayah
+      <View
+        style={styles.pageImageShell}
+        onLayout={handleImageLayout}
+      >
+        {imageSource ? (
+          <Image source={imageSource} style={styles.pageImage} contentFit="fill" />
+        ) : (
+          <View style={styles.errorOverlay}>
+            <Ionicons name="cloud-offline-outline" size={24} color="#b91c1c" />
+            <Text style={styles.errorTitle}>Page image missing</Text>
+            <Text style={styles.errorBody}>Page {pageNumber} could not be found.</Text>
+          </View>
+        )}
+
+        {isBlindHidden ? (
+          <Pressable
+            style={styles.pageBackgroundPressable}
+            onPress={handlePagePress}
+            accessibilityRole="button"
+            accessibilityLabel="Reveal hidden mushaf page"
+          />
+        ) : null}
+
+        {!isBlindHidden
+          ? overlayRects.map((rect) => {
+              const highlighted = highlightedVerseKeys.has(rect.verseKey);
+              const active = activeVerseKey === rect.verseKey;
+              return (
+                <Pressable
+                  key={rect.key}
+                  accessible
+                  accessibilityLabel={`Quran ${rect.verseKey}`}
+                  accessibilityRole="button"
+                  style={[
+                    styles.ayahTapOverlay,
+                    {
+                      top: rect.top,
+                      left: rect.left,
+                      width: rect.width,
+                      height: rect.height,
+                    },
+                    highlighted && styles.ayahTapOverlayHighlighted,
+                    active && styles.ayahTapOverlayActive,
+                  ]}
+                  onPress={() => handleAyahPress(rect)}
+                  onLongPress={() => onOpenAyah(targetFromRect(rect))}
+                />
+              );
+            })
+          : null}
+
+        {loading ? (
+          <View pointerEvents="none" style={styles.pageDataBadge}>
+            <ActivityIndicator size="small" color="#2563eb" />
+          </View>
+        ) : error ? (
+          <View pointerEvents="none" style={styles.pageDataBadge}>
+            <Ionicons name="cloud-offline-outline" size={14} color="#dc2626" />
+          </View>
+        ) : null}
+
+        {isBlindHidden ? (
+          <View pointerEvents="none" style={styles.blindOverlay}>
+            <Ionicons name="eye-off-outline" size={30} color="#ffffff" />
+            <Text style={styles.blindOverlayTitle}>Blind practice</Text>
+            <Text style={styles.blindOverlayText}>Tap to reveal this page.</Text>
+          </View>
+        ) : null}
+
+        {toolMode === "recite" && !isBlindHidden ? (
+          <View pointerEvents="none" style={styles.modeOverlayHint}>
+            <Ionicons name="mic-outline" size={15} color="#be123c" />
+            <Text style={[styles.modeOverlayHintText, styles.modeOverlayHintTextRecite]}>
+              Tap ayah to recite
             </Text>
-            </>
-          ) : null
-        }
-      />
+          </View>
+        ) : null}
+      </View>
       <Text style={styles.pageNumberLabel}>
         {pageNumber} / {TOTAL_MUSHAF_PAGES}
       </Text>
@@ -554,219 +714,6 @@ function JuzChip({ item, onPress }: { item: MushafJuz; onPress: () => void }) {
       <Text style={styles.juzChipTitle}>Juz {item.number}</Text>
       <Text style={styles.juzChipDetail}>p. {item.startPage}</Text>
     </Pressable>
-  );
-}
-
-function AyahListModal({
-  visible,
-  pageNumber,
-  toolMode,
-  pageAyahs,
-  status,
-  selectedVerseKeys,
-  annotations,
-  onClose,
-  onOpenAyah,
-  onToggleSelectedAyah,
-  onStartRecite,
-  onStartSelected,
-  onPlaySelected,
-  onReciteSelected,
-  onMarkSelected,
-  markingMemorized,
-}: {
-  visible: boolean;
-  pageNumber: number;
-  toolMode: ToolMode;
-  pageAyahs: PageAyahTarget[];
-  status: PageVerseStatus;
-  selectedVerseKeys: Set<string>;
-  annotations: MushafAnnotations;
-  onClose: () => void;
-  onOpenAyah: (target: PageAyahTarget) => void;
-  onToggleSelectedAyah: (target: PageAyahTarget) => void;
-  onStartRecite: (target: PageAyahTarget) => void;
-  onStartSelected: () => void;
-  onPlaySelected: () => void;
-  onReciteSelected: () => void;
-  onMarkSelected: () => void;
-  markingMemorized: boolean;
-}) {
-  const selectedCount = selectedVerseKeys.size;
-  const modeCopy =
-    toolMode === "select"
-      ? "Tap ayahs to build a range for memorization."
-      : toolMode === "recite"
-        ? "Pick the ayah where recitation should begin."
-        : "Tap an ayah to open actions.";
-
-  return (
-    <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
-      <View style={styles.sheet}>
-        <View style={styles.sheetHeader}>
-          <Pressable style={styles.sheetClose} onPress={onClose}>
-            <Ionicons name="chevron-down" size={22} color="#2563eb" />
-          </Pressable>
-          <View style={styles.sheetTitleBlock}>
-            <Text style={styles.sheetTitle}>Ayahs on Page {pageNumber}</Text>
-            <Text style={styles.sheetSubtitle}>{modeCopy}</Text>
-          </View>
-          <View style={styles.sheetHeaderSpacer} />
-        </View>
-
-        {status === "loading" ? (
-          <View style={styles.sheetCenter}>
-            <ActivityIndicator color="#2563eb" />
-            <Text style={styles.sheetCenterText}>Loading ayahs</Text>
-          </View>
-        ) : status === "error" ? (
-          <View style={styles.sheetCenter}>
-            <Ionicons name="cloud-offline-outline" size={26} color="#dc2626" />
-            <Text style={styles.sheetCenterTitle}>Ayahs could not load</Text>
-            <Text style={styles.sheetCenterText}>The page image is still available.</Text>
-          </View>
-        ) : (
-          <ScrollView style={styles.sheetScroll} contentContainerStyle={styles.ayahListContent}>
-            {pageAyahs.map((ayah) => {
-              const selected = selectedVerseKeys.has(ayah.verseKey);
-              const surah = MUSHAF_SURAHS[ayah.surahNumber - 1];
-              const highlight = annotations.highlights[ayah.verseKey];
-              const isBookmarked = !!annotations.bookmarks[ayah.verseKey];
-              const hasNote = !!annotations.notes[ayah.verseKey];
-              return (
-                <Pressable
-                  key={ayah.verseKey}
-                  style={[
-                    styles.ayahRow,
-                    highlight && { backgroundColor: HIGHLIGHT_COLORS[highlight.color].bg },
-                    selected && styles.ayahRowSelected,
-                  ]}
-                  onPress={() => {
-                    if (toolMode === "select") {
-                      onToggleSelectedAyah(ayah);
-                    } else if (toolMode === "recite") {
-                      onStartRecite(ayah);
-                    } else {
-                      onOpenAyah(ayah);
-                    }
-                  }}
-                >
-                  <View style={[styles.ayahNumberBadge, selected && styles.ayahNumberBadgeSelected]}>
-                    <Text
-                      style={[
-                        styles.ayahNumberBadgeText,
-                        selected && styles.ayahNumberBadgeTextSelected,
-                      ]}
-                    >
-                      {ayah.ayahNumber}
-                    </Text>
-                  </View>
-                  <View style={styles.ayahRowTextBlock}>
-                    <Text style={styles.ayahRowTitle} numberOfLines={1}>
-                      {surah?.name ?? `Surah ${ayah.surahNumber}`} · Ayah {ayah.ayahNumber}
-                    </Text>
-                    <Text style={styles.ayahRowArabic} numberOfLines={2}>
-                      {ayah.textUthmani}
-                    </Text>
-                    {isBookmarked || highlight || hasNote ? (
-                      <View style={styles.ayahAnnotationRow}>
-                        {isBookmarked ? (
-                          <View style={styles.ayahAnnotationChip}>
-                            <Ionicons name="bookmark" size={11} color="#b45309" />
-                            <Text style={styles.ayahAnnotationChipText}>Bookmark</Text>
-                          </View>
-                        ) : null}
-                        {highlight ? (
-                          <View style={styles.ayahAnnotationChip}>
-                            <View
-                              style={[
-                                styles.ayahAnnotationDot,
-                                { backgroundColor: HIGHLIGHT_COLORS[highlight.color].dot },
-                              ]}
-                            />
-                            <Text style={styles.ayahAnnotationChipText}>
-                              {HIGHLIGHT_COLORS[highlight.color].label}
-                            </Text>
-                          </View>
-                        ) : null}
-                        {hasNote ? (
-                          <View style={styles.ayahAnnotationChip}>
-                            <Ionicons name="document-text-outline" size={11} color="#2563eb" />
-                            <Text style={styles.ayahAnnotationChipText}>Note</Text>
-                          </View>
-                        ) : null}
-                      </View>
-                    ) : null}
-                  </View>
-                  <Ionicons
-                    name={
-                      toolMode === "select"
-                        ? selected
-                          ? "checkmark-circle"
-                          : "ellipse-outline"
-                        : toolMode === "recite"
-                          ? "mic-outline"
-                          : "chevron-forward"
-                    }
-                    size={21}
-                    color={selected ? "#047857" : toolMode === "recite" ? "#be123c" : "#9ca3af"}
-                  />
-                </Pressable>
-              );
-            })}
-            {pageAyahs.length === 0 ? (
-              <View style={styles.emptyResults}>
-                <Text style={styles.emptyResultsTitle}>No ayahs loaded</Text>
-                <Text style={styles.emptyResultsDetail}>Try again after the page finishes loading.</Text>
-              </View>
-            ) : null}
-          </ScrollView>
-        )}
-
-        {toolMode === "select" ? (
-          <View style={styles.ayahListFooter}>
-            <Text style={styles.ayahListFooterText}>
-              {selectedCount} ayah{selectedCount === 1 ? "" : "s"} selected
-            </Text>
-            <View style={styles.ayahListFooterActions}>
-              <Pressable
-                style={[styles.ayahListFooterButton, selectedCount === 0 && styles.ayahListFooterButtonDisabled]}
-                disabled={selectedCount === 0}
-                onPress={onPlaySelected}
-              >
-                <Text style={styles.ayahListFooterButtonText}>Play</Text>
-              </Pressable>
-              <Pressable
-                style={[styles.ayahListFooterButton, selectedCount === 0 && styles.ayahListFooterButtonDisabled]}
-                disabled={selectedCount === 0}
-                onPress={onReciteSelected}
-              >
-                <Text style={styles.ayahListFooterButtonText}>Recite</Text>
-              </Pressable>
-              <Pressable
-                style={[
-                  styles.ayahListFooterButton,
-                  (selectedCount === 0 || markingMemorized) && styles.ayahListFooterButtonDisabled,
-                ]}
-                disabled={selectedCount === 0 || markingMemorized}
-                onPress={onMarkSelected}
-              >
-                <Text style={styles.ayahListFooterButtonText}>
-                  {markingMemorized ? "Saving" : "Mark"}
-                </Text>
-              </Pressable>
-              <Pressable
-                style={[styles.ayahListFooterButton, selectedCount === 0 && styles.ayahListFooterButtonDisabled]}
-                disabled={selectedCount === 0}
-                onPress={onStartSelected}
-              >
-                <Text style={styles.ayahListFooterButtonText}>Open</Text>
-              </Pressable>
-            </View>
-          </View>
-        ) : null}
-      </View>
-    </Modal>
   );
 }
 
@@ -979,7 +926,7 @@ function MushafAudioSettingsModal({
 
 function AyahActionSheet({
   target,
-  selected,
+  pageBookmarked,
   annotations,
   pageAyahs,
   onClose,
@@ -988,14 +935,14 @@ function AyahActionSheet({
   onPlayAyah,
   onPlayFromHere,
   onReciteFromAyah,
-  onMarkMemorized,
-  onToggleSelection,
+  onSavePage,
+  onTogglePageBookmark,
   onToggleBookmark,
   onSetHighlight,
   onSaveNote,
 }: {
   target: PageAyahTarget | null;
-  selected: boolean;
+  pageBookmarked: boolean;
   annotations: MushafAnnotations;
   pageAyahs: PageAyahTarget[];
   onClose: () => void;
@@ -1004,8 +951,8 @@ function AyahActionSheet({
   onPlayAyah: (target: PageAyahTarget) => void;
   onPlayFromHere: (target: PageAyahTarget) => void;
   onReciteFromAyah: (target: PageAyahTarget) => void;
-  onMarkMemorized: (target: PageAyahTarget) => void;
-  onToggleSelection: (target: PageAyahTarget) => void;
+  onSavePage: (target: PageAyahTarget) => void;
+  onTogglePageBookmark: (target: PageAyahTarget) => void;
   onToggleBookmark: (target: PageAyahTarget) => void;
   onSetHighlight: (target: PageAyahTarget, color: HighlightColor | null) => void;
   onSaveNote: (target: PageAyahTarget, text: string) => void;
@@ -1252,13 +1199,23 @@ function AyahActionSheet({
             <Ionicons name="mic-outline" size={18} color="#be123c" />
             <Text style={styles.ayahMenuRowText}>Recite from here</Text>
           </Pressable>
-          <Pressable style={styles.ayahMenuRow} onPress={() => onMarkMemorized(target)}>
-            <Ionicons name="ribbon-outline" size={18} color="#047857" />
-            <Text style={styles.ayahMenuRowText}>Mark memorized</Text>
+          <Pressable style={styles.ayahMenuRow} onPress={() => onSavePage(target)}>
+            <Ionicons name="save-outline" size={18} color="#2563eb" />
+            <Text style={styles.ayahMenuRowText}>Save current page</Text>
           </Pressable>
         </View>
 
         <View style={styles.ayahMenuGroup}>
+          <Pressable style={styles.ayahMenuRow} onPress={() => onTogglePageBookmark(target)}>
+            <Ionicons
+              name={pageBookmarked ? "bookmark" : "bookmark-outline"}
+              size={18}
+              color="#0f766e"
+            />
+            <Text style={styles.ayahMenuRowText}>
+              {pageBookmarked ? "Remove page bookmark" : "Bookmark page"}
+            </Text>
+          </Pressable>
           <Pressable style={styles.ayahMenuRow} onPress={() => onToggleBookmark(target)}>
             <Ionicons name={bookmark ? "bookmark" : "bookmark-outline"} size={18} color="#b45309" />
             <Text style={styles.ayahMenuRowText}>{bookmark ? "Remove bookmark" : "Bookmark ayah"}</Text>
@@ -1299,16 +1256,6 @@ function AyahActionSheet({
           <Pressable style={styles.ayahMenuRow} onPress={shareAyah}>
             <Ionicons name="share-outline" size={18} color="#374151" />
             <Text style={styles.ayahMenuRowText}>Share ayah</Text>
-          </Pressable>
-          <Pressable style={styles.ayahMenuRow} onPress={() => onToggleSelection(target)}>
-            <Ionicons
-              name={selected ? "checkmark-circle" : "checkmark-circle-outline"}
-              size={18}
-              color="#047857"
-            />
-            <Text style={styles.ayahMenuRowText}>
-              {selected ? "Remove from selection" : "Add to selection"}
-            </Text>
           </Pressable>
         </View>
 
@@ -1552,20 +1499,9 @@ export default function MushafScreen() {
   const router = useRouter();
   const screenW = Dimensions.get("window").width;
   const requestedInitialPage = useMemo(() => parsePageParam(params.page), [params.page]);
-  const memorizationContext = useMemo(
-    () =>
-      buildMemorizationContext({
-        fromMemorization: params.fromMemorization,
-        surahNumber: params.surahNumber,
-        ayahNumber: params.ayahNumber,
-      }),
-    [params.fromMemorization, params.surahNumber, params.ayahNumber],
-  );
 
   const [initialPage, setInitialPage] = useState<number | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
-  const [readingGoal, setReadingGoal] = useState<ReadingGoal | null>(null);
-  const [lastSavedPage, setLastSavedPage] = useState<number | null>(null);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
   const [saveError, setSaveError] = useState<string | null>(null);
   const [jumpOpen, setJumpOpen] = useState(false);
@@ -1576,14 +1512,11 @@ export default function MushafScreen() {
   const [annotations, setAnnotations] = useState<MushafAnnotations>(() => emptyMushafAnnotations());
   const [annotationError, setAnnotationError] = useState<string | null>(null);
   const [recentReads, setRecentReads] = useState<RecentRead[]>([]);
-  const [chromeVisible, setChromeVisible] = useState(true);
   const [toolMode, setToolMode] = useState<ToolMode>("none");
   const [blindRevealed, setBlindRevealed] = useState(false);
-  const [ayahListOpen, setAyahListOpen] = useState(false);
   const [selectedAyah, setSelectedAyah] = useState<PageAyahTarget | null>(null);
-  const [selectedVerseKeys, setSelectedVerseKeys] = useState<Set<string>>(new Set());
   const [pageVerses, setPageVerses] = useState<ApiPageVerse[]>([]);
-  const [pageVerseStatus, setPageVerseStatus] = useState<PageVerseStatus>("idle");
+  const [attributionOpen, setAttributionOpen] = useState(false);
   const [audioSettings, setAudioSettings] = useState<MushafAudioSettings>(
     DEFAULT_MUSHAF_AUDIO_SETTINGS,
   );
@@ -1591,7 +1524,6 @@ export default function MushafScreen() {
   const [audioPlayer, setAudioPlayer] = useState<MushafAudioPlayer | null>(null);
   const [audioError, setAudioError] = useState<string | null>(null);
   const [audioSettingsHydrated, setAudioSettingsHydrated] = useState(false);
-  const [markingMemorized, setMarkingMemorized] = useState(false);
 
   const listRef = useRef<FlatList<number>>(null);
   const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -1601,6 +1533,7 @@ export default function MushafScreen() {
   const audioPlayerRef = useRef<MushafAudioPlayer | null>(null);
   const audioSettingsRef = useRef<MushafAudioSettings>(DEFAULT_MUSHAF_AUDIO_SETTINGS);
   const lastAudioReciterIdRef = useRef(DEFAULT_MUSHAF_AUDIO_SETTINGS.reciterId);
+  const preloadedMushafPagesRef = useRef<Set<number>>(new Set());
 
   const data = useMemo(
     () => Array.from({ length: TOTAL_MUSHAF_PAGES }, (_, i) => i + 1),
@@ -1608,23 +1541,12 @@ export default function MushafScreen() {
   );
   const currentSurah = getMushafSurahForPage(currentPage);
   const currentJuz = getJuzForMushafPage(currentPage);
-  const ratio = progressRatio(readingGoal);
-  const goalCopy = formatGoalCopy(readingGoal);
-  const isBookmarked = bookmarkedPages.includes(currentPage);
   const pageAyahs = useMemo(
     () =>
       pageVerses
         .map((verse) => pageVerseToTarget(verse, currentPage))
         .filter((target): target is PageAyahTarget => target !== null),
     [currentPage, pageVerses],
-  );
-  const selectedAyahTargets = useMemo(
-    () =>
-      pageAyahs.filter((target) => selectedVerseKeys.has(target.verseKey)).sort((a, b) => {
-        if (a.surahNumber !== b.surahNumber) return a.surahNumber - b.surahNumber;
-        return a.ayahNumber - b.ayahNumber;
-      }),
-    [pageAyahs, selectedVerseKeys],
   );
   const activeAudioTarget = audioPlayer?.queue[audioPlayer.index] ?? null;
   const activeVerseKey =
@@ -1645,10 +1567,6 @@ export default function MushafScreen() {
       }),
     [annotations.bookmarks],
   );
-  const annotationCount =
-    Object.keys(annotations.bookmarks).length +
-    Object.keys(annotations.highlights).length +
-    Object.keys(annotations.notes).length;
   const parsedQuery = parsePositiveInteger(jumpQuery);
   const pageResult =
     parsedQuery !== null && parsedQuery >= 1 && parsedQuery <= TOTAL_MUSHAF_PAGES
@@ -1692,8 +1610,6 @@ export default function MushafScreen() {
             : 1;
         const startPage = requestedInitialPage ?? savedPage;
 
-        setReadingGoal(goal);
-        setLastSavedPage(goal?.lastPage ?? null);
         setCurrentPage(startPage);
         setInitialPage(startPage);
       } catch {
@@ -1776,6 +1692,45 @@ export default function MushafScreen() {
   }, [audioPlayer]);
 
   useEffect(() => {
+    const pagesToPreload = [
+      currentPage,
+      Math.max(currentPage - 1, 1),
+      Math.min(currentPage + 1, TOTAL_MUSHAF_PAGES),
+      Math.min(currentPage + 2, TOTAL_MUSHAF_PAGES),
+    ];
+    const newPagesToPreload = pagesToPreload.filter(
+      (page) => !preloadedMushafPagesRef.current.has(page),
+    );
+    if (newPagesToPreload.length === 0) return;
+
+    let cancelled = false;
+    async function preloadImages() {
+      try {
+        await Promise.all(
+          newPagesToPreload.map(async (page) => {
+            const image = getKingFahdPageImage(page);
+            if (!image) return;
+            await Image.loadAsync(image);
+          }),
+        );
+        if (cancelled) return;
+        newPagesToPreload.forEach((page) => preloadedMushafPagesRef.current.add(page));
+        const pagesToKeep = new Set(pagesToPreload);
+        preloadedMushafPagesRef.current = new Set(
+          [...preloadedMushafPagesRef.current].filter((page) => pagesToKeep.has(page)),
+        );
+      } catch {
+        // Preloading is only a swipe performance optimization.
+      }
+    }
+
+    void preloadImages();
+    return () => {
+      cancelled = true;
+    };
+  }, [currentPage]);
+
+  useEffect(() => {
     audioSettingsRef.current = audioSettings;
     if (!audioSettingsHydrated) return;
     AsyncStorage.setItem(audioSettingsStorageKey(childId), JSON.stringify(audioSettings)).catch(() => {
@@ -1817,19 +1772,16 @@ export default function MushafScreen() {
 
   useEffect(() => {
     let cancelled = false;
-    setPageVerseStatus("loading");
     setPageVerses([]);
 
     fetchVersesByPage(currentPage)
       .then((verses) => {
         if (cancelled) return;
         setPageVerses(verses);
-        setPageVerseStatus("ready");
       })
       .catch(() => {
         if (cancelled) return;
         setPageVerses([]);
-        setPageVerseStatus("error");
       });
 
     return () => {
@@ -1839,7 +1791,6 @@ export default function MushafScreen() {
 
   useEffect(() => {
     setBlindRevealed(false);
-    setSelectedVerseKeys(new Set());
     setSelectedAyah(null);
   }, [currentPage]);
 
@@ -1887,7 +1838,7 @@ export default function MushafScreen() {
     setSaveError(null);
 
     try {
-      const result = await apiFetch<ReadingProgressResponse>(
+      await apiFetch<ReadingProgressResponse>(
         `/api/children/${childId}/reading-progress`,
         {
           method: "POST",
@@ -1895,14 +1846,6 @@ export default function MushafScreen() {
         },
       );
 
-      setReadingGoal((current) => ({
-        targetPages: current?.targetPages ?? 0,
-        completedPages: result.readingCompletedPages ?? current?.completedPages ?? 0,
-        lastPage: result.readingLastPage ?? target,
-        status: result.readingStatus ?? current?.status ?? "not_started",
-        isEnabled: current?.isEnabled ?? false,
-      }));
-      setLastSavedPage(result.readingLastPage ?? target);
       setSaveStatus("saved");
       if (saveStatusTimer.current) clearTimeout(saveStatusTimer.current);
       saveStatusTimer.current = setTimeout(() => setSaveStatus("idle"), 1500);
@@ -1933,13 +1876,13 @@ export default function MushafScreen() {
     goToPage(juz.startPage, true);
   }
 
-  function toggleBookmark() {
-    const page = currentPage;
+  function toggleBookmark(page = currentPage) {
+    const target = clampMushafPage(page);
     setBookmarkError(null);
     setBookmarkedPages((current) => {
-      const next = current.includes(page)
-        ? current.filter((savedPage) => savedPage !== page)
-        : [page, ...current.filter((savedPage) => savedPage !== page)].slice(0, BOOKMARK_LIMIT);
+      const next = current.includes(target)
+        ? current.filter((savedPage) => savedPage !== target)
+        : [target, ...current.filter((savedPage) => savedPage !== target)].slice(0, BOOKMARK_LIMIT);
       AsyncStorage.setItem(bookmarkStorageKey(childId), JSON.stringify(next)).catch(() => {
         setBookmarkError("Bookmark could not save.");
       });
@@ -2139,7 +2082,7 @@ export default function MushafScreen() {
   async function playAudioTargets(targets: PageAyahTarget[], sourceLabel: string) {
     const queue = sortAyahTargets(targets);
     if (queue.length === 0) {
-      Alert.alert("No ayahs ready", "Open the ayah list after the page finishes loading.");
+      Alert.alert("No ayahs ready", "Try again after the page finishes loading.");
       return;
     }
     await startAudioQueueAt({
@@ -2196,10 +2139,6 @@ export default function MushafScreen() {
     });
   }
 
-  function playPageAudio() {
-    void playAudioTargets(pageAyahs, `Page ${currentPage}`);
-  }
-
   function playAyahAudio(target: PageAyahTarget) {
     setSelectedAyah(null);
     void playAudioTargets([target], formatTargetRange([target]));
@@ -2214,156 +2153,25 @@ export default function MushafScreen() {
     void playAudioTargets(queue, `${formatTargetRange([target])} onward`);
   }
 
-  function playSelectedAyahs() {
-    void playAudioTargets(selectedAyahTargets, "Selected ayahs");
-  }
-
-  async function maybeSubmitMarkedDailyProgress({
-    dashboard,
-    surahNumber: markedSurah,
-    mergedAyahs,
-  }: {
-    dashboard: MemorizationDashboardResponse;
-    surahNumber: number;
-    mergedAyahs: number[];
-  }) {
-    const todayWork = dashboard.todaysPlan.newMemorization;
-    if (!todayWork || todayWork.isReviewOnly) return;
-
-    const todayProgress = dashboard.todayProgress;
-    const targetSurah = todayProgress?.memTargetSurah ?? todayWork.surahNumber;
-    const targetEndSurah = todayWork.endSurahNumber ?? targetSurah;
-    if (targetSurah !== targetEndSurah || markedSurah !== targetSurah) return;
-
-    const targetAyahStart = todayProgress?.memTargetAyahStart ?? todayWork.ayahStart;
-    const targetAyahEnd = todayProgress?.memTargetAyahEnd ?? todayWork.ayahEnd;
-    if (targetAyahStart == null || targetAyahEnd == null) return;
-
-    const completedThrough = contiguousMemorizedThrough(
-      targetAyahStart,
-      targetAyahEnd,
-      mergedAyahs,
-    );
-    if (completedThrough === null) return;
-
-    const completedAyahEnd = Math.max(
-      todayProgress?.memCompletedAyahEnd ?? 0,
-      completedThrough,
-    );
-
-    await submitDailyProgress(childId, {
-      memStatus: completedAyahEnd >= targetAyahEnd ? "completed" : "in_progress",
-      memCompletedAyahEnd: completedAyahEnd,
-      memTargetSurah: targetSurah,
-      memTargetAyahStart: targetAyahStart,
-      memTargetAyahEnd: targetAyahEnd,
-      memTargetEndSurah: targetEndSurah,
-    });
-  }
-
-  async function markTargetsMemorized(targets: PageAyahTarget[]) {
-    const sortedTargets = sortAyahTargets(targets);
-    if (sortedTargets.length === 0 || markingMemorized) return;
-    setMarkingMemorized(true);
-    setAudioError(null);
-    try {
-      const [dashboardBeforeSave, latestProgress] = await Promise.all([
-        fetchDashboard(childId),
-        fetchMemorizationProgress(childId),
-      ]);
-      const grouped = new Map<number, number[]>();
-      for (const target of sortedTargets) {
-        const current = grouped.get(target.surahNumber) ?? [];
-        current.push(target.ayahNumber);
-        grouped.set(target.surahNumber, current);
-      }
-
-      for (const [targetSurah, ayahs] of grouped.entries()) {
-        const surahMeta = MUSHAF_SURAHS[targetSurah - 1];
-        const existingProgress = latestProgress.find((item) => item.surahNumber === targetSurah);
-        const totalVerses =
-          existingProgress?.totalVerses ??
-          surahMeta?.verseCount ??
-          Math.max(...ayahs);
-        const uniqueAyahs = Array.from(new Set(ayahs)).sort((a, b) => a - b);
-        const memorizedAyahs = mergeMemorizedAyahs(
-          existingProgress?.memorizedAyahs,
-          uniqueAyahs,
-          totalVerses,
-        );
-        const status = hasFullSurahMemorized(memorizedAyahs, totalVerses)
-          ? "memorized"
-          : "in_progress";
-
-        await submitMemorization(childId, {
-          surahId: targetSurah,
-          memorizedAyahs,
-          ratedAyahs: uniqueAyahs,
-          qualityRating: 5,
-          status,
-        });
-
-        await maybeSubmitMarkedDailyProgress({
-          dashboard: dashboardBeforeSave,
-          surahNumber: targetSurah,
-          mergedAyahs: memorizedAyahs,
-        });
-      }
-
-      await Promise.all([fetchDashboard(childId), fetchMemorizationProgress(childId)]);
-      setSelectedVerseKeys((current) => {
-        const next = new Set(current);
-        for (const target of sortedTargets) next.delete(target.verseKey);
-        return next;
-      });
-      setToolMode("none");
-      setSelectedAyah(null);
-      Alert.alert("Marked memorized", `${formatTargetRange(sortedTargets)} saved as memorized.`);
-    } catch (error) {
-      Alert.alert("Could not save", error instanceof Error ? error.message : "Try again in a moment.");
-    } finally {
-      setMarkingMemorized(false);
-    }
-  }
-
   function toggleToolMode(mode: ToolMode) {
     setToolMode((current) => {
       const next = current === mode ? "none" : mode;
       if (next !== "blind") setBlindRevealed(false);
-      if (next !== "select") setSelectedVerseKeys(new Set());
       return next;
     });
-  }
-
-  function toggleSelectedAyah(target: PageAyahTarget) {
-    setSelectedVerseKeys((current) => {
-      const next = new Set(current);
-      if (next.has(target.verseKey)) next.delete(target.verseKey);
-      else next.add(target.verseKey);
-      return next;
-    });
-  }
-
-  function toggleSelectedAyahFromSheet(target: PageAyahTarget) {
-    const willSelect = !selectedVerseKeys.has(target.verseKey);
-    toggleSelectedAyah(target);
-    if (willSelect) setToolMode("select");
   }
 
   function openAyahActions(target: PageAyahTarget) {
     setSelectedAyah(target);
-    setAyahListOpen(false);
   }
 
   function openAnnotatedAyah(target: PageAyahTarget) {
     goToPage(target.pageNumber, true);
     setSelectedAyah(target);
-    setAyahListOpen(false);
   }
 
   function openMemorizationFromAyah(target: PageAyahTarget, options?: { recite?: boolean }) {
     setSelectedAyah(null);
-    setAyahListOpen(false);
     void stopMushafAudio();
     router.push({
       pathname: "/child/[childId]/memorization",
@@ -2382,208 +2190,43 @@ export default function MushafScreen() {
     });
   }
 
-  function openSelectedRangeInMemorization(options?: { recite?: boolean }) {
-    if (selectedAyahTargets.length === 0) return;
-    const surahNumber = selectedAyahTargets[0]?.surahNumber;
-    if (!surahNumber || selectedAyahTargets.some((target) => target.surahNumber !== surahNumber)) {
-      Alert.alert("Select one surah", "For this shell, selected ayahs need to be in the same surah.");
-      return;
-    }
-
-    const ayahStart = Math.min(...selectedAyahTargets.map((target) => target.ayahNumber));
-    const ayahEnd = Math.max(...selectedAyahTargets.map((target) => target.ayahNumber));
-    setAyahListOpen(false);
-    void stopMushafAudio();
-    router.push({
-      pathname: "/child/[childId]/memorization",
-      params: {
-        childId,
-        name: name ?? "",
-        surahNumber: String(surahNumber),
-        ayahStart: String(ayahStart),
-        ayahEnd: String(ayahEnd),
-        pageStart: String(currentPage),
-        pageEnd: String(currentPage),
-        session: "1",
-        recite: options?.recite ? "1" : undefined,
-        viewMode: options?.recite ? "page" : undefined,
-      },
-    });
-  }
-
   function reciteFromAyah(target: PageAyahTarget) {
     openMemorizationFromAyah(target, { recite: true });
-  }
-
-  function reciteSelectedAyahs() {
-    openSelectedRangeInMemorization({ recite: true });
-  }
-
-  function markSelectedAyahsMemorized() {
-    void markTargetsMemorized(selectedAyahTargets);
-  }
-
-  function markAyahMemorized(target: PageAyahTarget) {
-    void markTargetsMemorized([target]);
   }
 
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Pressable onPress={() => router.back()} style={styles.backButton}>
-          <Ionicons name="chevron-back" size={19} color="#2563eb" />
-          <Text style={styles.backText}>Back</Text>
+        <Pressable
+          onPress={() => router.back()}
+          style={styles.backButton}
+          accessibilityRole="button"
+          accessibilityLabel="Go back"
+        >
+          <Ionicons name="chevron-back" size={22} color="#2563eb" />
         </Pressable>
-        <View style={styles.headerTitleBlock}>
-          <Text style={styles.headerTitle}>Full Quran</Text>
-          <Text style={styles.headerSubtitle}>
-            Page {currentPage} · Juz {currentJuz}
+        <Pressable
+          style={styles.surahPill}
+          onPress={() => setJumpOpen(true)}
+          accessibilityRole="button"
+          accessibilityLabel="Open Quran jump search"
+        >
+          <Text style={styles.surahPillTitle} numberOfLines={1}>
+            {currentSurah.number}. {currentSurah.name}
           </Text>
-        </View>
-        <View style={styles.headerActions}>
-          <Pressable style={styles.iconButtonNeutral} onPress={() => setChromeVisible((value) => !value)}>
-            <Ionicons
-              name={chromeVisible ? "chevron-up" : "chevron-down"}
-              size={18}
-              color="#374151"
-            />
-          </Pressable>
-          <Pressable style={styles.iconButton} onPress={toggleBookmark}>
-            <Ionicons
-              name={isBookmarked ? "bookmark" : "bookmark-outline"}
-              size={18}
-              color={isBookmarked ? "#0f766e" : "#2563eb"}
-            />
-          </Pressable>
-          <Pressable
-            style={[styles.saveButton, saveStatus === "saving" && styles.saveButtonDisabled]}
-            onPress={() => savePage(currentPage)}
-            disabled={saveStatus === "saving"}
-          >
-            <Text
-              style={[
-                styles.saveText,
-                saveStatus === "saving" && styles.saveTextMuted,
-                saveStatus === "saved" && styles.saveTextConfirm,
-              ]}
-            >
-              {saveStatus === "saving" ? "Saving" : saveStatus === "saved" ? "Saved" : "Save"}
-            </Text>
-          </Pressable>
-        </View>
+          <Text style={styles.surahPillMeta} numberOfLines={1}>
+            Page {currentPage} · Juz {currentJuz} · Hafs
+          </Text>
+        </Pressable>
+        <Pressable
+          style={styles.headerInfoButton}
+          onPress={() => setAttributionOpen(true)}
+          accessibilityRole="button"
+          accessibilityLabel="Mushaf credits"
+        >
+          <Ionicons name="information-circle-outline" size={21} color="#2563eb" />
+        </Pressable>
       </View>
-
-      {chromeVisible ? (
-        <>
-          <View style={styles.statusPanel}>
-            <View style={styles.statusTopRow}>
-              <View style={styles.surahBlock}>
-                <Text style={styles.surahTitle} numberOfLines={1}>
-                  {currentSurah.number}. {currentSurah.name}
-                </Text>
-                <Text style={styles.surahMeta} numberOfLines={1}>
-                  {currentSurah.translation} · pages {currentSurah.startPage}-{currentSurah.endPage}
-                </Text>
-              </View>
-              <View style={styles.resumePill}>
-                <Text style={styles.resumePillText}>
-                  {lastSavedPage ? `Saved p. ${lastSavedPage}` : "No saved page"}
-                </Text>
-              </View>
-            </View>
-            {memorizationContext ? (
-              <View style={styles.sourceContextPill}>
-                <Ionicons name="reader-outline" size={14} color="#0369a1" />
-                <Text style={styles.sourceContextText} numberOfLines={1}>
-                  {memorizationContext}
-                </Text>
-              </View>
-            ) : null}
-            {annotationCount > 0 ? (
-              <View style={styles.sourceContextPill}>
-                <Ionicons name="pricetags-outline" size={14} color="#7c3aed" />
-                <Text style={styles.sourceContextText} numberOfLines={1}>
-                  {annotationCount} ayah annotation{annotationCount === 1 ? "" : "s"} saved
-                </Text>
-              </View>
-            ) : null}
-            <View style={styles.progressRow}>
-              <View style={styles.progressTextBlock}>
-                <Text style={styles.progressLabel}>{goalCopy}</Text>
-                <Text style={styles.progressHint} numberOfLines={1}>
-                  {name ? `${name}'s reading` : "Daily reading"}
-                </Text>
-              </View>
-              <Text style={styles.progressPercent}>{Math.round(ratio * 100)}%</Text>
-            </View>
-            <View style={styles.progressTrack}>
-              <View style={[styles.progressFill, { width: `${Math.round(ratio * 100)}%` }]} />
-            </View>
-          </View>
-
-          <View style={styles.toolPanel}>
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.toolScroller}
-            >
-              <ToolButton
-                label="Jump"
-                iconName="search"
-                color="#2563eb"
-                onPress={() => setJumpOpen(true)}
-              />
-              <ToolButton
-                label="Ayahs"
-                iconName="list-outline"
-                color="#0f766e"
-                active={ayahListOpen}
-                onPress={() => setAyahListOpen(true)}
-              />
-              <ToolButton
-                label="Listen"
-                iconName="play-circle-outline"
-                color="#2563eb"
-                active={audioPlayer !== null}
-                onPress={playPageAudio}
-              />
-              <ToolButton
-                label="Blind"
-                iconName={toolMode === "blind" ? "eye-off-outline" : "eye-outline"}
-                color="#7c3aed"
-                active={toolMode === "blind"}
-                onPress={() => toggleToolMode("blind")}
-              />
-              <ToolButton
-                label="Select"
-                iconName="checkmark-circle-outline"
-                color="#047857"
-                active={toolMode === "select"}
-                onPress={() => {
-                  toggleToolMode("select");
-                  setAyahListOpen(true);
-                }}
-              />
-              <ToolButton
-                label="Recite"
-                iconName="mic-outline"
-                color="#be123c"
-                active={toolMode === "recite"}
-                onPress={() => {
-                  toggleToolMode("recite");
-                  setAyahListOpen(true);
-                }}
-              />
-            </ScrollView>
-          </View>
-        </>
-      ) : (
-        <View style={styles.collapsedChromeBar}>
-          <Text style={styles.collapsedChromeText} numberOfLines={1}>
-            {currentSurah.name} · Page {currentPage} · tools hidden
-          </Text>
-        </View>
-      )}
 
       {saveStatus === "error" && saveError && (
         <View style={styles.errorBanner}>
@@ -2646,44 +2289,35 @@ export default function MushafScreen() {
               width={screenW}
               toolMode={toolMode}
               blindRevealed={blindRevealed}
-              selectedVerseKeys={selectedVerseKeys}
               highlightedVerseKeys={highlightedVerseKeys}
               activeVerseKey={activeVerseKey}
               onRevealBlindPage={() => setBlindRevealed(true)}
-              onOpenAyahList={() => setAyahListOpen(true)}
               onOpenAyah={openAyahActions}
+              onStartRecite={reciteFromAyah}
             />
           )}
         />
       )}
 
-      {toolMode === "select" && selectedVerseKeys.size > 0 ? (
-        <View style={styles.selectionBar}>
-          <Text style={styles.selectionBarText}>
-            {selectedVerseKeys.size} ayah{selectedVerseKeys.size === 1 ? "" : "s"} selected
-          </Text>
-          <View style={styles.selectionBarActions}>
-            <Pressable style={styles.selectionBarButton} onPress={playSelectedAyahs}>
-              <Text style={styles.selectionBarButtonText}>Play</Text>
-            </Pressable>
-            <Pressable style={styles.selectionBarButton} onPress={reciteSelectedAyahs}>
-              <Text style={styles.selectionBarButtonText}>Recite</Text>
-            </Pressable>
-            <Pressable
-              style={[styles.selectionBarButton, markingMemorized && styles.selectionBarButtonDisabled]}
-              onPress={markSelectedAyahsMemorized}
-              disabled={markingMemorized}
-            >
-              <Text style={styles.selectionBarButtonText}>
-                {markingMemorized ? "Saving" : "Mark"}
-              </Text>
-            </Pressable>
-            <Pressable style={styles.selectionBarButton} onPress={() => openSelectedRangeInMemorization()}>
-              <Text style={styles.selectionBarButtonText}>Open</Text>
-            </Pressable>
-          </View>
-        </View>
-      ) : null}
+      <View
+        pointerEvents="box-none"
+        style={[styles.floatingToolDock, audioPlayer && styles.floatingToolDockRaised]}
+      >
+        <ToolButton
+          label="Blind"
+          iconName={toolMode === "blind" ? "eye-off-outline" : "eye-outline"}
+          color="#7c3aed"
+          active={toolMode === "blind"}
+          onPress={() => toggleToolMode("blind")}
+        />
+        <ToolButton
+          label="Recite"
+          iconName="mic-outline"
+          color="#be123c"
+          active={toolMode === "recite"}
+          onPress={() => toggleToolMode("recite")}
+        />
+      </View>
 
       {audioPlayer ? (
         <MushafAudioBar
@@ -2697,89 +2331,9 @@ export default function MushafScreen() {
         />
       ) : null}
 
-      {chromeVisible ? (
-        <View style={styles.footer}>
-          <View style={styles.footerControls}>
-            <Pressable
-              style={[styles.footerButton, currentPage <= 1 && styles.footerButtonDisabled]}
-              onPress={() => goToPage(currentPage - 1)}
-              disabled={currentPage <= 1}
-            >
-              <Ionicons name="chevron-back" size={17} color={currentPage <= 1 ? "#9ca3af" : "#2563eb"} />
-              <Text style={[styles.footerButtonText, currentPage <= 1 && styles.footerButtonTextDisabled]}>
-                Prev
-              </Text>
-            </Pressable>
-            <Pressable style={styles.footerButtonPrimary} onPress={() => setJumpOpen(true)}>
-              <Ionicons name="search" size={17} color="#ffffff" />
-              <Text style={styles.footerButtonPrimaryText}>Jump</Text>
-            </Pressable>
-            <Pressable
-              style={[
-                styles.footerButton,
-                currentPage >= TOTAL_MUSHAF_PAGES && styles.footerButtonDisabled,
-              ]}
-              onPress={() => goToPage(currentPage + 1)}
-              disabled={currentPage >= TOTAL_MUSHAF_PAGES}
-            >
-              <Text
-                style={[
-                  styles.footerButtonText,
-                  currentPage >= TOTAL_MUSHAF_PAGES && styles.footerButtonTextDisabled,
-                ]}
-              >
-                Next
-              </Text>
-              <Ionicons
-                name="chevron-forward"
-                size={17}
-                color={currentPage >= TOTAL_MUSHAF_PAGES ? "#9ca3af" : "#2563eb"}
-              />
-            </Pressable>
-          </View>
-          <View style={styles.presetRow}>
-            {PRESET_PAGES.map((page) => (
-              <Pressable
-                key={page}
-                style={[styles.presetButton, currentPage === page && styles.presetButtonActive]}
-                onPress={() => goToPage(page)}
-              >
-                <Text
-                  style={[
-                    styles.presetButtonText,
-                    currentPage === page && styles.presetButtonTextActive,
-                  ]}
-                >
-                  Page {page}
-                </Text>
-              </Pressable>
-            ))}
-          </View>
-        </View>
-      ) : null}
-
-      <AyahListModal
-        visible={ayahListOpen}
-        pageNumber={currentPage}
-        toolMode={toolMode}
-        pageAyahs={pageAyahs}
-        status={pageVerseStatus}
-        selectedVerseKeys={selectedVerseKeys}
-        annotations={annotations}
-        onClose={() => setAyahListOpen(false)}
-        onOpenAyah={openAyahActions}
-        onToggleSelectedAyah={toggleSelectedAyah}
-        onStartRecite={openMemorizationFromAyah}
-        onStartSelected={() => openSelectedRangeInMemorization()}
-        onPlaySelected={playSelectedAyahs}
-        onReciteSelected={reciteSelectedAyahs}
-        onMarkSelected={markSelectedAyahsMemorized}
-        markingMemorized={markingMemorized}
-      />
-
       <AyahActionSheet
         target={selectedAyah}
-        selected={selectedAyah ? selectedVerseKeys.has(selectedAyah.verseKey) : false}
+        pageBookmarked={selectedAyah ? bookmarkedPages.includes(selectedAyah.pageNumber) : false}
         annotations={annotations}
         pageAyahs={pageAyahs}
         onClose={() => setSelectedAyah(null)}
@@ -2788,8 +2342,8 @@ export default function MushafScreen() {
         onPlayAyah={playAyahAudio}
         onPlayFromHere={playFromAyah}
         onReciteFromAyah={reciteFromAyah}
-        onMarkMemorized={markAyahMemorized}
-        onToggleSelection={toggleSelectedAyahFromSheet}
+        onSavePage={(target) => void savePage(target.pageNumber)}
+        onTogglePageBookmark={(target) => toggleBookmark(target.pageNumber)}
         onToggleBookmark={toggleAyahBookmark}
         onSetHighlight={setAyahHighlight}
         onSaveNote={saveAyahNote}
@@ -2801,6 +2355,42 @@ export default function MushafScreen() {
         onChange={setAudioSettings}
         onClose={() => setAudioSettingsOpen(false)}
       />
+
+      <Modal
+        visible={attributionOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setAttributionOpen(false)}
+      >
+        <Pressable style={styles.backdrop} onPress={() => setAttributionOpen(false)} />
+        <View style={styles.creditModalWrap}>
+          <View style={styles.creditModal}>
+            <View style={styles.creditHeader}>
+              <View style={styles.creditIcon}>
+                <Ionicons name="information-circle-outline" size={20} color="#2563eb" />
+              </View>
+              <Text style={styles.creditTitle}>Mushaf credits</Text>
+              <Pressable
+                style={styles.creditClose}
+                onPress={() => setAttributionOpen(false)}
+                accessibilityRole="button"
+                accessibilityLabel="Close credits"
+              >
+                <Ionicons name="close" size={18} color="#6b7280" />
+              </Pressable>
+            </View>
+            <Text style={styles.creditText}>
+              Mushaf images: King Fahd Glorious Qur'an Printing Complex (Madani 1421H Hafs)
+            </Text>
+            <Text style={styles.creditText}>
+              Distributed under King Fahd Complex's free-use rights for non-commercial software
+            </Text>
+            <Text style={styles.creditText}>
+              Page rendering pattern adapted from open-mushaf-native (MIT, github.com/adelpro/open-mushaf-native)
+            </Text>
+          </View>
+        </View>
+      </Modal>
 
       <Modal visible={jumpOpen} animationType="slide" onRequestClose={() => setJumpOpen(false)}>
         <View style={styles.sheet}>
@@ -3005,226 +2595,91 @@ const styles = StyleSheet.create({
     paddingTop: 56,
     paddingBottom: 12,
     paddingHorizontal: 16,
+    gap: 10,
     backgroundColor: "#ffffff",
     borderBottomWidth: 1,
     borderBottomColor: "#e2e8f0",
   },
   backButton: {
-    width: 84,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 2,
-  },
-  backText: {
-    fontSize: 15,
-    color: "#2563eb",
-    fontWeight: "700",
-  },
-  headerTitleBlock: {
-    flex: 1,
-    alignItems: "center",
-    gap: 2,
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: "800",
-    color: "#111827",
-  },
-  headerSubtitle: {
-    fontSize: 11,
-    color: "#666666",
-    fontWeight: "700",
-  },
-  headerActions: {
-    width: 136,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "flex-end",
-    gap: 6,
-  },
-  iconButtonNeutral: {
-    width: 34,
-    height: 34,
-    borderRadius: 10,
+    width: 42,
+    height: 42,
+    borderRadius: 21,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#ffffff",
-    borderWidth: 1,
-    borderColor: "#e2e8f0",
-  },
-  iconButton: {
-    width: 34,
-    height: 34,
-    borderRadius: 10,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#f0fdfa",
-    borderWidth: 1,
-    borderColor: "#ccfbf1",
-  },
-  saveButton: {
-    minWidth: 56,
-    height: 34,
-    borderRadius: 10,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 10,
     backgroundColor: "#eff6ff",
     borderWidth: 1,
     borderColor: "#bfdbfe",
   },
-  saveButtonDisabled: {
-    backgroundColor: "#f3f4f6",
-    borderColor: "#e5e7eb",
-  },
-  saveText: {
-    fontSize: 12,
-    color: "#2563eb",
-    fontWeight: "800",
-  },
-  saveTextMuted: {
-    color: "#999999",
-  },
-  saveTextConfirm: {
-    color: "#16a34a",
-  },
-  statusPanel: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    gap: 10,
-    backgroundColor: "#ffffff",
-    borderBottomWidth: 1,
-    borderBottomColor: "#e2e8f0",
-  },
-  statusTopRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-  },
-  surahBlock: {
+  surahPill: {
     flex: 1,
-    minWidth: 0,
+    alignItems: "center",
+    justifyContent: "center",
+    minHeight: 48,
+    borderRadius: 999,
+    paddingHorizontal: 16,
+    backgroundColor: "#f8fafc",
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
   },
-  surahTitle: {
+  surahPillTitle: {
     fontSize: 15,
     color: "#111827",
     fontWeight: "900",
+    textAlign: "center",
   },
-  surahMeta: {
+  surahPillMeta: {
     marginTop: 2,
-    fontSize: 12,
+    fontSize: 11,
     color: "#666666",
-    fontWeight: "600",
-  },
-  resumePill: {
-    borderRadius: 999,
-    backgroundColor: "#ffffff",
-    borderWidth: 1,
-    borderColor: "#e2e8f0",
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-  },
-  resumePillText: {
-    fontSize: 11,
-    color: "#374151",
     fontWeight: "800",
+    textAlign: "center",
   },
-  sourceContextPill: {
-    alignSelf: "flex-start",
-    maxWidth: "100%",
+  headerInfoButton: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#eff6ff",
+    borderWidth: 1,
+    borderColor: "#bfdbfe",
+  },
+  floatingToolDock: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 24,
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: "#bae6fd",
-    backgroundColor: "#f0f9ff",
-    paddingHorizontal: 10,
-    paddingVertical: 6,
+    justifyContent: "center",
+    gap: 10,
+    zIndex: 30,
   },
-  sourceContextText: {
-    flexShrink: 1,
-    fontSize: 12,
-    fontWeight: "800",
-    color: "#0369a1",
-  },
-  progressRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 12,
-  },
-  progressTextBlock: {
-    flex: 1,
-    minWidth: 0,
-  },
-  progressLabel: {
-    fontSize: 13,
-    color: "#111827",
-    fontWeight: "900",
-  },
-  progressHint: {
-    marginTop: 2,
-    fontSize: 11,
-    color: "#6b7280",
-    fontWeight: "600",
-  },
-  progressPercent: {
-    fontSize: 16,
-    color: "#0f766e",
-    fontWeight: "900",
-  },
-  progressTrack: {
-    height: 7,
-    borderRadius: 999,
-    backgroundColor: "#e5e7eb",
-    overflow: "hidden",
-  },
-  progressFill: {
-    height: "100%",
-    borderRadius: 999,
-    backgroundColor: "#0f766e",
-  },
-  toolPanel: {
-    paddingVertical: 10,
-    backgroundColor: "#ffffff",
-    borderBottomWidth: 1,
-    borderBottomColor: "#e2e8f0",
-  },
-  toolScroller: {
-    paddingHorizontal: 16,
-    gap: 8,
+  floatingToolDockRaised: {
+    bottom: 148,
   },
   toolButton: {
-    minWidth: 76,
-    minHeight: 40,
-    borderRadius: 12,
+    minWidth: 108,
+    minHeight: 46,
+    borderRadius: 999,
     borderWidth: 1,
     borderColor: "#e2e8f0",
-    backgroundColor: "#ffffff",
+    backgroundColor: "rgba(255, 255, 255, 0.96)",
     alignItems: "center",
     justifyContent: "center",
     flexDirection: "row",
     gap: 6,
-    paddingHorizontal: 10,
+    paddingHorizontal: 16,
+    shadowColor: "#0f172a",
+    shadowOpacity: 0.12,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 8,
   },
   toolButtonText: {
     fontSize: 12,
     color: "#374151",
     fontWeight: "900",
-  },
-  collapsedChromeBar: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    backgroundColor: "#ffffff",
-    borderBottomWidth: 1,
-    borderBottomColor: "#e2e8f0",
-  },
-  collapsedChromeText: {
-    fontSize: 12,
-    color: "#6b7280",
-    fontWeight: "800",
-    textAlign: "center",
   },
   errorBanner: {
     backgroundColor: "#fef2f2",
@@ -3251,22 +2706,52 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
   pageWrap: {
-    paddingHorizontal: 16,
-    alignItems: "center",
+    flex: 1,
+    alignItems: "stretch",
     justifyContent: "center",
+    backgroundColor: "#f8fafc",
   },
-  pageCard: {
+  pageImageShell: {
+    flex: 1,
+    width: "100%",
     backgroundColor: "#ffffff",
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "#e2e8f0",
     overflow: "hidden",
-    justifyContent: "center",
-    alignItems: "center",
+    position: "relative",
   },
   pageImage: {
     width: "100%",
-    height: "100%",
+    flex: 1,
+  },
+  pageBackgroundPressable: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 2,
+  },
+  ayahTapOverlay: {
+    position: "absolute",
+    backgroundColor: "transparent",
+    zIndex: 4,
+  },
+  ayahTapOverlayHighlighted: {
+    backgroundColor: "rgba(250, 204, 21, 0.2)",
+  },
+  ayahTapOverlayActive: {
+    backgroundColor: "rgba(37, 99, 235, 0.18)",
+    borderWidth: 1,
+    borderColor: "rgba(37, 99, 235, 0.48)",
+  },
+  pageDataBadge: {
+    position: "absolute",
+    top: 10,
+    right: 10,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255, 255, 255, 0.88)",
+    borderWidth: 1,
+    borderColor: "rgba(226, 232, 240, 0.9)",
+    zIndex: 8,
   },
   blindOverlay: {
     ...StyleSheet.absoluteFillObject,
@@ -3275,6 +2760,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     paddingHorizontal: 24,
     gap: 8,
+    zIndex: 12,
   },
   blindOverlayTitle: {
     fontSize: 18,
@@ -3301,6 +2787,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 6,
+    zIndex: 10,
   },
   modeOverlayHintText: {
     fontSize: 12,
@@ -3309,16 +2796,6 @@ const styles = StyleSheet.create({
   },
   modeOverlayHintTextRecite: {
     color: "#be123c",
-  },
-  loadingOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    justifyContent: "center",
-    alignItems: "center",
-    gap: 6,
-  },
-  loadingText: {
-    fontSize: 11,
-    color: "#666666",
   },
   errorOverlay: {
     ...StyleSheet.absoluteFillObject,
@@ -3339,132 +2816,18 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   pageNumberLabel: {
-    fontSize: 11,
-    color: "#666666",
-    marginTop: 6,
-    textTransform: "uppercase",
-    fontWeight: "800",
-  },
-  footer: {
-    gap: 10,
-    paddingTop: 12,
-    paddingHorizontal: 16,
-    paddingBottom: 22,
-    backgroundColor: "#ffffff",
-    borderTopWidth: 1,
-    borderTopColor: "#e2e8f0",
-    shadowColor: "#0f172a",
-    shadowOpacity: 0.08,
-    shadowRadius: 14,
-    shadowOffset: { width: 0, height: -4 },
-    elevation: 8,
-  },
-  footerControls: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-  },
-  footerButton: {
-    flex: 1,
-    minHeight: 42,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "#dbeafe",
-    backgroundColor: "#eff6ff",
-    alignItems: "center",
-    justifyContent: "center",
-    flexDirection: "row",
-    gap: 4,
-  },
-  footerButtonDisabled: {
-    backgroundColor: "#f8fafc",
-    borderColor: "#e2e8f0",
-  },
-  footerButtonText: {
-    fontSize: 13,
-    color: "#2563eb",
-    fontWeight: "800",
-  },
-  footerButtonTextDisabled: {
-    color: "#9ca3af",
-  },
-  footerButtonPrimary: {
-    flex: 1.15,
-    minHeight: 42,
-    borderRadius: 12,
-    backgroundColor: "#2563eb",
-    alignItems: "center",
-    justifyContent: "center",
-    flexDirection: "row",
-    gap: 6,
-  },
-  footerButtonPrimaryText: {
-    fontSize: 13,
-    color: "#ffffff",
-    fontWeight: "900",
-  },
-  presetRow: {
-    flexDirection: "row",
-    gap: 8,
-  },
-  presetButton: {
-    flex: 1,
-    minHeight: 34,
-    borderRadius: 9,
-    borderWidth: 1,
-    borderColor: "#e2e8f0",
-    backgroundColor: "#ffffff",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  presetButtonActive: {
-    backgroundColor: "#ecfeff",
-    borderColor: "#67e8f9",
-  },
-  presetButtonText: {
+    position: "absolute",
+    left: 16,
+    bottom: 6,
     fontSize: 11,
     color: "#374151",
+    textTransform: "uppercase",
     fontWeight: "800",
-  },
-  presetButtonTextActive: {
-    color: "#0e7490",
-  },
-  selectionBar: {
-    marginHorizontal: 16,
-    marginBottom: 8,
-    borderRadius: 12,
-    backgroundColor: "#ecfdf5",
-    borderWidth: 1,
-    borderColor: "#a7f3d0",
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    gap: 8,
-  },
-  selectionBarText: {
-    fontSize: 13,
-    color: "#047857",
-    fontWeight: "900",
-  },
-  selectionBarActions: {
-    flexDirection: "row",
-    gap: 6,
-  },
-  selectionBarButton: {
-    flex: 1,
-    borderRadius: 9,
-    backgroundColor: "#047857",
-    alignItems: "center",
-    justifyContent: "center",
+    backgroundColor: "rgba(255, 255, 255, 0.82)",
+    borderRadius: 999,
+    overflow: "hidden",
     paddingHorizontal: 8,
-    paddingVertical: 9,
-  },
-  selectionBarButtonDisabled: {
-    backgroundColor: "#9ca3af",
-  },
-  selectionBarButtonText: {
-    color: "#ffffff",
-    fontSize: 11,
-    fontWeight: "900",
+    paddingVertical: 3,
   },
   audioBar: {
     marginHorizontal: 16,
@@ -3601,154 +2964,68 @@ const styles = StyleSheet.create({
   sheetHeaderSpacer: {
     width: 38,
   },
-  sheetCenter: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    paddingHorizontal: 28,
-  },
-  sheetCenterTitle: {
-    fontSize: 16,
-    color: "#111827",
-    fontWeight: "900",
-    textAlign: "center",
-  },
-  sheetCenterText: {
-    fontSize: 13,
-    color: "#666666",
-    fontWeight: "700",
-    textAlign: "center",
-  },
-  ayahListContent: {
-    padding: 16,
-    paddingBottom: 30,
-    gap: 10,
-  },
-  ayahRow: {
-    minHeight: 74,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "#e2e8f0",
-    backgroundColor: "#ffffff",
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-  },
-  ayahRowSelected: {
-    borderColor: "#a7f3d0",
-    backgroundColor: "#ecfdf5",
-  },
-  ayahNumberBadge: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    borderWidth: 1,
-    borderColor: "#dbeafe",
-    backgroundColor: "#eff6ff",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  ayahNumberBadgeSelected: {
-    borderColor: "#047857",
-    backgroundColor: "#047857",
-  },
-  ayahNumberBadgeText: {
-    fontSize: 13,
-    color: "#2563eb",
-    fontWeight: "900",
-  },
-  ayahNumberBadgeTextSelected: {
-    color: "#ffffff",
-  },
-  ayahRowTextBlock: {
-    flex: 1,
-    minWidth: 0,
-  },
-  ayahRowTitle: {
-    fontSize: 13,
-    color: "#111827",
-    fontWeight: "900",
-  },
-  ayahRowArabic: {
-    marginTop: 4,
-    fontSize: 18,
-    lineHeight: 30,
-    color: "#374151",
-    textAlign: "right",
-    writingDirection: "rtl",
-  },
-  ayahAnnotationRow: {
-    marginTop: 8,
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 6,
-  },
-  ayahAnnotationChip: {
-    minHeight: 22,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: "#e2e8f0",
-    backgroundColor: "rgba(255, 255, 255, 0.72)",
-    paddingHorizontal: 8,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-  },
-  ayahAnnotationChipText: {
-    fontSize: 10,
-    color: "#374151",
-    fontWeight: "800",
-  },
   ayahAnnotationDot: {
     width: 8,
     height: 8,
     borderRadius: 4,
   },
-  ayahListFooter: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderTopWidth: 1,
-    borderTopColor: "#e2e8f0",
-    backgroundColor: "#ffffff",
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 12,
-  },
-  ayahListFooterText: {
-    flex: 1,
-    fontSize: 13,
-    color: "#047857",
-    fontWeight: "900",
-  },
-  ayahListFooterActions: {
-    flex: 2,
-    flexDirection: "row",
-    gap: 6,
-  },
-  ayahListFooterButton: {
-    flex: 1,
-    borderRadius: 10,
-    backgroundColor: "#047857",
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 8,
-    paddingVertical: 10,
-  },
-  ayahListFooterButtonDisabled: {
-    backgroundColor: "#9ca3af",
-  },
-  ayahListFooterButtonText: {
-    fontSize: 13,
-    color: "#ffffff",
-    fontWeight: "900",
-  },
   backdrop: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: "rgba(17, 24, 39, 0.45)",
+  },
+  creditModalWrap: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 24,
+  },
+  creditModal: {
+    width: "100%",
+    maxWidth: 420,
+    borderRadius: 16,
+    backgroundColor: "#ffffff",
+    padding: 16,
+    gap: 12,
+    shadowColor: "#0f172a",
+    shadowOpacity: 0.18,
+    shadowRadius: 22,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 10,
+  },
+  creditHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  creditIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: "#eff6ff",
+    borderWidth: 1,
+    borderColor: "#bfdbfe",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  creditTitle: {
+    flex: 1,
+    fontSize: 17,
+    color: "#111827",
+    fontWeight: "900",
+  },
+  creditClose: {
+    width: 34,
+    height: 34,
+    borderRadius: 10,
+    backgroundColor: "#f3f4f6",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  creditText: {
+    fontSize: 13,
+    lineHeight: 20,
+    color: "#374151",
+    fontWeight: "700",
   },
   ayahKeyboardAvoider: {
     position: "absolute",
@@ -3885,22 +3162,6 @@ const styles = StyleSheet.create({
   ayahPrimaryButtonText: {
     fontSize: 14,
     color: "#ffffff",
-    fontWeight: "900",
-  },
-  ayahSecondaryButton: {
-    minHeight: 44,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "#a7f3d0",
-    backgroundColor: "#ecfdf5",
-    alignItems: "center",
-    justifyContent: "center",
-    flexDirection: "row",
-    gap: 8,
-  },
-  ayahSecondaryButtonText: {
-    fontSize: 14,
-    color: "#047857",
     fontWeight: "900",
   },
   ayahMenuGroup: {

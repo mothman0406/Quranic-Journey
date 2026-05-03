@@ -6,6 +6,9 @@
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "noormobile",
+    "assetBundlePatterns": [
+      "**/*"
+    ],
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "ios": {
