@@ -1,4 +1,7 @@
-import { SURAH_START_PAGES_GENERATED } from "./generated-mushaf-tables";
+import {
+  PAGE_TO_FIRST_VERSE_GENERATED,
+  SURAH_START_PAGES_GENERATED,
+} from "./generated-mushaf-tables";
 
 export const TOTAL_MUSHAF_PAGES = 604;
 
@@ -299,6 +302,38 @@ export function getJuzStartPage(juzNumber: number): number | null {
     return null;
   }
   return JUZ_START_PAGES[juzNumber - 1];
+}
+
+function compareMushafVerse(
+  left: { surah: number; ayah: number },
+  right: { surah: number; ayah: number },
+) {
+  if (left.surah !== right.surah) return left.surah - right.surah;
+  return left.ayah - right.ayah;
+}
+
+export function getMushafPageForVerse(surahNumber: number, ayahNumber: number): number | null {
+  if (
+    !Number.isInteger(surahNumber) ||
+    !Number.isInteger(ayahNumber) ||
+    surahNumber < 1 ||
+    surahNumber > SURAH_VERSE_COUNTS.length
+  ) {
+    return null;
+  }
+
+  const verseCount = SURAH_VERSE_COUNTS[surahNumber - 1];
+  if (ayahNumber < 1 || ayahNumber > verseCount) return null;
+
+  const target = { surah: surahNumber, ayah: ayahNumber };
+  for (let index = PAGE_TO_FIRST_VERSE_GENERATED.length - 1; index >= 0; index -= 1) {
+    const pageStart = PAGE_TO_FIRST_VERSE_GENERATED[index];
+    if (pageStart && compareMushafVerse(pageStart, target) <= 0) {
+      return clampMushafPage(index + 1);
+    }
+  }
+
+  return null;
 }
 
 function normalizeSearchText(value: string): string {

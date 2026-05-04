@@ -45,6 +45,7 @@ import {
   MUSHAF_SURAHS,
   clampMushafPage,
   getJuzForMushafPage,
+  getMushafPageForVerse,
   getMushafSurahForPage,
   searchMushafSurahs,
   TOTAL_MUSHAF_PAGES,
@@ -69,6 +70,7 @@ const QURAN_COM_1405_PAGE_ASPECT_RATIO =
 const MUSHAF_AUDIO_SPEEDS = [0.75, 0.85, 1, 1.15, 1.25, 1.5] as const;
 const MUSHAF_AUDIO_AYAH_REPEATS = [1, 2, 3, 5] as const;
 const MUSHAF_AUDIO_RANGE_REPEATS = [1, 2, 3] as const;
+const MUSHAF_CONTROL_SLOT_HEIGHT = 140;
 
 type ReadingStatus = "not_started" | "in_progress" | "completed";
 type ToolMode = "none" | "blind" | "recite";
@@ -246,6 +248,46 @@ function pageVerseToTarget(verse: ApiPageVerse, pageNumber: number): PageAyahTar
 
 function verseKeyFor(surahNumber: number, ayahNumber: number) {
   return `${surahNumber}:${ayahNumber}`;
+}
+
+function getPageForVerseKey(surahNumber: number, ayahNumber: number) {
+  return (
+    getMushafPageForVerse(surahNumber, ayahNumber) ??
+    MUSHAF_SURAHS[surahNumber - 1]?.startPage ??
+    1
+  );
+}
+
+function buildPageAyahTarget(
+  surahNumber: number,
+  ayahNumber: number,
+  pageAyahs: PageAyahTarget[],
+): PageAyahTarget | null {
+  const surah = MUSHAF_SURAHS[surahNumber - 1];
+  if (!surah || ayahNumber < 1 || ayahNumber > surah.verseCount) return null;
+
+  const verseKey = verseKeyFor(surahNumber, ayahNumber);
+  const existing = pageAyahs.find((ayah) => ayah.verseKey === verseKey);
+  return {
+    verseKey,
+    surahNumber,
+    ayahNumber,
+    pageNumber: existing?.pageNumber ?? getPageForVerseKey(surahNumber, ayahNumber),
+    textUthmani: existing?.textUthmani ?? "",
+  };
+}
+
+function buildSurahPlaybackQueue(start: PageAyahTarget, pageAyahs: PageAyahTarget[]) {
+  const surah = MUSHAF_SURAHS[start.surahNumber - 1];
+  if (!surah) return [start];
+
+  const queue: PageAyahTarget[] = [];
+  for (let ayah = start.ayahNumber; ayah <= surah.verseCount; ayah += 1) {
+    const target = buildPageAyahTarget(start.surahNumber, ayah, pageAyahs);
+    if (target) queue.push(target);
+  }
+
+  return queue.length > 0 ? queue : [start];
 }
 
 function isKnownAyah(surahNumber: number, ayahNumber: number) {
@@ -607,9 +649,6 @@ function PageView({
           </View>
         ) : null}
       </View>
-      <Text style={styles.pageNumberLabel}>
-        {pageNumber} / {TOTAL_MUSHAF_PAGES}
-      </Text>
     </View>
   );
 }
@@ -940,19 +979,27 @@ function AyahActionSheet({
     data: null,
     error: null,
   });
+  const previousVerseKeyRef = useRef<string | null>(null);
 
   const bookmark = target ? annotations.bookmarks[target.verseKey] : undefined;
   const highlight = target ? annotations.highlights[target.verseKey] : undefined;
   const note = target ? annotations.notes[target.verseKey] : undefined;
-  const currentIndex = target ? pageAyahs.findIndex((ayah) => ayah.verseKey === target.verseKey) : -1;
-  const previousAyah = currentIndex > 0 ? pageAyahs[currentIndex - 1] : null;
+  const previousAyah =
+    target && target.ayahNumber > 1
+      ? buildPageAyahTarget(target.surahNumber, target.ayahNumber - 1, pageAyahs)
+      : null;
   const nextAyah =
-    currentIndex >= 0 && currentIndex < pageAyahs.length - 1 ? pageAyahs[currentIndex + 1] : null;
+    target && surah && target.ayahNumber < surah.verseCount
+      ? buildPageAyahTarget(target.surahNumber, target.ayahNumber + 1, pageAyahs)
+      : null;
   const sheetMaxHeight = Math.round(Dimensions.get("window").height * 0.86);
 
   useEffect(() => {
-    setSheetView("main");
-    setNoteText(target ? annotations.notes[target.verseKey]?.text ?? "" : "");
+    const previous = previousVerseKeyRef.current;
+    previousVerseKeyRef.current = target?.verseKey ?? null;
+    if (!target) return;
+    if (!previous) setSheetView("main");
+    setNoteText(annotations.notes[target.verseKey]?.text ?? "");
     setTranslationState({ status: "idle", data: null, error: null });
     setTafseerState({ status: "idle", data: null, error: null });
     setWbwState({ status: "idle", data: null, error: null });
@@ -1267,6 +1314,7 @@ function AyahActionSheet({
             <Text style={styles.ayahDangerButtonText}>Remove highlight</Text>
           </Pressable>
         ) : null}
+        {renderNavigation()}
       </>
     );
   }
@@ -1314,6 +1362,7 @@ function AyahActionSheet({
             ) : null}
           </View>
         </View>
+        {renderNavigation()}
       </>
     );
   }
@@ -1756,7 +1805,7 @@ export default function MushafScreen() {
 
   useEffect(() => {
     setBlindRevealed(false);
-    setSelectedAyah(null);
+    setSelectedAyah((current) => (current?.pageNumber === currentPage ? current : null));
   }, [currentPage]);
 
   useEffect(() => {
@@ -2110,10 +2159,7 @@ export default function MushafScreen() {
   }
 
   function playFromAyah(target: PageAyahTarget) {
-    const queue = pageAyahs.filter((ayah) => {
-      if (ayah.surahNumber !== target.surahNumber) return ayah.surahNumber > target.surahNumber;
-      return ayah.ayahNumber >= target.ayahNumber;
-    });
+    const queue = buildSurahPlaybackQueue(target, pageAyahs);
     setSelectedAyah(null);
     void playAudioTargets(queue, `${formatTargetRange([target])} onward`);
   }
@@ -2133,6 +2179,13 @@ export default function MushafScreen() {
   function openAnnotatedAyah(target: PageAyahTarget) {
     goToPage(target.pageNumber, true);
     setSelectedAyah(target);
+  }
+
+  function navigateAyahSheet(target: PageAyahTarget) {
+    setSelectedAyah(target);
+    if (target.pageNumber !== currentPage) {
+      goToPage(target.pageNumber, false);
+    }
   }
 
   function openMemorizationFromAyah(target: PageAyahTarget, options?: { recite?: boolean }) {
@@ -2222,6 +2275,7 @@ export default function MushafScreen() {
       ) : (
         <FlatList
           ref={listRef}
+          style={styles.pageList}
           data={data}
           keyExtractor={(page) => String(page)}
           horizontal
@@ -2264,36 +2318,37 @@ export default function MushafScreen() {
         />
       )}
 
-      <View
-        pointerEvents="box-none"
-        style={[styles.floatingToolDock, audioPlayer && styles.floatingToolDockRaised]}
-      >
-        <ToolButton
-          label="Blind"
-          iconName={toolMode === "blind" ? "eye-off-outline" : "eye-outline"}
-          color="#7c3aed"
-          active={toolMode === "blind"}
-          onPress={() => toggleToolMode("blind")}
-        />
-        <ToolButton
-          label="Recite"
-          iconName="mic-outline"
-          color="#be123c"
-          active={toolMode === "recite"}
-          onPress={() => toggleToolMode("recite")}
-        />
-      </View>
-
-      {audioPlayer ? (
-        <MushafAudioBar
-          player={audioPlayer}
-          settings={audioSettings}
-          onToggle={() => void toggleMushafAudio()}
-          onStop={() => void stopMushafAudio()}
-          onPrevious={() => jumpMushafAudio(-1)}
-          onNext={() => jumpMushafAudio(1)}
-          onOpenSettings={() => setAudioSettingsOpen(true)}
-        />
+      {initialPage !== null ? (
+        <View style={styles.controlSlot}>
+          {audioPlayer ? (
+            <MushafAudioBar
+              player={audioPlayer}
+              settings={audioSettings}
+              onToggle={() => void toggleMushafAudio()}
+              onStop={() => void stopMushafAudio()}
+              onPrevious={() => jumpMushafAudio(-1)}
+              onNext={() => jumpMushafAudio(1)}
+              onOpenSettings={() => setAudioSettingsOpen(true)}
+            />
+          ) : (
+            <View style={styles.controlPills}>
+              <ToolButton
+                label="Blind"
+                iconName={toolMode === "blind" ? "eye-off-outline" : "eye-outline"}
+                color="#7c3aed"
+                active={toolMode === "blind"}
+                onPress={() => toggleToolMode("blind")}
+              />
+              <ToolButton
+                label="Recite"
+                iconName="mic-outline"
+                color="#be123c"
+                active={toolMode === "recite"}
+                onPress={() => toggleToolMode("recite")}
+              />
+            </View>
+          )}
+        </View>
       ) : null}
 
       <AyahActionSheet
@@ -2302,7 +2357,7 @@ export default function MushafScreen() {
         annotations={annotations}
         pageAyahs={pageAyahs}
         onClose={() => setSelectedAyah(null)}
-        onNavigate={setSelectedAyah}
+        onNavigate={navigateAyahSheet}
         onOpenMemorization={openMemorizationFromAyah}
         onPlayAyah={playAyahAudio}
         onPlayFromHere={playFromAyah}
@@ -2612,19 +2667,19 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#bfdbfe",
   },
-  floatingToolDock: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    bottom: 24,
+  controlSlot: {
+    height: MUSHAF_CONTROL_SLOT_HEIGHT,
+    backgroundColor: "#f5efe0",
+    borderTopWidth: 1,
+    borderTopColor: "#e3d5bd",
+    justifyContent: "center",
+    paddingBottom: 10,
+  },
+  controlPills: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 10,
-    zIndex: 30,
-  },
-  floatingToolDockRaised: {
-    bottom: 148,
   },
   toolButton: {
     minWidth: 108,
@@ -2673,10 +2728,13 @@ const styles = StyleSheet.create({
     color: "#666666",
     fontWeight: "700",
   },
+  pageList: {
+    flex: 1,
+  },
   pageWrap: {
     flex: 1,
     alignItems: "stretch",
-    justifyContent: "center",
+    justifyContent: "flex-start",
     backgroundColor: "#f8fafc",
   },
   pageImageShell: {
@@ -2787,23 +2845,8 @@ const styles = StyleSheet.create({
     color: "#dc2626",
     textAlign: "center",
   },
-  pageNumberLabel: {
-    position: "absolute",
-    left: 16,
-    bottom: 6,
-    fontSize: 11,
-    color: "#374151",
-    textTransform: "uppercase",
-    fontWeight: "800",
-    backgroundColor: "rgba(255, 255, 255, 0.82)",
-    borderRadius: 999,
-    overflow: "hidden",
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-  },
   audioBar: {
     marginHorizontal: 16,
-    marginBottom: 8,
     borderRadius: 12,
     borderWidth: 1,
     borderColor: "#bfdbfe",
