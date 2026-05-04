@@ -2,7 +2,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import type { ThemeKey } from "@/src/lib/mushaf-theme";
 
 // Profile-level memorization preferences persisted across sessions.
-export type MemorizationViewMode = "ayah" | "page";
+export type MemorizationViewMode = "ayah" | "page" | "test-mushaf";
 export type MushafViewMode = "swipe" | "scroll";
 
 export type ProfileSettings = {
@@ -35,7 +35,12 @@ function normalizeProfileSettings(
       typeof settings.reciterId === "string" && settings.reciterId.length > 0
         ? settings.reciterId
         : DEFAULT_PROFILE_SETTINGS.reciterId,
-    viewMode: settings.viewMode === "page" ? "page" : DEFAULT_PROFILE_SETTINGS.viewMode,
+    viewMode:
+      settings.viewMode === "page"
+        ? "page"
+        : settings.viewMode === "test-mushaf"
+          ? "test-mushaf"
+          : DEFAULT_PROFILE_SETTINGS.viewMode,
     mushafViewMode:
       settings.mushafViewMode === "scroll"
         ? "scroll"

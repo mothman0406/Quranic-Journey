@@ -76,10 +76,12 @@ import {
   saveMemorizationSessionBookmark,
   saveProfileSettings,
   type MemorizationSessionBookmark,
+  type MemorizationViewMode,
   type MushafViewMode,
 } from "@/src/lib/settings";
 import { extractTajweedColor } from "@/src/lib/tajweed";
 import { CelebrationOverlay } from "@/src/components/celebration-overlay";
+import { MushafTestPageView } from "@/src/components/mushaf-test-page-view";
 import {
   saveMushafAyahBookmark,
   type MushafAyahTarget,
@@ -616,11 +618,15 @@ export default function MemorizationScreen() {
     pageEnd?: string;
     session?: string;
     recite?: string;
-    viewMode?: "ayah" | "page";
+    viewMode?: MemorizationViewMode;
   }>();
   const childId = params.childId;
   const routeViewMode =
-    params.viewMode === "page" || params.viewMode === "ayah" ? params.viewMode : null;
+    params.viewMode === "page" ||
+    params.viewMode === "ayah" ||
+    params.viewMode === "test-mushaf"
+      ? params.viewMode
+      : null;
   const initialSessionRequested =
     params.session === "1" ||
     (params.surahNumber !== undefined &&
@@ -693,7 +699,7 @@ export default function MemorizationScreen() {
   const [autoplayThroughRange, setAutoplayThroughRange] = useState<boolean>(DEFAULT_SESSION_SETTINGS.autoplayThroughRange);
   const [blindMode, setBlindMode] = useState<boolean>(DEFAULT_SESSION_SETTINGS.blindMode);
   const [blurMode, setBlurMode] = useState<boolean>(DEFAULT_SESSION_SETTINGS.blurMode);
-  const [viewMode, setViewMode] = useState<"ayah" | "page">(routeViewMode ?? "ayah");
+  const [viewMode, setViewMode] = useState<MemorizationViewMode>(routeViewMode ?? "ayah");
   const [profileMushafViewMode, setProfileMushafViewMode] =
     useState<MushafViewMode>("swipe");
   const [mushafViewMode, setMushafViewMode] = useState<MushafViewMode>("swipe");
@@ -764,7 +770,7 @@ export default function MemorizationScreen() {
   const suppressPlaybackForNavigationRef = useRef(false);
 
   // Refs readable inside async callbacks and RAF ticks (avoid stale closures)
-  const viewModeRef = useRef<"ayah" | "page">(viewMode);
+  const viewModeRef = useRef<MemorizationViewMode>(viewMode);
   const currentVerseRef = useRef<number>(currentVerse);
   const playingVerseNumberRef = useRef<number>(playingVerseNumber);
   const displayedMushafPageRef = useRef<number | null>(displayedMushafPage);
@@ -3987,6 +3993,9 @@ export default function MemorizationScreen() {
     const fallbackPage = MUSHAF_SURAHS.find((surah) => surah.number === surahNumber)?.startPage;
     return fallbackPage ? clampMushafPage(fallbackPage) : null;
   }, [surahNumber, versePageMap, playingVerseNumber, currentVerse, pageStart]);
+  const testMushafPage = clampMushafPage(
+    displayedMushafPage ?? activeMushafPage ?? pageStart ?? 1,
+  );
   const sessionMushafPages = useMemo(() => {
     if (pageStart !== null && pageEnd !== null) {
       return Array.from(
@@ -4120,6 +4129,11 @@ export default function MemorizationScreen() {
 
   useEffect(() => {
     if (viewMode !== "page" || activeMushafPage === null) return;
+    updateDisplayedMushafPage(activeMushafPage);
+  }, [activeMushafPage, viewMode, sessionLoadId]);
+
+  useEffect(() => {
+    if (viewMode !== "test-mushaf" || activeMushafPage === null) return;
     updateDisplayedMushafPage(activeMushafPage);
   }, [activeMushafPage, viewMode, sessionLoadId]);
 
@@ -4529,6 +4543,11 @@ export default function MemorizationScreen() {
               animated: true,
             });
           }}
+        />
+      ) : viewMode === "test-mushaf" ? (
+        <MushafTestPageView
+          currentPage={testMushafPage}
+          onPageChange={updateDisplayedMushafPage}
         />
       ) : (
         <View style={styles.mushafPagerShell}>
@@ -5268,6 +5287,24 @@ export default function MemorizationScreen() {
                     ]}
                   >
                     Full Mushaf
+                  </Text>
+                </Pressable>
+                <Pressable
+                  style={[
+                    styles.settingsSegmentPill,
+                    viewMode === "test-mushaf" && styles.settingsSegmentPillSelected,
+                  ]}
+                  onPress={() => setViewMode("test-mushaf")}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: viewMode === "test-mushaf" }}
+                >
+                  <Text
+                    style={[
+                      styles.settingsSegmentText,
+                      viewMode === "test-mushaf" && styles.settingsSegmentTextSelected,
+                    ]}
+                  >
+                    Test Mushaf
                   </Text>
                 </Pressable>
               </View>
