@@ -214,7 +214,6 @@ function MushafTestPage({
   useEffect(() => {
     audioHighlightAnimRef.current?.stop();
     audioHighlightAnimRef.current = null;
-    audioHighlightOpacity.stopAnimation();
 
     if (!currentAudioWord) {
       // Audio stopped/ended: fade out over 250 ms
@@ -230,18 +229,26 @@ function MushafTestPage({
       return;
     }
 
-    // New word: cross-fade — ~75 ms fade out, then ~75 ms fade in (~150 ms total).
-    // The rect jumps to the new word during the invisible fade-out phase so the
-    // fade-in reveals the highlight already at the correct position.
-    const anim = Animated.sequence([
-      Animated.timing(audioHighlightOpacity, { toValue: 0, duration: 75, useNativeDriver: true }),
-      Animated.timing(audioHighlightOpacity, { toValue: 1, duration: 75, useNativeDriver: true }),
-    ]);
+    // New word: snap to position with a quick fade-in (no fade-out).
+    // The position changes through audioHighlightRect (driven by currentAudioWord),
+    // so when this effect runs, the rect is already at the new word — we just
+    // re-establish full opacity. This guarantees the highlight is visible
+    // continuously during playback rather than flashing on/off.
+    const anim = Animated.timing(audioHighlightOpacity, {
+      toValue: 1,
+      duration: 80,
+      useNativeDriver: true,
+    });
     audioHighlightAnimRef.current = anim;
     anim.start(({ finished: done }) => {
       if (done && audioHighlightAnimRef.current === anim) audioHighlightAnimRef.current = null;
     });
-  }, [currentAudioWord, audioHighlightOpacity]);
+  }, [
+    currentAudioWord?.surah,
+    currentAudioWord?.ayah,
+    currentAudioWord?.position,
+    audioHighlightOpacity,
+  ]);
 
   useEffect(() => {
     return () => {
