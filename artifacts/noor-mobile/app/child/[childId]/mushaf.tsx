@@ -24,10 +24,15 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { apiFetch } from "@/src/lib/api";
 import { ayahAudioUrl } from "@/src/lib/audio";
 import {
-  KING_FAHD_PAGE_SPECS,
-  getAyahCoordsForPage,
-} from "@/src/lib/king-fahd-ayah-coords";
-import { getKingFahdPageImage } from "@/src/lib/king-fahd-page-images";
+  QURAN_COM_1405_NATIVE_HEIGHT,
+  QURAN_COM_1405_NATIVE_WIDTH,
+  getQuranCom1405AyahRectsForPage,
+} from "@/src/lib/quran-com-1405-ayah-coords";
+import {
+  QURAN_COM_1405_PAGE_HEIGHT,
+  QURAN_COM_1405_PAGE_WIDTH,
+  getQuranCom1405PageImage,
+} from "@/src/lib/quran-com-1405-page-images";
 import {
   cleanTranslationHtml,
   fetchAyahTranslation,
@@ -59,6 +64,8 @@ import {
 const BOOKMARK_LIMIT = 12;
 const RECENT_READ_LIMIT = 5;
 const QURAN_API = "https://api.quran.com/api/v4";
+const QURAN_COM_1405_PAGE_ASPECT_RATIO =
+  QURAN_COM_1405_PAGE_WIDTH / QURAN_COM_1405_PAGE_HEIGHT;
 const MUSHAF_AUDIO_SPEEDS = [0.75, 0.85, 1, 1.15, 1.25, 1.5] as const;
 const MUSHAF_AUDIO_AYAH_REPEATS = [1, 2, 3, 5] as const;
 const MUSHAF_AUDIO_RANGE_REPEATS = [1, 2, 3] as const;
@@ -293,36 +300,27 @@ function pushOverlayRect(
   });
 }
 
-function buildKingFahdOverlayRects(pageNumber: number, layout: PageImageLayout): PageOverlayRect[] {
+function buildQuranCom1405OverlayRects(pageNumber: number, layout: PageImageLayout): PageOverlayRect[] {
   if (layout.width <= 0 || layout.height <= 0) return [];
 
-  const coords = getAyahCoordsForPage(pageNumber);
-  if (coords.length === 0) return [];
+  const ayahRects = getQuranCom1405AyahRectsForPage(pageNumber);
+  if (ayahRects.length === 0) return [];
 
-  const specs = KING_FAHD_PAGE_SPECS;
-  const heightCoeff = layout.height / specs.defaultPageHeight;
-  const widthCoeff = layout.width / specs.defaultPageWidth;
-  const lineHeight = specs.defaultLineHeight * heightCoeff;
-  const isFirstSpreadPage = pageNumber <= 2;
-  const pageWidth = (
-    isFirstSpreadPage ? specs.defaultFirstPagesWidth : specs.defaultPageWidth
-  ) * widthCoeff;
-  const horizontalMargin = (
-    isFirstSpreadPage ? specs.defaultFirstPagesMarginY : specs.defaultMarginY
-  ) * widthCoeff;
-  const sourceTopMargin = isFirstSpreadPage
-    ? specs.defaultFirstPagesMarginX
-    : specs.defaultMarginX;
-  const sourceLeftMargin = isFirstSpreadPage
-    ? specs.defaultFirstPagesMarginX
-    : specs.defaultMarginY;
-  const samePageAyahs = new Set(coords.map(([surah, ayah]) => verseKeyFor(surah, ayah)));
+  const widthCoeff = layout.width / QURAN_COM_1405_NATIVE_WIDTH;
+  const heightCoeff = layout.height / QURAN_COM_1405_NATIVE_HEIGHT;
   const rects: PageOverlayRect[] = [];
-  let previousTop = 0;
 
-  coords.forEach(([surahNumber, ayahNumber, sourceTop, sourceLeft], index) => {
-    const top = (sourceTop - sourceTopMargin) * heightCoeff;
-    const left = (sourceLeft - sourceLeftMargin) * widthCoeff;
+  ayahRects.forEach(([
+    surahNumber,
+    ayahNumber,
+    lineNumber,
+    minX,
+    maxX,
+    minY,
+    maxY,
+  ], index) => {
+    const top = minY * heightCoeff;
+    const left = minX * widthCoeff;
 
     pushOverlayRect(rects, {
       pageNumber,
@@ -330,48 +328,11 @@ function buildKingFahdOverlayRects(pageNumber: number, layout: PageImageLayout):
       ayahNumber,
       top,
       left,
-      width: pageWidth - left,
-      height: lineHeight,
+      width: (maxX - minX) * widthCoeff,
+      height: (maxY - minY) * heightCoeff,
       layout,
-      suffix: `after-marker-${index}`,
+      suffix: `line-${lineNumber}-${index}`,
     });
-
-    const nextAyahNumber = ayahNumber + 1;
-    if (left > 93 * widthCoeff && samePageAyahs.has(verseKeyFor(surahNumber, nextAyahNumber))) {
-      pushOverlayRect(rects, {
-        pageNumber,
-        surahNumber,
-        ayahNumber: nextAyahNumber,
-        top,
-        left: horizontalMargin,
-        width: left - horizontalMargin,
-        height: lineHeight,
-        layout,
-        suffix: `before-marker-${index}`,
-      });
-    }
-
-    const numberOfLines = Math.ceil((top - previousTop - lineHeight) / lineHeight);
-    if (numberOfLines > 1) {
-      for (let line = 0; line < numberOfLines - 1; line += 1) {
-        const lineTop = top - lineHeight * (line + 1);
-        if (lineTop >= lineHeight) {
-          pushOverlayRect(rects, {
-            pageNumber,
-            surahNumber,
-            ayahNumber,
-            top: lineTop,
-            left: horizontalMargin,
-            width: pageWidth - horizontalMargin,
-            height: lineHeight,
-            layout,
-            suffix: `carry-${index}-${line}`,
-          });
-        }
-      }
-    }
-
-    previousTop = top;
   });
 
   return rects;
@@ -493,7 +454,7 @@ function PageView({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [imageLayout, setImageLayout] = useState<PageImageLayout>({ width: 0, height: 0 });
-  const imageSource = getKingFahdPageImage(pageNumber);
+  const imageSource = getQuranCom1405PageImage(pageNumber);
   const isBlindHidden = toolMode === "blind" && !blindRevealed;
   const verseByKey = useMemo(() => {
     const map = new Map<string, ApiPageVerse>();
@@ -501,7 +462,7 @@ function PageView({
     return map;
   }, [pageVerses]);
   const overlayRects = useMemo(
-    () => buildKingFahdOverlayRects(pageNumber, imageLayout),
+    () => buildQuranCom1405OverlayRects(pageNumber, imageLayout),
     [imageLayout, pageNumber],
   );
 
@@ -565,11 +526,15 @@ function PageView({
   return (
     <View style={[styles.pageWrap, { width }]}>
       <View
-        style={styles.pageImageShell}
+        style={[styles.pageImageShell, styles.quranCom1405ImageShell]}
         onLayout={handleImageLayout}
       >
         {imageSource ? (
-          <Image source={imageSource} style={styles.pageImage} contentFit="fill" />
+          <Image
+            source={imageSource}
+            style={styles.pageImage}
+            contentFit="contain"
+          />
         ) : (
           <View style={styles.errorOverlay}>
             <Ionicons name="cloud-offline-outline" size={24} color="#b91c1c" />
@@ -1708,7 +1673,7 @@ export default function MushafScreen() {
       try {
         await Promise.all(
           newPagesToPreload.map(async (page) => {
-            const image = getKingFahdPageImage(page);
+            const image = getQuranCom1405PageImage(page);
             if (!image) return;
             await Image.loadAsync(image);
           }),
@@ -2380,13 +2345,16 @@ export default function MushafScreen() {
               </Pressable>
             </View>
             <Text style={styles.creditText}>
-              Mushaf images: King Fahd Glorious Qur'an Printing Complex (Madani 1421H Hafs)
+              Mushaf images: King Fahd Glorious Qur'an Printing Complex (Madinah print, 1405H/2003 edition)
             </Text>
             <Text style={styles.creditText}>
-              Distributed under King Fahd Complex's free-use rights for non-commercial software
+              Distributed under King Fahd Complex's free-use rights for non-commercial software and educational apps
             </Text>
             <Text style={styles.creditText}>
-              Page rendering pattern adapted from open-mushaf-native (MIT, github.com/adelpro/open-mushaf-native)
+              Image set extracted from Quran.com QuranEngine (Apache 2.0, github.com/quran/quran-ios)
+            </Text>
+            <Text style={styles.creditText}>
+              Original page rendering pattern adapted from open-mushaf-native (MIT, github.com/adelpro/open-mushaf-native)
             </Text>
           </View>
         </View>
@@ -2717,6 +2685,10 @@ const styles = StyleSheet.create({
     backgroundColor: "#ffffff",
     overflow: "hidden",
     position: "relative",
+  },
+  quranCom1405ImageShell: {
+    flex: 0,
+    aspectRatio: QURAN_COM_1405_PAGE_ASPECT_RATIO,
   },
   pageImage: {
     width: "100%",
