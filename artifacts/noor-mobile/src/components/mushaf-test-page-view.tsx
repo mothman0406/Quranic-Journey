@@ -24,8 +24,17 @@ import {
   TOTAL_QURAN_COM_1405_PAGES,
   getQuranCom1405PageImage,
 } from "@/src/lib/quran-com-1405-page-images";
+import { getMushafPageForVerse } from "@/src/lib/mushaf";
 
 type MushafTestWordTarget = {
+  surah: number;
+  ayah: number;
+  position: number;
+};
+
+// Audio word pointer passed in from the memorization engine.
+// position is 1-based and matches QPC2 glyph position directly.
+export type AudioWordPointer = {
   surah: number;
   ayah: number;
   position: number;
@@ -42,6 +51,12 @@ type FlashedWord = MushafTestWordTarget & {
 type MushafTestPageViewProps = {
   currentPage: number;
   onPageChange: (page: number) => void;
+  // Phase 1c: audio word highlighting props
+  currentAudioWord?: AudioWordPointer | null;
+  // true when audio is playing; false when paused or stopped.
+  // Animation is driven by currentAudioWord changes; isAudioActive is available
+  // for future slice use (e.g. recite overlays).
+  isAudioActive?: boolean;
   onWordPress?: (word: MushafTestWordTarget) => void;
   onWordLongPress?: (word: MushafTestWordTarget) => void;
 };
@@ -147,6 +162,7 @@ function MushafTestPage({
   width,
   flashedWord,
   flashOpacity,
+  currentAudioWord,
   onWordTap,
   onWordLongPress,
 }: {
@@ -154,6 +170,7 @@ function MushafTestPage({
   width: number;
   flashedWord: FlashedWord | null;
   flashOpacity: Animated.Value;
+  currentAudioWord?: AudioWordPointer | null;
   onWordTap: (pageNumber: number, word: QuranCom1405WordRect) => void;
   onWordLongPress?: (word: MushafTestWordTarget) => void;
 }) {
@@ -174,6 +191,65 @@ function MushafTestPage({
         : null,
     [flashedWord, imageLayout, pageNumber],
   );
+
+  // Audio highlight: find the matching scaled rect for the current audio word on this page.
+  // Returns null when the audio word is on a different page or no glyph matches.
+  const audioHighlightRect = useMemo(() => {
+    if (!currentAudioWord) return null;
+    return (
+      overlayRects.find(
+        (r) =>
+          r.surah === currentAudioWord.surah &&
+          r.ayah === currentAudioWord.ayah &&
+          r.position === currentAudioWord.position,
+      ) ?? null
+    );
+  }, [currentAudioWord, overlayRects]);
+
+  // Green highlight uses a different color than the amber tap-flash (Phase 1b)
+  // to make audio-following distinct from user-initiated feedback.
+  const audioHighlightOpacity = useRef(new Animated.Value(0)).current;
+  const audioHighlightAnimRef = useRef<Animated.CompositeAnimation | null>(null);
+
+  useEffect(() => {
+    audioHighlightAnimRef.current?.stop();
+    audioHighlightAnimRef.current = null;
+    audioHighlightOpacity.stopAnimation();
+
+    if (!currentAudioWord) {
+      // Audio stopped/ended: fade out over 250 ms
+      const anim = Animated.timing(audioHighlightOpacity, {
+        toValue: 0,
+        duration: 250,
+        useNativeDriver: true,
+      });
+      audioHighlightAnimRef.current = anim;
+      anim.start(({ finished: done }) => {
+        if (done && audioHighlightAnimRef.current === anim) audioHighlightAnimRef.current = null;
+      });
+      return;
+    }
+
+    // New word: cross-fade — ~75 ms fade out, then ~75 ms fade in (~150 ms total).
+    // The rect jumps to the new word during the invisible fade-out phase so the
+    // fade-in reveals the highlight already at the correct position.
+    const anim = Animated.sequence([
+      Animated.timing(audioHighlightOpacity, { toValue: 0, duration: 75, useNativeDriver: true }),
+      Animated.timing(audioHighlightOpacity, { toValue: 1, duration: 75, useNativeDriver: true }),
+    ]);
+    audioHighlightAnimRef.current = anim;
+    anim.start(({ finished: done }) => {
+      if (done && audioHighlightAnimRef.current === anim) audioHighlightAnimRef.current = null;
+    });
+  }, [currentAudioWord, audioHighlightOpacity]);
+
+  useEffect(() => {
+    return () => {
+      audioHighlightAnimRef.current?.stop();
+      audioHighlightAnimRef.current = null;
+      audioHighlightOpacity.stopAnimation();
+    };
+  }, [audioHighlightOpacity]);
 
   function handleLayout(event: LayoutChangeEvent) {
     const { width: nextWidth, height: nextHeight } = event.nativeEvent.layout;
@@ -242,6 +318,22 @@ function MushafTestPage({
             />
           );
         })}
+
+        {audioHighlightRect ? (
+          <Animated.View
+            pointerEvents="none"
+            style={[
+              styles.audioHighlight,
+              {
+                top: audioHighlightRect.top,
+                left: audioHighlightRect.left,
+                width: audioHighlightRect.width,
+                height: audioHighlightRect.height,
+                opacity: audioHighlightOpacity,
+              },
+            ]}
+          />
+        ) : null}
       </View>
     </View>
   );
@@ -250,6 +342,7 @@ function MushafTestPage({
 export function MushafTestPageView({
   currentPage,
   onPageChange,
+  currentAudioWord,
   onWordLongPress,
 }: MushafTestPageViewProps) {
   const { width: screenWidth } = useWindowDimensions();
@@ -261,6 +354,32 @@ export function MushafTestPageView({
   const flashOpacity = useRef(new Animated.Value(0)).current;
   const flashAnimationRef = useRef<Animated.CompositeAnimation | null>(null);
   const flashTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Stable ref so the auto-paging effect doesn't need onPageChange in its deps.
+  const onPageChangeRef = useRef(onPageChange);
+  useEffect(() => { onPageChangeRef.current = onPageChange; }, [onPageChange]);
+
+  // Auto-paging: when audio word moves to a different page, swipe Test Mushaf to follow.
+  // lastAutoPagedRef avoids firing duplicate onPageChange calls for the same target page.
+  const lastAutoPagedRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (!currentAudioWord) {
+      lastAutoPagedRef.current = null;
+      return;
+    }
+    const audioPage = getMushafPageForVerse(currentAudioWord.surah, currentAudioWord.ayah);
+    if (audioPage === null) return;
+    // Already on the correct page: clear the tracker so a future manual navigation
+    // can re-trigger auto-paging back to this page.
+    if (audioPage === safeCurrentPage) {
+      lastAutoPagedRef.current = null;
+      return;
+    }
+    // Avoid duplicate calls if we already fired for this target page.
+    if (audioPage === lastAutoPagedRef.current) return;
+    lastAutoPagedRef.current = audioPage;
+    onPageChangeRef.current(audioPage);
+  }, [currentAudioWord, safeCurrentPage]);
 
   const getItemLayout = useCallback(
     (_data: ArrayLike<number> | null | undefined, index: number) => ({
@@ -427,6 +546,7 @@ export function MushafTestPageView({
             width={pageWidth}
             flashedWord={flashedWord}
             flashOpacity={flashOpacity}
+            currentAudioWord={currentAudioWord}
             onWordTap={handleWordTap}
             onWordLongPress={onWordLongPress}
           />
@@ -478,9 +598,17 @@ const styles = StyleSheet.create({
   },
   flashHighlight: {
     position: "absolute",
+    // Amber (#fbbf24) is the user-initiated tap-flash from Phase 1b.
     backgroundColor: "#fbbf24",
     borderRadius: 4,
     zIndex: 1,
+  },
+  audioHighlight: {
+    position: "absolute",
+    // Green distinguishes audio-following highlight from the amber tap-flash.
+    backgroundColor: "rgba(34, 197, 94, 0.35)",
+    borderRadius: 4,
+    zIndex: 3,
   },
   debugToast: {
     position: "absolute",

@@ -3996,6 +3996,18 @@ export default function MemorizationScreen() {
   const testMushafPage = clampMushafPage(
     displayedMushafPage ?? activeMushafPage ?? pageStart ?? 1,
   );
+  // Derives a word pointer from the RAF-updated highlightedPage state so
+  // MushafTestPageView can highlight the active audio word.
+  // highlightedPage.verseKey is "surah:ayah" and position is 1-based (matches QPC2).
+  const currentAudioWord = useMemo(() => {
+    if (!highlightedPage) return null;
+    const colonIdx = highlightedPage.verseKey.indexOf(":");
+    if (colonIdx < 0) return null;
+    const surah = Number(highlightedPage.verseKey.slice(0, colonIdx));
+    const ayah = Number(highlightedPage.verseKey.slice(colonIdx + 1));
+    if (!Number.isFinite(surah) || !Number.isFinite(ayah)) return null;
+    return { surah, ayah, position: highlightedPage.position };
+  }, [highlightedPage]);
   const sessionMushafPages = useMemo(() => {
     if (pageStart !== null && pageEnd !== null) {
       return Array.from(
@@ -4548,6 +4560,8 @@ export default function MemorizationScreen() {
         <MushafTestPageView
           currentPage={testMushafPage}
           onPageChange={updateDisplayedMushafPage}
+          currentAudioWord={currentAudioWord}
+          isAudioActive={isPlaying}
         />
       ) : (
         <View style={styles.mushafPagerShell}>
