@@ -969,11 +969,13 @@ function AyahActionSheet({
     data: null,
     error: null,
   });
+  const [translationExpanded, setTranslationExpanded] = useState(false);
   const [tafseerState, setTafseerState] = useState<LoadState<string>>({
     status: "idle",
     data: null,
     error: null,
   });
+  const [tafseerExpanded, setTafseerExpanded] = useState(false);
   const [wbwState, setWbwState] = useState<LoadState<WBWWord[]>>({
     status: "idle",
     data: null,
@@ -1001,7 +1003,9 @@ function AyahActionSheet({
     if (!previous) setSheetView("main");
     setNoteText(annotations.notes[target.verseKey]?.text ?? "");
     setTranslationState({ status: "idle", data: null, error: null });
+    setTranslationExpanded(false);
     setTafseerState({ status: "idle", data: null, error: null });
+    setTafseerExpanded(false);
     setWbwState({ status: "idle", data: null, error: null });
   }, [annotations.notes, target?.verseKey]);
 
@@ -1382,9 +1386,29 @@ function AyahActionSheet({
         ) : translationState.status === "error" ? (
           renderErrorContent(translationState.error)
         ) : (
-          <Text style={styles.ayahLongText}>
-            {translationState.data ?? "Open this panel to load the translation."}
-          </Text>
+          <>
+            <Text
+              style={styles.ayahLongText}
+              numberOfLines={translationExpanded ? undefined : 8}
+            >
+              {translationState.data ?? "Open this panel to load the translation."}
+            </Text>
+            {translationState.data && translationState.data.length > 300 ? (
+              <Pressable
+                style={styles.expandToggle}
+                onPress={() => setTranslationExpanded((value) => !value)}
+              >
+                <Text style={styles.expandToggleText}>
+                  {translationExpanded ? "Less" : "More"}
+                </Text>
+                <Ionicons
+                  name={translationExpanded ? "chevron-up" : "chevron-down"}
+                  size={14}
+                  color="#2563eb"
+                />
+              </Pressable>
+            ) : null}
+          </>
         )}
         {renderNavigation()}
       </>
@@ -1406,9 +1430,29 @@ function AyahActionSheet({
         ) : tafseerState.status === "error" ? (
           renderErrorContent(tafseerState.error)
         ) : (
-          <Text style={styles.ayahLongText}>
-            {tafseerState.data ?? "Open this panel to load tafseer."}
-          </Text>
+          <>
+            <Text
+              style={styles.ayahLongText}
+              numberOfLines={tafseerExpanded ? undefined : 10}
+            >
+              {tafseerState.data ?? "Open this panel to load tafseer."}
+            </Text>
+            {tafseerState.data && tafseerState.data.length > 400 ? (
+              <Pressable
+                style={styles.expandToggle}
+                onPress={() => setTafseerExpanded((value) => !value)}
+              >
+                <Text style={styles.expandToggleText}>
+                  {tafseerExpanded ? "Less" : "More"}
+                </Text>
+                <Ionicons
+                  name={tafseerExpanded ? "chevron-up" : "chevron-down"}
+                  size={14}
+                  color="#2563eb"
+                />
+              </Pressable>
+            ) : null}
+          </>
         )}
         {renderNavigation()}
       </>
@@ -3375,6 +3419,24 @@ const styles = StyleSheet.create({
     lineHeight: 26,
     color: "#374151",
     fontWeight: "600",
+  },
+  expandToggle: {
+    alignSelf: "flex-start",
+    marginTop: 8,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+    backgroundColor: "#eff6ff",
+    borderWidth: 1,
+    borderColor: "#bfdbfe",
+  },
+  expandToggleText: {
+    fontSize: 13,
+    color: "#2563eb",
+    fontWeight: "800",
   },
   ayahContentState: {
     minHeight: 120,
