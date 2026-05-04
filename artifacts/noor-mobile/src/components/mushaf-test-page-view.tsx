@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  Animated,
   FlatList,
   NativeScrollEvent,
   NativeSyntheticEvent,
@@ -15,6 +16,7 @@ import {
   QURAN_COM_1405_NATIVE_HEIGHT,
   QURAN_COM_1405_NATIVE_WIDTH,
   getQuranCom1405WordRectsForPage,
+  type QuranCom1405WordRect,
 } from "@/src/lib/quran-com-1405-ayah-coords";
 import {
   QURAN_COM_1405_PAGE_HEIGHT,
@@ -27,6 +29,14 @@ type MushafTestWordTarget = {
   surah: number;
   ayah: number;
   position: number;
+};
+
+type FlashedWord = MushafTestWordTarget & {
+  pageNumber: number;
+  minX: number;
+  maxX: number;
+  minY: number;
+  maxY: number;
 };
 
 type MushafTestPageViewProps = {
@@ -43,6 +53,7 @@ type PageLayout = {
 
 type WordOverlayRect = MushafTestWordTarget & {
   key: string;
+  wordRect: QuranCom1405WordRect;
   top: number;
   left: number;
   width: number;
@@ -80,41 +91,53 @@ function getContainedPageLayout(container: PageLayout): PageLayout {
   };
 }
 
-function buildWordOverlayRects(pageNumber: number, layout: PageLayout): WordOverlayRect[] {
-  if (layout.width <= 0 || layout.height <= 0) return [];
+function scaleNativeWordBounds(
+  bounds: Pick<FlashedWord, "minX" | "maxX" | "minY" | "maxY">,
+  layout: PageLayout,
+): Pick<WordOverlayRect, "top" | "left" | "width" | "height"> | null {
+  if (layout.width <= 0 || layout.height <= 0) return null;
 
   const widthCoeff = layout.width / QURAN_COM_1405_NATIVE_WIDTH;
   const heightCoeff = layout.height / QURAN_COM_1405_NATIVE_HEIGHT;
+  const top = bounds.minY * heightCoeff;
+  const left = bounds.minX * widthCoeff;
+  const width = (bounds.maxX - bounds.minX) * widthCoeff;
+  const height = (bounds.maxY - bounds.minY) * heightCoeff;
+  if (top >= layout.height || top + height <= 0 || left >= layout.width || left + width <= 0) {
+    return null;
+  }
+
+  const clampedTop = Math.max(0, top);
+  const clampedLeft = Math.max(0, left);
+  const clampedWidth = Math.max(0, Math.min(width, layout.width - clampedLeft));
+  const clampedHeight = Math.max(0, Math.min(height, layout.height - clampedTop));
+  if (clampedWidth <= 0 || clampedHeight <= 0) return null;
+
+  return {
+    top: clampedTop,
+    left: clampedLeft,
+    width: clampedWidth,
+    height: clampedHeight,
+  };
+}
+
+function buildWordOverlayRects(pageNumber: number, layout: PageLayout): WordOverlayRect[] {
   const rects: WordOverlayRect[] = [];
 
-  getQuranCom1405WordRectsForPage(pageNumber).forEach(
-    ([surah, ayah, position, line, minX, maxX, minY, maxY], index) => {
-      const top = minY * heightCoeff;
-      const left = minX * widthCoeff;
-      const width = (maxX - minX) * widthCoeff;
-      const height = (maxY - minY) * heightCoeff;
-      if (top >= layout.height || top + height <= 0 || left >= layout.width || left + width <= 0) {
-        return;
-      }
+  getQuranCom1405WordRectsForPage(pageNumber).forEach((wordRect, index) => {
+    const [surah, ayah, position, line, minX, maxX, minY, maxY] = wordRect;
+    const scaledRect = scaleNativeWordBounds({ minX, maxX, minY, maxY }, layout);
+    if (!scaledRect) return;
 
-      const clampedTop = Math.max(0, top);
-      const clampedLeft = Math.max(0, left);
-      const clampedWidth = Math.max(0, Math.min(width, layout.width - clampedLeft));
-      const clampedHeight = Math.max(0, Math.min(height, layout.height - clampedTop));
-      if (clampedWidth <= 0 || clampedHeight <= 0) return;
-
-      rects.push({
-        key: `${pageNumber}:${surah}:${ayah}:${position}:${line}:${index}`,
-        surah,
-        ayah,
-        position,
-        top: clampedTop,
-        left: clampedLeft,
-        width: clampedWidth,
-        height: clampedHeight,
-      });
-    },
-  );
+    rects.push({
+      key: `${pageNumber}:${surah}:${ayah}:${position}:${line}:${index}`,
+      wordRect,
+      surah,
+      ayah,
+      position,
+      ...scaledRect,
+    });
+  });
 
   return rects;
 }
@@ -122,12 +145,16 @@ function buildWordOverlayRects(pageNumber: number, layout: PageLayout): WordOver
 function MushafTestPage({
   pageNumber,
   width,
-  onWordPress,
+  flashedWord,
+  flashOpacity,
+  onWordTap,
   onWordLongPress,
 }: {
   pageNumber: number;
   width: number;
-  onWordPress?: (word: MushafTestWordTarget) => void;
+  flashedWord: FlashedWord | null;
+  flashOpacity: Animated.Value;
+  onWordTap: (pageNumber: number, word: QuranCom1405WordRect) => void;
   onWordLongPress?: (word: MushafTestWordTarget) => void;
 }) {
   const [containerLayout, setContainerLayout] = useState<PageLayout>({ width: 0, height: 0 });
@@ -139,6 +166,13 @@ function MushafTestPage({
   const overlayRects = useMemo(
     () => buildWordOverlayRects(pageNumber, imageLayout),
     [imageLayout, pageNumber],
+  );
+  const flashedRect = useMemo(
+    () =>
+      flashedWord?.pageNumber === pageNumber
+        ? scaleNativeWordBounds(flashedWord, imageLayout)
+        : null,
+    [flashedWord, imageLayout, pageNumber],
   );
 
   function handleLayout(event: LayoutChangeEvent) {
@@ -168,6 +202,22 @@ function MushafTestPage({
           </View>
         )}
 
+        {flashedRect ? (
+          <Animated.View
+            pointerEvents="none"
+            style={[
+              styles.flashHighlight,
+              {
+                top: flashedRect.top,
+                left: flashedRect.left,
+                width: flashedRect.width,
+                height: flashedRect.height,
+                opacity: flashOpacity,
+              },
+            ]}
+          />
+        ) : null}
+
         {overlayRects.map((rect) => {
           const word = {
             surah: rect.surah,
@@ -187,7 +237,7 @@ function MushafTestPage({
                   height: rect.height,
                 },
               ]}
-              onPress={() => onWordPress?.(word)}
+              onPress={() => onWordTap(pageNumber, rect.wordRect)}
               onLongPress={() => onWordLongPress?.(word)}
             />
           );
@@ -200,7 +250,6 @@ function MushafTestPage({
 export function MushafTestPageView({
   currentPage,
   onPageChange,
-  onWordPress,
   onWordLongPress,
 }: MushafTestPageViewProps) {
   const { width: screenWidth } = useWindowDimensions();
@@ -208,6 +257,10 @@ export function MushafTestPageView({
   const safeCurrentPage = clampPage(currentPage);
   const listRef = useRef<FlatList<number>>(null);
   const preloadedPagesRef = useRef<Set<number>>(new Set());
+  const [flashedWord, setFlashedWord] = useState<FlashedWord | null>(null);
+  const flashOpacity = useRef(new Animated.Value(0)).current;
+  const flashAnimationRef = useRef<Animated.CompositeAnimation | null>(null);
+  const flashTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const getItemLayout = useCallback(
     (_data: ArrayLike<number> | null | undefined, index: number) => ({
@@ -276,6 +329,46 @@ export function MushafTestPageView({
     };
   }, [pageWidth, safeCurrentPage]);
 
+  useEffect(() => {
+    return () => {
+      if (flashTimeoutRef.current) clearTimeout(flashTimeoutRef.current);
+      flashAnimationRef.current?.stop();
+      flashAnimationRef.current = null;
+      flashOpacity.stopAnimation();
+    };
+  }, [flashOpacity]);
+
+  function handleWordTap(pageNumber: number, word: QuranCom1405WordRect) {
+    const [surah, ayah, position, _line, minX, maxX, minY, maxY] = word;
+    const next: FlashedWord = { pageNumber, surah, ayah, position, minX, maxX, minY, maxY };
+
+    if (flashTimeoutRef.current) {
+      clearTimeout(flashTimeoutRef.current);
+      flashTimeoutRef.current = null;
+    }
+    flashAnimationRef.current?.stop();
+    flashAnimationRef.current = null;
+    flashOpacity.stopAnimation();
+    flashOpacity.setValue(0);
+
+    setFlashedWord(next);
+
+    const animation = Animated.sequence([
+      Animated.timing(flashOpacity, { toValue: 0.45, duration: 250, useNativeDriver: true }),
+      Animated.delay(600),
+      Animated.timing(flashOpacity, { toValue: 0, duration: 250, useNativeDriver: true }),
+    ]);
+    flashAnimationRef.current = animation;
+    animation.start(({ finished }) => {
+      if (flashAnimationRef.current === animation) {
+        flashAnimationRef.current = null;
+      }
+      if (finished) {
+        setFlashedWord(null);
+      }
+    });
+  }
+
   function handleMomentumEnd(event: NativeSyntheticEvent<NativeScrollEvent>) {
     const index = Math.max(
       0,
@@ -284,50 +377,81 @@ export function MushafTestPageView({
         Math.round(event.nativeEvent.contentOffset.x / pageWidth),
       ),
     );
-    onPageChange(index + 1);
+    const nextPage = index + 1;
+    if (nextPage !== safeCurrentPage) {
+      if (flashTimeoutRef.current) {
+        clearTimeout(flashTimeoutRef.current);
+        flashTimeoutRef.current = null;
+      }
+      flashAnimationRef.current?.stop();
+      flashAnimationRef.current = null;
+      flashOpacity.stopAnimation();
+      flashOpacity.setValue(0);
+      setFlashedWord(null);
+    }
+    onPageChange(nextPage);
   }
 
   return (
-    <FlatList
-      ref={listRef}
-      style={styles.pageList}
-      data={PAGE_NUMBERS}
-      keyExtractor={(page) => String(page)}
-      horizontal
-      pagingEnabled
-      inverted
-      showsHorizontalScrollIndicator={false}
-      initialScrollIndex={safeCurrentPage - 1}
-      getItemLayout={getItemLayout}
-      onScrollToIndexFailed={(info) => {
-        setTimeout(() => {
-          try {
-            listRef.current?.scrollToIndex({ index: info.index, animated: false });
-          } catch {
-            listRef.current?.scrollToOffset({
-              offset: Math.max(0, info.index * pageWidth),
-              animated: false,
-            });
-          }
-        }, 80);
-      }}
-      onMomentumScrollEnd={handleMomentumEnd}
-      windowSize={3}
-      initialNumToRender={1}
-      maxToRenderPerBatch={2}
-      renderItem={({ item }) => (
-        <MushafTestPage
-          pageNumber={item}
-          width={pageWidth}
-          onWordPress={onWordPress}
-          onWordLongPress={onWordLongPress}
-        />
-      )}
-    />
+    <View style={styles.container}>
+      <FlatList
+        ref={listRef}
+        style={styles.pageList}
+        data={PAGE_NUMBERS}
+        keyExtractor={(page) => String(page)}
+        horizontal
+        pagingEnabled
+        inverted
+        showsHorizontalScrollIndicator={false}
+        initialScrollIndex={safeCurrentPage - 1}
+        getItemLayout={getItemLayout}
+        onScrollToIndexFailed={(info) => {
+          setTimeout(() => {
+            try {
+              listRef.current?.scrollToIndex({ index: info.index, animated: false });
+            } catch {
+              listRef.current?.scrollToOffset({
+                offset: Math.max(0, info.index * pageWidth),
+                animated: false,
+              });
+            }
+          }, 80);
+        }}
+        onMomentumScrollEnd={handleMomentumEnd}
+        windowSize={3}
+        initialNumToRender={1}
+        maxToRenderPerBatch={2}
+        renderItem={({ item }) => (
+          <MushafTestPage
+            pageNumber={item}
+            width={pageWidth}
+            flashedWord={flashedWord}
+            flashOpacity={flashOpacity}
+            onWordTap={handleWordTap}
+            onWordLongPress={onWordLongPress}
+          />
+        )}
+      />
+
+      {flashedWord ? (
+        <Animated.View
+          pointerEvents="none"
+          style={[styles.debugToast, { opacity: flashOpacity }]}
+        >
+          <Text style={styles.debugToastText}>
+            {flashedWord.surah}:{flashedWord.ayah} word {flashedWord.position}
+          </Text>
+        </Animated.View>
+      ) : null}
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: "#f8fafc",
+  },
   pageList: {
     flex: 1,
     backgroundColor: "#f8fafc",
@@ -351,6 +475,26 @@ const styles = StyleSheet.create({
     position: "absolute",
     backgroundColor: "transparent",
     zIndex: 2,
+  },
+  flashHighlight: {
+    position: "absolute",
+    backgroundColor: "#fbbf24",
+    borderRadius: 4,
+    zIndex: 1,
+  },
+  debugToast: {
+    position: "absolute",
+    bottom: 16,
+    alignSelf: "center",
+    borderRadius: 999,
+    backgroundColor: "rgba(15,23,42,0.9)",
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+  },
+  debugToastText: {
+    color: "#ffffff",
+    fontSize: 12,
+    fontWeight: "700",
   },
   errorOverlay: {
     ...StyleSheet.absoluteFillObject,
