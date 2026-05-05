@@ -717,6 +717,92 @@ function ToolButton({
   );
 }
 
+function ReaderQuickActionButton({
+  iconName,
+  active,
+  color,
+  accessibilityLabel,
+  onPress,
+}: {
+  iconName: keyof typeof Ionicons.glyphMap;
+  active: boolean;
+  color: string;
+  accessibilityLabel: string;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      style={[
+        styles.readerQuickActionButton,
+        active && {
+          borderColor: color,
+          backgroundColor: `${color}14`,
+        },
+      ]}
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityState={{ selected: active }}
+      accessibilityLabel={accessibilityLabel}
+    >
+      <Ionicons name={iconName} size={20} color={active ? color : "#475569"} />
+    </Pressable>
+  );
+}
+
+function ReaderQuickToolbar({
+  mushafViewMode,
+  pageBookmarked,
+  toolMode,
+  onChangeViewMode,
+  onTogglePageBookmark,
+  onToggleToolMode,
+}: {
+  mushafViewMode: MushafViewMode;
+  pageBookmarked: boolean;
+  toolMode: ToolMode;
+  onChangeViewMode: (mode: MushafViewMode) => void;
+  onTogglePageBookmark: () => void;
+  onToggleToolMode: (mode: ToolMode) => void;
+}) {
+  const scrollModeActive = mushafViewMode === "scroll";
+  const nextViewMode: MushafViewMode = scrollModeActive ? "swipe" : "scroll";
+
+  return (
+    <View style={styles.readerQuickToolbar}>
+      <ReaderQuickActionButton
+        iconName={toolMode === "blind" ? "eye-off-outline" : "eye-outline"}
+        active={toolMode === "blind"}
+        color="#7c3aed"
+        accessibilityLabel={toolMode === "blind" ? "Turn off Blind mode" : "Turn on Blind mode"}
+        onPress={() => onToggleToolMode("blind")}
+      />
+      <ReaderQuickActionButton
+        iconName={toolMode === "recite" ? "mic" : "mic-outline"}
+        active={toolMode === "recite"}
+        color="#be123c"
+        accessibilityLabel={toolMode === "recite" ? "Turn off Recite mode" : "Turn on Recite mode"}
+        onPress={() => onToggleToolMode("recite")}
+      />
+      <ReaderQuickActionButton
+        iconName={pageBookmarked ? "bookmark" : "bookmark-outline"}
+        active={pageBookmarked}
+        color="#b45309"
+        accessibilityLabel={pageBookmarked ? "Remove page bookmark" : "Bookmark page"}
+        onPress={onTogglePageBookmark}
+      />
+      <ReaderQuickActionButton
+        iconName={scrollModeActive ? "reorder-four-outline" : "swap-horizontal-outline"}
+        active={scrollModeActive}
+        color="#2563eb"
+        accessibilityLabel={
+          scrollModeActive ? "Switch to Swipe Mushaf view" : "Switch to Scroll Mushaf view"
+        }
+        onPress={() => onChangeViewMode(nextViewMode)}
+      />
+    </View>
+  );
+}
+
 function JumpRow({
   title,
   detail,
@@ -756,6 +842,98 @@ function JuzChip({ item, onPress }: { item: MushafJuz; onPress: () => void }) {
       <Text style={styles.juzChipTitle}>Juz {item.number}</Text>
       <Text style={styles.juzChipDetail}>p. {item.startPage}</Text>
     </Pressable>
+  );
+}
+
+function MushafAudioDock({
+  player,
+  settings,
+  bottomInset,
+  onToggle,
+  onPrevious,
+  onNext,
+  onOpenSettings,
+}: {
+  player: MushafAudioPlayer;
+  settings: MushafAudioSettings;
+  bottomInset: number;
+  onToggle: () => void;
+  onPrevious: () => void;
+  onNext: () => void;
+  onOpenSettings: () => void;
+}) {
+  const activeTarget = player.queue[player.index];
+  const reciter = findReciter(settings.reciterId);
+  const canPrevious = player.index > 0 || player.rangeRepeatPass > 1;
+  const canNext =
+    player.index < player.queue.length - 1 || player.rangeRepeatPass < settings.rangeRepeat;
+
+  if (!activeTarget) return null;
+
+  return (
+    <View style={[styles.audioDockWrap, { paddingBottom: 10 + bottomInset }]}>
+      <View style={styles.audioDock}>
+        <View style={styles.audioDockControls}>
+          <Pressable
+            style={[styles.audioDockIconButton, !canPrevious && styles.audioDockButtonDisabled]}
+            disabled={!canPrevious}
+            onPress={onPrevious}
+            accessibilityRole="button"
+            accessibilityLabel="Previous audio ayah"
+          >
+            <Ionicons
+              name="play-skip-back"
+              size={21}
+              color={canPrevious ? "#111827" : "#9ca3af"}
+            />
+          </Pressable>
+          <Pressable
+            style={styles.audioDockPrimaryButton}
+            onPress={onToggle}
+            accessibilityRole="button"
+            accessibilityLabel={player.status === "playing" ? "Pause audio" : "Play audio"}
+          >
+            <Ionicons
+              name={
+                player.status === "loading"
+                  ? "hourglass-outline"
+                  : player.status === "playing"
+                    ? "pause"
+                    : "play"
+              }
+              size={24}
+              color="#ffffff"
+            />
+          </Pressable>
+          <Pressable
+            style={[styles.audioDockIconButton, !canNext && styles.audioDockButtonDisabled]}
+            disabled={!canNext}
+            onPress={onNext}
+            accessibilityRole="button"
+            accessibilityLabel="Next audio ayah"
+          >
+            <Ionicons
+              name="play-skip-forward"
+              size={21}
+              color={canNext ? "#111827" : "#9ca3af"}
+            />
+          </Pressable>
+        </View>
+        <Pressable
+          style={styles.audioDockInfo}
+          onPress={onOpenSettings}
+          accessibilityRole="button"
+          accessibilityLabel="Open audio settings"
+        >
+          <Text style={styles.audioDockTitle} numberOfLines={1}>
+            {formatTargetRange([activeTarget])}
+          </Text>
+          <Text style={styles.audioDockMeta} numberOfLines={1}>
+            {reciter.fullName} | {settings.speed}x
+          </Text>
+        </Pressable>
+      </View>
+    </View>
   );
 }
 
@@ -2691,6 +2869,15 @@ export default function MushafScreen() {
         </View>
       )}
 
+      <ReaderQuickToolbar
+        mushafViewMode={mushafViewMode}
+        pageBookmarked={bookmarkedPages.includes(currentPage)}
+        toolMode={toolMode}
+        onChangeViewMode={updateMushafViewMode}
+        onTogglePageBookmark={() => toggleBookmark(currentPage)}
+        onToggleToolMode={toggleToolMode}
+      />
+
       <View style={styles.pageArea} onLayout={handlePageAreaLayout}>
         {initialPage === null ? (
           <View style={styles.loadingCenter}>
@@ -2788,6 +2975,18 @@ export default function MushafScreen() {
           )
         )}
       </View>
+
+      {audioPlayer ? (
+        <MushafAudioDock
+          player={audioPlayer}
+          settings={audioSettings}
+          bottomInset={safeAreaInsets.bottom}
+          onToggle={() => void toggleMushafAudio()}
+          onPrevious={() => jumpMushafAudio(-1)}
+          onNext={() => jumpMushafAudio(1)}
+          onOpenSettings={() => setAudioSettingsOpen(true)}
+        />
+      ) : null}
 
       <ReaderSettingsModal
         visible={readerSettingsOpen}
@@ -3128,6 +3327,31 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#bfdbfe",
   },
+  readerQuickToolbar: {
+    minHeight: 52,
+    paddingHorizontal: 18,
+    paddingVertical: 6,
+    backgroundColor: "#f8fafc",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 14,
+  },
+  readerQuickActionButton: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#ffffff",
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    shadowColor: "#0f172a",
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
+  },
   viewModeSegment: {
     alignSelf: "center",
     minHeight: 38,
@@ -3420,6 +3644,78 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: "#dc2626",
     textAlign: "center",
+  },
+  audioDockWrap: {
+    paddingHorizontal: 18,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: "#e5e7eb",
+    backgroundColor: "#ffffff",
+    shadowColor: "#0f172a",
+    shadowOpacity: 0.05,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: -3 },
+    elevation: 5,
+  },
+  audioDock: {
+    minHeight: 58,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  audioDockControls: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    flexShrink: 0,
+  },
+  audioDockIconButton: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#ffffff",
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+  },
+  audioDockButtonDisabled: {
+    opacity: 0.42,
+  },
+  audioDockPrimaryButton: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#2563eb",
+    shadowColor: "#1d4ed8",
+    shadowOpacity: 0.22,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 5,
+  },
+  audioDockInfo: {
+    flex: 1,
+    minWidth: 0,
+    minHeight: 48,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    backgroundColor: "#f8fafc",
+    justifyContent: "center",
+    paddingHorizontal: 12,
+  },
+  audioDockTitle: {
+    fontSize: 13,
+    color: "#111827",
+    fontWeight: "900",
+  },
+  audioDockMeta: {
+    marginTop: 2,
+    fontSize: 11,
+    color: "#64748b",
+    fontWeight: "800",
   },
   audioBar: {
     borderRadius: 12,
