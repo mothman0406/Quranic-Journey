@@ -34,8 +34,6 @@ type MushafTestWordTarget = {
   position: number;
 };
 
-type MushafTestAyahTarget = Pick<MushafTestWordTarget, "surah" | "ayah">;
-
 // Audio word pointer passed in from the memorization engine.
 // position is 1-based reciteable-only audio order; audioToGlyphPositions maps it to QPC2.
 export type AudioWordPointer = {
@@ -256,7 +254,7 @@ function MushafTestPage({
   currentAudioWord,
   audioToGlyphPositions,
   blindMode,
-  revealedAyah,
+  revealedAyahs,
   reciteActive,
   reciteCurrentWord,
   reciteRange,
@@ -276,7 +274,7 @@ function MushafTestPage({
   currentAudioWord?: AudioWordPointer | null;
   audioToGlyphPositions?: readonly number[] | null;
   blindMode: boolean;
-  revealedAyah: MushafTestAyahTarget | null;
+  revealedAyahs: Set<string>;
   reciteActive: boolean;
   reciteCurrentWord?: ReciteWordPointer | null;
   reciteRange?: ReciteRange | null;
@@ -345,6 +343,25 @@ function MushafTestPage({
       ),
     }));
   }, [overlayRects, reciteActive, reciteCurrentWord, reciteRange]);
+  const verseMarkerKeys = useMemo(() => {
+    const maxPositionByAyah = new Map<string, number>();
+
+    overlayRects.forEach((rect) => {
+      const key = `${rect.surah}:${rect.ayah}`;
+      const current = maxPositionByAyah.get(key) ?? -Infinity;
+      if (rect.position > current) maxPositionByAyah.set(key, rect.position);
+    });
+
+    const markers = new Set<string>();
+    overlayRects.forEach((rect) => {
+      const ayahKey = `${rect.surah}:${rect.ayah}`;
+      if (maxPositionByAyah.get(ayahKey) === rect.position) {
+        markers.add(rect.key);
+      }
+    });
+
+    return markers;
+  }, [overlayRects]);
 
   // Green highlight uses a different color than the amber tap-flash (Phase 1b)
   // to make audio-following distinct from user-initiated feedback.
@@ -563,11 +580,11 @@ function MushafTestPage({
         {blindMode && !reciteActive ? (
           <>
             {overlayRects
-              .filter((rect) =>
-                revealedAyah === null ||
-                rect.surah !== revealedAyah.surah ||
-                rect.ayah !== revealedAyah.ayah
-              )
+              .filter((rect) => {
+                if (verseMarkerKeys.has(rect.key)) return false;
+                if (revealedAyahs.has(`${rect.surah}:${rect.ayah}`)) return false;
+                return true;
+              })
               .map((rect) => (
                 <View
                   key={`blind-mask-${rect.key}`}
@@ -644,7 +661,7 @@ export function MushafTestPageView({
     useState<WordTranslationTarget | null>(null);
   const [wordTranslationText, setWordTranslationText] = useState<string | null>(null);
   const [wordTranslationLoading, setWordTranslationLoading] = useState(false);
-  const [lastTappedAyah, setLastTappedAyah] = useState<MushafTestAyahTarget | null>(null);
+  const [revealedAyahs, setRevealedAyahs] = useState<Set<string>>(new Set());
   const flashOpacity = useRef(new Animated.Value(0)).current;
   const flashAnimationRef = useRef<Animated.CompositeAnimation | null>(null);
   const flashTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -820,30 +837,8 @@ export function MushafTestPageView({
   }, [actionSheetVisible]);
 
   useEffect(() => {
-    if (!blindMode) setLastTappedAyah(null);
+    if (!blindMode) setRevealedAyahs(new Set());
   }, [blindMode]);
-
-  useEffect(() => {
-    if (!blindMode || !currentAudioWord) return;
-    setLastTappedAyah((current) =>
-      current?.surah === currentAudioWord.surah && current?.ayah === currentAudioWord.ayah
-        ? current
-        : { surah: currentAudioWord.surah, ayah: currentAudioWord.ayah },
-    );
-  }, [blindMode, currentAudioWord?.ayah, currentAudioWord?.surah]);
-
-  const revealedAyah = useMemo(() => {
-    if (!blindMode) return null;
-    if (currentAudioWord) {
-      return { surah: currentAudioWord.surah, ayah: currentAudioWord.ayah };
-    }
-    return lastTappedAyah;
-  }, [
-    blindMode,
-    currentAudioWord?.ayah,
-    currentAudioWord?.surah,
-    lastTappedAyah,
-  ]);
 
   function handleWordTap(pageNumber: number, word: QuranCom1405WordRect, scaledRect: ScaledWordRect) {
     const [surah, ayah, position, _line, minX, maxX, minY, maxY] = word;
@@ -877,7 +872,6 @@ export function MushafTestPageView({
     });
 
     onWordPress?.(target);
-    if (blindMode) setLastTappedAyah({ surah, ayah });
     if (actionSheetVisible) {
       const requestId = wordTranslationRequestRef.current + 1;
       wordTranslationRequestRef.current = requestId;
@@ -904,6 +898,20 @@ export function MushafTestPageView({
             setWordTranslationLoading(false);
           }
         });
+      return;
+    }
+
+    if (blindMode) {
+      setRevealedAyahs((prev) => {
+        const key = `${surah}:${ayah}`;
+        const next = new Set(prev);
+        if (next.has(key)) {
+          next.delete(key);
+        } else {
+          next.add(key);
+        }
+        return next;
+      });
       return;
     }
 
@@ -967,7 +975,7 @@ export function MushafTestPageView({
         currentAudioWord={currentAudioWord}
         audioToGlyphPositions={audioToGlyphPositions}
         blindMode={blindMode}
-        revealedAyah={revealedAyah}
+        revealedAyahs={revealedAyahs}
         reciteActive={reciteActive}
         reciteCurrentWord={reciteCurrentWord}
         reciteRange={reciteRange}
@@ -1115,7 +1123,7 @@ const styles = StyleSheet.create({
     // Green distinguishes audio-following highlight from the amber tap-flash.
     backgroundColor: "rgba(34, 197, 94, 0.35)",
     borderRadius: 4,
-    zIndex: 3,
+    zIndex: 5,
   },
   reciteMask: {
     position: "absolute",
