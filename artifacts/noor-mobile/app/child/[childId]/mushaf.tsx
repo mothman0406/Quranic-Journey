@@ -24,6 +24,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { Audio } from "expo-av";
 import { Image } from "expo-image";
 import { useLocalSearchParams, useRouter } from "expo-router";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { apiFetch } from "@/src/lib/api";
 import { ayahAudioUrl } from "@/src/lib/audio";
 import {
@@ -267,6 +268,26 @@ function getPageForVerseKey(surahNumber: number, ayahNumber: number) {
   );
 }
 
+function getContainedQuranCom1405PageLayout(container: PageImageLayout): PageImageLayout {
+  if (container.width <= 0) return { width: 0, height: 0 };
+  if (container.height <= 0) {
+    return {
+      width: container.width,
+      height: container.width / QURAN_COM_1405_PAGE_ASPECT_RATIO,
+    };
+  }
+
+  const widthFromHeight = container.height * QURAN_COM_1405_PAGE_ASPECT_RATIO;
+  if (widthFromHeight <= container.width) {
+    return { width: widthFromHeight, height: container.height };
+  }
+
+  return {
+    width: container.width,
+    height: container.width / QURAN_COM_1405_PAGE_ASPECT_RATIO,
+  };
+}
+
 function buildPageAyahTarget(
   surahNumber: number,
   ayahNumber: number,
@@ -504,9 +525,16 @@ function PageView({
   const [pageVerses, setPageVerses] = useState<ApiPageVerse[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [imageLayout, setImageLayout] = useState<PageImageLayout>({ width: 0, height: 0 });
+  const [containerLayout, setContainerLayout] = useState<PageImageLayout>({ width: 0, height: 0 });
   const imageSource = getQuranCom1405PageImage(pageNumber);
   const isBlindHidden = toolMode === "blind" && !blindRevealed;
+  const imageLayout = useMemo(
+    () =>
+      getContainedQuranCom1405PageLayout(
+        containerLayout.width > 0 ? containerLayout : { width, height: 0 },
+      ),
+    [containerLayout, width],
+  );
   const verseByKey = useMemo(() => {
     const map = new Map<string, ApiPageVerse>();
     for (const verse of pageVerses) map.set(verse.verse_key, verse);
@@ -540,13 +568,13 @@ function PageView({
     };
   }, [pageNumber]);
 
-  function handleImageLayout(event: LayoutChangeEvent) {
-    const { width: renderedWidth, height: renderedHeight } = event.nativeEvent.layout;
-    setImageLayout((current) =>
-      Math.abs(current.width - renderedWidth) < 0.5 &&
-      Math.abs(current.height - renderedHeight) < 0.5
+  function handlePageLayout(event: LayoutChangeEvent) {
+    const { width: nextWidth, height: nextHeight } = event.nativeEvent.layout;
+    setContainerLayout((current) =>
+      Math.abs(current.width - nextWidth) < 0.5 &&
+      Math.abs(current.height - nextHeight) < 0.5
         ? current
-        : { width: renderedWidth, height: renderedHeight },
+        : { width: nextWidth, height: nextHeight },
     );
   }
 
@@ -575,10 +603,12 @@ function PageView({
   }
 
   return (
-    <View style={[styles.pageWrap, { width }]}>
+    <View style={[styles.pageWrap, { width }]} onLayout={handlePageLayout}>
       <View
-        style={[styles.pageImageShell, styles.quranCom1405ImageShell]}
-        onLayout={handleImageLayout}
+        style={[
+          styles.pageImageShell,
+          { width: imageLayout.width, height: imageLayout.height },
+        ]}
       >
         {imageSource ? (
           <Image
@@ -1564,12 +1594,28 @@ export default function MushafScreen() {
   }>();
   const { childId, name } = params;
   const router = useRouter();
+  const safeAreaInsets = useSafeAreaInsets();
   const { width: windowWidth } = useWindowDimensions();
   const screenW = Math.max(1, Math.round(windowWidth));
-  const scrollPageItemHeight = useMemo(
-    () => Math.max(1, Math.round(screenW / QURAN_COM_1405_PAGE_ASPECT_RATIO)),
-    [screenW],
+  const [pageAreaLayout, setPageAreaLayout] = useState<PageImageLayout>({
+    width: 0,
+    height: 0,
+  });
+  const pageAreaWidth = pageAreaLayout.width > 0 ? pageAreaLayout.width : screenW;
+  const fittedPageLayout = useMemo(
+    () =>
+      getContainedQuranCom1405PageLayout({
+        width: pageAreaWidth,
+        height: pageAreaLayout.height,
+      }),
+    [pageAreaLayout.height, pageAreaWidth],
   );
+  const scrollPageItemHeight = useMemo(
+    () => Math.max(1, Math.round(fittedPageLayout.height)),
+    [fittedPageLayout.height],
+  );
+  const controlSlotHeight = MUSHAF_CONTROL_SLOT_HEIGHT + safeAreaInsets.bottom;
+  const controlSlotPaddingBottom = 10 + safeAreaInsets.bottom;
   const requestedInitialPage = useMemo(() => parsePageParam(params.page), [params.page]);
 
   const [initialPage, setInitialPage] = useState<number | null>(null);
@@ -1672,11 +1718,11 @@ export default function MushafScreen() {
 
   const getSwipeItemLayout = useCallback(
     (_data: ArrayLike<number> | null | undefined, index: number) => ({
-      length: screenW,
-      offset: screenW * index,
+      length: pageAreaWidth,
+      offset: pageAreaWidth * index,
       index,
     }),
-    [screenW],
+    [pageAreaWidth],
   );
 
   const getScrollItemLayout = useCallback(
@@ -1841,7 +1887,7 @@ export default function MushafScreen() {
     }
 
     const index = currentPage - 1;
-    const itemLength = mushafViewMode === "scroll" ? scrollPageItemHeight : screenW;
+    const itemLength = mushafViewMode === "scroll" ? scrollPageItemHeight : pageAreaWidth;
     const timeout = setTimeout(() => {
       try {
         listRef.current?.scrollToIndex({
@@ -1863,7 +1909,7 @@ export default function MushafScreen() {
     return () => {
       clearTimeout(timeout);
     };
-  }, [currentPage, initialPage, mushafViewMode, screenW, scrollPageItemHeight]);
+  }, [currentPage, initialPage, mushafViewMode, pageAreaWidth, scrollPageItemHeight]);
 
   useEffect(() => {
     audioSettingsRef.current = audioSettings;
@@ -1957,7 +2003,7 @@ export default function MushafScreen() {
   function goToPage(page: number, closeJump = false) {
     const target = clampMushafPage(page);
     const targetIndex = target - 1;
-    const itemLength = mushafViewMode === "scroll" ? scrollPageItemHeight : screenW;
+    const itemLength = mushafViewMode === "scroll" ? scrollPageItemHeight : pageAreaWidth;
     programmaticPageChangeRef.current = true;
     setCurrentPage(target);
     setSaveError(null);
@@ -1993,7 +2039,7 @@ export default function MushafScreen() {
   }
 
   function handleSwipeMomentumEnd(event: NativeSyntheticEvent<NativeScrollEvent>) {
-    const idx = Math.round(event.nativeEvent.contentOffset.x / screenW);
+    const idx = Math.round(event.nativeEvent.contentOffset.x / pageAreaWidth);
     updateVisiblePageFromScroll(idx + 1);
   }
 
@@ -2014,6 +2060,16 @@ export default function MushafScreen() {
     setMushafViewMode(mode);
     setProfileSettings(nextProfileSettings);
     void saveProfileSettings(childId, nextProfileSettings);
+  }
+
+  function handlePageAreaLayout(event: LayoutChangeEvent) {
+    const { width: nextWidth, height: nextHeight } = event.nativeEvent.layout;
+    setPageAreaLayout((current) =>
+      Math.abs(current.width - nextWidth) < 0.5 &&
+      Math.abs(current.height - nextHeight) < 0.5
+        ? current
+        : { width: nextWidth, height: nextHeight },
+    );
   }
 
   async function savePage(page: number) {
@@ -2437,45 +2493,90 @@ export default function MushafScreen() {
         </View>
       )}
 
-      {initialPage === null ? (
-        <View style={styles.loadingCenter}>
-          <ActivityIndicator size="large" color="#2563eb" />
-          <Text style={styles.loadingCenterText}>Loading saved page</Text>
-        </View>
-      ) : (
-        mushafViewMode === "scroll" ? (
-          <FlatList
-            key="reading-mushaf-scroll"
-            ref={listRef}
-            style={styles.pageList}
-            data={data}
-            keyExtractor={(page) => String(page)}
-            showsVerticalScrollIndicator={false}
-            initialScrollIndex={currentPage - 1}
-            getItemLayout={getScrollItemLayout}
-            onScrollToIndexFailed={(info) => {
-              setTimeout(() => {
-                try {
-                  listRef.current?.scrollToIndex({ index: info.index, animated: false });
-                } catch {
-                  listRef.current?.scrollToOffset({
-                    offset: Math.max(0, info.index * scrollPageItemHeight),
-                    animated: false,
-                  });
-                }
-              }, 80);
-            }}
-            onMomentumScrollEnd={handleScrollMomentumEnd}
-            onScroll={handleScrollScroll}
-            scrollEventThrottle={64}
-            windowSize={3}
-            initialNumToRender={1}
-            maxToRenderPerBatch={2}
-            renderItem={({ item }) => (
-              <View style={{ width: screenW, height: scrollPageItemHeight }}>
+      <View style={styles.pageArea} onLayout={handlePageAreaLayout}>
+        {initialPage === null ? (
+          <View style={styles.loadingCenter}>
+            <ActivityIndicator size="large" color="#2563eb" />
+            <Text style={styles.loadingCenterText}>Loading saved page</Text>
+          </View>
+        ) : (
+          mushafViewMode === "scroll" ? (
+            <FlatList
+              key="reading-mushaf-scroll"
+              ref={listRef}
+              style={styles.pageList}
+              data={data}
+              keyExtractor={(page) => String(page)}
+              showsVerticalScrollIndicator={false}
+              initialScrollIndex={currentPage - 1}
+              getItemLayout={getScrollItemLayout}
+              onScrollToIndexFailed={(info) => {
+                setTimeout(() => {
+                  try {
+                    listRef.current?.scrollToIndex({ index: info.index, animated: false });
+                  } catch {
+                    listRef.current?.scrollToOffset({
+                      offset: Math.max(0, info.index * scrollPageItemHeight),
+                      animated: false,
+                    });
+                  }
+                }, 80);
+              }}
+              onMomentumScrollEnd={handleScrollMomentumEnd}
+              onScroll={handleScrollScroll}
+              scrollEventThrottle={64}
+              windowSize={3}
+              initialNumToRender={1}
+              maxToRenderPerBatch={2}
+              renderItem={({ item }) => (
+                <View style={{ width: pageAreaWidth, height: scrollPageItemHeight }}>
+                  <PageView
+                    pageNumber={item}
+                    width={pageAreaWidth}
+                    toolMode={toolMode}
+                    blindRevealed={blindRevealed}
+                    highlightedVerseKeys={highlightedVerseKeys}
+                    activeVerseKey={activeVerseKey}
+                    onRevealBlindPage={() => setBlindRevealed(true)}
+                    onOpenAyah={openAyahActions}
+                    onStartRecite={reciteFromAyah}
+                  />
+                </View>
+              )}
+            />
+          ) : (
+            <FlatList
+              key="reading-mushaf-swipe"
+              ref={listRef}
+              style={styles.pageList}
+              data={data}
+              keyExtractor={(page) => String(page)}
+              horizontal
+              pagingEnabled
+              inverted
+              showsHorizontalScrollIndicator={false}
+              initialScrollIndex={currentPage - 1}
+              getItemLayout={getSwipeItemLayout}
+              onScrollToIndexFailed={(info) => {
+                setTimeout(() => {
+                  try {
+                    listRef.current?.scrollToIndex({ index: info.index, animated: false });
+                  } catch {
+                    listRef.current?.scrollToOffset({
+                      offset: Math.max(0, info.index * pageAreaWidth),
+                      animated: false,
+                    });
+                  }
+                }, 80);
+              }}
+              windowSize={3}
+              initialNumToRender={1}
+              maxToRenderPerBatch={2}
+              onMomentumScrollEnd={handleSwipeMomentumEnd}
+              renderItem={({ item }) => (
                 <PageView
                   pageNumber={item}
-                  width={screenW}
+                  width={pageAreaWidth}
                   toolMode={toolMode}
                   blindRevealed={blindRevealed}
                   highlightedVerseKeys={highlightedVerseKeys}
@@ -2484,57 +2585,22 @@ export default function MushafScreen() {
                   onOpenAyah={openAyahActions}
                   onStartRecite={reciteFromAyah}
                 />
-              </View>
-            )}
-          />
-        ) : (
-          <FlatList
-            key="reading-mushaf-swipe"
-            ref={listRef}
-            style={styles.pageList}
-            data={data}
-            keyExtractor={(page) => String(page)}
-            horizontal
-            pagingEnabled
-            inverted
-            showsHorizontalScrollIndicator={false}
-            initialScrollIndex={currentPage - 1}
-            getItemLayout={getSwipeItemLayout}
-            onScrollToIndexFailed={(info) => {
-              setTimeout(() => {
-                try {
-                  listRef.current?.scrollToIndex({ index: info.index, animated: false });
-                } catch {
-                  listRef.current?.scrollToOffset({
-                    offset: Math.max(0, info.index * screenW),
-                    animated: false,
-                  });
-                }
-              }, 80);
-            }}
-            windowSize={3}
-            initialNumToRender={1}
-            maxToRenderPerBatch={2}
-            onMomentumScrollEnd={handleSwipeMomentumEnd}
-            renderItem={({ item }) => (
-              <PageView
-                pageNumber={item}
-                width={screenW}
-                toolMode={toolMode}
-                blindRevealed={blindRevealed}
-                highlightedVerseKeys={highlightedVerseKeys}
-                activeVerseKey={activeVerseKey}
-                onRevealBlindPage={() => setBlindRevealed(true)}
-                onOpenAyah={openAyahActions}
-                onStartRecite={reciteFromAyah}
-              />
-            )}
-          />
-        )
-      )}
+              )}
+            />
+          )
+        )}
+      </View>
 
       {initialPage !== null ? (
-        <View style={styles.controlSlot}>
+        <View
+          style={[
+            styles.controlSlot,
+            {
+              height: controlSlotHeight,
+              paddingBottom: controlSlotPaddingBottom,
+            },
+          ]}
+        >
           <View style={styles.viewModeSegment}>
             {(["swipe", "scroll"] as const).map((mode) => {
               const active = mushafViewMode === mode;
@@ -3008,29 +3074,28 @@ const styles = StyleSheet.create({
     color: "#666666",
     fontWeight: "700",
   },
+  pageArea: {
+    flex: 1,
+    backgroundColor: "#f8fafc",
+    overflow: "hidden",
+  },
   pageList: {
     flex: 1,
   },
   pageWrap: {
     flex: 1,
-    alignItems: "stretch",
-    justifyContent: "flex-start",
+    alignItems: "center",
+    justifyContent: "center",
     backgroundColor: "#f8fafc",
   },
   pageImageShell: {
-    flex: 1,
-    width: "100%",
     backgroundColor: "#ffffff",
     overflow: "hidden",
     position: "relative",
   },
-  quranCom1405ImageShell: {
-    flex: 0,
-    aspectRatio: QURAN_COM_1405_PAGE_ASPECT_RATIO,
-  },
   pageImage: {
     width: "100%",
-    flex: 1,
+    height: "100%",
   },
   pageBackgroundPressable: {
     ...StyleSheet.absoluteFillObject,
