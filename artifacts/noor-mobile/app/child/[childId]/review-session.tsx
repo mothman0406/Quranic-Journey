@@ -41,7 +41,6 @@ import { saveMushafAyahBookmark } from "@/src/lib/mushaf-annotations";
 
 const PAGE_ASPECT_RATIO = 1.45;
 const PLAYBACK_RATES = [0.75, 0.85, 1.0, 1.15, 1.25, 1.5] as const;
-const AYAH_STRIP_ITEM_WIDTH = 52;
 
 const QUALITY_OPTIONS: { rating: number; label: string; color: string }[] = [
   { rating: 0, label: "Forgot completely", color: "#dc2626" },
@@ -140,16 +139,6 @@ function buildNumberRange(start: number, end: number) {
   return Array.from({ length: Math.max(0, end - start + 1) }, (_, index) => start + index);
 }
 
-function previewAyahNumbers(values: number[]) {
-  if (values.length <= 6) return values;
-  return [...values.slice(0, 5), values[values.length - 1]!];
-}
-
-function toArabicIndic(value: number) {
-  const digits = ["٠", "١", "٢", "٣", "٤", "٥", "٦", "٧", "٨", "٩"];
-  return String(value).replace(/\d/g, (digit) => digits[Number(digit)] ?? digit);
-}
-
 export default function ReviewSession() {
   const router = useRouter();
   const {
@@ -223,12 +212,9 @@ export default function ReviewSession() {
   const pageSlideWidth = screenW;
 
   const soundRef = useRef<Audio.Sound | null>(null);
-  const ayahStripRef = useRef<FlatList<number>>(null);
   const pageListRef = useRef<FlatList<number>>(null);
   const currentAyahRef = useRef(ayahStartN);
   const playbackRateRef = useRef<number>(1);
-  const stripPreRenderCountRef = useRef(0);
-  const stripFirstItemRenderKeyRef = useRef<string | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isAudioLoading, setIsAudioLoading] = useState(false);
   const [audioError, setAudioError] = useState<string | null>(null);
@@ -256,7 +242,6 @@ export default function ReviewSession() {
   const [submitError, setSubmitError] = useState<string | null>(null);
 
   const selectedReciter = findReciter(reciterId);
-  const ayahNumbers = useMemo(() => buildNumberRange(ayahStartN, ayahEndN), [ayahStartN, ayahEndN]);
   const mushafPages = useMemo(
     () => buildNumberRange(pageStartN, pageEndN),
     [pageStartN, pageEndN],
@@ -307,16 +292,6 @@ export default function ReviewSession() {
     isBatchSession,
     mushafViewMode,
   });
-
-  useEffect(() => {
-    console.log("[noor-review] ayah-strip-data-built", {
-      ayahStartN,
-      ayahEndN,
-      totalAyahs,
-      ayahNumbersLength: ayahNumbers.length,
-      ayahNumbers: previewAyahNumbers(ayahNumbers),
-    });
-  }, [ayahNumbers, ayahEndN, ayahStartN]);
 
   useEffect(() => {
     setSessionQueue(routeQueue);
@@ -419,25 +394,6 @@ export default function ReviewSession() {
       cancelled = true;
     };
   }, [mushafPages]);
-
-  useEffect(() => {
-    const index = Math.max(0, currentAyah - ayahStartN);
-    const offset = Math.max(
-      0,
-      index * AYAH_STRIP_ITEM_WIDTH - screenW / 2 + AYAH_STRIP_ITEM_WIDTH / 2,
-    );
-    console.log("[noor-review] strip-auto-scroll", {
-      currentAyah,
-      ayahStartN,
-      index,
-      offset,
-    });
-    try {
-      ayahStripRef.current?.scrollToOffset({ offset, animated: true });
-    } catch {
-      // Best-effort while the strip is mounting.
-    }
-  }, [ayahStartN, currentAyah, screenW]);
 
   useEffect(() => {
     if (mushafViewMode !== "swipe") return;
@@ -559,16 +515,6 @@ export default function ReviewSession() {
     await playAyah(ayahNumber);
   }
 
-  function targetForCurrentReviewAyah(ayahNumber: number): ReviewActionSheetAyahTarget {
-    return {
-      verseKey: `${surahNumberN}:${ayahNumber}`,
-      surahNumber: surahNumberN,
-      ayahNumber,
-      pageNumber: ayahPageMap.get(ayahNumber) ?? activePage,
-      textUthmani: ayahTextMap.get(ayahNumber) ?? "",
-    };
-  }
-
   function withResolvedAyahText(
     target: ReviewActionSheetAyahTarget,
   ): ReviewActionSheetAyahTarget {
@@ -617,10 +563,6 @@ export default function ReviewSession() {
             : current,
         );
       });
-  }
-
-  function openTranslationForAyah(ayahNumber: number) {
-    openTranslationForTarget(targetForCurrentReviewAyah(ayahNumber));
   }
 
   async function saveMushafViewAsDefault() {
@@ -826,26 +768,6 @@ export default function ReviewSession() {
       ? translationPopup.translation
       : null;
   const currentAyahIndex = Math.max(1, currentAyah - ayahStartN + 1);
-  const ayahStripData = ayahNumbers;
-  stripPreRenderCountRef.current += 1;
-  const shouldLogStripDetail =
-    stripPreRenderCountRef.current === 1 || stripPreRenderCountRef.current % 5 === 0;
-
-  console.log("[noor-review] strip-pre-render", {
-    length: ayahStripData.length,
-    ...(shouldLogStripDetail
-      ? {
-          message: "ayahNumbers being passed to strip",
-          renderCount: stripPreRenderCountRef.current,
-          ayahNumbers: previewAyahNumbers(ayahStripData),
-          firstAyah: ayahStripData[0] ?? null,
-          lastAyah: ayahStripData[ayahStripData.length - 1] ?? null,
-          currentAyah,
-          ayahStartN,
-          ayahEndN,
-        }
-      : {}),
-  });
 
   return (
     <View style={styles.container}>
@@ -870,76 +792,25 @@ export default function ReviewSession() {
         )}
       </View>
 
-      <View style={styles.sessionTopPanel}>
-        {nextQueueItem && (
-          <View style={styles.nextQueueCard}>
-            <Ionicons name="arrow-forward-circle-outline" size={18} color="#2563eb" />
-            <Text style={styles.nextQueueText} numberOfLines={1}>
-              Next: {nextQueueItem.surahName || `Surah ${nextQueueItem.surahNumber}`}
-            </Text>
-          </View>
-        )}
+      {nextQueueItem || audioError ? (
+        <View style={styles.sessionTopPanel}>
+          {nextQueueItem ? (
+            <View style={styles.nextQueueCard}>
+              <Ionicons name="arrow-forward-circle-outline" size={18} color="#2563eb" />
+              <Text style={styles.nextQueueText} numberOfLines={1}>
+                Next: {nextQueueItem.surahName || `Surah ${nextQueueItem.surahNumber}`}
+              </Text>
+            </View>
+          ) : null}
 
-        <FlatList
-          ref={ayahStripRef}
-          data={ayahStripData}
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          keyExtractor={(item) => String(item)}
-          contentContainerStyle={styles.ayahStripContent}
-          getItemLayout={(_data, index) => ({
-            length: AYAH_STRIP_ITEM_WIDTH,
-            offset: AYAH_STRIP_ITEM_WIDTH * index,
-            index,
-          })}
-          renderItem={({ item }) => {
-            const active = item === currentAyah;
-            const renderKey = `${surahNumberN}:${ayahStartN}:${ayahEndN}:${queueIndex}`;
-            if (
-              item === ayahStripData[0] &&
-              stripFirstItemRenderKeyRef.current !== renderKey
-            ) {
-              stripFirstItemRenderKeyRef.current = renderKey;
-              console.log("[noor-review] strip-first-item-render", {
-                message: "first ayah strip item rendered",
-                ayahNumber: item,
-                active,
-              });
-            }
-            return (
-              <Pressable
-                onPress={() => {
-                  void handleSeekAyah(item);
-                }}
-                onLongPress={() => openTranslationForAyah(item)}
-                delayLongPress={420}
-                style={[
-                  styles.ayahCircle,
-                  active && styles.ayahCircleActive,
-                ]}
-                accessibilityRole="button"
-                accessibilityLabel={`Play ayah ${item}`}
-              >
-                <Text
-                  style={[
-                    styles.ayahCircleText,
-                    active && styles.ayahCircleTextActive,
-                  ]}
-                >
-                  {toArabicIndic(item)}
-                </Text>
-              </Pressable>
-            );
-          }}
-        />
-
-        {audioError ? (
-          <View style={styles.audioError}>
-            <Ionicons name="alert-circle-outline" size={17} color="#dc2626" />
-            <Text style={styles.audioErrorText}>{audioError}</Text>
-          </View>
-        ) : null}
-      </View>
+          {audioError ? (
+            <View style={styles.audioError}>
+              <Ionicons name="alert-circle-outline" size={17} color="#dc2626" />
+              <Text style={styles.audioErrorText}>{audioError}</Text>
+            </View>
+          ) : null}
+        </View>
+      ) : null}
 
       <View style={styles.pageArea}>
         {mushafViewMode === "swipe" ? (
@@ -1350,42 +1221,6 @@ const styles = StyleSheet.create({
     color: "#1d4ed8",
     fontSize: 12,
     fontWeight: "800",
-  },
-  ayahStripContent: {
-    paddingHorizontal: 16,
-    gap: 8,
-  },
-  ayahCircle: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: "#cbd5e1",
-    backgroundColor: "#ffffff",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  ayahCircleActive: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    marginVertical: -2,
-    borderColor: "#2563eb",
-    backgroundColor: "#2563eb",
-    shadowColor: "#1d4ed8",
-    shadowOpacity: 0.18,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 3 },
-    elevation: 3,
-  },
-  ayahCircleText: {
-    fontSize: 16,
-    lineHeight: 20,
-    color: "#64748b",
-    fontWeight: "900",
-  },
-  ayahCircleTextActive: {
-    color: "#ffffff",
   },
   audioError: {
     marginHorizontal: 16,
