@@ -1,4 +1,4 @@
-import React, { useMemo } from "react";
+import React, { useMemo, useRef } from "react";
 import {
   ActivityIndicator,
   Pressable,
@@ -213,6 +213,7 @@ export function ReviewMushafPage({
   revealedAyahKeys,
   blurActiveSurahNumber,
   onToggleAyahReveal,
+  onLongPressAyah,
   onPressEndMarker,
 }: {
   pageNumber: number;
@@ -226,9 +227,11 @@ export function ReviewMushafPage({
   revealedAyahKeys?: Set<string>;
   blurActiveSurahNumber?: number | null;
   onToggleAyahReveal?: (verseKey: string) => void;
+  onLongPressAyah?: (target: ReviewMushafPageAyahTarget) => void;
   onPressEndMarker?: (target: ReviewMushafPageAyahTarget) => void;
 }) {
   const imageSource = getQuranCom1405PageImage(pageNumber);
+  const suppressedLongPressKeyRef = useRef<string | null>(null);
   const imageLayout = useMemo(
     () => getContainedQuranCom1405PageLayout({ width, height }),
     [height, width],
@@ -329,7 +332,9 @@ export function ReviewMushafPage({
                 blurActiveSurahNumber !== null &&
                 blurActiveSurahNumber !== undefined &&
                 rect.surahNumber !== blurActiveSurahNumber;
-              const disabled = blindMode ? !onToggleAyahReveal : !onPressEndMarker;
+              const disabled = blindMode
+                ? !onToggleAyahReveal && !onLongPressAyah
+                : !onPressEndMarker && !onLongPressAyah;
               return (
                 <Pressable
                   key={rect.key}
@@ -350,12 +355,30 @@ export function ReviewMushafPage({
                     pressed && !hiddenByBlind && styles.ayahOverlayPressed,
                   ]}
                   onPress={() => {
+                    if (suppressedLongPressKeyRef.current === rect.key) {
+                      suppressedLongPressKeyRef.current = null;
+                      return;
+                    }
                     if (blindMode) {
                       onToggleAyahReveal?.(rect.verseKey);
                       return;
                     }
                     onPressEndMarker?.(targetFromRect(rect));
                   }}
+                  onLongPress={
+                    onLongPressAyah
+                      ? () => {
+                          suppressedLongPressKeyRef.current = rect.key;
+                          setTimeout(() => {
+                            if (suppressedLongPressKeyRef.current === rect.key) {
+                              suppressedLongPressKeyRef.current = null;
+                            }
+                          }, 1000);
+                          onLongPressAyah(targetFromRect(rect));
+                        }
+                      : undefined
+                  }
+                  delayLongPress={420}
                 />
               );
             })

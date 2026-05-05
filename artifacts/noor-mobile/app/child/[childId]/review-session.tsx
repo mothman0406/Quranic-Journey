@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Clipboard,
   Dimensions,
   FlatList,
   Modal,
@@ -14,6 +15,10 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Audio } from "expo-av";
+import {
+  ReviewActionSheet,
+  type ReviewActionSheetAyahTarget,
+} from "@/src/components/review-action-sheet";
 import { ReviewMushafPage } from "@/src/components/review-mushaf-page";
 import { ayahAudioUrl } from "@/src/lib/audio";
 import { DEFAULT_RECITER_ID, findReciter, RECITERS } from "@/src/lib/reciters";
@@ -32,6 +37,7 @@ import {
   type MushafViewMode,
   type ProfileSettings,
 } from "@/src/lib/settings";
+import { saveMushafAyahBookmark } from "@/src/lib/mushaf-annotations";
 
 const PAGE_ASPECT_RATIO = 1.45;
 const PLAYBACK_RATES = [0.75, 0.85, 1.0, 1.15, 1.25, 1.5] as const;
@@ -241,6 +247,8 @@ export default function ReviewSession() {
   const [pageVersesByPage, setPageVersesByPage] = useState<Record<number, ApiPageVerse[]>>({});
   const [pageVerseErrors, setPageVerseErrors] = useState<Record<number, string>>({});
   const [translationPopup, setTranslationPopup] = useState<ReviewTranslationPopup | null>(null);
+  const [reviewActionTarget, setReviewActionTarget] =
+    useState<ReviewActionSheetAyahTarget | null>(null);
 
   const [ratingModalVisible, setRatingModalVisible] = useState(false);
   const [selectedRating, setSelectedRating] = useState<number | null>(null);
@@ -327,6 +335,7 @@ export default function ReviewSession() {
     setSelectedRating(null);
     setRatingModalVisible(false);
     setTranslationPopup(null);
+    setReviewActionTarget(null);
     void stopAudio();
   }, [ayahStartN, ayahEndN, pageStartN, pageEndN, surahIdN]);
 
@@ -550,17 +559,38 @@ export default function ReviewSession() {
     await playAyah(ayahNumber);
   }
 
-  function openTranslationForAyah(ayahNumber: number) {
-    const verseKey = `${surahNumberN}:${ayahNumber}`;
-    console.log("[noor-review] open-translation-entry", {
+  function targetForCurrentReviewAyah(ayahNumber: number): ReviewActionSheetAyahTarget {
+    return {
+      verseKey: `${surahNumberN}:${ayahNumber}`,
+      surahNumber: surahNumberN,
       ayahNumber,
+      pageNumber: ayahPageMap.get(ayahNumber) ?? activePage,
+      textUthmani: ayahTextMap.get(ayahNumber) ?? "",
+    };
+  }
+
+  function withResolvedAyahText(
+    target: ReviewActionSheetAyahTarget,
+  ): ReviewActionSheetAyahTarget {
+    if (target.textUthmani || target.surahNumber !== surahNumberN) return target;
+    return {
+      ...target,
+      textUthmani: ayahTextMap.get(target.ayahNumber) ?? "",
+    };
+  }
+
+  function openTranslationForTarget(rawTarget: ReviewActionSheetAyahTarget) {
+    const target = withResolvedAyahText(rawTarget);
+    const verseKey = target.verseKey;
+    console.log("[noor-review] open-translation-entry", {
+      ayahNumber: target.ayahNumber,
       verseKey,
-      hasAyahText: ayahTextMap.has(ayahNumber),
+      hasAyahText: !!target.textUthmani,
     });
     setTranslationPopup({
       verseKey,
-      ayahNumber,
-      arabic: ayahTextMap.get(ayahNumber) ?? "",
+      ayahNumber: target.ayahNumber,
+      arabic: target.textUthmani,
       translation: "Loading translation...",
       loading: true,
     });
@@ -589,6 +619,10 @@ export default function ReviewSession() {
       });
   }
 
+  function openTranslationForAyah(ayahNumber: number) {
+    openTranslationForTarget(targetForCurrentReviewAyah(ayahNumber));
+  }
+
   async function saveMushafViewAsDefault() {
     const next = { ...profileSettings, mushafViewMode };
     setProfileSettings(next);
@@ -610,6 +644,81 @@ export default function ReviewSession() {
       }
       return next;
     });
+  }
+
+  function openReviewActionSheet(target: ReviewActionSheetAyahTarget) {
+    setReviewActionTarget(withResolvedAyahText(target));
+  }
+
+  function handleActionSheetTranslation() {
+    const target = reviewActionTarget;
+    if (!target) return;
+    setReviewActionTarget(null);
+    openTranslationForTarget(target);
+  }
+
+  async function openFullMushafForTarget(target: ReviewActionSheetAyahTarget) {
+    await stopAudio();
+    setSettingsOpen(false);
+    setTranslationPopup(null);
+    router.push({
+      pathname: "/child/[childId]/mushaf",
+      params: {
+        childId,
+        page: String(target.pageNumber),
+        surahNumber: String(target.surahNumber),
+        ayahNumber: String(target.ayahNumber),
+      },
+    });
+  }
+
+  function confirmViewInFullMushaf() {
+    const target = reviewActionTarget;
+    if (!target) return;
+    setReviewActionTarget(null);
+    Alert.alert(
+      "Open Full Mushaf?",
+      `Open Quran ${target.verseKey} on page ${target.pageNumber}?`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Open",
+          onPress: () => {
+            void openFullMushafForTarget(target);
+          },
+        },
+      ],
+    );
+  }
+
+  async function bookmarkReviewAyah() {
+    const target = reviewActionTarget ? withResolvedAyahText(reviewActionTarget) : null;
+    if (!target) return;
+    if (!target.textUthmani) {
+      Alert.alert("Bookmark unavailable", "Ayah text is still loading.");
+      return;
+    }
+
+    try {
+      await saveMushafAyahBookmark(childId, target);
+      setReviewActionTarget(null);
+      Alert.alert("Bookmarked", `Bookmarked Quran ${target.verseKey}.`);
+    } catch {
+      Alert.alert("Bookmark unavailable", "Try bookmarking this ayah again in a moment.");
+    }
+  }
+
+  function copyReviewAyah() {
+    const target = reviewActionTarget ? withResolvedAyahText(reviewActionTarget) : null;
+    if (!target) return;
+    if (!target.textUthmani) {
+      Alert.alert("Copy unavailable", "Ayah text is still loading.");
+      return;
+    }
+
+    Clipboard.setString(`${target.textUthmani}\n- Quran ${target.verseKey}`);
+    setReviewActionTarget(null);
+    Alert.alert("Copied", `Copied Quran ${target.verseKey}.`);
   }
 
   async function handlePlayPause() {
@@ -691,6 +800,7 @@ export default function ReviewSession() {
         revealedAyahKeys={revealedAyahKeys}
         blurActiveSurahNumber={surahNumberN}
         onToggleAyahReveal={toggleAyahReveal}
+        onLongPressAyah={openReviewActionSheet}
         onPressEndMarker={(target) => {
           if (
             target.surahNumber !== surahNumberN ||
@@ -709,6 +819,12 @@ export default function ReviewSession() {
   const pageLabel =
     pageStartN === pageEndN ? `Page ${pageStartN}` : `Pages ${pageStartN}-${pageEndN}`;
   const headerDetail = `Ayahs ${ayahStartN}-${ayahEndN} · ${pageLabel}`;
+  const actionSheetTranslation =
+    reviewActionTarget &&
+    translationPopup?.verseKey === reviewActionTarget.verseKey &&
+    !translationPopup.loading
+      ? translationPopup.translation
+      : null;
   const currentAyahIndex = Math.max(1, currentAyah - ayahStartN + 1);
   const ayahStripData = ayahNumbers;
   stripPreRenderCountRef.current += 1;
@@ -1034,6 +1150,18 @@ export default function ReviewSession() {
           </Pressable>
         </View>
       </Modal>
+
+      <ReviewActionSheet
+        target={reviewActionTarget}
+        translation={actionSheetTranslation}
+        onClose={() => setReviewActionTarget(null)}
+        onTranslation={handleActionSheetTranslation}
+        onViewInFullMushaf={confirmViewInFullMushaf}
+        onBookmark={() => {
+          void bookmarkReviewAyah();
+        }}
+        onCopy={copyReviewAyah}
+      />
 
       <Modal
         visible={translationPopup !== null}
