@@ -149,6 +149,13 @@ type AssignmentAyahRange = {
   ayahEnd: number;
 };
 
+type OverviewDailyTarget = {
+  ayahStart: number;
+  ayahEnd: number;
+  pageStart: number | null;
+  pageEnd: number | null;
+};
+
 type ManualAyahToggleRequest = {
   surahNumber: number;
   totalVerses: number;
@@ -7960,6 +7967,40 @@ function getWorkRangeDetail(work: NewMemorization, mode: "full" | "current") {
   }`;
 }
 
+function getOverviewDailyTarget(
+  todayProgress: TodayProgress | undefined,
+  todayWork: NewMemorization | null,
+): OverviewDailyTarget | null {
+  if (
+    todayProgress?.memTargetSurah == null ||
+    todayProgress.memTargetAyahStart == null ||
+    todayProgress.memTargetAyahEnd == null
+  ) {
+    return null;
+  }
+
+  const endSurah = todayWork?.endSurahNumber ?? todayProgress.memTargetSurah;
+
+  return {
+    ayahStart: todayProgress.memTargetAyahStart,
+    ayahEnd: todayProgress.memTargetAyahEnd,
+    pageStart: getMushafPageForVerse(todayProgress.memTargetSurah, todayProgress.memTargetAyahStart),
+    pageEnd: getMushafPageForVerse(endSurah, todayProgress.memTargetAyahEnd),
+  };
+}
+
+function getDailyTargetRangeDetail(
+  todayWork: NewMemorization | null,
+  target: OverviewDailyTarget | null,
+) {
+  if (!target) return null;
+  const pageRange = formatPageRange(target.pageStart, target.pageEnd);
+  return `${todayWork?.workLabel ?? "Memorization"} · ${formatAyahRange(
+    target.ayahStart,
+    target.ayahEnd,
+  )}${pageRange ? ` · ${pageRange}` : ""}`;
+}
+
 function MemorizationOverviewCards({
   todayWork,
   upNext,
@@ -7978,6 +8019,14 @@ function MemorizationOverviewCards({
       ? "todayDone"
       : "today"
     : "empty";
+  const todayTarget = getOverviewDailyTarget(todayProgress, todayWork);
+  const todayTargetDetail = getDailyTargetRangeDetail(todayWork, todayTarget);
+  const todayCardTarget =
+    todayWork && todayTarget && todayTargetDetail
+      ? { heading: todayWork.surahName, detail: todayTargetDetail }
+      : null;
+  const hasTodayTarget = todayCardTarget !== null;
+  const todayPlaceholder = "Not yet generated.";
   const currentTitle = todayWork?.isReviewOnly ? "Recitation Focus" : "Current work";
   const currentStatus = getCurrentWorkStatus(todayWork, todayProgress);
   const currentStatusLabel = todayWork
@@ -7998,21 +8047,17 @@ function MemorizationOverviewCards({
       ? "Continue"
       : "Start"
     : "Browse below";
-  const todayDisabled = !todayWork || todayStatus === "completed";
-  const currentDisabled = !todayWork || currentStatus === "completed";
+  const todayDisabled = !hasTodayTarget || todayStatus === "completed";
+  const currentDisabled = !hasTodayTarget || currentStatus === "completed";
 
   return (
     <View style={styles.overviewGrid}>
       <OverviewWorkCard
         title="Today's work"
-        heading={todayWork?.surahName ?? "No assignment"}
-        detail={
-          todayWork
-            ? getWorkRangeDetail(todayWork, "full")
-            : "Search below to choose a surah."
-        }
-        status={todayWork ? getTodayStatusLabel(todayStatus) : "Not scheduled"}
-        action={todayWork ? getTodayActionLabel(todayStatus) : "Browse below"}
+        heading={todayCardTarget?.heading ?? "No assignment"}
+        detail={todayCardTarget?.detail ?? todayPlaceholder}
+        status={hasTodayTarget ? getTodayStatusLabel(todayStatus) : "Not generated"}
+        action={hasTodayTarget ? getTodayActionLabel(todayStatus) : "Waiting"}
         tone={todayTone}
         disabled={todayDisabled}
         onPress={() => {
@@ -8021,14 +8066,10 @@ function MemorizationOverviewCards({
       />
       <OverviewWorkCard
         title={currentTitle}
-        heading={todayWork?.currentWorkSurahName ?? todayWork?.surahName ?? "Nothing active"}
-        detail={
-          todayWork
-            ? getWorkRangeDetail(todayWork, "current")
-            : "Start from today's work or the list below."
-        }
-        status={currentStatusLabel}
-        action={currentActionLabel}
+        heading={todayCardTarget?.heading ?? "Nothing active"}
+        detail={todayCardTarget?.detail ?? todayPlaceholder}
+        status={hasTodayTarget ? currentStatusLabel : "Not generated"}
+        action={hasTodayTarget ? currentActionLabel : "Waiting"}
         tone={todayWork ? (currentStatus === "completed" ? "todayDone" : "current") : "empty"}
         disabled={currentDisabled}
         onPress={() => {
@@ -8041,10 +8082,10 @@ function MemorizationOverviewCards({
         detail={
           upNext
             ? getWorkRangeDetail(upNext, "full")
-            : "No next assignment is queued yet."
+            : "Not yet generated."
         }
-        status={upNext?.isReviewOnly ? "Recitation" : upNext ? "Tomorrow" : "Clear"}
-        action={upNext ? (upNext.isReviewOnly ? "Recite" : "Start") : "Clear"}
+        status={upNext?.isReviewOnly ? "Recitation" : upNext ? "Tomorrow" : "Not generated"}
+        action={upNext ? (upNext.isReviewOnly ? "Recite" : "Start") : "Waiting"}
         tone={upNext ? "next" : "empty"}
         disabled={!upNext}
         onPress={() => {
