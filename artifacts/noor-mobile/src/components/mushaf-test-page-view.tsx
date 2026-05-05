@@ -519,31 +519,14 @@ function MushafTestPage({
         {reciteActive ? (
           <>
             {reciteClassifiedRects
-              .filter(({ state }) => state === "future")
-              .map(({ rect }) => (
+              .filter(({ state }) => state === "future" || state === "current")
+              .map(({ rect, state }) => (
                 <View
                   key={`recite-mask-${rect.key}`}
                   pointerEvents="none"
                   style={[
                     styles.reciteMask,
-                    {
-                      top: rect.top,
-                      left: rect.left,
-                      width: rect.width,
-                      height: rect.height,
-                    },
-                  ]}
-                />
-              ))}
-
-            {reciteClassifiedRects
-              .filter(({ state }) => state === "current")
-              .map(({ rect }) => (
-                <View
-                  key={`recite-current-${rect.key}`}
-                  pointerEvents="none"
-                  style={[
-                    styles.reciteCurrent,
+                    state === "current" && styles.reciteMaskCurrent,
                     {
                       top: rect.top,
                       left: rect.left,
@@ -951,18 +934,18 @@ const styles = StyleSheet.create({
   },
   reciteMask: {
     position: "absolute",
-    // Cream matches the page tone closely enough to hide future recite words.
+    // Cream matches the page tone closely enough to hide recite words.
     backgroundColor: "#fffbeb",
     borderRadius: 3,
     borderWidth: 1,
     borderColor: "#fef3c7",
     zIndex: 4,
   },
-  reciteCurrent: {
-    position: "absolute",
-    // Blue distinguishes the recite cursor from green audio and amber taps.
-    backgroundColor: "rgba(59, 130, 246, 0.4)",
-    borderRadius: 4,
+  reciteMaskCurrent: {
+    // Current target: blue outline on top of the mask while text stays hidden.
+    borderWidth: 2,
+    borderColor: "#3b82f6",
+    backgroundColor: "#eff6ff",
     zIndex: 5,
   },
   wordTranslationPopover: {
