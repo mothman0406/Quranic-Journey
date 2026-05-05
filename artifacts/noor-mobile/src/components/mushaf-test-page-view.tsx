@@ -62,8 +62,6 @@ export type ReciteRange = {
   endAyah: number;
 };
 
-export type AyahMemorizationState = "memorized" | "in-progress" | "not-started";
-
 type FlashedWord = MushafTestWordTarget & {
   pageNumber: number;
   minX: number;
@@ -96,7 +94,6 @@ type MushafTestPageViewProps = {
   reciteCurrentWord?: ReciteWordPointer | null;
   reciteRange?: ReciteRange | null;
   sessionFocusRange?: ReciteRange | null;
-  memorizationStateMap?: ReadonlyMap<string, AyahMemorizationState>;
 };
 
 type PageLayout = {
@@ -271,7 +268,6 @@ function MushafTestPage({
   reciteCurrentWord,
   reciteRange,
   sessionFocusRange,
-  memorizationStateMap,
   actionSheetVisible,
   wordTranslationTarget,
   wordTranslationText,
@@ -295,7 +291,6 @@ function MushafTestPage({
   reciteCurrentWord?: ReciteWordPointer | null;
   reciteRange?: ReciteRange | null;
   sessionFocusRange?: ReciteRange | null;
-  memorizationStateMap?: ReadonlyMap<string, AyahMemorizationState>;
   actionSheetVisible: boolean;
   wordTranslationTarget: WordTranslationTarget | null;
   wordTranslationText: string | null;
@@ -493,33 +488,6 @@ function MushafTestPage({
             accessibilityRole="button"
             accessibilityLabel="Close ayah actions"
           />
-        ) : null}
-
-        {memorizationStateMap ? (
-          <>
-            {overlayRects.map((rect) => {
-              const state = memorizationStateMap.get(`${rect.surah}:${rect.ayah}`);
-              if (!state || state === "not-started") return null;
-              return (
-                <View
-                  key={`mem-tint-${rect.key}`}
-                  pointerEvents="none"
-                  style={[
-                    styles.memTint,
-                    state === "memorized"
-                      ? styles.memTintMemorized
-                      : styles.memTintInProgress,
-                    {
-                      top: rect.top,
-                      left: rect.left,
-                      width: rect.width,
-                      height: rect.height,
-                    },
-                  ]}
-                />
-              );
-            })}
-          </>
         ) : null}
 
         {flashedRect ? (
@@ -745,7 +713,6 @@ export function MushafTestPageView({
   reciteCurrentWord = null,
   reciteRange = null,
   sessionFocusRange = null,
-  memorizationStateMap,
   onWordPress,
   onWordSeek,
   onWordLongPress,
@@ -1118,7 +1085,6 @@ export function MushafTestPageView({
         reciteCurrentWord={reciteCurrentWord}
         reciteRange={reciteRange}
         sessionFocusRange={sessionFocusRange}
-        memorizationStateMap={memorizationStateMap}
         actionSheetVisible={actionSheetVisible}
         wordTranslationTarget={wordTranslationTarget}
         wordTranslationText={wordTranslationText}
@@ -1257,17 +1223,6 @@ const styles = StyleSheet.create({
     backgroundColor: "#fbbf24",
     borderRadius: 4,
     zIndex: 1,
-  },
-  memTint: {
-    position: "absolute",
-    borderRadius: 3,
-    zIndex: 1,
-  },
-  memTintMemorized: {
-    backgroundColor: "rgba(34, 197, 94, 0.16)",
-  },
-  memTintInProgress: {
-    backgroundColor: "rgba(245, 158, 11, 0.18)",
   },
   audioHighlight: {
     position: "absolute",
