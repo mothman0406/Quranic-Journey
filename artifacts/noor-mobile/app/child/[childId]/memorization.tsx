@@ -7604,6 +7604,7 @@ function SurahAyahStatusSheet({
   onStartSession: (progress: MemorizationProgress) => void;
   onToggleAyahs: (ayahs: number[], memorized: boolean) => void;
 }) {
+  const [selectionMode, setSelectionMode] = useState(false);
   const [selectedAyahs, setSelectedAyahs] = useState<Set<number>>(() => new Set());
   const memorizedSet = useMemo(
     () => new Set(row?.progress.memorizedAyahs ?? []),
@@ -7617,6 +7618,7 @@ function SurahAyahStatusSheet({
   );
 
   useEffect(() => {
+    setSelectionMode(false);
     setSelectedAyahs(new Set());
   }, [rowKey]);
 
@@ -7629,7 +7631,7 @@ function SurahAyahStatusSheet({
   const memorizedCount = row.progress.memorizedAyahs?.length ?? 0;
   const percent = totalVerses > 0 ? Math.round((memorizedCount / totalVerses) * 100) : 0;
   const hasPending = pendingAyahs.size > 0;
-  const selectionMode = selectedAyahs.size > 0;
+  const hasSelectedAyahs = selectedAyahs.size > 0;
 
   const toggleSelection = (ayah: number) => {
     setSelectedAyahs((current) => {
@@ -7654,14 +7656,21 @@ function SurahAyahStatusSheet({
 
   const handleCircleLongPress = (ayah: number) => {
     if (hasPending) return;
+    setSelectionMode(true);
     setSelectedAyahs(new Set([ayah]));
   };
 
   const runBulkToggle = (memorized: boolean) => {
     const ayahs = Array.from(selectedAyahs).sort((a, b) => a - b);
     if (ayahs.length === 0 || hasPending) return;
+    setSelectionMode(false);
     setSelectedAyahs(new Set());
     onToggleAyahs(ayahs, memorized);
+  };
+
+  const clearSelectionMode = () => {
+    setSelectionMode(false);
+    setSelectedAyahs(new Set());
   };
 
   return (
@@ -7686,13 +7695,45 @@ function SurahAyahStatusSheet({
           </Pressable>
         </View>
 
-        <Pressable
-          style={styles.surahAyahStartButton}
-          onPress={() => onStartSession(row.progress)}
-        >
-          <Ionicons name="play-circle" size={20} color="#ffffff" />
-          <Text style={styles.surahAyahStartButtonText}>Start memorization session</Text>
-        </Pressable>
+        <View style={styles.surahAyahTopActions}>
+          <Pressable
+            style={styles.surahAyahStartButton}
+            onPress={() => onStartSession(row.progress)}
+          >
+            <Ionicons name="play-circle" size={20} color="#ffffff" />
+            <Text style={styles.surahAyahStartButtonText}>Start memorization session</Text>
+          </Pressable>
+          <Pressable
+            style={[
+              styles.surahAyahSelectButton,
+              selectionMode && styles.surahAyahSelectButtonActive,
+            ]}
+            onPress={() => {
+              if (selectionMode) {
+                clearSelectionMode();
+                return;
+              }
+              setSelectionMode(true);
+            }}
+            disabled={hasPending}
+            accessibilityRole="button"
+            accessibilityLabel={selectionMode ? "Exit ayah selection" : "Select multiple ayahs"}
+          >
+            <Ionicons
+              name={selectionMode ? "checkmark-circle" : "checkmark-circle-outline"}
+              size={18}
+              color={selectionMode ? "#ffffff" : "#2563eb"}
+            />
+            <Text
+              style={[
+                styles.surahAyahSelectButtonText,
+                selectionMode && styles.surahAyahSelectButtonTextActive,
+              ]}
+            >
+              {selectionMode ? "Done" : "Select"}
+            </Text>
+          </Pressable>
+        </View>
 
         {selectionMode ? (
           <View style={styles.ayahBulkBar}>
@@ -7702,18 +7743,26 @@ function SurahAyahStatusSheet({
             </View>
             <View style={styles.ayahBulkActions}>
               <Pressable
-                style={[styles.ayahBulkButton, styles.ayahBulkMarkButton]}
+                style={[
+                  styles.ayahBulkButton,
+                  styles.ayahBulkMarkButton,
+                  (!hasSelectedAyahs || hasPending) && styles.ayahBulkButtonDisabled,
+                ]}
                 onPress={() => runBulkToggle(true)}
-                disabled={hasPending}
+                disabled={!hasSelectedAyahs || hasPending}
               >
                 <Text style={[styles.ayahBulkButtonText, styles.ayahBulkMarkButtonText]}>
                   Mark
                 </Text>
               </Pressable>
               <Pressable
-                style={[styles.ayahBulkButton, styles.ayahBulkUnmarkButton]}
+                style={[
+                  styles.ayahBulkButton,
+                  styles.ayahBulkUnmarkButton,
+                  (!hasSelectedAyahs || hasPending) && styles.ayahBulkButtonDisabled,
+                ]}
                 onPress={() => runBulkToggle(false)}
-                disabled={hasPending}
+                disabled={!hasSelectedAyahs || hasPending}
               >
                 <Text style={[styles.ayahBulkButtonText, styles.ayahBulkUnmarkButtonText]}>
                   Unmark
@@ -7721,7 +7770,7 @@ function SurahAyahStatusSheet({
               </Pressable>
               <Pressable
                 style={[styles.ayahBulkButton, styles.ayahBulkClearButton]}
-                onPress={() => setSelectedAyahs(new Set())}
+                onPress={clearSelectionMode}
                 disabled={hasPending}
               >
                 <Text style={[styles.ayahBulkButtonText, styles.ayahBulkClearButtonText]}>
@@ -10288,7 +10337,13 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: 0,
   },
+  surahAyahTopActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
   surahAyahStartButton: {
+    flex: 1,
     minHeight: 48,
     borderRadius: 14,
     backgroundColor: "#2563eb",
@@ -10301,6 +10356,31 @@ const styles = StyleSheet.create({
     color: "#ffffff",
     fontSize: 15,
     fontWeight: "900",
+  },
+  surahAyahSelectButton: {
+    minHeight: 48,
+    minWidth: 94,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#bfdbfe",
+    backgroundColor: "#eff6ff",
+    alignItems: "center",
+    justifyContent: "center",
+    flexDirection: "row",
+    gap: 6,
+    paddingHorizontal: 12,
+  },
+  surahAyahSelectButtonActive: {
+    borderColor: "#2563eb",
+    backgroundColor: "#2563eb",
+  },
+  surahAyahSelectButtonText: {
+    fontSize: 13,
+    fontWeight: "900",
+    color: "#2563eb",
+  },
+  surahAyahSelectButtonTextActive: {
+    color: "#ffffff",
   },
   ayahLegendRow: {
     flexDirection: "row",
@@ -10370,6 +10450,9 @@ const styles = StyleSheet.create({
   ayahBulkButtonText: {
     fontSize: 11,
     fontWeight: "900",
+  },
+  ayahBulkButtonDisabled: {
+    opacity: 0.45,
   },
   ayahBulkMarkButton: {
     borderColor: "#a7f3d0",
