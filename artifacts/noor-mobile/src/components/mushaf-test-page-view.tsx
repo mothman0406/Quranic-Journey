@@ -42,6 +42,11 @@ export type AudioWordPointer = {
   position: number;
 };
 
+type AudioAyahPointer = {
+  surah: number;
+  ayah: number;
+};
+
 // Recite word pointer passed in from the existing memorization recite engine.
 // position is 1-based and matches QPC2 glyph position directly.
 export type ReciteWordPointer = {
@@ -253,6 +258,7 @@ function MushafTestPage({
   flashedWord,
   flashOpacity,
   currentAudioWord,
+  persistedAudioAyah,
   audioToGlyphPositions,
   blindMode,
   blurMode,
@@ -274,6 +280,7 @@ function MushafTestPage({
   flashedWord: FlashedWord | null;
   flashOpacity: Animated.Value;
   currentAudioWord?: AudioWordPointer | null;
+  persistedAudioAyah: AudioAyahPointer | null;
   audioToGlyphPositions?: readonly number[] | null;
   blindMode: boolean;
   blurMode: boolean;
@@ -606,13 +613,13 @@ function MushafTestPage({
           </>
         ) : null}
 
-        {blurMode && currentAudioWord && !reciteActive && !blindMode ? (
+        {blurMode && persistedAudioAyah && !reciteActive && !blindMode ? (
           <>
             {overlayRects
               .filter(
                 (rect) =>
-                  rect.surah !== currentAudioWord.surah ||
-                  rect.ayah !== currentAudioWord.ayah,
+                  rect.surah !== persistedAudioAyah.surah ||
+                  rect.ayah !== persistedAudioAyah.ayah,
               )
               .map((rect) => (
                 <View
@@ -692,15 +699,46 @@ export function MushafTestPageView({
   const [wordTranslationText, setWordTranslationText] = useState<string | null>(null);
   const [wordTranslationLoading, setWordTranslationLoading] = useState(false);
   const [revealedAyahs, setRevealedAyahs] = useState<Set<string>>(new Set());
+  const [persistedAudioAyah, setPersistedAudioAyah] =
+    useState<AudioAyahPointer | null>(null);
   const flashOpacity = useRef(new Animated.Value(0)).current;
   const flashAnimationRef = useRef<Animated.CompositeAnimation | null>(null);
   const flashTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const persistedClearTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const wordTranslationRequestRef = useRef(0);
   const programmaticPageChangeRef = useRef(true);
 
   // Stable ref so the auto-paging effect doesn't need onPageChange in its deps.
   const onPageChangeRef = useRef(onPageChange);
   useEffect(() => { onPageChangeRef.current = onPageChange; }, [onPageChange]);
+
+  useEffect(() => {
+    if (persistedClearTimeoutRef.current) {
+      clearTimeout(persistedClearTimeoutRef.current);
+      persistedClearTimeoutRef.current = null;
+    }
+
+    if (currentAudioWord) {
+      setPersistedAudioAyah({
+        surah: currentAudioWord.surah,
+        ayah: currentAudioWord.ayah,
+      });
+      return;
+    }
+
+    persistedClearTimeoutRef.current = setTimeout(() => {
+      setPersistedAudioAyah(null);
+      persistedClearTimeoutRef.current = null;
+    }, 3000);
+  }, [currentAudioWord?.surah, currentAudioWord?.ayah]);
+
+  useEffect(() => {
+    return () => {
+      if (persistedClearTimeoutRef.current) {
+        clearTimeout(persistedClearTimeoutRef.current);
+      }
+    };
+  }, []);
 
   // Auto-paging: when audio word moves to a different page, Test Mushaf follows.
   // lastAutoPagedRef avoids firing duplicate onPageChange calls for the same target page.
@@ -1003,6 +1041,7 @@ export function MushafTestPageView({
         flashedWord={flashedWord}
         flashOpacity={flashOpacity}
         currentAudioWord={currentAudioWord}
+        persistedAudioAyah={persistedAudioAyah}
         audioToGlyphPositions={audioToGlyphPositions}
         blindMode={blindMode}
         blurMode={blurMode}
