@@ -1,12 +1,18 @@
 import { Router, type IRouter } from "express";
 import { db } from "@workspace/db";
 import { childrenTable, memorizationProgressTable, reviewScheduleTable, reviewDailySetTable, learningSessionsTable, childDuasTable, dailyProgressTable } from "@workspace/db/schema";
-import { eq, desc, and, sql, gte, lte } from "drizzle-orm";
+import { eq, desc, and, gte, lte } from "drizzle-orm";
 import { SURAHS } from "../data/surahs.js";
 import { resolveSurahBoundedPageRange, getPageForVerse } from "../data/quran-meta.js";
 import { STORIES } from "../data/stories.js";
 import { DUAS } from "../data/duas.js";
 import { addDaysToLocalDate, getRequestLocalDate } from "../lib/local-date.js";
+import {
+  calculateReadingCompletedPages,
+  getReadingGoalLastPage,
+  getReadingStatus,
+  type ReadingStatus,
+} from "../lib/reading-progress.js";
 import {
   buildSurahPageChunks,
   buildSurahMemorizationWorkflow,
@@ -851,6 +857,7 @@ router.get("/children/:childId/dashboard", async (req, res) => {
         reviewTargetCount: null,
         reviewCompletedCount: 0,
         reviewStatus: 'not_started',
+        readingTargetPages: child.readPagesPerDay > 0 ? child.readPagesPerDay : null,
       }).returning();
     }
   } else if (
@@ -995,6 +1002,11 @@ router.get("/children/:childId/dashboard", async (req, res) => {
     totalEstimatedMinutes: child.practiceMinutesPerDay
   };
 
+  const readingGoalLastPage =
+    child.readPagesPerDay > 0
+      ? getReadingGoalLastPage(todayProgress, dailyProgressRows, today)
+      : todayProgress.readingLastPage;
+
   res.json({
     child: formatChild(child),
     todaysPlan,
@@ -1040,7 +1052,7 @@ router.get("/children/:childId/dashboard", async (req, res) => {
     readingGoal: {
       targetPages: child.readPagesPerDay,
       completedPages: todayProgress.readingCompletedPages,
-      lastPage: todayProgress.readingLastPage,
+      lastPage: readingGoalLastPage,
       status: todayProgress.readingStatus,
       isEnabled: child.readPagesPerDay > 0,
     },
@@ -1373,41 +1385,50 @@ router.post("/children/:childId/reading-progress", async (req, res) => {
   let row = todayRows[0] ?? null;
 
   if (!row) {
+    const targetPages = child.readPagesPerDay > 0 ? child.readPagesPerDay : null;
+    const completedPages = calculateReadingCompletedPages({
+      currentPage,
+      previousLastPage: null,
+      previousCompletedPages: 0,
+      targetPages,
+    });
+    const readingStatus = getReadingStatus(completedPages, targetPages, "not_started");
+
     [row] = await db.insert(dailyProgressTable).values({
       childId,
       date: today,
       memStatus: "not_started",
       reviewStatus: "not_started",
-      readingTargetPages: child.readPagesPerDay > 0 ? child.readPagesPerDay : null,
+      readingTargetPages: targetPages,
       readingLastPage: currentPage,
-      readingCompletedPages: 0,
-      readingStatus: "not_started",
+      readingCompletedPages: completedPages,
+      readingStatus,
     }).returning();
     res.json({ readingStatus: row.readingStatus, readingCompletedPages: row.readingCompletedPages, readingLastPage: row.readingLastPage });
     return;
   }
 
   const targetPages = row.readingTargetPages ?? (child.readPagesPerDay > 0 ? child.readPagesPerDay : null);
+  const completedPages = calculateReadingCompletedPages({
+    currentPage,
+    previousLastPage: row.readingLastPage,
+    previousCompletedPages: row.readingCompletedPages,
+    targetPages,
+  });
+  const readingLastPage = Math.max(row.readingLastPage ?? currentPage, currentPage);
+  const readingStatus = getReadingStatus(
+    completedPages,
+    targetPages,
+    row.readingStatus as ReadingStatus,
+  );
 
-  // Atomic update — GREATEST ensures readingLastPage always moves forward even if POSTs arrive out of order
   [row] = await db.update(dailyProgressTable).set({
     readingTargetPages: targetPages,
-    readingLastPage: sql`GREATEST(COALESCE(${dailyProgressTable.readingLastPage}, ${currentPage}), ${currentPage})`,
-    readingCompletedPages: sql`${dailyProgressTable.readingCompletedPages} + GREATEST(0, ${currentPage} - COALESCE(${dailyProgressTable.readingLastPage}, ${currentPage}))`,
+    readingLastPage,
+    readingCompletedPages: completedPages,
+    readingStatus,
     updatedAt: new Date(),
   }).where(eq(dailyProgressTable.id, row.id)).returning();
-
-  // Compute status from the atomically-updated returned values
-  const finalCompleted = row.readingCompletedPages ?? 0;
-  const newStatus: string = targetPages && finalCompleted >= targetPages ? "completed"
-    : finalCompleted > 0 ? "in_progress"
-    : row.readingStatus;
-  if (newStatus !== row.readingStatus) {
-    [row] = await db.update(dailyProgressTable)
-      .set({ readingStatus: newStatus, updatedAt: new Date() })
-      .where(eq(dailyProgressTable.id, row.id))
-      .returning();
-  }
 
   res.json({ readingStatus: row.readingStatus, readingCompletedPages: row.readingCompletedPages, readingLastPage: row.readingLastPage });
 });
