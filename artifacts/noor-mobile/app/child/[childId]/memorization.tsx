@@ -682,14 +682,17 @@ export default function MemorizationScreen() {
     session?: string;
     recite?: string;
     viewMode?: MemorizationViewMode;
+    mushafViewMode?: string;
   }>();
   const childId = params.childId;
-  const routeViewMode =
+  const routeForcesTestMushaf = params.mushafViewMode === "test";
+  const routeParamViewMode =
     params.viewMode === "page" ||
     params.viewMode === "ayah" ||
     params.viewMode === "test-mushaf"
       ? params.viewMode
       : null;
+  const routeViewMode = routeForcesTestMushaf ? "test-mushaf" : routeParamViewMode;
   const initialSessionRequested =
     params.session === "1" ||
     (params.surahNumber !== undefined &&
@@ -764,6 +767,7 @@ export default function MemorizationScreen() {
   const [blindMode, setBlindMode] = useState<boolean>(DEFAULT_SESSION_SETTINGS.blindMode);
   const [blurMode, setBlurMode] = useState<boolean>(DEFAULT_SESSION_SETTINGS.blurMode);
   const [viewMode, setViewMode] = useState<MemorizationViewMode>(routeViewMode ?? "ayah");
+  const [profileViewMode, setProfileViewMode] = useState<MemorizationViewMode>("ayah");
   const [profileMushafViewMode, setProfileMushafViewMode] =
     useState<MushafViewMode>("swipe");
   const [mushafViewMode, setMushafViewMode] = useState<MushafViewMode>("swipe");
@@ -963,6 +967,7 @@ export default function MemorizationScreen() {
       if (cancelled) return;
       setThemeKey(p.themeKey);
       setReciterId(p.reciterId);
+      setProfileViewMode(p.viewMode);
       setViewMode(routeViewMode ?? p.viewMode);
       setProfileMushafViewMode(p.mushafViewMode);
       setMushafViewMode(p.mushafViewMode);
@@ -1028,10 +1033,19 @@ export default function MemorizationScreen() {
     void saveProfileSettings(childId, {
       themeKey,
       reciterId,
-      viewMode,
+      viewMode: routeForcesTestMushaf ? profileViewMode : viewMode,
       mushafViewMode: profileMushafViewMode,
     });
-  }, [childId, profileMushafViewMode, settingsLoaded, themeKey, reciterId, viewMode]);
+  }, [
+    childId,
+    profileMushafViewMode,
+    profileViewMode,
+    reciterId,
+    routeForcesTestMushaf,
+    settingsLoaded,
+    themeKey,
+    viewMode,
+  ]);
 
   useEffect(() => {
     setMushafDefaultSaved(false);

@@ -31,6 +31,7 @@ import {
   QURAN_COM_1405_NATIVE_HEIGHT,
   QURAN_COM_1405_NATIVE_WIDTH,
   getQuranCom1405AyahRectsForPage,
+  getQuranCom1405WordRectsForPage,
 } from "@/src/lib/quran-com-1405-ayah-coords";
 import {
   QURAN_COM_1405_PAGE_HEIGHT,
@@ -158,6 +159,10 @@ type PageOverlayRect = {
   left: number;
   width: number;
   height: number;
+};
+
+type PageWordMaskRect = PageOverlayRect & {
+  position: number;
 };
 
 const HIGHLIGHT_COLORS: Record<HighlightColor, { bg: string; dot: string; label: string }> = {
@@ -409,6 +414,54 @@ function buildQuranCom1405OverlayRects(pageNumber: number, layout: PageImageLayo
   return rects;
 }
 
+function buildQuranCom1405WordMaskRects(
+  pageNumber: number,
+  layout: PageImageLayout,
+): PageWordMaskRect[] {
+  if (layout.width <= 0 || layout.height <= 0) return [];
+
+  const wordRects = getQuranCom1405WordRectsForPage(pageNumber);
+  if (wordRects.length === 0) return [];
+
+  const widthCoeff = layout.width / QURAN_COM_1405_NATIVE_WIDTH;
+  const heightCoeff = layout.height / QURAN_COM_1405_NATIVE_HEIGHT;
+  const rects: PageWordMaskRect[] = [];
+
+  wordRects.forEach(
+    ([surahNumber, ayahNumber, position, lineNumber, minX, maxX, minY, maxY], index) => {
+      if (!isKnownAyah(surahNumber, ayahNumber)) return;
+
+      const top = minY * heightCoeff;
+      const left = minX * widthCoeff;
+      const width = (maxX - minX) * widthCoeff;
+      const height = (maxY - minY) * heightCoeff;
+      if (top >= layout.height || top + height <= 0 || left >= layout.width || left + width <= 0) {
+        return;
+      }
+
+      const clampedTop = Math.max(0, top);
+      const clampedLeft = Math.max(0, left);
+      const clampedHeight = Math.max(0, Math.min(height, layout.height - clampedTop));
+      const clampedWidth = Math.max(0, Math.min(width, layout.width - clampedLeft));
+      if (clampedHeight < 6 || clampedWidth < 8) return;
+
+      rects.push({
+        key: `${pageNumber}:${surahNumber}:${ayahNumber}:${position}:${lineNumber}:${index}`,
+        verseKey: verseKeyFor(surahNumber, ayahNumber),
+        surahNumber,
+        ayahNumber,
+        position,
+        top: clampedTop,
+        left: clampedLeft,
+        width: clampedWidth,
+        height: clampedHeight,
+      });
+    },
+  );
+
+  return rects;
+}
+
 function sortAyahTargets(targets: PageAyahTarget[]) {
   return [...targets].sort((a, b) => {
     if (a.surahNumber !== b.surahNumber) return a.surahNumber - b.surahNumber;
@@ -504,20 +557,20 @@ function PageView({
   pageNumber,
   width,
   toolMode,
-  blindRevealed,
+  revealedAyahKeys,
   highlightedVerseKeys,
   activeVerseKey,
-  onRevealBlindPage,
+  onToggleBlindAyah,
   onOpenAyah,
   onStartRecite,
 }: {
   pageNumber: number;
   width: number;
   toolMode: ToolMode;
-  blindRevealed: boolean;
+  revealedAyahKeys: Set<string>;
   highlightedVerseKeys: Set<string>;
   activeVerseKey: string | null;
-  onRevealBlindPage: () => void;
+  onToggleBlindAyah: (verseKey: string) => void;
   onOpenAyah: (target: PageAyahTarget) => void;
   onStartRecite: (target: PageAyahTarget) => void;
 }) {
@@ -526,7 +579,8 @@ function PageView({
   const [error, setError] = useState<string | null>(null);
   const [containerLayout, setContainerLayout] = useState<PageImageLayout>({ width: 0, height: 0 });
   const imageSource = getQuranCom1405PageImage(pageNumber);
-  const isBlindHidden = toolMode === "blind" && !blindRevealed;
+  const blindMode = toolMode === "blind";
+  const suppressedLongPressKeyRef = useRef<string | null>(null);
   const imageLayout = useMemo(
     () =>
       getContainedQuranCom1405PageLayout(
@@ -543,6 +597,35 @@ function PageView({
     () => buildQuranCom1405OverlayRects(pageNumber, imageLayout),
     [imageLayout, pageNumber],
   );
+  const wordMaskRects = useMemo(
+    () => buildQuranCom1405WordMaskRects(pageNumber, imageLayout),
+    [imageLayout, pageNumber],
+  );
+  const verseMarkerKeys = useMemo(() => {
+    const maxPositionByAyah = new Map<string, number>();
+
+    wordMaskRects.forEach((rect) => {
+      const current = maxPositionByAyah.get(rect.verseKey) ?? -Infinity;
+      if (rect.position > current) maxPositionByAyah.set(rect.verseKey, rect.position);
+    });
+
+    const markers = new Set<string>();
+    wordMaskRects.forEach((rect) => {
+      if (maxPositionByAyah.get(rect.verseKey) === rect.position) {
+        markers.add(rect.key);
+      }
+    });
+
+    return markers;
+  }, [wordMaskRects]);
+  const blindMaskRects = useMemo(() => {
+    if (!blindMode) return [];
+    return wordMaskRects.filter((rect) => {
+      if (verseMarkerKeys.has(rect.key)) return false;
+      if (revealedAyahKeys.has(rect.verseKey)) return false;
+      return true;
+    });
+  }, [blindMode, revealedAyahKeys, verseMarkerKeys, wordMaskRects]);
 
   useEffect(() => {
     let cancelled = false;
@@ -589,16 +672,20 @@ function PageView({
   }
 
   function handleAyahPress(rect: PageOverlayRect) {
+    if (suppressedLongPressKeyRef.current === rect.key) {
+      suppressedLongPressKeyRef.current = null;
+      return;
+    }
+    if (blindMode) {
+      onToggleBlindAyah(rect.verseKey);
+      return;
+    }
     const target = targetFromRect(rect);
     if (toolMode === "recite") {
       onStartRecite(target);
       return;
     }
     onOpenAyah(target);
-  }
-
-  function handlePagePress() {
-    if (isBlindHidden) onRevealBlindPage();
   }
 
   return (
@@ -623,17 +710,27 @@ function PageView({
           </View>
         )}
 
-        {isBlindHidden ? (
-          <Pressable
-            style={styles.pageBackgroundPressable}
-            onPress={handlePagePress}
-            accessibilityRole="button"
-            accessibilityLabel="Reveal hidden mushaf page"
-          />
-        ) : null}
+        {imageSource && blindMode
+          ? blindMaskRects.map((rect) => (
+              <View
+                key={`blind-mask-${rect.key}`}
+                pointerEvents="none"
+                style={[
+                  styles.ayahBlindMask,
+                  {
+                    top: rect.top,
+                    left: rect.left,
+                    width: rect.width,
+                    height: rect.height,
+                  },
+                ]}
+              />
+            ))
+          : null}
 
-        {!isBlindHidden
+        {imageSource
           ? overlayRects.map((rect) => {
+              const hiddenByBlind = blindMode && !revealedAyahKeys.has(rect.verseKey);
               const highlighted = highlightedVerseKeys.has(rect.verseKey);
               const active = activeVerseKey === rect.verseKey;
               return (
@@ -642,7 +739,7 @@ function PageView({
                   accessible
                   accessibilityLabel={`Quran ${rect.verseKey}`}
                   accessibilityRole="button"
-                  style={[
+                  style={({ pressed }) => [
                     styles.ayahTapOverlay,
                     {
                       top: rect.top,
@@ -650,11 +747,21 @@ function PageView({
                       width: rect.width,
                       height: rect.height,
                     },
-                    highlighted && styles.ayahTapOverlayHighlighted,
-                    active && styles.ayahTapOverlayActive,
+                    highlighted && !hiddenByBlind && styles.ayahTapOverlayHighlighted,
+                    active && !hiddenByBlind && styles.ayahTapOverlayActive,
+                    pressed && !hiddenByBlind && styles.ayahTapOverlayPressed,
                   ]}
                   onPress={() => handleAyahPress(rect)}
-                  onLongPress={() => onOpenAyah(targetFromRect(rect))}
+                  onLongPress={() => {
+                    suppressedLongPressKeyRef.current = rect.key;
+                    setTimeout(() => {
+                      if (suppressedLongPressKeyRef.current === rect.key) {
+                        suppressedLongPressKeyRef.current = null;
+                      }
+                    }, 1000);
+                    onOpenAyah(targetFromRect(rect));
+                  }}
+                  delayLongPress={420}
                 />
               );
             })
@@ -670,15 +777,7 @@ function PageView({
           </View>
         ) : null}
 
-        {isBlindHidden ? (
-          <View pointerEvents="none" style={styles.blindOverlay}>
-            <Ionicons name="eye-off-outline" size={30} color="#ffffff" />
-            <Text style={styles.blindOverlayTitle}>Blind practice</Text>
-            <Text style={styles.blindOverlayText}>Tap to reveal this page.</Text>
-          </View>
-        ) : null}
-
-        {toolMode === "recite" && !isBlindHidden ? (
+        {toolMode === "recite" ? (
           <View pointerEvents="none" style={styles.modeOverlayHint}>
             <Ionicons name="mic-outline" size={15} color="#be123c" />
             <Text style={[styles.modeOverlayHintText, styles.modeOverlayHintTextRecite]}>
@@ -1996,7 +2095,7 @@ export default function MushafScreen() {
   const [annotationError, setAnnotationError] = useState<string | null>(null);
   const [recentReads, setRecentReads] = useState<RecentRead[]>([]);
   const [toolMode, setToolMode] = useState<ToolMode>("none");
-  const [blindRevealed, setBlindRevealed] = useState(false);
+  const [blindRevealedAyahKeys, setBlindRevealedAyahKeys] = useState<Set<string>>(new Set());
   const [selectedAyah, setSelectedAyah] = useState<PageAyahTarget | null>(null);
   const [pageVerses, setPageVerses] = useState<ApiPageVerse[]>([]);
   const [attributionOpen, setAttributionOpen] = useState(false);
@@ -2015,6 +2114,7 @@ export default function MushafScreen() {
 
   const listRef = useRef<FlatList<number>>(null);
   const programmaticPageChangeRef = useRef(true);
+  const pendingModeSwitchPageRef = useRef<number | null>(null);
   const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const saveStatusTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const audioSoundRef = useRef<Audio.Sound | null>(null);
@@ -2252,7 +2352,9 @@ export default function MushafScreen() {
       return;
     }
 
-    const index = currentPage - 1;
+    const preservedPage = pendingModeSwitchPageRef.current;
+    const targetPage = preservedPage ?? currentPage;
+    const index = targetPage - 1;
     const itemLength = mushafViewMode === "scroll" ? scrollPageItemHeight : pageAreaWidth;
     const timeout = setTimeout(() => {
       try {
@@ -2271,9 +2373,15 @@ export default function MushafScreen() {
         }
       }
     }, 0);
+    const clearModeSwitchTimeout = setTimeout(() => {
+      if (pendingModeSwitchPageRef.current === targetPage) {
+        pendingModeSwitchPageRef.current = null;
+      }
+    }, 300);
 
     return () => {
       clearTimeout(timeout);
+      clearTimeout(clearModeSwitchTimeout);
     };
   }, [currentPage, initialPage, mushafViewMode, pageAreaWidth, scrollPageItemHeight]);
 
@@ -2337,7 +2445,6 @@ export default function MushafScreen() {
   }, [currentPage]);
 
   useEffect(() => {
-    setBlindRevealed(false);
     setSelectedAyah((current) => (current?.pageNumber === currentPage ? current : null));
   }, [currentPage]);
 
@@ -2395,6 +2502,13 @@ export default function MushafScreen() {
 
   function updateVisiblePageFromScroll(page: number, save = true) {
     const target = clampMushafPage(page);
+    const pendingModeSwitchPage = pendingModeSwitchPageRef.current;
+    if (pendingModeSwitchPage !== null && target !== pendingModeSwitchPage) {
+      return;
+    }
+    if (pendingModeSwitchPage === target) {
+      pendingModeSwitchPageRef.current = null;
+    }
     if (target !== currentPage) {
       programmaticPageChangeRef.current = false;
       setCurrentPage(target);
@@ -2422,6 +2536,7 @@ export default function MushafScreen() {
   function updateMushafViewMode(mode: MushafViewMode) {
     if (mode === mushafViewMode) return;
     const nextProfileSettings = { ...profileSettings, mushafViewMode: mode };
+    pendingModeSwitchPageRef.current = currentPage;
     programmaticPageChangeRef.current = true;
     setMushafViewMode(mode);
     setProfileSettings(nextProfileSettings);
@@ -2759,7 +2874,19 @@ export default function MushafScreen() {
   function toggleToolMode(mode: ToolMode) {
     setToolMode((current) => {
       const next = current === mode ? "none" : mode;
-      if (next !== "blind") setBlindRevealed(false);
+      if (next !== "blind") setBlindRevealedAyahKeys(new Set());
+      return next;
+    });
+  }
+
+  function toggleBlindAyahReveal(verseKey: string) {
+    setBlindRevealedAyahKeys((current) => {
+      const next = new Set(current);
+      if (next.has(verseKey)) {
+        next.delete(verseKey);
+      } else {
+        next.add(verseKey);
+      }
       return next;
     });
   }
@@ -2795,7 +2922,7 @@ export default function MushafScreen() {
         pageEnd: String(target.pageNumber),
         session: "1",
         recite: options?.recite ? "1" : undefined,
-        viewMode: options?.recite ? "page" : undefined,
+        mushafViewMode: options?.recite ? "test" : undefined,
       },
     });
   }
@@ -2919,10 +3046,10 @@ export default function MushafScreen() {
                     pageNumber={item}
                     width={pageAreaWidth}
                     toolMode={toolMode}
-                    blindRevealed={blindRevealed}
+                    revealedAyahKeys={blindRevealedAyahKeys}
                     highlightedVerseKeys={highlightedVerseKeys}
                     activeVerseKey={activeVerseKey}
-                    onRevealBlindPage={() => setBlindRevealed(true)}
+                    onToggleBlindAyah={toggleBlindAyahReveal}
                     onOpenAyah={openAyahActions}
                     onStartRecite={reciteFromAyah}
                   />
@@ -2963,10 +3090,10 @@ export default function MushafScreen() {
                   pageNumber={item}
                   width={pageAreaWidth}
                   toolMode={toolMode}
-                  blindRevealed={blindRevealed}
+                  revealedAyahKeys={blindRevealedAyahKeys}
                   highlightedVerseKeys={highlightedVerseKeys}
                   activeVerseKey={activeVerseKey}
-                  onRevealBlindPage={() => setBlindRevealed(true)}
+                  onToggleBlindAyah={toggleBlindAyahReveal}
                   onOpenAyah={openAyahActions}
                   onStartRecite={reciteFromAyah}
                 />
@@ -3552,10 +3679,6 @@ const styles = StyleSheet.create({
     width: "100%",
     height: "100%",
   },
-  pageBackgroundPressable: {
-    ...StyleSheet.absoluteFillObject,
-    zIndex: 2,
-  },
   ayahTapOverlay: {
     position: "absolute",
     backgroundColor: "transparent",
@@ -3568,6 +3691,17 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(37, 99, 235, 0.18)",
     borderWidth: 1,
     borderColor: "rgba(37, 99, 235, 0.48)",
+  },
+  ayahTapOverlayPressed: {
+    backgroundColor: "rgba(37, 99, 235, 0.24)",
+  },
+  ayahBlindMask: {
+    position: "absolute",
+    backgroundColor: "#fffbeb",
+    borderRadius: 3,
+    borderWidth: 1,
+    borderColor: "#fef3c7",
+    zIndex: 4,
   },
   pageDataBadge: {
     position: "absolute",
@@ -3582,26 +3716,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(226, 232, 240, 0.9)",
     zIndex: 8,
-  },
-  blindOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(17,24,39,0.92)",
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 24,
-    gap: 8,
-    zIndex: 12,
-  },
-  blindOverlayTitle: {
-    fontSize: 18,
-    color: "#ffffff",
-    fontWeight: "900",
-  },
-  blindOverlayText: {
-    fontSize: 13,
-    color: "#d1d5db",
-    fontWeight: "700",
-    textAlign: "center",
   },
   modeOverlayHint: {
     position: "absolute",
