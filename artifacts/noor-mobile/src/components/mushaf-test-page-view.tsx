@@ -95,6 +95,7 @@ type MushafTestPageViewProps = {
   reciteActive?: boolean;
   reciteCurrentWord?: ReciteWordPointer | null;
   reciteRange?: ReciteRange | null;
+  sessionFocusRange?: ReciteRange | null;
   memorizationStateMap?: ReadonlyMap<string, AyahMemorizationState>;
 };
 
@@ -269,6 +270,7 @@ function MushafTestPage({
   reciteActive,
   reciteCurrentWord,
   reciteRange,
+  sessionFocusRange,
   memorizationStateMap,
   actionSheetVisible,
   wordTranslationTarget,
@@ -292,6 +294,7 @@ function MushafTestPage({
   reciteActive: boolean;
   reciteCurrentWord?: ReciteWordPointer | null;
   reciteRange?: ReciteRange | null;
+  sessionFocusRange?: ReciteRange | null;
   memorizationStateMap?: ReadonlyMap<string, AyahMemorizationState>;
   actionSheetVisible: boolean;
   wordTranslationTarget: WordTranslationTarget | null;
@@ -671,6 +674,37 @@ function MushafTestPage({
           </>
         ) : null}
 
+        {sessionFocusRange &&
+        !reciteActive &&
+        !blindMode &&
+        !(blurMode && persistedAudioAyah) ? (
+          <>
+            {overlayRects
+              .filter(
+                (rect) =>
+                  !isWordWithinRange(
+                    { surah: rect.surah, ayah: rect.ayah, position: rect.position },
+                    sessionFocusRange,
+                  ),
+              )
+              .map((rect) => (
+                <View
+                  key={`session-focus-dim-${rect.key}`}
+                  pointerEvents="none"
+                  style={[
+                    styles.sessionFocusDim,
+                    {
+                      top: rect.top,
+                      left: rect.left,
+                      width: rect.width,
+                      height: rect.height,
+                    },
+                  ]}
+                />
+              ))}
+          </>
+        ) : null}
+
         {activeWordTranslationTarget && popoverLayout ? (
           <View
             pointerEvents="none"
@@ -710,6 +744,7 @@ export function MushafTestPageView({
   reciteActive = false,
   reciteCurrentWord = null,
   reciteRange = null,
+  sessionFocusRange = null,
   memorizationStateMap,
   onWordPress,
   onWordSeek,
@@ -1082,6 +1117,7 @@ export function MushafTestPageView({
         reciteActive={reciteActive}
         reciteCurrentWord={reciteCurrentWord}
         reciteRange={reciteRange}
+        sessionFocusRange={sessionFocusRange}
         memorizationStateMap={memorizationStateMap}
         actionSheetVisible={actionSheetVisible}
         wordTranslationTarget={wordTranslationTarget}
@@ -1269,6 +1305,13 @@ const styles = StyleSheet.create({
     position: "absolute",
     // Dark translucent veil keeps words legible while de-emphasizing them.
     backgroundColor: "rgba(15, 23, 42, 0.32)",
+    borderRadius: 3,
+    zIndex: 4,
+  },
+  sessionFocusDim: {
+    position: "absolute",
+    // Gentler than blur mode: ambient context-narrowing rather than active audio focus.
+    backgroundColor: "rgba(15, 23, 42, 0.20)",
     borderRadius: 3,
     zIndex: 4,
   },

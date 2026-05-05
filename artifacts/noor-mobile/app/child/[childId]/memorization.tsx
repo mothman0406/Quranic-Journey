@@ -4520,6 +4520,17 @@ export default function MemorizationScreen() {
       endAyah: ayahEnd,
     };
   }, [ayahEnd, ayahStart, reciteMode, surahNumber]);
+  const sessionFocusRange = useMemo<ReciteRange | null>(() => {
+    if (!sessionRequested || surahNumber === null || ayahStart === null || ayahEnd === null) {
+      return null;
+    }
+    return {
+      startSurah: surahNumber,
+      startAyah: ayahStart,
+      endSurah: surahNumber,
+      endAyah: ayahEnd,
+    };
+  }, [ayahEnd, ayahStart, sessionRequested, surahNumber]);
   const sessionMushafPages = useMemo(() => {
     if (pageStart !== null && pageEnd !== null) {
       return Array.from(
@@ -5081,6 +5092,7 @@ export default function MemorizationScreen() {
           reciteActive={reciteMode}
           reciteCurrentWord={reciteCurrentWord}
           reciteRange={reciteRange}
+          sessionFocusRange={sessionFocusRange}
           memorizationStateMap={memorizationStateMap}
           onWordSeek={(word) => {
             void handleTestMushafWordSeek(word);
