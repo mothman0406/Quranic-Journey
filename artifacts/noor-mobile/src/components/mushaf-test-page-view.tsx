@@ -58,6 +58,8 @@ type MushafTestPageViewProps = {
   // for future slice use (e.g. recite overlays).
   isAudioActive?: boolean;
   onWordPress?: (word: MushafTestWordTarget) => void;
+  // Phase 1d: called when user taps a word; should seek/start audio at that word.
+  onWordSeek?: (word: MushafTestWordTarget) => void;
   onWordLongPress?: (word: MushafTestWordTarget) => void;
 };
 
@@ -350,6 +352,8 @@ export function MushafTestPageView({
   currentPage,
   onPageChange,
   currentAudioWord,
+  onWordPress,
+  onWordSeek,
   onWordLongPress,
 }: MushafTestPageViewProps) {
   const { width: screenWidth } = useWindowDimensions();
@@ -466,6 +470,7 @@ export function MushafTestPageView({
 
   function handleWordTap(pageNumber: number, word: QuranCom1405WordRect) {
     const [surah, ayah, position, _line, minX, maxX, minY, maxY] = word;
+    const target = { surah, ayah, position };
     const next: FlashedWord = { pageNumber, surah, ayah, position, minX, maxX, minY, maxY };
 
     if (flashTimeoutRef.current) {
@@ -493,6 +498,9 @@ export function MushafTestPageView({
         setFlashedWord(null);
       }
     });
+
+    onWordPress?.(target);
+    onWordSeek?.(target);
   }
 
   function handleMomentumEnd(event: NativeSyntheticEvent<NativeScrollEvent>) {

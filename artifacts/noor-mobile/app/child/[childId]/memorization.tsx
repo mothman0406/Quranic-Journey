@@ -2078,6 +2078,32 @@ export default function MemorizationScreen() {
     await seekToWordPosition(position);
   }
 
+  async function handleTestMushafWordSeek(word: {
+    surah: number;
+    ayah: number;
+    position: number;
+  }) {
+    if (reciteModeRef.current || isLoadingRef.current) return;
+
+    const verseKey = `${word.surah}:${word.ayah}`;
+    if (
+      word.surah === surahNumberRef.current &&
+      word.ayah === currentVerseRef.current &&
+      !soundRef.current
+    ) {
+      pendingSeekPositionRef.current = word.position;
+      await playVerse(word.ayah);
+      if (pendingSeekPositionRef.current !== null) {
+        const position = pendingSeekPositionRef.current;
+        pendingSeekPositionRef.current = null;
+        await seekToWordPosition(position);
+      }
+      return;
+    }
+
+    await handlePageWordTap(verseKey, word.position);
+  }
+
   async function replayPlaybackVerseFromStart(verseNum: number) {
     if (isLoadingRef.current) return;
     if (advanceTimeoutRef.current) {
@@ -4562,6 +4588,9 @@ export default function MemorizationScreen() {
           onPageChange={updateDisplayedMushafPage}
           currentAudioWord={currentAudioWord}
           isAudioActive={isPlaying}
+          onWordSeek={(word) => {
+            void handleTestMushafWordSeek(word);
+          }}
         />
       ) : (
         <View style={styles.mushafPagerShell}>
