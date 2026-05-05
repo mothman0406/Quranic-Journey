@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -14,7 +14,10 @@ import {
   Text,
   TextInput,
   View,
+  useWindowDimensions,
   type LayoutChangeEvent,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
@@ -61,6 +64,12 @@ import {
   type MushafAyahTarget as PageAyahTarget,
   type MushafHighlightColor as HighlightColor,
 } from "@/src/lib/mushaf-annotations";
+import {
+  DEFAULT_PROFILE_SETTINGS,
+  loadProfileSettings,
+  saveProfileSettings,
+  type MushafViewMode,
+} from "@/src/lib/settings";
 
 const BOOKMARK_LIMIT = 12;
 const RECENT_READ_LIMIT = 5;
@@ -70,7 +79,7 @@ const QURAN_COM_1405_PAGE_ASPECT_RATIO =
 const MUSHAF_AUDIO_SPEEDS = [0.75, 0.85, 1, 1.15, 1.25, 1.5] as const;
 const MUSHAF_AUDIO_AYAH_REPEATS = [1, 2, 3, 5] as const;
 const MUSHAF_AUDIO_RANGE_REPEATS = [1, 2, 3] as const;
-const MUSHAF_CONTROL_SLOT_HEIGHT = 140;
+const MUSHAF_CONTROL_SLOT_HEIGHT = 170;
 
 type ReadingStatus = "not_started" | "in_progress" | "completed";
 type ToolMode = "none" | "blind" | "recite";
@@ -1555,7 +1564,12 @@ export default function MushafScreen() {
   }>();
   const { childId, name } = params;
   const router = useRouter();
-  const screenW = Dimensions.get("window").width;
+  const { width: windowWidth } = useWindowDimensions();
+  const screenW = Math.max(1, Math.round(windowWidth));
+  const scrollPageItemHeight = useMemo(
+    () => Math.max(1, Math.round(screenW / QURAN_COM_1405_PAGE_ASPECT_RATIO)),
+    [screenW],
+  );
   const requestedInitialPage = useMemo(() => parsePageParam(params.page), [params.page]);
 
   const [initialPage, setInitialPage] = useState<number | null>(null);
@@ -1582,8 +1596,13 @@ export default function MushafScreen() {
   const [audioPlayer, setAudioPlayer] = useState<MushafAudioPlayer | null>(null);
   const [audioError, setAudioError] = useState<string | null>(null);
   const [audioSettingsHydrated, setAudioSettingsHydrated] = useState(false);
+  const [profileSettings, setProfileSettings] = useState(DEFAULT_PROFILE_SETTINGS);
+  const [mushafViewMode, setMushafViewMode] = useState<MushafViewMode>(
+    DEFAULT_PROFILE_SETTINGS.mushafViewMode,
+  );
 
   const listRef = useRef<FlatList<number>>(null);
+  const programmaticPageChangeRef = useRef(true);
   const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const saveStatusTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const audioSoundRef = useRef<Audio.Sound | null>(null);
@@ -1650,6 +1669,24 @@ export default function MushafScreen() {
       return String(juz.number) === q || label.includes(q);
     });
   }, [jumpQuery]);
+
+  const getSwipeItemLayout = useCallback(
+    (_data: ArrayLike<number> | null | undefined, index: number) => ({
+      length: screenW,
+      offset: screenW * index,
+      index,
+    }),
+    [screenW],
+  );
+
+  const getScrollItemLayout = useCallback(
+    (_data: ArrayLike<number> | null | undefined, index: number) => ({
+      length: scrollPageItemHeight,
+      offset: scrollPageItemHeight * index,
+      index,
+    }),
+    [scrollPageItemHeight],
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -1727,11 +1764,19 @@ export default function MushafScreen() {
       }
     }
 
+    async function loadReadingProfileSettings() {
+      const settings = await loadProfileSettings(childId);
+      if (cancelled) return;
+      setProfileSettings(settings);
+      setMushafViewMode(settings.mushafViewMode);
+    }
+
     loadInitialPage();
     loadBookmarks();
     loadRecentReads();
     loadAnnotations();
     loadAudioSettings();
+    loadReadingProfileSettings();
 
     return () => {
       cancelled = true;
@@ -1787,6 +1832,38 @@ export default function MushafScreen() {
       cancelled = true;
     };
   }, [currentPage]);
+
+  useEffect(() => {
+    if (initialPage === null) return;
+    if (!programmaticPageChangeRef.current) {
+      programmaticPageChangeRef.current = true;
+      return;
+    }
+
+    const index = currentPage - 1;
+    const itemLength = mushafViewMode === "scroll" ? scrollPageItemHeight : screenW;
+    const timeout = setTimeout(() => {
+      try {
+        listRef.current?.scrollToIndex({
+          index,
+          animated: mushafViewMode === "scroll",
+        });
+      } catch {
+        try {
+          listRef.current?.scrollToOffset({
+            offset: Math.max(0, index * itemLength),
+            animated: mushafViewMode === "scroll",
+          });
+        } catch {
+          // The list may still be mounting after a mode switch.
+        }
+      }
+    }, 0);
+
+    return () => {
+      clearTimeout(timeout);
+    };
+  }, [currentPage, initialPage, mushafViewMode, screenW, scrollPageItemHeight]);
 
   useEffect(() => {
     audioSettingsRef.current = audioSettings;
@@ -1879,15 +1956,64 @@ export default function MushafScreen() {
 
   function goToPage(page: number, closeJump = false) {
     const target = clampMushafPage(page);
+    const targetIndex = target - 1;
+    const itemLength = mushafViewMode === "scroll" ? scrollPageItemHeight : screenW;
+    programmaticPageChangeRef.current = true;
     setCurrentPage(target);
     setSaveError(null);
     setSaveStatus("idle");
-    listRef.current?.scrollToIndex({ index: target - 1, animated: false });
+    try {
+      listRef.current?.scrollToIndex({ index: targetIndex, animated: false });
+    } catch {
+      try {
+        listRef.current?.scrollToOffset({
+          offset: Math.max(0, targetIndex * itemLength),
+          animated: false,
+        });
+      } catch {
+        // The current list orientation may be remounting.
+      }
+    }
     if (closeJump) {
       setJumpOpen(false);
       setJumpQuery("");
       setPageInput("");
     }
+  }
+
+  function updateVisiblePageFromScroll(page: number, save = true) {
+    const target = clampMushafPage(page);
+    if (target !== currentPage) {
+      programmaticPageChangeRef.current = false;
+      setCurrentPage(target);
+      setSaveError(null);
+      setSaveStatus("idle");
+    }
+    if (save) scheduleAutoSave(target);
+  }
+
+  function handleSwipeMomentumEnd(event: NativeSyntheticEvent<NativeScrollEvent>) {
+    const idx = Math.round(event.nativeEvent.contentOffset.x / screenW);
+    updateVisiblePageFromScroll(idx + 1);
+  }
+
+  function handleScrollMomentumEnd(event: NativeSyntheticEvent<NativeScrollEvent>) {
+    const idx = Math.round(event.nativeEvent.contentOffset.y / scrollPageItemHeight);
+    updateVisiblePageFromScroll(idx + 1);
+  }
+
+  function handleScrollScroll(event: NativeSyntheticEvent<NativeScrollEvent>) {
+    const idx = Math.round(event.nativeEvent.contentOffset.y / scrollPageItemHeight);
+    updateVisiblePageFromScroll(idx + 1);
+  }
+
+  function updateMushafViewMode(mode: MushafViewMode) {
+    if (mode === mushafViewMode) return;
+    const nextProfileSettings = { ...profileSettings, mushafViewMode: mode };
+    programmaticPageChangeRef.current = true;
+    setMushafViewMode(mode);
+    setProfileSettings(nextProfileSettings);
+    void saveProfileSettings(childId, nextProfileSettings);
   }
 
   async function savePage(page: number) {
@@ -2317,53 +2443,130 @@ export default function MushafScreen() {
           <Text style={styles.loadingCenterText}>Loading saved page</Text>
         </View>
       ) : (
-        <FlatList
-          ref={listRef}
-          style={styles.pageList}
-          data={data}
-          keyExtractor={(page) => String(page)}
-          horizontal
-          pagingEnabled
-          inverted
-          showsHorizontalScrollIndicator={false}
-          initialScrollIndex={initialPage - 1}
-          getItemLayout={(_, index) => ({
-            length: screenW,
-            offset: screenW * index,
-            index,
-          })}
-          onScrollToIndexFailed={(info) => {
-            setTimeout(() => {
-              listRef.current?.scrollToIndex({ index: info.index, animated: false });
-            }, 80);
-          }}
-          windowSize={3}
-          initialNumToRender={1}
-          maxToRenderPerBatch={2}
-          onMomentumScrollEnd={(e) => {
-            const idx = Math.round(e.nativeEvent.contentOffset.x / screenW);
-            const page = clampMushafPage(idx + 1);
-            setCurrentPage(page);
-            scheduleAutoSave(page);
-          }}
-          renderItem={({ item }) => (
-            <PageView
-              pageNumber={item}
-              width={screenW}
-              toolMode={toolMode}
-              blindRevealed={blindRevealed}
-              highlightedVerseKeys={highlightedVerseKeys}
-              activeVerseKey={activeVerseKey}
-              onRevealBlindPage={() => setBlindRevealed(true)}
-              onOpenAyah={openAyahActions}
-              onStartRecite={reciteFromAyah}
-            />
-          )}
-        />
+        mushafViewMode === "scroll" ? (
+          <FlatList
+            key="reading-mushaf-scroll"
+            ref={listRef}
+            style={styles.pageList}
+            data={data}
+            keyExtractor={(page) => String(page)}
+            showsVerticalScrollIndicator={false}
+            initialScrollIndex={currentPage - 1}
+            getItemLayout={getScrollItemLayout}
+            onScrollToIndexFailed={(info) => {
+              setTimeout(() => {
+                try {
+                  listRef.current?.scrollToIndex({ index: info.index, animated: false });
+                } catch {
+                  listRef.current?.scrollToOffset({
+                    offset: Math.max(0, info.index * scrollPageItemHeight),
+                    animated: false,
+                  });
+                }
+              }, 80);
+            }}
+            onMomentumScrollEnd={handleScrollMomentumEnd}
+            onScroll={handleScrollScroll}
+            scrollEventThrottle={64}
+            windowSize={3}
+            initialNumToRender={1}
+            maxToRenderPerBatch={2}
+            renderItem={({ item }) => (
+              <View style={{ width: screenW, height: scrollPageItemHeight }}>
+                <PageView
+                  pageNumber={item}
+                  width={screenW}
+                  toolMode={toolMode}
+                  blindRevealed={blindRevealed}
+                  highlightedVerseKeys={highlightedVerseKeys}
+                  activeVerseKey={activeVerseKey}
+                  onRevealBlindPage={() => setBlindRevealed(true)}
+                  onOpenAyah={openAyahActions}
+                  onStartRecite={reciteFromAyah}
+                />
+              </View>
+            )}
+          />
+        ) : (
+          <FlatList
+            key="reading-mushaf-swipe"
+            ref={listRef}
+            style={styles.pageList}
+            data={data}
+            keyExtractor={(page) => String(page)}
+            horizontal
+            pagingEnabled
+            inverted
+            showsHorizontalScrollIndicator={false}
+            initialScrollIndex={currentPage - 1}
+            getItemLayout={getSwipeItemLayout}
+            onScrollToIndexFailed={(info) => {
+              setTimeout(() => {
+                try {
+                  listRef.current?.scrollToIndex({ index: info.index, animated: false });
+                } catch {
+                  listRef.current?.scrollToOffset({
+                    offset: Math.max(0, info.index * screenW),
+                    animated: false,
+                  });
+                }
+              }, 80);
+            }}
+            windowSize={3}
+            initialNumToRender={1}
+            maxToRenderPerBatch={2}
+            onMomentumScrollEnd={handleSwipeMomentumEnd}
+            renderItem={({ item }) => (
+              <PageView
+                pageNumber={item}
+                width={screenW}
+                toolMode={toolMode}
+                blindRevealed={blindRevealed}
+                highlightedVerseKeys={highlightedVerseKeys}
+                activeVerseKey={activeVerseKey}
+                onRevealBlindPage={() => setBlindRevealed(true)}
+                onOpenAyah={openAyahActions}
+                onStartRecite={reciteFromAyah}
+              />
+            )}
+          />
+        )
       )}
 
       {initialPage !== null ? (
         <View style={styles.controlSlot}>
+          <View style={styles.viewModeSegment}>
+            {(["swipe", "scroll"] as const).map((mode) => {
+              const active = mushafViewMode === mode;
+              return (
+                <Pressable
+                  key={mode}
+                  style={[
+                    styles.viewModePill,
+                    active && styles.viewModePillSelected,
+                  ]}
+                  onPress={() => updateMushafViewMode(mode)}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: active }}
+                  accessibilityLabel={`Use ${mode} Mushaf view`}
+                >
+                  <Ionicons
+                    name={mode === "swipe" ? "swap-horizontal-outline" : "reorder-four-outline"}
+                    size={15}
+                    color={active ? "#ffffff" : "#475569"}
+                  />
+                  <Text
+                    style={[
+                      styles.viewModePillText,
+                      active && styles.viewModePillTextSelected,
+                    ]}
+                  >
+                    {mode === "swipe" ? "Swipe" : "Scroll"}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
           {audioPlayer ? (
             <MushafAudioBar
               player={audioPlayer}
@@ -2724,6 +2927,39 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 10,
+  },
+  viewModeSegment: {
+    alignSelf: "center",
+    minHeight: 38,
+    borderRadius: 999,
+    backgroundColor: "rgba(255, 255, 255, 0.86)",
+    borderWidth: 1,
+    borderColor: "#e3d5bd",
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 3,
+    marginBottom: 10,
+  },
+  viewModePill: {
+    minWidth: 92,
+    minHeight: 32,
+    borderRadius: 999,
+    alignItems: "center",
+    justifyContent: "center",
+    flexDirection: "row",
+    gap: 5,
+    paddingHorizontal: 12,
+  },
+  viewModePillSelected: {
+    backgroundColor: "#2563eb",
+  },
+  viewModePillText: {
+    fontSize: 12,
+    color: "#475569",
+    fontWeight: "900",
+  },
+  viewModePillTextSelected: {
+    color: "#ffffff",
   },
   toolButton: {
     minWidth: 108,
