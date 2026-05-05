@@ -86,6 +86,7 @@ import { CelebrationOverlay } from "@/src/components/celebration-overlay";
 import { MushafTestActionSheet } from "@/src/components/mushaf-test-action-sheet";
 import {
   MushafTestPageView,
+  type AyahMemorizationState,
   type ReciteRange,
   type ReciteWordPointer,
 } from "@/src/components/mushaf-test-page-view";
@@ -107,6 +108,7 @@ const MUSHAF_WORD_FONT_SIZE = 20;
 const MUSHAF_END_MARKER_FONT_SIZE = 16;
 const MUSHAF_LINE_HEIGHT = 38;
 const MUSHAF_LINE_FIT_INSET = 2;
+const MEMORIZED_STRENGTH_THRESHOLD = 0.7;
 type InternalPhase = "single" | "cumulative";
 type DiscoveryFilter = "all" | "current" | "in_progress" | "not_started" | "memorized" | "needs_review";
 type AyahTone = "white" | "red" | "orange" | "green";
@@ -504,6 +506,59 @@ function hasFullSurahMemorized(memorizedAyahs: number[], totalVerses: number) {
   return true;
 }
 
+function classifyMemorizationStrength(strength: number): AyahMemorizationState | null {
+  if (!Number.isFinite(strength) || strength <= 0) return null;
+  const normalizedStrength =
+    strength > 1 || Number.isInteger(strength) ? strength / 5 : strength;
+  return normalizedStrength >= MEMORIZED_STRENGTH_THRESHOLD
+    ? "memorized"
+    : "in-progress";
+}
+
+function buildMemorizationStateMap(
+  progress: readonly MemorizationProgress[],
+): ReadonlyMap<string, AyahMemorizationState> {
+  const map = new Map<string, AyahMemorizationState>();
+
+  for (const record of progress) {
+    const surah = record.surahNumber;
+    if (!Number.isInteger(surah) || surah <= 0) continue;
+
+    const memorizedSet = new Set(
+      (record.memorizedAyahs ?? []).filter(
+        (ayah) => Number.isInteger(ayah) && ayah > 0,
+      ),
+    );
+    const strengths = record.ayahStrengths ?? {};
+
+    for (const ayah of memorizedSet) {
+      map.set(`${surah}:${ayah}`, "memorized");
+    }
+
+    for (const [ayahKey, rawStrength] of Object.entries(strengths)) {
+      const ayah = Number(ayahKey);
+      const strength = Number(rawStrength);
+      if (!Number.isInteger(ayah) || ayah <= 0) continue;
+
+      const key = `${surah}:${ayah}`;
+      if (map.get(key) === "memorized") continue;
+
+      const state = classifyMemorizationStrength(strength);
+      if (state) map.set(key, state);
+    }
+
+    const hasPerAyahData =
+      memorizedSet.size > 0 || Object.keys(strengths).length > 0;
+    if (record.status === "in_progress" && !hasPerAyahData) {
+      for (let ayah = 1; ayah <= record.totalVerses; ayah += 1) {
+        map.set(`${surah}:${ayah}`, "in-progress");
+      }
+    }
+  }
+
+  return map;
+}
+
 function buildWorkTarget(work: NewMemorization): SessionTarget {
   const surahNumber = work.currentWorkSurahNumber ?? work.surahNumber;
   const ayahStart = work.currentWorkAyahStart ?? work.ayahStart;
@@ -820,6 +875,13 @@ export default function MemorizationScreen() {
 
   // Themed styles factory — recomputed only when themeKey changes
   const themedStyles = useMemo(() => makeThemedStyles(THEMES[themeKey]), [themeKey]);
+  const memorizationStateMap = useMemo(
+    () =>
+      discoveryState.status === "ready"
+        ? buildMemorizationStateMap(discoveryState.progress)
+        : undefined,
+    [discoveryState],
+  );
 
   // Audio + RAF refs
   const soundRef = useRef<Audio.Sound | null>(null);
@@ -5019,6 +5081,7 @@ export default function MemorizationScreen() {
           reciteActive={reciteMode}
           reciteCurrentWord={reciteCurrentWord}
           reciteRange={reciteRange}
+          memorizationStateMap={memorizationStateMap}
           onWordSeek={(word) => {
             void handleTestMushafWordSeek(word);
           }}
