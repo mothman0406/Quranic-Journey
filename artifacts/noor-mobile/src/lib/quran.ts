@@ -18,6 +18,13 @@ export type ApiVerse = {
   translations?: Array<{ text?: string }>;
 };
 
+export type ApiAyahWithWords = {
+  verse_number: number;
+  verse_key: string;
+  text_uthmani: string;
+  words: ApiWord[];
+};
+
 export type ApiPageVerse = {
   verse_key: string;
   verse_number: number;
@@ -54,6 +61,7 @@ export function cleanTranslationHtml(raw: string): string {
 }
 
 const ayahTranslationCache = new Map<string, string>();
+const ayahWithWordsCache = new Map<string, ApiAyahWithWords>();
 
 export async function fetchAyahTranslation(
   verseKey: string,
@@ -79,6 +87,58 @@ export async function fetchAyahTranslation(
   } finally {
     clearTimeout(timer);
   }
+}
+
+function getWordTranslationText(translation: ApiWord["translation"]): string {
+  if (!translation) return "";
+  return typeof translation === "string" ? translation : translation.text ?? "";
+}
+
+export async function fetchAyahWithWords(verseKey: string): Promise<ApiAyahWithWords> {
+  const cached = ayahWithWordsCache.get(verseKey);
+  if (cached) return cached;
+
+  const [, ayahPart] = verseKey.split(":");
+  const fallbackAyah = Number(ayahPart);
+  const ac = new AbortController();
+  const timer = setTimeout(() => ac.abort(), 10000);
+  try {
+    const res = await fetch(
+      `https://api.quran.com/api/v4/verses/by_key/${verseKey}?words=true&fields=text_uthmani&word_fields=text_uthmani,text_uthmani_tajweed,translation,line_number,char_type_name,position&word_translation_language=en`,
+      { signal: ac.signal },
+    );
+    if (!res.ok) throw new Error(`Quran.com API ${res.status}`);
+    const data = (await res.json()) as { verse?: Partial<ApiAyahWithWords> };
+    const verse = data.verse;
+    if (!verse) throw new Error("Ayah unavailable");
+
+    const normalized: ApiAyahWithWords = {
+      verse_key: verse.verse_key ?? verseKey,
+      verse_number: verse.verse_number ?? (Number.isFinite(fallbackAyah) ? fallbackAyah : 0),
+      text_uthmani: verse.text_uthmani ?? "",
+      words: verse.words ?? [],
+    };
+    ayahWithWordsCache.set(verseKey, normalized);
+    return normalized;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+export async function fetchWordTranslation(
+  surahNumber: number,
+  ayahNumber: number,
+  position: number,
+): Promise<string> {
+  const verse = await fetchAyahWithWords(`${surahNumber}:${ayahNumber}`);
+  const word =
+    verse.words.find(
+      (candidate) => candidate.char_type_name === "word" && candidate.position === position,
+    ) ??
+    verse.words.find((candidate) => candidate.position === position);
+  const translation = cleanTranslationHtml(getWordTranslationText(word?.translation));
+  if (!translation) throw new Error("Word translation unavailable");
+  return translation;
 }
 
 export async function fetchVersesByPage(pageNumber: number): Promise<ApiPageVerse[]> {

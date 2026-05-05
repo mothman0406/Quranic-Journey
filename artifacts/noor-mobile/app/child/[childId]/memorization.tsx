@@ -49,6 +49,7 @@ import {
 } from "@/src/lib/memorization";
 import {
   fetchAyahTranslation,
+  fetchAyahWithWords,
   fetchSurahVerses,
   fetchVersesByPage,
   fetchVersesByKeys,
@@ -65,7 +66,7 @@ import {
   type ThemeKey,
   type MushafTheme,
 } from "@/src/lib/mushaf-theme";
-import { MUSHAF_SURAHS, clampMushafPage } from "@/src/lib/mushaf";
+import { MUSHAF_SURAHS, clampMushafPage, getMushafPageForVerse } from "@/src/lib/mushaf";
 import { findReciter, RECITERS } from "@/src/lib/reciters";
 import {
   clearMemorizationSessionBookmark,
@@ -81,6 +82,7 @@ import {
 } from "@/src/lib/settings";
 import { extractTajweedColor } from "@/src/lib/tajweed";
 import { CelebrationOverlay } from "@/src/components/celebration-overlay";
+import { MushafTestActionSheet } from "@/src/components/mushaf-test-action-sheet";
 import { MushafTestPageView } from "@/src/components/mushaf-test-page-view";
 import {
   saveMushafAyahBookmark,
@@ -721,6 +723,8 @@ export default function MemorizationScreen() {
   const [tappedWord, setTappedWord] = useState<TappedWordTarget | null>(null);
   const [wordAudioLoadingKey, setWordAudioLoadingKey] = useState<string | null>(null);
   const [tappedAyah, setTappedAyah] = useState<AyahSheetTarget | null>(null);
+  const [testMushafSheetTarget, setTestMushafSheetTarget] =
+    useState<AyahSheetTarget | null>(null);
   const [playbackRate, setPlaybackRate] = useState<number>(1.0);
   const playbackRateRef = useRef(playbackRate);
   const [internalPhase, setInternalPhase] = useState<InternalPhase>("single");
@@ -845,6 +849,7 @@ export default function MemorizationScreen() {
   useEffect(() => { setRevealedVerses(new Set()); }, [viewMode]);
   useEffect(() => { setRevealedVerses(new Set()); }, [blindMode]);
   useEffect(() => { setTappedWord(null); }, [viewMode]);
+  useEffect(() => { setTestMushafSheetTarget(null); }, [viewMode]);
   useEffect(() => { setTappedWord(null); }, [playingVerseNumber]);
   useEffect(() => {
     if (blindMode || reciteMode) setTappedWord(null);
@@ -1111,6 +1116,7 @@ export default function MemorizationScreen() {
     setPauseSheetOpen(false);
     setPauseCompletedAyahEnd(null);
     setTappedAyah(null);
+    setTestMushafSheetTarget(null);
     updateReadyToReciteSheet(false);
     setCompletionSheetOpen(false);
     setSelectedQuality(null);
@@ -3226,6 +3232,48 @@ export default function MemorizationScreen() {
     };
   }
 
+  function getKnownAyahTextUthmani(targetSurah: number, targetAyah: number, pageNumber: number | null) {
+    if (targetSurah === surahNumber) {
+      const sessionText = getAyahTextUthmani(targetAyah);
+      if (sessionText) return sessionText;
+    }
+
+    if (pageNumber !== null) {
+      const pageText = pageWordsMap
+        .get(pageNumber)
+        ?.find((verse) => verse.verse_key === `${targetSurah}:${targetAyah}`)
+        ?.text_uthmani;
+      if (pageText) return pageText;
+    }
+
+    return "";
+  }
+
+  function buildTestMushafSheetTarget(word: {
+    surah: number;
+    ayah: number;
+    position: number;
+  }): AyahSheetTarget {
+    const pageNumber = getMushafPageForVerse(word.surah, word.ayah);
+    return {
+      verseKey: `${word.surah}:${word.ayah}`,
+      surahNumber: word.surah,
+      ayahNumber: word.ayah,
+      pageNumber,
+      textUthmani: getKnownAyahTextUthmani(word.surah, word.ayah, pageNumber),
+    };
+  }
+
+  async function ensureAyahActionText(target: AyahSheetTarget): Promise<AyahSheetTarget> {
+    if (target.textUthmani) return target;
+    try {
+      const verse = await fetchAyahWithWords(target.verseKey);
+      return { ...target, textUthmani: verse.text_uthmani };
+    } catch {
+      return target;
+    }
+  }
+
   function ensureAyahTranslation(verseKey: string) {
     const existing = ayahTranslations[verseKey];
     if (existing?.status === "loading" || existing?.status === "ready") return;
@@ -3406,6 +3454,28 @@ export default function MemorizationScreen() {
     Clipboard.setString(`${target.textUthmani}\n— Quran ${target.verseKey}`);
     setTappedAyah(null);
     Alert.alert("Copied", `Copied Quran ${target.verseKey}.`);
+  }
+
+  function openTestMushafActionSheet(word: {
+    surah: number;
+    ayah: number;
+    position: number;
+  }) {
+    if (reciteModeRef.current) return;
+    setSettingsOpen(false);
+    setTranslationPopup(null);
+    setTappedAyah(null);
+    setTestMushafSheetTarget(buildTestMushafSheetTarget(word));
+  }
+
+  async function withResolvedTestMushafTarget(
+    action: (target: AyahSheetTarget) => void | Promise<void>,
+  ) {
+    const target = testMushafSheetTarget;
+    if (!target) return;
+    setTestMushafSheetTarget(null);
+    const resolvedTarget = await ensureAyahActionText(target);
+    await action(resolvedTarget);
   }
 
   async function handleJumpToAyah(verseNumber: number) {
@@ -4591,6 +4661,9 @@ export default function MemorizationScreen() {
           onWordSeek={(word) => {
             void handleTestMushafWordSeek(word);
           }}
+          onWordLongPress={openTestMushafActionSheet}
+          actionSheetVisible={testMushafSheetTarget !== null}
+          onActionSheetBackdropPress={() => setTestMushafSheetTarget(null)}
         />
       ) : (
         <View style={styles.mushafPagerShell}>
@@ -5276,6 +5349,30 @@ export default function MemorizationScreen() {
           </View>
         ) : null}
       </Modal>
+
+      {testMushafSheetTarget ? (
+        <MushafTestActionSheet
+          visible={testMushafSheetTarget !== null}
+          onClose={() => setTestMushafSheetTarget(null)}
+          surah={testMushafSheetTarget.surahNumber}
+          ayah={testMushafSheetTarget.ayahNumber}
+          surahName={getBookmarkSurahName(testMushafSheetTarget.surahNumber, chaptersMap)}
+          onListen={() => {
+            void withResolvedTestMushafTarget(handleListenToAyah);
+          }}
+          onBookmark={() => {
+            void withResolvedTestMushafTarget(handleBookmarkAyah);
+          }}
+          onViewInFullMushaf={() => {
+            void withResolvedTestMushafTarget(handleViewInFullMushaf);
+          }}
+          onCopy={() => {
+            void withResolvedTestMushafTarget((target) => {
+              handleCopyAyah(target);
+            });
+          }}
+        />
+      ) : null}
 
       {/* Settings bottom sheet */}
       <Modal

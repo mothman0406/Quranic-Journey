@@ -25,6 +25,7 @@ import {
   getQuranCom1405PageImage,
 } from "@/src/lib/quran-com-1405-page-images";
 import { getMushafPageForVerse } from "@/src/lib/mushaf";
+import { fetchWordTranslation } from "@/src/lib/quran";
 
 type MushafTestWordTarget = {
   surah: number;
@@ -61,6 +62,8 @@ type MushafTestPageViewProps = {
   // Phase 1d: called when user taps a word; should seek/start audio at that word.
   onWordSeek?: (word: MushafTestWordTarget) => void;
   onWordLongPress?: (word: MushafTestWordTarget) => void;
+  actionSheetVisible?: boolean;
+  onActionSheetBackdropPress?: () => void;
 };
 
 type PageLayout = {
@@ -75,6 +78,13 @@ type WordOverlayRect = MushafTestWordTarget & {
   left: number;
   width: number;
   height: number;
+};
+
+type ScaledWordRect = Pick<WordOverlayRect, "top" | "left" | "width" | "height">;
+
+type WordTranslationTarget = MushafTestWordTarget & {
+  pageNumber: number;
+  rect: ScaledWordRect;
 };
 
 const PAGE_NUMBERS = Array.from(
@@ -165,18 +175,31 @@ function MushafTestPage({
   flashedWord,
   flashOpacity,
   currentAudioWord,
+  actionSheetVisible,
+  wordTranslationTarget,
+  wordTranslationText,
+  wordTranslationLoading,
   onWordTap,
   onWordLongPress,
+  onDismissWordTranslation,
+  onActionSheetBackdropPress,
 }: {
   pageNumber: number;
   width: number;
   flashedWord: FlashedWord | null;
   flashOpacity: Animated.Value;
   currentAudioWord?: AudioWordPointer | null;
-  onWordTap: (pageNumber: number, word: QuranCom1405WordRect) => void;
+  actionSheetVisible: boolean;
+  wordTranslationTarget: WordTranslationTarget | null;
+  wordTranslationText: string | null;
+  wordTranslationLoading: boolean;
+  onWordTap: (pageNumber: number, word: QuranCom1405WordRect, scaledRect: ScaledWordRect) => void;
   onWordLongPress?: (word: MushafTestWordTarget) => void;
+  onDismissWordTranslation: () => void;
+  onActionSheetBackdropPress?: () => void;
 }) {
   const [containerLayout, setContainerLayout] = useState<PageLayout>({ width: 0, height: 0 });
+  const suppressedLongPressKeyRef = useRef<string | null>(null);
   const imageSource = getQuranCom1405PageImage(pageNumber);
   const imageLayout = useMemo(
     () => getContainedPageLayout(containerLayout),
@@ -212,6 +235,31 @@ function MushafTestPage({
   // to make audio-following distinct from user-initiated feedback.
   const audioHighlightOpacity = useRef(new Animated.Value(0)).current;
   const audioHighlightAnimRef = useRef<Animated.CompositeAnimation | null>(null);
+  const activeWordTranslationTarget =
+    wordTranslationTarget?.pageNumber === pageNumber ? wordTranslationTarget : null;
+  const popoverLayout = useMemo(() => {
+    if (!activeWordTranslationTarget) return null;
+    const popoverWidth = Math.min(200, Math.max(140, imageLayout.width - 16));
+    const left = Math.max(
+      8,
+      Math.min(
+        activeWordTranslationTarget.rect.left +
+          activeWordTranslationTarget.rect.width / 2 -
+          popoverWidth / 2,
+        Math.max(8, imageLayout.width - popoverWidth - 8),
+      ),
+    );
+    const shouldRenderAbove = activeWordTranslationTarget.rect.top > 74;
+    const top = shouldRenderAbove
+      ? Math.max(8, activeWordTranslationTarget.rect.top - 62)
+      : Math.min(
+          Math.max(8, imageLayout.height - 70),
+          activeWordTranslationTarget.rect.top +
+            activeWordTranslationTarget.rect.height +
+            8,
+        );
+    return { top, left, width: popoverWidth };
+  }, [activeWordTranslationTarget, imageLayout.height, imageLayout.width]);
 
   useEffect(() => {
     audioHighlightAnimRef.current?.stop();
@@ -287,6 +335,15 @@ function MushafTestPage({
           </View>
         )}
 
+        {actionSheetVisible ? (
+          <Pressable
+            style={styles.sheetBackdropLayer}
+            onPress={onActionSheetBackdropPress ?? onDismissWordTranslation}
+            accessibilityRole="button"
+            accessibilityLabel="Close ayah actions"
+          />
+        ) : null}
+
         {flashedRect ? (
           <Animated.View
             pointerEvents="none"
@@ -315,6 +372,7 @@ function MushafTestPage({
               accessible={false}
               style={[
                 styles.wordOverlay,
+                actionSheetVisible && styles.wordOverlayAboveBackdrop,
                 {
                   top: rect.top,
                   left: rect.left,
@@ -322,8 +380,27 @@ function MushafTestPage({
                   height: rect.height,
                 },
               ]}
-              onPress={() => onWordTap(pageNumber, rect.wordRect)}
-              onLongPress={() => onWordLongPress?.(word)}
+              onPress={() => {
+                if (suppressedLongPressKeyRef.current === rect.key) {
+                  suppressedLongPressKeyRef.current = null;
+                  return;
+                }
+                onWordTap(pageNumber, rect.wordRect, {
+                  top: rect.top,
+                  left: rect.left,
+                  width: rect.width,
+                  height: rect.height,
+                });
+              }}
+              onLongPress={() => {
+                suppressedLongPressKeyRef.current = rect.key;
+                setTimeout(() => {
+                  if (suppressedLongPressKeyRef.current === rect.key) {
+                    suppressedLongPressKeyRef.current = null;
+                  }
+                }, 1000);
+                onWordLongPress?.(word);
+              }}
             />
           );
         })}
@@ -343,6 +420,30 @@ function MushafTestPage({
             ]}
           />
         ) : null}
+
+        {activeWordTranslationTarget && popoverLayout ? (
+          <View
+            pointerEvents="none"
+            style={[
+              styles.wordTranslationPopover,
+              {
+                top: popoverLayout.top,
+                left: popoverLayout.left,
+                width: popoverLayout.width,
+              },
+            ]}
+          >
+            <Text style={styles.wordTranslationMeta}>
+              {activeWordTranslationTarget.surah}:{activeWordTranslationTarget.ayah} word{" "}
+              {activeWordTranslationTarget.position}
+            </Text>
+            <Text style={styles.wordTranslationText}>
+              {wordTranslationLoading
+                ? "Loading..."
+                : wordTranslationText ?? "Translation unavailable"}
+            </Text>
+          </View>
+        ) : null}
       </View>
     </View>
   );
@@ -355,6 +456,8 @@ export function MushafTestPageView({
   onWordPress,
   onWordSeek,
   onWordLongPress,
+  actionSheetVisible = false,
+  onActionSheetBackdropPress,
 }: MushafTestPageViewProps) {
   const { width: screenWidth } = useWindowDimensions();
   const pageWidth = Math.max(1, Math.round(screenWidth));
@@ -362,9 +465,14 @@ export function MushafTestPageView({
   const listRef = useRef<FlatList<number>>(null);
   const preloadedPagesRef = useRef<Set<number>>(new Set());
   const [flashedWord, setFlashedWord] = useState<FlashedWord | null>(null);
+  const [wordTranslationTarget, setWordTranslationTarget] =
+    useState<WordTranslationTarget | null>(null);
+  const [wordTranslationText, setWordTranslationText] = useState<string | null>(null);
+  const [wordTranslationLoading, setWordTranslationLoading] = useState(false);
   const flashOpacity = useRef(new Animated.Value(0)).current;
   const flashAnimationRef = useRef<Animated.CompositeAnimation | null>(null);
   const flashTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const wordTranslationRequestRef = useRef(0);
 
   // Stable ref so the auto-paging effect doesn't need onPageChange in its deps.
   const onPageChangeRef = useRef(onPageChange);
@@ -468,7 +576,18 @@ export function MushafTestPageView({
     };
   }, [flashOpacity]);
 
-  function handleWordTap(pageNumber: number, word: QuranCom1405WordRect) {
+  function clearWordTranslationPopover() {
+    wordTranslationRequestRef.current += 1;
+    setWordTranslationTarget(null);
+    setWordTranslationText(null);
+    setWordTranslationLoading(false);
+  }
+
+  useEffect(() => {
+    if (!actionSheetVisible) clearWordTranslationPopover();
+  }, [actionSheetVisible]);
+
+  function handleWordTap(pageNumber: number, word: QuranCom1405WordRect, scaledRect: ScaledWordRect) {
     const [surah, ayah, position, _line, minX, maxX, minY, maxY] = word;
     const target = { surah, ayah, position };
     const next: FlashedWord = { pageNumber, surah, ayah, position, minX, maxX, minY, maxY };
@@ -500,6 +619,35 @@ export function MushafTestPageView({
     });
 
     onWordPress?.(target);
+    if (actionSheetVisible) {
+      const requestId = wordTranslationRequestRef.current + 1;
+      wordTranslationRequestRef.current = requestId;
+      setWordTranslationTarget({
+        pageNumber,
+        surah,
+        ayah,
+        position,
+        rect: scaledRect,
+      });
+      setWordTranslationText(null);
+      setWordTranslationLoading(true);
+      fetchWordTranslation(surah, ayah, position)
+        .then((translation) => {
+          if (wordTranslationRequestRef.current !== requestId) return;
+          setWordTranslationText(translation);
+        })
+        .catch(() => {
+          if (wordTranslationRequestRef.current !== requestId) return;
+          setWordTranslationText(null);
+        })
+        .finally(() => {
+          if (wordTranslationRequestRef.current === requestId) {
+            setWordTranslationLoading(false);
+          }
+        });
+      return;
+    }
+
     onWordSeek?.(target);
   }
 
@@ -522,6 +670,7 @@ export function MushafTestPageView({
       flashOpacity.stopAnimation();
       flashOpacity.setValue(0);
       setFlashedWord(null);
+      clearWordTranslationPopover();
     }
     onPageChange(nextPage);
   }
@@ -562,8 +711,14 @@ export function MushafTestPageView({
             flashedWord={flashedWord}
             flashOpacity={flashOpacity}
             currentAudioWord={currentAudioWord}
+            actionSheetVisible={actionSheetVisible}
+            wordTranslationTarget={wordTranslationTarget}
+            wordTranslationText={wordTranslationText}
+            wordTranslationLoading={wordTranslationLoading}
             onWordTap={handleWordTap}
             onWordLongPress={onWordLongPress}
+            onDismissWordTranslation={clearWordTranslationPopover}
+            onActionSheetBackdropPress={onActionSheetBackdropPress}
           />
         )}
       />
@@ -611,6 +766,14 @@ const styles = StyleSheet.create({
     backgroundColor: "transparent",
     zIndex: 2,
   },
+  wordOverlayAboveBackdrop: {
+    zIndex: 6,
+  },
+  sheetBackdropLayer: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "transparent",
+    zIndex: 4,
+  },
   flashHighlight: {
     position: "absolute",
     // Amber (#fbbf24) is the user-initiated tap-flash from Phase 1b.
@@ -624,6 +787,27 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(34, 197, 94, 0.35)",
     borderRadius: 4,
     zIndex: 3,
+  },
+  wordTranslationPopover: {
+    position: "absolute",
+    borderRadius: 10,
+    backgroundColor: "rgba(15,23,42,0.92)",
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    zIndex: 7,
+  },
+  wordTranslationMeta: {
+    marginBottom: 3,
+    color: "#cbd5e1",
+    fontSize: 10,
+    lineHeight: 13,
+    fontWeight: "800",
+  },
+  wordTranslationText: {
+    color: "#ffffff",
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: "800",
   },
   debugToast: {
     position: "absolute",
