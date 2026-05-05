@@ -7,6 +7,8 @@
     "dev": "export NODE_ENV=development && node --env-file=.env --watch --import tsx/esm src/index.ts",
     "build": "node ./build.mjs",
     "start": "node --enable-source-maps ./dist/index.mjs",
+    "generate:quran-com-pages": "tsx src/scripts/generate-quran-com-1405-pages.ts",
+    "migrate:quran-com-pages": "tsx src/scripts/migrate-quran-com-1405-pages.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
