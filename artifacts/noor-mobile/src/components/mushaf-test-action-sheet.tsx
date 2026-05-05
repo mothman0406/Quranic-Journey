@@ -45,6 +45,7 @@ type MushafTestActionSheetProps = {
   currentAudioWord?: AudioWordPointer | null;
   isAudioActive?: boolean;
   onListen: () => void;
+  onPlayFromHere: () => void;
   onBookmark: () => void;
   onViewInFullMushaf: () => void;
   onCopy: () => void;
@@ -89,6 +90,7 @@ export function MushafTestActionSheet({
   surahName,
   currentAudioWord,
   onListen,
+  onPlayFromHere,
   onBookmark,
   onViewInFullMushaf,
   onCopy,
@@ -372,6 +374,12 @@ export function MushafTestActionSheet({
                 icon="play-circle-outline"
                 color="#2563eb"
                 onPress={onListen}
+              />
+              <ActionRow
+                label="Play from here"
+                icon="play-skip-forward-outline"
+                color="#2563eb"
+                onPress={onPlayFromHere}
               />
               <ActionRow
                 label="Bookmark"

@@ -140,6 +140,19 @@ type AyahSheetTarget = {
   textUthmani: string;
 };
 
+type TestMushafPlaybackTarget = {
+  verseKey: string;
+  surahNumber: number;
+  ayahNumber: number;
+  pageNumber: number;
+};
+
+type TestMushafPlaybackState = {
+  token: number;
+  queue: TestMushafPlaybackTarget[];
+  index: number;
+};
+
 type TappedWordTarget = {
   key: string;
   arabic: string;
@@ -536,6 +549,44 @@ async function fetchMushafPageVerses(pageNumber: number) {
     : fetchVersesByPage(pageNumber);
 }
 
+function getResolvedMushafPageForVerse(surahNumber: number, ayahNumber: number) {
+  return clampMushafPage(
+    getMushafPageForVerse(surahNumber, ayahNumber) ??
+      MUSHAF_SURAHS[surahNumber - 1]?.startPage ??
+      1,
+  );
+}
+
+function buildTestMushafPlaybackTarget(
+  surahNumber: number,
+  ayahNumber: number,
+): TestMushafPlaybackTarget | null {
+  const surah = MUSHAF_SURAHS[surahNumber - 1];
+  if (!surah || ayahNumber < 1 || ayahNumber > surah.verseCount) return null;
+
+  return {
+    verseKey: `${surahNumber}:${ayahNumber}`,
+    surahNumber,
+    ayahNumber,
+    pageNumber: getResolvedMushafPageForVerse(surahNumber, ayahNumber),
+  };
+}
+
+function buildTestMushafSurahPlaybackQueue(
+  start: TestMushafPlaybackTarget,
+): TestMushafPlaybackTarget[] {
+  const surah = MUSHAF_SURAHS[start.surahNumber - 1];
+  if (!surah) return [start];
+
+  const queue: TestMushafPlaybackTarget[] = [];
+  for (let ayah = start.ayahNumber; ayah <= surah.verseCount; ayah += 1) {
+    const target = buildTestMushafPlaybackTarget(start.surahNumber, ayah);
+    if (target) queue.push(target);
+  }
+
+  return queue.length > 0 ? queue : [start];
+}
+
 function buildBookmarkTarget(bookmark: MemorizationSessionBookmark): SessionTarget {
   const pages =
     typeof bookmark.pageStart === "number" && typeof bookmark.pageEnd === "number"
@@ -762,6 +813,7 @@ export default function MemorizationScreen() {
   // Audio + RAF refs
   const soundRef = useRef<Audio.Sound | null>(null);
   const wordAudioSoundRef = useRef<Audio.Sound | null>(null);
+  const testMushafPlaybackRef = useRef<TestMushafPlaybackState | null>(null);
   const rafIdRef = useRef<number>(0);
   const positionRef = useRef(0);
   const durationRef = useRef(0);
@@ -1719,6 +1771,7 @@ export default function MemorizationScreen() {
 
   async function stopAudioCompletely() {
     invalidatePlaybackRequest();
+    testMushafPlaybackRef.current = null;
     cancelAnimationFrame(rafIdRef.current);
     if (advanceTimeoutRef.current) {
       clearTimeout(advanceTimeoutRef.current);
@@ -1877,6 +1930,7 @@ export default function MemorizationScreen() {
   async function playVerse(verseNum: number) {
     if (reciteModeRef.current) return;
     if (!surahNumber) return;
+    testMushafPlaybackRef.current = null;
     const requestId = playbackRequestIdRef.current + 1;
     playbackRequestIdRef.current = requestId;
     isLoadingRef.current = true;
@@ -2045,7 +2099,7 @@ export default function MemorizationScreen() {
       isPlayingRef.current = true;
       setIsPlaying(true);
       await soundRef.current.playAsync();
-      startRAF();
+      if (!testMushafPlaybackRef.current) startRAF();
     } else {
       setCurrentRepeat(1);
       await playVerse(playingVerseNumberRef.current);
@@ -2090,6 +2144,9 @@ export default function MemorizationScreen() {
     position: number;
   }) {
     if (reciteModeRef.current || isLoadingRef.current) return;
+    if (testMushafPlaybackRef.current) {
+      await stopAudioCompletely();
+    }
 
     const verseKey = `${word.surah}:${word.ayah}`;
     if (
@@ -2108,6 +2165,223 @@ export default function MemorizationScreen() {
     }
 
     await handlePageWordTap(verseKey, word.position);
+  }
+
+  async function getTestMushafPlaybackSegments(target: TestMushafPlaybackTarget) {
+    const timings = await fetchTimingsForReciter(reciterRef.current, target.surahNumber);
+    if (timings.kind === "chapter") {
+      return timings.map.get(target.verseKey) ?? [];
+    }
+    return timings.fetch(target.ayahNumber);
+  }
+
+  function updateTestMushafPlaybackHighlight(
+    target: TestMushafPlaybackTarget,
+    segments: Segment[],
+    positionMillis: number,
+    durationMillis?: number,
+  ) {
+    positionRef.current = positionMillis;
+    if (durationMillis && durationMillis > 0) durationRef.current = durationMillis;
+    const duration = durationMillis && durationMillis > 0 ? durationMillis : durationRef.current;
+    if (duration <= 0) return;
+
+    const frac = positionMillis / duration;
+    let found = -1;
+
+    if (segments.length > 0) {
+      for (const [wordIdx, start, end] of segments) {
+        if (frac >= start && frac < end) {
+          found = wordIdx - 1;
+          break;
+        }
+      }
+      if (found === -1 && frac > 0) {
+        const last = segments[segments.length - 1];
+        if (last && frac >= last[1]) found = last[0] - 1;
+      }
+    } else if (target.surahNumber === surahNumberRef.current) {
+      const wordCount = displayWordsMapRef.current.get(target.ayahNumber)?.length ?? 0;
+      if (wordCount > 0) {
+        const shiftedFrac = Math.min((positionMillis + 500) / duration, 1);
+        found = Math.min(Math.floor(shiftedFrac * wordCount), wordCount - 1);
+      }
+    }
+
+    setHighlightedWord(found);
+    setHighlightedPage(
+      found === -1
+        ? null
+        : {
+            verseKey: target.verseKey,
+            position: found + 1,
+          },
+    );
+  }
+
+  async function finishTestMushafPlaybackAyah(token: number, finishedSound: Audio.Sound | null) {
+    const playback = testMushafPlaybackRef.current;
+    if (
+      !playback ||
+      playback.token !== token ||
+      token !== playbackRequestIdRef.current ||
+      soundRef.current !== finishedSound
+    ) {
+      try {
+        await finishedSound?.unloadAsync();
+      } catch {
+        // ignore stale sheet audio
+      }
+      return;
+    }
+
+    soundRef.current = null;
+    try {
+      await finishedSound?.unloadAsync();
+    } catch {
+      // ignore stale sheet audio
+    }
+
+    const nextIndex = playback.index + 1;
+    if (nextIndex < playback.queue.length) {
+      await startTestMushafAudioQueueAt(playback.queue, nextIndex, token);
+      return;
+    }
+
+    testMushafPlaybackRef.current = null;
+    isPlayingRef.current = false;
+    setIsPlaying(false);
+    setHighlightedWord(-1);
+    setHighlightedPage(null);
+    positionRef.current = 0;
+    durationRef.current = 0;
+    segsRef.current = [];
+    isLoadingRef.current = false;
+  }
+
+  async function startTestMushafAudioQueueAt(
+    queue: TestMushafPlaybackTarget[],
+    index: number,
+    token: number,
+  ) {
+    const target = queue[index];
+    if (!target) return;
+
+    playbackRequestIdRef.current = token;
+    testMushafPlaybackRef.current = { token, queue, index };
+    isLoadingRef.current = true;
+    autoPlayRef.current = false;
+    pendingSeekPositionRef.current = null;
+    setCurrentRepeat(1);
+    cancelAnimationFrame(rafIdRef.current);
+    setHighlightedWord(-1);
+    setHighlightedPage(null);
+    positionRef.current = 0;
+    durationRef.current = 0;
+    updateDisplayedMushafPage(target.pageNumber);
+
+    try {
+      const previousSound = soundRef.current;
+      if (previousSound) {
+        await previousSound.unloadAsync();
+        if (soundRef.current === previousSound) soundRef.current = null;
+      }
+
+      const segments = await getTestMushafPlaybackSegments(target);
+      if (
+        token !== playbackRequestIdRef.current ||
+        testMushafPlaybackRef.current?.token !== token
+      ) {
+        return;
+      }
+      segsRef.current = segments;
+
+      let createdSound: Audio.Sound | null = null;
+      const { sound } = await Audio.Sound.createAsync(
+        { uri: ayahAudioUrl(reciterRef.current, target.surahNumber, target.ayahNumber) },
+        {
+          shouldPlay: true,
+          progressUpdateIntervalMillis: 80,
+          rate: playbackRateRef.current,
+          shouldCorrectPitch: true,
+        },
+        (status) => {
+          if (!status.isLoaded) return;
+          updateTestMushafPlaybackHighlight(
+            target,
+            segments,
+            status.positionMillis,
+            status.durationMillis,
+          );
+          if (status.didJustFinish) {
+            const finishedSound = createdSound;
+            void finishTestMushafPlaybackAyah(token, finishedSound);
+          }
+        },
+      );
+      createdSound = sound;
+
+      if (
+        token !== playbackRequestIdRef.current ||
+        testMushafPlaybackRef.current?.token !== token
+      ) {
+        await sound.unloadAsync().catch(() => {});
+        return;
+      }
+
+      soundRef.current = sound;
+      try {
+        await sound.setVolumeAsync(1.0);
+      } catch {
+        // best-effort
+      }
+      isPlayingRef.current = true;
+      setIsPlaying(true);
+    } catch {
+      if (token !== playbackRequestIdRef.current) return;
+      testMushafPlaybackRef.current = null;
+      isPlayingRef.current = false;
+      setIsPlaying(false);
+      setHighlightedWord(-1);
+      setHighlightedPage(null);
+      segsRef.current = [];
+      isLoadingRef.current = false;
+      Alert.alert("Audio unavailable", "Try listening to this ayah again in a moment.");
+    } finally {
+      if (token === playbackRequestIdRef.current) {
+        isLoadingRef.current = false;
+      }
+    }
+  }
+
+  async function playTestMushafAudioTargets(queue: TestMushafPlaybackTarget[]) {
+    if (reciteModeRef.current) return;
+    if (queue.length === 0) {
+      Alert.alert("Audio unavailable", "This ayah could not be prepared for playback.");
+      return;
+    }
+
+    await stopAudioCompletely();
+    const token = playbackRequestIdRef.current + 1;
+    await startTestMushafAudioQueueAt(queue, 0, token);
+  }
+
+  async function handlePlaySingleTestMushafAyah(target: {
+    surah: number;
+    ayah: number;
+  }) {
+    const playbackTarget = buildTestMushafPlaybackTarget(target.surah, target.ayah);
+    if (!playbackTarget) return;
+    await playTestMushafAudioTargets([playbackTarget]);
+  }
+
+  async function handlePlayTestMushafFromHere(target: {
+    surah: number;
+    ayah: number;
+  }) {
+    const playbackTarget = buildTestMushafPlaybackTarget(target.surah, target.ayah);
+    if (!playbackTarget) return;
+    await playTestMushafAudioTargets(buildTestMushafSurahPlaybackQueue(playbackTarget));
   }
 
   async function replayPlaybackVerseFromStart(verseNum: number) {
@@ -3343,6 +3617,7 @@ export default function MemorizationScreen() {
     setTappedAyah(null);
     setTranslationPopup(null);
     if (isLoadingRef.current) return;
+    testMushafPlaybackRef.current = null;
     isLoadingRef.current = true;
     try {
       if (advanceTimeoutRef.current) {
@@ -3482,19 +3757,21 @@ export default function MemorizationScreen() {
     const target = testMushafSheetTarget;
     if (!target) return;
 
-    // Keep the sheet open and use the existing word-seek playback path so
-    // highlightedPage/currentAudioWord continues to drive Test Mushaf highlights.
-    if (target.surahNumber === surahNumberRef.current) {
-      await handleTestMushafWordSeek({
-        surah: target.surahNumber,
-        ayah: target.ayahNumber,
-        position: 1,
-      });
-      return;
-    }
+    await handlePlaySingleTestMushafAyah({
+      surah: target.surahNumber,
+      ayah: target.ayahNumber,
+    });
+  }
 
-    const resolvedTarget = await ensureAyahActionText(target);
-    await handleListenToAyah(resolvedTarget);
+  async function handlePlayFromTestMushafTarget() {
+    const target = testMushafSheetTarget;
+    if (!target) return;
+
+    setTestMushafSheetTarget(null);
+    await handlePlayTestMushafFromHere({
+      surah: target.surahNumber,
+      ayah: target.ayahNumber,
+    });
   }
 
   async function handleJumpToAyah(verseNumber: number) {
@@ -5380,6 +5657,9 @@ export default function MemorizationScreen() {
           isAudioActive={isPlaying}
           onListen={() => {
             void handleListenToTestMushafTarget();
+          }}
+          onPlayFromHere={() => {
+            void handlePlayFromTestMushafTarget();
           }}
           onBookmark={() => {
             void withResolvedTestMushafTarget(handleBookmarkAyah);
