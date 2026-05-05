@@ -221,7 +221,6 @@ export default function ReviewSession() {
   const pageListRef = useRef<FlatList<number>>(null);
   const currentAyahRef = useRef(ayahStartN);
   const playbackRateRef = useRef<number>(1);
-  const blurClearTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const stripPreRenderCountRef = useRef(0);
   const stripFirstItemRenderKeyRef = useRef<string | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -237,7 +236,6 @@ export default function ReviewSession() {
   const [mushafDefaultSaved, setMushafDefaultSaved] = useState(false);
   const [blindMode, setBlindMode] = useState(false);
   const [revealedAyahKeys, setRevealedAyahKeys] = useState<Set<string>>(new Set());
-  const [blurActiveSurahNumber, setBlurActiveSurahNumber] = useState<number | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [reviewVerses, setReviewVerses] = useState<ApiVerse[]>([]);
   const [pageVersesByPage, setPageVersesByPage] = useState<Record<number, ApiPageVerse[]>>({});
@@ -363,23 +361,6 @@ export default function ReviewSession() {
   }, [blindMode]);
 
   useEffect(() => {
-    if (blurClearTimeoutRef.current) {
-      clearTimeout(blurClearTimeoutRef.current);
-      blurClearTimeoutRef.current = null;
-    }
-
-    if (isPlaying) {
-      setBlurActiveSurahNumber(surahNumberN);
-      return;
-    }
-
-    blurClearTimeoutRef.current = setTimeout(() => {
-      setBlurActiveSurahNumber(null);
-      blurClearTimeoutRef.current = null;
-    }, 3000);
-  }, [isPlaying, surahNumberN]);
-
-  useEffect(() => {
     let cancelled = false;
     setReviewVerses([]);
     (async () => {
@@ -485,10 +466,6 @@ export default function ReviewSession() {
 
   useEffect(() => {
     return () => {
-      if (blurClearTimeoutRef.current) {
-        clearTimeout(blurClearTimeoutRef.current);
-        blurClearTimeoutRef.current = null;
-      }
       soundRef.current?.unloadAsync();
     };
   }, []);
@@ -712,7 +689,7 @@ export default function ReviewSession() {
         activeVerseKey={activeVerseKey}
         blindMode={blindMode}
         revealedAyahKeys={revealedAyahKeys}
-        blurActiveSurahNumber={blurActiveSurahNumber}
+        blurActiveSurahNumber={surahNumberN}
         onToggleAyahReveal={toggleAyahReveal}
         onPressEndMarker={(target) => {
           if (
