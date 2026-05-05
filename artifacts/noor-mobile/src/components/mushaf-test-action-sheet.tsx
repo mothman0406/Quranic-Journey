@@ -43,6 +43,7 @@ type MushafTestActionSheetProps = {
   ayah: number;
   surahName: string;
   currentAudioWord?: AudioWordPointer | null;
+  audioToGlyphPositions?: readonly number[] | null;
   isAudioActive?: boolean;
   onListen: () => void;
   onPlayFromHere: () => void;
@@ -89,6 +90,7 @@ export function MushafTestActionSheet({
   ayah,
   surahName,
   currentAudioWord,
+  audioToGlyphPositions,
   onListen,
   onPlayFromHere,
   onBookmark,
@@ -269,10 +271,19 @@ export function MushafTestActionSheet({
               ) : ayahWords.length > 0 ? (
                 <View style={styles.arabicWordRow}>
                   {ayahWords.map((word, index) => {
+                    const currentAudioGlyphPosition =
+                      currentAudioWord &&
+                      currentAudioWord.surah === surah &&
+                      currentAudioWord.ayah === ayah
+                        ? audioToGlyphPositions?.[currentAudioWord.position - 1] ??
+                          currentAudioWord.position
+                        : null;
+                    const wordGlyphPosition =
+                      audioToGlyphPositions?.[index] ?? word.position;
                     const isAudioCurrent =
                       currentAudioWord?.surah === surah &&
                       currentAudioWord?.ayah === ayah &&
-                      currentAudioWord?.position === word.position;
+                      currentAudioGlyphPosition === wordGlyphPosition;
                     const isSelectedForTranslation =
                       selectedTranslationWord?.position === word.position;
                     return (

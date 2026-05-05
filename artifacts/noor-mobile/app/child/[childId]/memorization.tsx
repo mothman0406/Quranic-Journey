@@ -67,6 +67,7 @@ import {
   type MushafTheme,
 } from "@/src/lib/mushaf-theme";
 import { MUSHAF_SURAHS, clampMushafPage, getMushafPageForVerse } from "@/src/lib/mushaf";
+import { getAudioToGlyphPositionMap } from "@/src/lib/quran-com-1405-ayah-coords";
 import { findReciter, RECITERS } from "@/src/lib/reciters";
 import {
   clearMemorizationSessionBookmark,
@@ -114,6 +115,11 @@ type AyahTranslationState =
   | { status: "loading"; text: null; error: null }
   | { status: "ready"; text: string; error: null }
   | { status: "error"; text: null; error: string };
+
+type AudioToGlyphMapState = {
+  verseKey: string;
+  positions: number[] | null;
+};
 
 type DiscoveryState =
   | { status: "loading" }
@@ -736,6 +742,7 @@ export default function MemorizationScreen() {
     verseKey: string;
     position: number;
   } | null>(null);
+  const [audioToGlyphMap, setAudioToGlyphMap] = useState<AudioToGlyphMapState | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [leaveSheetOpen, setLeaveSheetOpen] = useState(false);
   const [pauseSheetOpen, setPauseSheetOpen] = useState(false);
@@ -4394,7 +4401,7 @@ export default function MemorizationScreen() {
   );
   // Derives a word pointer from the RAF-updated highlightedPage state so
   // MushafTestPageView can highlight the active audio word.
-  // highlightedPage.verseKey is "surah:ayah" and position is 1-based (matches QPC2).
+  // highlightedPage.verseKey is "surah:ayah" and position is 1-based audio wordIdx.
   const currentAudioWord = useMemo(() => {
     if (!highlightedPage) return null;
     const colonIdx = highlightedPage.verseKey.indexOf(":");
@@ -4404,6 +4411,33 @@ export default function MemorizationScreen() {
     if (!Number.isFinite(surah) || !Number.isFinite(ayah)) return null;
     return { surah, ayah, position: highlightedPage.position };
   }, [highlightedPage]);
+  const currentAudioVerseKey =
+    currentAudioWord ? `${currentAudioWord.surah}:${currentAudioWord.ayah}` : null;
+  const currentAudioToGlyphPositions =
+    currentAudioVerseKey !== null && audioToGlyphMap?.verseKey === currentAudioVerseKey
+      ? audioToGlyphMap.positions
+      : null;
+  useEffect(() => {
+    if (!currentAudioWord || currentAudioVerseKey === null) return;
+    if (audioToGlyphMap?.verseKey === currentAudioVerseKey) return;
+
+    let cancelled = false;
+    void getAudioToGlyphPositionMap(currentAudioWord.surah, currentAudioWord.ayah).then(
+      (positions) => {
+        if (cancelled) return;
+        setAudioToGlyphMap({ verseKey: currentAudioVerseKey, positions });
+      },
+    );
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    audioToGlyphMap?.verseKey,
+    currentAudioVerseKey,
+    currentAudioWord?.ayah,
+    currentAudioWord?.surah,
+  ]);
   const reciteCurrentWord = useMemo<ReciteWordPointer | null>(() => {
     if (!reciteMode || surahNumber === null || currentReciteExpectedIndex === null) return null;
     const word = words[currentReciteExpectedIndex];
@@ -4977,6 +5011,7 @@ export default function MemorizationScreen() {
           currentPage={testMushafPage}
           onPageChange={updateDisplayedMushafPage}
           currentAudioWord={currentAudioWord}
+          audioToGlyphPositions={currentAudioToGlyphPositions}
           isAudioActive={isPlaying}
           reciteActive={reciteMode}
           reciteCurrentWord={reciteCurrentWord}
@@ -5681,6 +5716,7 @@ export default function MemorizationScreen() {
           ayah={testMushafSheetTarget.ayahNumber}
           surahName={getBookmarkSurahName(testMushafSheetTarget.surahNumber, chaptersMap)}
           currentAudioWord={currentAudioWord}
+          audioToGlyphPositions={currentAudioToGlyphPositions}
           isAudioActive={isPlaying}
           onListen={() => {
             void handleListenToTestMushafTarget();

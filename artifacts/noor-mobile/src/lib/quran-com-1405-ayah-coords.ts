@@ -8,6 +8,7 @@ import {
   QURAN_COM_1405_PAGE_WIDTH,
   TOTAL_QURAN_COM_1405_PAGES,
 } from "./quran-com-1405-page-images";
+import { fetchAyahWithWords } from "./quran";
 
 // Extractor tuple order: [surah, ayah, line, minX, maxX, minY, maxY, glyphCount].
 export type QuranCom1405AyahRect = readonly [
@@ -57,6 +58,7 @@ type QuranCom1405AyahInfo = {
 
 const ayahInfo = ayahInfoJson as unknown as QuranCom1405AyahInfo;
 const MIN_WORD_HIT_WIDTH_PX = 24;
+const audioToGlyphPositionMapCache = new Map<string, Promise<number[] | null>>();
 
 export const QURAN_COM_1405_NATIVE_WIDTH = QURAN_COM_1405_PAGE_WIDTH;
 export const QURAN_COM_1405_NATIVE_HEIGHT = QURAN_COM_1405_PAGE_HEIGHT;
@@ -87,6 +89,67 @@ export function getQuranCom1405WordRectsForPage(
 
     return [surah, ayah, position, line, minX, maxX, minY, maxY] as const;
   });
+}
+
+function getQuranCom1405GlyphRectsForVerse(
+  surah: number,
+  ayah: number,
+): QuranCom1405GlyphRect[] {
+  const glyphs: QuranCom1405GlyphRect[] = [];
+
+  for (const page of Object.values(ayahInfo.pages)) {
+    for (const glyph of page?.glyphs ?? []) {
+      if (glyph[2] === surah && glyph[3] === ayah) {
+        glyphs.push(glyph);
+      }
+    }
+  }
+
+  return glyphs.sort((a, b) => a[4] - b[4]);
+}
+
+function getLikelyReciteableGlyphPositions(
+  surah: number,
+  ayah: number,
+  reciteableWordCount: number,
+): number[] | null {
+  const glyphs = getQuranCom1405GlyphRectsForVerse(surah, ayah);
+  if (glyphs.length === 0) return null;
+
+  // QuranEngine stores waqf marks as tiny or negative-width glyph rects.
+  // The final remaining glyph is the ayah marker, so the first N word-like
+  // positions are the reciteable words in audio/display order.
+  const wordLikeGlyphs = glyphs.filter((glyph) => {
+    const [_glyphId, _line, _surah, _ayah, _position, minX, maxX] = glyph;
+    return maxX - minX > MIN_WORD_HIT_WIDTH_PX;
+  });
+  if (wordLikeGlyphs.length < reciteableWordCount) return null;
+
+  return wordLikeGlyphs.slice(0, reciteableWordCount).map((glyph) => glyph[4]);
+}
+
+// Maps audio-segment wordIdx (1-based, reciteable-only order) to QPC2 glyph position.
+// Returns null if mapping unavailable for this ayah.
+export async function getAudioToGlyphPositionMap(
+  surah: number,
+  ayah: number,
+): Promise<number[] | null> {
+  const verseKey = `${surah}:${ayah}`;
+  const cached = audioToGlyphPositionMapCache.get(verseKey);
+  if (cached) return cached;
+
+  const promise = (async () => {
+    const verse = await fetchAyahWithWords(verseKey);
+    const reciteableWordCount = verse.words.filter(
+      (word) => word.char_type_name === "word",
+    ).length;
+    if (reciteableWordCount <= 0) return null;
+
+    return getLikelyReciteableGlyphPositions(surah, ayah, reciteableWordCount);
+  })().catch(() => null);
+
+  audioToGlyphPositionMapCache.set(verseKey, promise);
+  return promise;
 }
 
 if (__DEV__) {

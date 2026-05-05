@@ -34,7 +34,7 @@ type MushafTestWordTarget = {
 };
 
 // Audio word pointer passed in from the memorization engine.
-// position is 1-based and matches QPC2 glyph position directly.
+// position is 1-based reciteable-only audio order; audioToGlyphPositions maps it to QPC2.
 export type AudioWordPointer = {
   surah: number;
   ayah: number;
@@ -69,6 +69,7 @@ type MushafTestPageViewProps = {
   onPageChange: (page: number) => void;
   // Phase 1c: audio word highlighting props
   currentAudioWord?: AudioWordPointer | null;
+  audioToGlyphPositions?: readonly number[] | null;
   // true when audio is playing; false when paused or stopped.
   // Animation is driven by currentAudioWord changes; isAudioActive is available
   // for future slice use (e.g. recite overlays).
@@ -248,6 +249,7 @@ function MushafTestPage({
   flashedWord,
   flashOpacity,
   currentAudioWord,
+  audioToGlyphPositions,
   reciteActive,
   reciteCurrentWord,
   reciteRange,
@@ -265,6 +267,7 @@ function MushafTestPage({
   flashedWord: FlashedWord | null;
   flashOpacity: Animated.Value;
   currentAudioWord?: AudioWordPointer | null;
+  audioToGlyphPositions?: readonly number[] | null;
   reciteActive: boolean;
   reciteCurrentWord?: ReciteWordPointer | null;
   reciteRange?: ReciteRange | null;
@@ -302,15 +305,24 @@ function MushafTestPage({
     if (!currentAudioWord) return null;
     if (actionSheetVisible) return null;
     if (reciteActive) return null;
+    const mappedPosition =
+      audioToGlyphPositions?.[currentAudioWord.position - 1] ??
+      currentAudioWord.position;
     return (
       overlayRects.find(
         (r) =>
           r.surah === currentAudioWord.surah &&
           r.ayah === currentAudioWord.ayah &&
-          r.position === currentAudioWord.position,
+          r.position === mappedPosition,
       ) ?? null
     );
-  }, [actionSheetVisible, currentAudioWord, overlayRects, reciteActive]);
+  }, [
+    actionSheetVisible,
+    audioToGlyphPositions,
+    currentAudioWord,
+    overlayRects,
+    reciteActive,
+  ]);
 
   const reciteClassifiedRects = useMemo(() => {
     if (!reciteActive) return [];
@@ -571,6 +583,7 @@ export function MushafTestPageView({
   currentPage,
   onPageChange,
   currentAudioWord,
+  audioToGlyphPositions,
   reciteActive = false,
   reciteCurrentWord = null,
   reciteRange = null,
@@ -852,6 +865,7 @@ export function MushafTestPageView({
             flashedWord={flashedWord}
             flashOpacity={flashOpacity}
             currentAudioWord={currentAudioWord}
+            audioToGlyphPositions={audioToGlyphPositions}
             reciteActive={reciteActive}
             reciteCurrentWord={reciteCurrentWord}
             reciteRange={reciteRange}
