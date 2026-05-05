@@ -5010,6 +5010,7 @@ export default function MemorizationScreen() {
         <MushafTestPageView
           currentPage={testMushafPage}
           onPageChange={updateDisplayedMushafPage}
+          mushafViewMode={mushafViewMode}
           currentAudioWord={currentAudioWord}
           audioToGlyphPositions={currentAudioToGlyphPositions}
           isAudioActive={isPlaying}

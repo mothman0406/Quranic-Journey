@@ -26,6 +26,7 @@ import {
 } from "@/src/lib/quran-com-1405-page-images";
 import { getMushafPageForVerse } from "@/src/lib/mushaf";
 import { fetchWordTranslation } from "@/src/lib/quran";
+import type { MushafViewMode } from "@/src/lib/settings";
 
 type MushafTestWordTarget = {
   surah: number;
@@ -67,6 +68,7 @@ type FlashedWord = MushafTestWordTarget & {
 type MushafTestPageViewProps = {
   currentPage: number;
   onPageChange: (page: number) => void;
+  mushafViewMode?: MushafViewMode;
   // Phase 1c: audio word highlighting props
   currentAudioWord?: AudioWordPointer | null;
   audioToGlyphPositions?: readonly number[] | null;
@@ -582,6 +584,7 @@ function MushafTestPage({
 export function MushafTestPageView({
   currentPage,
   onPageChange,
+  mushafViewMode = "swipe",
   currentAudioWord,
   audioToGlyphPositions,
   reciteActive = false,
@@ -595,6 +598,10 @@ export function MushafTestPageView({
 }: MushafTestPageViewProps) {
   const { width: screenWidth } = useWindowDimensions();
   const pageWidth = Math.max(1, Math.round(screenWidth));
+  const scrollPageItemHeight = useMemo(
+    () => Math.max(1, Math.round(pageWidth / QURAN_COM_1405_PAGE_ASPECT_RATIO)),
+    [pageWidth],
+  );
   const safeCurrentPage = clampPage(currentPage);
   const listRef = useRef<FlatList<number>>(null);
   const preloadedPagesRef = useRef<Set<number>>(new Set());
@@ -607,12 +614,13 @@ export function MushafTestPageView({
   const flashAnimationRef = useRef<Animated.CompositeAnimation | null>(null);
   const flashTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const wordTranslationRequestRef = useRef(0);
+  const programmaticPageChangeRef = useRef(true);
 
   // Stable ref so the auto-paging effect doesn't need onPageChange in its deps.
   const onPageChangeRef = useRef(onPageChange);
   useEffect(() => { onPageChangeRef.current = onPageChange; }, [onPageChange]);
 
-  // Auto-paging: when audio word moves to a different page, swipe Test Mushaf to follow.
+  // Auto-paging: when audio word moves to a different page, Test Mushaf follows.
   // lastAutoPagedRef avoids firing duplicate onPageChange calls for the same target page.
   const lastAutoPagedRef = useRef<number | null>(null);
   useEffect(() => {
@@ -631,6 +639,7 @@ export function MushafTestPageView({
     // Avoid duplicate calls if we already fired for this target page.
     if (audioPage === lastAutoPagedRef.current) return;
     lastAutoPagedRef.current = audioPage;
+    programmaticPageChangeRef.current = true;
     onPageChangeRef.current(audioPage);
   }, [currentAudioWord, reciteActive, safeCurrentPage]);
 
@@ -651,6 +660,7 @@ export function MushafTestPageView({
     }
     if (recitePage === lastReciteAutoPagedRef.current) return;
     lastReciteAutoPagedRef.current = recitePage;
+    programmaticPageChangeRef.current = true;
     onPageChangeRef.current(recitePage);
   }, [reciteActive, reciteCurrentWord, safeCurrentPage]);
 
@@ -661,6 +671,15 @@ export function MushafTestPageView({
       index,
     }),
     [pageWidth],
+  );
+
+  const getScrollItemLayout = useCallback(
+    (_data: ArrayLike<number> | null | undefined, index: number) => ({
+      length: scrollPageItemHeight,
+      offset: scrollPageItemHeight * index,
+      index,
+    }),
+    [scrollPageItemHeight],
   );
 
   useEffect(() => {
@@ -692,7 +711,7 @@ export function MushafTestPageView({
           [...preloadedPagesRef.current].filter((page) => pagesToKeep.has(page)),
         );
       } catch {
-        // Preloading is only a swipe performance optimization.
+        // Preloading is only a page-turn performance optimization.
       }
     }
 
@@ -703,13 +722,24 @@ export function MushafTestPageView({
   }, [safeCurrentPage]);
 
   useEffect(() => {
+    if (!programmaticPageChangeRef.current) {
+      programmaticPageChangeRef.current = true;
+      return;
+    }
+
     const index = safeCurrentPage - 1;
+    const itemLength =
+      mushafViewMode === "scroll" ? scrollPageItemHeight : pageWidth;
+    const animated = mushafViewMode === "scroll";
     const timeout = setTimeout(() => {
       try {
-        listRef.current?.scrollToIndex({ index, animated: false });
+        listRef.current?.scrollToIndex({ index, animated });
       } catch {
         try {
-          listRef.current?.scrollToOffset({ offset: Math.max(0, index * pageWidth), animated: false });
+          listRef.current?.scrollToOffset({
+            offset: Math.max(0, index * itemLength),
+            animated,
+          });
         } catch {
           // The list may not be measured yet; onScrollToIndexFailed will retry.
         }
@@ -719,7 +749,7 @@ export function MushafTestPageView({
     return () => {
       clearTimeout(timeout);
     };
-  }, [pageWidth, safeCurrentPage]);
+  }, [mushafViewMode, pageWidth, safeCurrentPage, scrollPageItemHeight]);
 
   useEffect(() => {
     return () => {
@@ -735,6 +765,19 @@ export function MushafTestPageView({
     setWordTranslationTarget(null);
     setWordTranslationText(null);
     setWordTranslationLoading(false);
+  }
+
+  function clearPageInteractionState() {
+    if (flashTimeoutRef.current) {
+      clearTimeout(flashTimeoutRef.current);
+      flashTimeoutRef.current = null;
+    }
+    flashAnimationRef.current?.stop();
+    flashAnimationRef.current = null;
+    flashOpacity.stopAnimation();
+    flashOpacity.setValue(0);
+    setFlashedWord(null);
+    clearWordTranslationPopover();
   }
 
   useEffect(() => {
@@ -805,7 +848,7 @@ export function MushafTestPageView({
     onWordSeek?.(target);
   }
 
-  function handleMomentumEnd(event: NativeSyntheticEvent<NativeScrollEvent>) {
+  function handleSwipeMomentumEnd(event: NativeSyntheticEvent<NativeScrollEvent>) {
     const index = Math.max(
       0,
       Math.min(
@@ -815,71 +858,135 @@ export function MushafTestPageView({
     );
     const nextPage = index + 1;
     if (nextPage !== safeCurrentPage) {
-      if (flashTimeoutRef.current) {
-        clearTimeout(flashTimeoutRef.current);
-        flashTimeoutRef.current = null;
-      }
-      flashAnimationRef.current?.stop();
-      flashAnimationRef.current = null;
-      flashOpacity.stopAnimation();
-      flashOpacity.setValue(0);
-      setFlashedWord(null);
-      clearWordTranslationPopover();
+      clearPageInteractionState();
+      programmaticPageChangeRef.current = false;
     }
     onPageChange(nextPage);
   }
 
+  function handleScrollMomentumEnd(event: NativeSyntheticEvent<NativeScrollEvent>) {
+    const index = Math.max(
+      0,
+      Math.min(
+        TOTAL_QURAN_COM_1405_PAGES - 1,
+        Math.round(event.nativeEvent.contentOffset.y / scrollPageItemHeight),
+      ),
+    );
+    const nextPage = index + 1;
+    if (nextPage !== safeCurrentPage) {
+      clearPageInteractionState();
+      programmaticPageChangeRef.current = false;
+    }
+    onPageChange(nextPage);
+  }
+
+  function handleScrollScroll(event: NativeSyntheticEvent<NativeScrollEvent>) {
+    const index = Math.max(
+      0,
+      Math.min(
+        TOTAL_QURAN_COM_1405_PAGES - 1,
+        Math.round(event.nativeEvent.contentOffset.y / scrollPageItemHeight),
+      ),
+    );
+    const nextPage = index + 1;
+    if (nextPage !== safeCurrentPage) {
+      programmaticPageChangeRef.current = false;
+      onPageChange(nextPage);
+    }
+  }
+
+  function renderTestPage(pageNumber: number) {
+    return (
+      <MushafTestPage
+        pageNumber={pageNumber}
+        width={pageWidth}
+        flashedWord={flashedWord}
+        flashOpacity={flashOpacity}
+        currentAudioWord={currentAudioWord}
+        audioToGlyphPositions={audioToGlyphPositions}
+        reciteActive={reciteActive}
+        reciteCurrentWord={reciteCurrentWord}
+        reciteRange={reciteRange}
+        actionSheetVisible={actionSheetVisible}
+        wordTranslationTarget={wordTranslationTarget}
+        wordTranslationText={wordTranslationText}
+        wordTranslationLoading={wordTranslationLoading}
+        onWordTap={handleWordTap}
+        onWordLongPress={onWordLongPress}
+        onDismissWordTranslation={clearWordTranslationPopover}
+        onActionSheetBackdropPress={onActionSheetBackdropPress}
+      />
+    );
+  }
+
   return (
     <View style={styles.container}>
-      <FlatList
-        ref={listRef}
-        style={styles.pageList}
-        data={PAGE_NUMBERS}
-        keyExtractor={(page) => String(page)}
-        horizontal
-        pagingEnabled
-        inverted
-        showsHorizontalScrollIndicator={false}
-        initialScrollIndex={safeCurrentPage - 1}
-        getItemLayout={getItemLayout}
-        onScrollToIndexFailed={(info) => {
-          setTimeout(() => {
-            try {
-              listRef.current?.scrollToIndex({ index: info.index, animated: false });
-            } catch {
-              listRef.current?.scrollToOffset({
-                offset: Math.max(0, info.index * pageWidth),
-                animated: false,
-              });
-            }
-          }, 80);
-        }}
-        onMomentumScrollEnd={handleMomentumEnd}
-        windowSize={3}
-        initialNumToRender={1}
-        maxToRenderPerBatch={2}
-        renderItem={({ item }) => (
-          <MushafTestPage
-            pageNumber={item}
-            width={pageWidth}
-            flashedWord={flashedWord}
-            flashOpacity={flashOpacity}
-            currentAudioWord={currentAudioWord}
-            audioToGlyphPositions={audioToGlyphPositions}
-            reciteActive={reciteActive}
-            reciteCurrentWord={reciteCurrentWord}
-            reciteRange={reciteRange}
-            actionSheetVisible={actionSheetVisible}
-            wordTranslationTarget={wordTranslationTarget}
-            wordTranslationText={wordTranslationText}
-            wordTranslationLoading={wordTranslationLoading}
-            onWordTap={handleWordTap}
-            onWordLongPress={onWordLongPress}
-            onDismissWordTranslation={clearWordTranslationPopover}
-            onActionSheetBackdropPress={onActionSheetBackdropPress}
-          />
-        )}
-      />
+      {mushafViewMode === "scroll" ? (
+        <FlatList
+          key="test-mushaf-scroll"
+          ref={listRef}
+          style={styles.pageList}
+          data={PAGE_NUMBERS}
+          keyExtractor={(page) => String(page)}
+          showsVerticalScrollIndicator={false}
+          initialScrollIndex={safeCurrentPage - 1}
+          getItemLayout={getScrollItemLayout}
+          onScrollToIndexFailed={(info) => {
+            setTimeout(() => {
+              try {
+                listRef.current?.scrollToIndex({ index: info.index, animated: false });
+              } catch {
+                listRef.current?.scrollToOffset({
+                  offset: Math.max(0, info.index * scrollPageItemHeight),
+                  animated: false,
+                });
+              }
+            }, 80);
+          }}
+          onMomentumScrollEnd={handleScrollMomentumEnd}
+          onScroll={handleScrollScroll}
+          scrollEventThrottle={64}
+          windowSize={3}
+          initialNumToRender={1}
+          maxToRenderPerBatch={2}
+          renderItem={({ item }) => (
+            <View style={{ width: pageWidth, height: scrollPageItemHeight }}>
+              {renderTestPage(item)}
+            </View>
+          )}
+        />
+      ) : (
+        <FlatList
+          key="test-mushaf-swipe"
+          ref={listRef}
+          style={styles.pageList}
+          data={PAGE_NUMBERS}
+          keyExtractor={(page) => String(page)}
+          horizontal
+          pagingEnabled
+          inverted
+          showsHorizontalScrollIndicator={false}
+          initialScrollIndex={safeCurrentPage - 1}
+          getItemLayout={getItemLayout}
+          onScrollToIndexFailed={(info) => {
+            setTimeout(() => {
+              try {
+                listRef.current?.scrollToIndex({ index: info.index, animated: false });
+              } catch {
+                listRef.current?.scrollToOffset({
+                  offset: Math.max(0, info.index * pageWidth),
+                  animated: false,
+                });
+              }
+            }, 80);
+          }}
+          onMomentumScrollEnd={handleSwipeMomentumEnd}
+          windowSize={3}
+          initialNumToRender={1}
+          maxToRenderPerBatch={2}
+          renderItem={({ item }) => renderTestPage(item)}
+        />
+      )}
 
       {flashedWord ? (
         <Animated.View
