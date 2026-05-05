@@ -10,7 +10,12 @@ import {
   Text,
   View,
 } from "react-native";
-import { fetchAyahTranslation, fetchAyahWithWords } from "@/src/lib/quran";
+import {
+  fetchAyahTranslation,
+  fetchAyahWithWords,
+  fetchWordTranslation,
+  type ApiWord,
+} from "@/src/lib/quran";
 
 type LoadState =
   | { status: "idle"; text: string | null; error: null }
@@ -20,17 +25,42 @@ type LoadState =
 
 type IoniconName = React.ComponentProps<typeof Ionicons>["name"];
 
+type AudioWordPointer = {
+  surah: number;
+  ayah: number;
+  position: number;
+};
+
+type AyahWordInfo = {
+  position: number;
+  text: string;
+};
+
 type MushafTestActionSheetProps = {
   visible: boolean;
   onClose: () => void;
   surah: number;
   ayah: number;
   surahName: string;
+  currentAudioWord?: AudioWordPointer | null;
+  isAudioActive?: boolean;
   onListen: () => void;
   onBookmark: () => void;
   onViewInFullMushaf: () => void;
   onCopy: () => void;
 };
+
+function buildAyahWords(words: ApiWord[]): AyahWordInfo[] {
+  return words
+    .filter((word) => word.char_type_name === "word")
+    .map((word, index) => ({
+      position: Number.isFinite(word.position) && word.position > 0
+        ? word.position
+        : index + 1,
+      text: word.text_uthmani,
+    }))
+    .filter((word) => word.text.trim().length > 0);
+}
 
 function ActionRow({
   label,
@@ -57,6 +87,7 @@ export function MushafTestActionSheet({
   surah,
   ayah,
   surahName,
+  currentAudioWord,
   onListen,
   onBookmark,
   onViewInFullMushaf,
@@ -73,9 +104,18 @@ export function MushafTestActionSheet({
     text: null,
     error: null,
   });
+  const [ayahWords, setAyahWords] = useState<AyahWordInfo[]>([]);
+  const [selectedTranslationWord, setSelectedTranslationWord] =
+    useState<AyahWordInfo | null>(null);
+  const [wordTranslationState, setWordTranslationState] = useState<LoadState>({
+    status: "idle",
+    text: null,
+    error: null,
+  });
   const [translationExpanded, setTranslationExpanded] = useState(false);
   const sheetOpacity = useRef(new Animated.Value(0)).current;
   const sheetTranslateY = useRef(new Animated.Value(24)).current;
+  const wordTranslationRequestRef = useRef(0);
 
   useEffect(() => {
     if (!visible) return;
@@ -100,6 +140,9 @@ export function MushafTestActionSheet({
 
     let cancelled = false;
     setTranslationExpanded(false);
+    setSelectedTranslationWord(null);
+    setWordTranslationState({ status: "idle", text: null, error: null });
+    setAyahWords([]);
     setAyahTextState({ status: "loading", text: null, error: null });
     setTranslationState({ status: "loading", text: null, error: null });
 
@@ -111,6 +154,7 @@ export function MushafTestActionSheet({
           text: verse.text_uthmani,
           error: null,
         });
+        setAyahWords(buildAyahWords(verse.words));
       })
       .catch((error) => {
         if (cancelled) return;
@@ -144,7 +188,35 @@ export function MushafTestActionSheet({
     };
   }, [verseKey, visible]);
 
+  useEffect(() => {
+    if (visible) return;
+    wordTranslationRequestRef.current += 1;
+    setSelectedTranslationWord(null);
+    setWordTranslationState({ status: "idle", text: null, error: null });
+  }, [visible]);
+
   const translationText = translationState.status === "ready" ? translationState.text : null;
+
+  function handleArabicWordTap(word: AyahWordInfo) {
+    const requestId = wordTranslationRequestRef.current + 1;
+    wordTranslationRequestRef.current = requestId;
+    setSelectedTranslationWord(word);
+    setWordTranslationState({ status: "loading", text: null, error: null });
+
+    fetchWordTranslation(surah, ayah, word.position)
+      .then((text) => {
+        if (wordTranslationRequestRef.current !== requestId) return;
+        setWordTranslationState({ status: "ready", text, error: null });
+      })
+      .catch((error) => {
+        if (wordTranslationRequestRef.current !== requestId) return;
+        setWordTranslationState({
+          status: "error",
+          text: null,
+          error: error instanceof Error ? error.message : "Translation could not load.",
+        });
+      });
+  }
 
   return (
     <Modal
@@ -192,10 +264,73 @@ export function MushafTestActionSheet({
                 </View>
               ) : ayahTextState.status === "error" ? (
                 <Text style={styles.arabicStateText}>Ayah text could not load.</Text>
+              ) : ayahWords.length > 0 ? (
+                <View style={styles.arabicWordRow}>
+                  {ayahWords.map((word, index) => {
+                    const isAudioCurrent =
+                      currentAudioWord?.surah === surah &&
+                      currentAudioWord?.ayah === ayah &&
+                      currentAudioWord?.position === word.position;
+                    const isSelectedForTranslation =
+                      selectedTranslationWord?.position === word.position;
+                    return (
+                      <Pressable
+                        key={`${word.position}-${index}`}
+                        style={styles.arabicWordPressable}
+                        onPress={() => handleArabicWordTap(word)}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Show translation for word ${word.position}`}
+                      >
+                        {isAudioCurrent ? (
+                          <View style={styles.arabicWordAudioHighlight} pointerEvents="none" />
+                        ) : null}
+                        <Text
+                          style={[
+                            styles.arabicWordText,
+                            isSelectedForTranslation && styles.arabicWordTextSelected,
+                          ]}
+                        >
+                          {word.text}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
               ) : (
                 <Text style={styles.arabicText}>{ayahTextState.text}</Text>
               )}
             </View>
+
+            {selectedTranslationWord ? (
+              <View style={styles.wordTranslationPanel}>
+                <View style={styles.wordTranslationHeader}>
+                  <Text style={styles.wordTranslationLabel}>
+                    Word {selectedTranslationWord.position}
+                  </Text>
+                  <Pressable
+                    onPress={() => {
+                      wordTranslationRequestRef.current += 1;
+                      setSelectedTranslationWord(null);
+                      setWordTranslationState({ status: "idle", text: null, error: null });
+                    }}
+                    accessibilityRole="button"
+                    accessibilityLabel="Close word translation"
+                  >
+                    <Ionicons name="close" size={16} color="#6b7280" />
+                  </Pressable>
+                </View>
+                {wordTranslationState.status === "loading" ||
+                wordTranslationState.status === "idle" ? (
+                  <Text style={styles.wordTranslationStateText}>Loading...</Text>
+                ) : wordTranslationState.status === "error" ? (
+                  <Text style={styles.wordTranslationErrorText}>
+                    Translation could not load.
+                  </Text>
+                ) : (
+                  <Text style={styles.wordTranslationText}>{wordTranslationState.text}</Text>
+                )}
+              </View>
+            ) : null}
 
             <View style={styles.translationPanel}>
               <Text style={styles.translationLabel}>Saheeh International</Text>
@@ -278,7 +413,7 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 18,
     borderTopRightRadius: 18,
     backgroundColor: "#ffffff",
-    paddingTop: 22,
+    paddingTop: 28,
     paddingHorizontal: 20,
     paddingBottom: 34,
   },
@@ -286,7 +421,7 @@ const styles = StyleSheet.create({
     flexGrow: 0,
   },
   sheetContent: {
-    gap: 14,
+    gap: 16,
   },
   headerRow: {
     flexDirection: "row",
@@ -322,13 +457,42 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   arabicCard: {
-    minHeight: 88,
+    minHeight: 96,
     borderRadius: 12,
     borderWidth: 1,
     borderColor: "#fde68a",
     backgroundColor: "#fffbeb",
-    padding: 14,
+    paddingVertical: 22,
+    paddingHorizontal: 18,
     justifyContent: "center",
+  },
+  arabicWordRow: {
+    flexDirection: "row-reverse",
+    flexWrap: "wrap",
+    alignItems: "center",
+    justifyContent: "flex-start",
+    gap: 6,
+  },
+  arabicWordPressable: {
+    position: "relative",
+    paddingHorizontal: 4,
+    paddingVertical: 2,
+  },
+  arabicWordText: {
+    fontFamily: "AmiriQuran",
+    fontSize: 25,
+    lineHeight: 42,
+    color: "#111827",
+    textAlign: "right",
+    writingDirection: "rtl",
+  },
+  arabicWordTextSelected: {
+    color: "#1d4ed8",
+  },
+  arabicWordAudioHighlight: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(34, 197, 94, 0.35)",
+    borderRadius: 4,
   },
   arabicText: {
     fontFamily: "AmiriQuran",
@@ -350,6 +514,43 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: "#92400e",
     textAlign: "center",
+  },
+  wordTranslationPanel: {
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#dbeafe",
+    backgroundColor: "#eff6ff",
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    gap: 6,
+  },
+  wordTranslationHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  wordTranslationLabel: {
+    fontSize: 11,
+    fontWeight: "900",
+    color: "#1e40af",
+    textTransform: "uppercase",
+    letterSpacing: 0,
+  },
+  wordTranslationText: {
+    fontSize: 15,
+    lineHeight: 22,
+    color: "#1e293b",
+    fontWeight: "600",
+  },
+  wordTranslationStateText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#1e40af",
+  },
+  wordTranslationErrorText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#b91c1c",
   },
   translationPanel: {
     borderRadius: 12,

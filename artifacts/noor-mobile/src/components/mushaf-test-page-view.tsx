@@ -221,6 +221,7 @@ function MushafTestPage({
   // Returns null when the audio word is on a different page or no glyph matches.
   const audioHighlightRect = useMemo(() => {
     if (!currentAudioWord) return null;
+    if (actionSheetVisible) return null;
     return (
       overlayRects.find(
         (r) =>
@@ -229,7 +230,7 @@ function MushafTestPage({
           r.position === currentAudioWord.position,
       ) ?? null
     );
-  }, [currentAudioWord, overlayRects]);
+  }, [actionSheetVisible, currentAudioWord, overlayRects]);
 
   // Green highlight uses a different color than the amber tap-flash (Phase 1b)
   // to make audio-following distinct from user-initiated feedback.

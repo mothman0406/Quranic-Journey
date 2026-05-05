@@ -3478,6 +3478,25 @@ export default function MemorizationScreen() {
     await action(resolvedTarget);
   }
 
+  async function handleListenToTestMushafTarget() {
+    const target = testMushafSheetTarget;
+    if (!target) return;
+
+    // Keep the sheet open and use the existing word-seek playback path so
+    // highlightedPage/currentAudioWord continues to drive Test Mushaf highlights.
+    if (target.surahNumber === surahNumberRef.current) {
+      await handleTestMushafWordSeek({
+        surah: target.surahNumber,
+        ayah: target.ayahNumber,
+        position: 1,
+      });
+      return;
+    }
+
+    const resolvedTarget = await ensureAyahActionText(target);
+    await handleListenToAyah(resolvedTarget);
+  }
+
   async function handleJumpToAyah(verseNumber: number) {
     if (verseNumber === playingVerseNumberRef.current) return;
     if (submitting || isLoadingRef.current) return;
@@ -5357,8 +5376,10 @@ export default function MemorizationScreen() {
           surah={testMushafSheetTarget.surahNumber}
           ayah={testMushafSheetTarget.ayahNumber}
           surahName={getBookmarkSurahName(testMushafSheetTarget.surahNumber, chaptersMap)}
+          currentAudioWord={currentAudioWord}
+          isAudioActive={isPlaying}
           onListen={() => {
-            void withResolvedTestMushafTarget(handleListenToAyah);
+            void handleListenToTestMushafTarget();
           }}
           onBookmark={() => {
             void withResolvedTestMushafTarget(handleBookmarkAyah);
