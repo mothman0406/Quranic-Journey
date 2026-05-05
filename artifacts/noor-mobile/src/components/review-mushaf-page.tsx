@@ -158,6 +158,10 @@ export function ReviewMushafPage({
   loading,
   error,
   activeVerseKey,
+  blindMode = false,
+  revealedAyahKeys,
+  blurActiveSurahNumber,
+  onToggleAyahReveal,
   onPressEndMarker,
 }: {
   pageNumber: number;
@@ -167,6 +171,10 @@ export function ReviewMushafPage({
   loading?: boolean;
   error?: string | null;
   activeVerseKey?: string | null;
+  blindMode?: boolean;
+  revealedAyahKeys?: Set<string>;
+  blurActiveSurahNumber?: number | null;
+  onToggleAyahReveal?: (verseKey: string) => void;
   onPressEndMarker?: (target: ReviewMushafPageAyahTarget) => void;
 }) {
   const imageSource = getQuranCom1405PageImage(pageNumber);
@@ -216,13 +224,21 @@ export function ReviewMushafPage({
         {imageSource
           ? overlayRects.map((rect) => {
               const active = activeVerseKey === rect.verseKey;
+              const hiddenByBlind =
+                blindMode && !(revealedAyahKeys?.has(rect.verseKey) ?? false);
+              const dimmedByBlur =
+                !blindMode &&
+                blurActiveSurahNumber !== null &&
+                blurActiveSurahNumber !== undefined &&
+                rect.surahNumber !== blurActiveSurahNumber;
+              const disabled = blindMode ? !onToggleAyahReveal : !onPressEndMarker;
               return (
                 <Pressable
                   key={rect.key}
                   accessible
                   accessibilityLabel={`Quran ${rect.verseKey}`}
-                  accessibilityRole={onPressEndMarker ? "button" : undefined}
-                  disabled={!onPressEndMarker}
+                  accessibilityRole={!disabled ? "button" : undefined}
+                  disabled={disabled}
                   style={({ pressed }) => [
                     styles.ayahOverlay,
                     {
@@ -232,9 +248,17 @@ export function ReviewMushafPage({
                       height: rect.height,
                     },
                     active && styles.ayahOverlayActive,
-                    pressed && styles.ayahOverlayPressed,
+                    dimmedByBlur && styles.ayahOverlayBlurDim,
+                    pressed && !hiddenByBlind && styles.ayahOverlayPressed,
+                    hiddenByBlind && styles.ayahOverlayBlindMask,
                   ]}
-                  onPress={() => onPressEndMarker?.(targetFromRect(rect))}
+                  onPress={() => {
+                    if (blindMode) {
+                      onToggleAyahReveal?.(rect.verseKey);
+                      return;
+                    }
+                    onPressEndMarker?.(targetFromRect(rect));
+                  }}
                 />
               );
             })
@@ -287,6 +311,16 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(37, 99, 235, 0.18)",
     borderWidth: 1,
     borderColor: "rgba(37, 99, 235, 0.48)",
+  },
+  ayahOverlayBlurDim: {
+    backgroundColor: "rgba(15, 23, 42, 0.32)",
+    borderRadius: 3,
+  },
+  ayahOverlayBlindMask: {
+    backgroundColor: "#fffbeb",
+    borderRadius: 3,
+    borderWidth: 1,
+    borderColor: "#fef3c7",
   },
   ayahOverlayPressed: {
     backgroundColor: "rgba(37, 99, 235, 0.24)",

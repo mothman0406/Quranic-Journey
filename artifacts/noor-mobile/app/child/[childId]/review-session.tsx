@@ -221,6 +221,7 @@ export default function ReviewSession() {
   const pageListRef = useRef<FlatList<number>>(null);
   const currentAyahRef = useRef(ayahStartN);
   const playbackRateRef = useRef<number>(1);
+  const blurClearTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const stripPreRenderCountRef = useRef(0);
   const stripFirstItemRenderKeyRef = useRef<string | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -234,6 +235,9 @@ export default function ReviewSession() {
   const [mushafViewMode, setMushafViewMode] =
     useState<MushafViewMode>(DEFAULT_PROFILE_SETTINGS.mushafViewMode);
   const [mushafDefaultSaved, setMushafDefaultSaved] = useState(false);
+  const [blindMode, setBlindMode] = useState(false);
+  const [revealedAyahKeys, setRevealedAyahKeys] = useState<Set<string>>(new Set());
+  const [blurActiveSurahNumber, setBlurActiveSurahNumber] = useState<number | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [reviewVerses, setReviewVerses] = useState<ApiVerse[]>([]);
   const [pageVersesByPage, setPageVersesByPage] = useState<Record<number, ApiPageVerse[]>>({});
@@ -355,6 +359,27 @@ export default function ReviewSession() {
   }, [mushafViewMode]);
 
   useEffect(() => {
+    if (!blindMode) setRevealedAyahKeys(new Set());
+  }, [blindMode]);
+
+  useEffect(() => {
+    if (blurClearTimeoutRef.current) {
+      clearTimeout(blurClearTimeoutRef.current);
+      blurClearTimeoutRef.current = null;
+    }
+
+    if (isPlaying) {
+      setBlurActiveSurahNumber(surahNumberN);
+      return;
+    }
+
+    blurClearTimeoutRef.current = setTimeout(() => {
+      setBlurActiveSurahNumber(null);
+      blurClearTimeoutRef.current = null;
+    }, 3000);
+  }, [isPlaying, surahNumberN]);
+
+  useEffect(() => {
     let cancelled = false;
     setReviewVerses([]);
     (async () => {
@@ -460,6 +485,10 @@ export default function ReviewSession() {
 
   useEffect(() => {
     return () => {
+      if (blurClearTimeoutRef.current) {
+        clearTimeout(blurClearTimeoutRef.current);
+        blurClearTimeoutRef.current = null;
+      }
       soundRef.current?.unloadAsync();
     };
   }, []);
@@ -590,6 +619,22 @@ export default function ReviewSession() {
     setMushafDefaultSaved(true);
   }
 
+  function toggleBlindMode() {
+    setBlindMode((current) => !current);
+  }
+
+  function toggleAyahReveal(verseKey: string) {
+    setRevealedAyahKeys((current) => {
+      const next = new Set(current);
+      if (next.has(verseKey)) {
+        next.delete(verseKey);
+      } else {
+        next.add(verseKey);
+      }
+      return next;
+    });
+  }
+
   async function handlePlayPause() {
     if (isAudioLoading) return;
     if (isPlaying) {
@@ -665,6 +710,10 @@ export default function ReviewSession() {
         loading={pageIsLoading}
         error={pageError}
         activeVerseKey={activeVerseKey}
+        blindMode={blindMode}
+        revealedAyahKeys={revealedAyahKeys}
+        blurActiveSurahNumber={blurActiveSurahNumber}
+        onToggleAyahReveal={toggleAyahReveal}
         onPressEndMarker={(target) => {
           if (
             target.surahNumber !== surahNumberN ||
@@ -929,6 +978,24 @@ export default function ReviewSession() {
             <Text style={styles.saveDefaultText}>
               {mushafDefaultSaved ? "Saved as default" : "Save as default"}
             </Text>
+          </Pressable>
+
+          <Pressable
+            style={styles.toggleSettingRow}
+            onPress={toggleBlindMode}
+            accessibilityRole="switch"
+            accessibilityState={{ checked: blindMode }}
+            accessibilityLabel="Blind mode"
+          >
+            <View style={styles.toggleSettingTextBlock}>
+              <Text style={styles.toggleSettingTitle}>Blind mode</Text>
+              <Text style={styles.toggleSettingDetail}>
+                {blindMode ? "Tap ayahs to reveal or hide." : "Ayahs are visible."}
+              </Text>
+            </View>
+            <View style={[styles.toggleSwitch, blindMode && styles.toggleSwitchOn]}>
+              <View style={[styles.toggleKnob, blindMode && styles.toggleKnobOn]} />
+            </View>
           </Pressable>
 
           <Text style={styles.settingLabel}>Playback speed</Text>
@@ -1419,6 +1486,53 @@ const styles = StyleSheet.create({
     color: "#2563eb",
     fontSize: 12,
     fontWeight: "900",
+  },
+  toggleSettingRow: {
+    minHeight: 56,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    borderRadius: 12,
+    backgroundColor: "#ffffff",
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+  toggleSettingTextBlock: {
+    flex: 1,
+    gap: 2,
+  },
+  toggleSettingTitle: {
+    fontSize: 14,
+    color: "#111827",
+    fontWeight: "900",
+  },
+  toggleSettingDetail: {
+    fontSize: 12,
+    color: "#64748b",
+    fontWeight: "700",
+  },
+  toggleSwitch: {
+    width: 48,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: "#e5e7eb",
+    justifyContent: "center",
+    paddingHorizontal: 2,
+  },
+  toggleSwitchOn: {
+    backgroundColor: "#2563eb",
+  },
+  toggleKnob: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: "#ffffff",
+  },
+  toggleKnobOn: {
+    alignSelf: "flex-end",
   },
   pillScroller: {
     gap: 8,
