@@ -144,6 +144,11 @@ type SessionTarget = {
   fromReadingRecite?: boolean;
 };
 
+type AssignmentAyahRange = {
+  ayahStart: number;
+  ayahEnd: number;
+};
+
 type ManualAyahToggleRequest = {
   surahNumber: number;
   totalVerses: number;
@@ -362,6 +367,20 @@ const QUALITY_OPTIONS: Array<{
 function formatAyahRange(start: number | undefined | null, end: number | undefined | null) {
   if (start == null || end == null) return "Ayahs";
   return start === end ? `Ayah ${start}` : `Ayahs ${start}-${end}`;
+}
+
+function getTodayAssignmentRangeForSurah(
+  todayProgress: TodayProgress | undefined,
+  surahNumber: number,
+): AssignmentAyahRange | null {
+  if (todayProgress?.memTargetSurah !== surahNumber) return null;
+  if (todayProgress.memTargetAyahStart == null || todayProgress.memTargetAyahEnd == null) {
+    return null;
+  }
+  return {
+    ayahStart: todayProgress.memTargetAyahStart,
+    ayahEnd: todayProgress.memTargetAyahEnd,
+  };
 }
 
 function clampNumber(value: number, min: number, max: number) {
@@ -7559,6 +7578,10 @@ function MemorizationDiscovery({
                   key={surah.number}
                   surah={surah}
                   progress={progress}
+                  assignmentRange={getTodayAssignmentRangeForSurah(
+                    state.dashboard.todayProgress,
+                    surah.number,
+                  )}
                   isCurrent={
                     (content.todayWork?.currentWorkSurahNumber ?? content.todayWork?.surahNumber) ===
                     surah.number
@@ -8182,12 +8205,14 @@ function ResumeWorkCard({
 function SurahProgressRow({
   surah,
   progress,
+  assignmentRange,
   isCurrent,
   onPress,
   onManage,
 }: {
   surah: SurahSummary;
   progress: MemorizationProgress;
+  assignmentRange: AssignmentAyahRange | null;
   isCurrent: boolean;
   onPress: () => void;
   onManage: () => void;
@@ -8199,6 +8224,11 @@ function SurahProgressRow({
   const toneMeta = reviewTone ? REVIEW_TONE_META[reviewTone] : null;
   const tajweedNotes = (surah.tajweedNotes ?? []).filter((note) => note.trim().length > 0);
   const actionLabel = "Manage";
+  const nextLabel = assignmentRange
+    ? `Next: ${formatAyahRange(assignmentRange.ayahStart, assignmentRange.ayahEnd)}`
+    : progress.status === "memorized"
+      ? "Ready for a practice pass"
+      : null;
 
   return (
     <View
@@ -8258,14 +8288,11 @@ function SurahProgressRow({
         <AyahStrengthStrip progress={progress} />
 
         <View style={styles.surahActionRow}>
-          <Text style={styles.surahNextText}>
-            {progress.status === "memorized"
-              ? "Ready for a practice pass"
-              : `Next: ${formatAyahRange(
-                  buildProgressTarget(progress).ayahStart,
-                  buildProgressTarget(progress).ayahEnd,
-                )}`}
-          </Text>
+          {nextLabel ? (
+            <Text style={styles.surahNextText}>{nextLabel}</Text>
+          ) : (
+            <View style={styles.surahNextSpacer} />
+          )}
           <Pressable
             style={styles.surahManageButton}
             onPress={(event) => {
@@ -9319,6 +9346,9 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "700",
     color: "#6b7280",
+  },
+  surahNextSpacer: {
+    flex: 1,
   },
   surahActionText: {
     fontSize: 13,
