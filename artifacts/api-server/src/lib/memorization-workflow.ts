@@ -1,6 +1,6 @@
 import {
   getPageForVerse,
-  resolveStrictSurahScopedPageTarget,
+  resolveSurahBoundedPageRange,
 } from "../data/quran-meta.js";
 
 export type MemorizationWorkType =
@@ -198,7 +198,7 @@ export function buildSurahPageChunks(
 
   let ayahStart = 1;
   while (ayahStart <= surah.verseCount) {
-    const target = resolveStrictSurahScopedPageTarget(
+    const target = resolveSurahBoundedPageRange(
       surah.number,
       ayahStart,
       safePagesTarget,

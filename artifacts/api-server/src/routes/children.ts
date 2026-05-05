@@ -3,7 +3,7 @@ import { db } from "@workspace/db";
 import { childrenTable, memorizationProgressTable, reviewScheduleTable, reviewDailySetTable, learningSessionsTable, childDuasTable, dailyProgressTable } from "@workspace/db/schema";
 import { eq, desc, and, sql, gte, lte } from "drizzle-orm";
 import { SURAHS } from "../data/surahs.js";
-import { resolvePageTarget, resolveStrictSurahScopedPageTarget, getPageForVerse } from "../data/quran-meta.js";
+import { resolveSurahBoundedPageRange, getPageForVerse } from "../data/quran-meta.js";
 import { STORIES } from "../data/stories.js";
 import { DUAS } from "../data/duas.js";
 import { addDaysToLocalDate, getRequestLocalDate } from "../lib/local-date.js";
@@ -800,9 +800,7 @@ router.get("/children/:childId/dashboard", async (req, res) => {
   const memTarget = memorizationSurahData
     ? (memorizationWorkflow?.enabled
         ? null
-        : inProgressSurah
-        ? resolveStrictSurahScopedPageTarget(nextStartSurah, nextStartAyah, child.memorizePagePerDay)
-        : resolvePageTarget(nextStartSurah, nextStartAyah, child.memorizePagePerDay))
+        : resolveSurahBoundedPageRange(nextStartSurah, nextStartAyah, child.memorizePagePerDay))
     : null;
 
   const desiredMemTargetSurah = scheduledWorkItem?.surahNumber ?? nextStartSurah;
@@ -1048,7 +1046,7 @@ router.get("/children/:childId/dashboard", async (req, res) => {
     },
     upNextMemorization: (() => {
       const buildNextUpMemorization = (surah: (typeof SURAHS_IN_ORDER)[number], ayahStart: number) => {
-        const nextUpTarget = resolveStrictSurahScopedPageTarget(surah.number, ayahStart, child.memorizePagePerDay);
+        const nextUpTarget = resolveSurahBoundedPageRange(surah.number, ayahStart, child.memorizePagePerDay);
         const ayahEnd = Math.min(nextUpTarget.endAyah, surah.verseCount);
 
         return {
