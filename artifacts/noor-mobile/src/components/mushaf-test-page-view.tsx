@@ -93,6 +93,7 @@ type MushafTestPageViewProps = {
   reciteActive?: boolean;
   reciteCurrentWord?: ReciteWordPointer | null;
   reciteRange?: ReciteRange | null;
+  reciteAutoPage?: boolean;
   sessionFocusRange?: ReciteRange | null;
 };
 
@@ -712,6 +713,7 @@ export function MushafTestPageView({
   reciteActive = false,
   reciteCurrentWord = null,
   reciteRange = null,
+  reciteAutoPage = true,
   sessionFocusRange = null,
   onWordPress,
   onWordSeek,
@@ -800,7 +802,7 @@ export function MushafTestPageView({
 
   const lastReciteAutoPagedRef = useRef<number | null>(null);
   useEffect(() => {
-    if (!reciteActive || !reciteCurrentWord) {
+    if (!reciteAutoPage || !reciteActive || !reciteCurrentWord) {
       lastReciteAutoPagedRef.current = null;
       return;
     }
@@ -817,7 +819,7 @@ export function MushafTestPageView({
     lastReciteAutoPagedRef.current = recitePage;
     programmaticPageChangeRef.current = true;
     onPageChangeRef.current(recitePage);
-  }, [reciteActive, reciteCurrentWord, safeCurrentPage]);
+  }, [reciteActive, reciteAutoPage, reciteCurrentWord, safeCurrentPage]);
 
   const getItemLayout = useCallback(
     (_data: ArrayLike<number> | null | undefined, index: number) => ({

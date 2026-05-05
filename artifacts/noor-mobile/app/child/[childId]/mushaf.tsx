@@ -2054,6 +2054,7 @@ export default function MushafScreen() {
     childId: string;
     name?: string;
     page?: string;
+    mushafViewMode?: string;
     fromMemorization?: string;
     surahNumber?: string;
     ayahNumber?: string;
@@ -2081,6 +2082,10 @@ export default function MushafScreen() {
     [fittedPageLayout.height],
   );
   const requestedInitialPage = useMemo(() => parsePageParam(params.page), [params.page]);
+  const requestedViewMode: MushafViewMode | null =
+    params.mushafViewMode === "swipe" || params.mushafViewMode === "scroll"
+      ? params.mushafViewMode
+      : null;
 
   const [initialPage, setInitialPage] = useState<number | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
@@ -2280,7 +2285,7 @@ export default function MushafScreen() {
       const settings = await loadProfileSettings(childId);
       if (cancelled) return;
       setProfileSettings(settings);
-      setMushafViewMode(settings.mushafViewMode);
+      setMushafViewMode(requestedViewMode ?? settings.mushafViewMode);
     }
 
     loadInitialPage();
@@ -2300,7 +2305,7 @@ export default function MushafScreen() {
         audioSoundRef.current = null;
       }
     };
-  }, [childId, requestedInitialPage]);
+  }, [childId, requestedInitialPage, requestedViewMode]);
 
   useEffect(() => {
     audioPlayerRef.current = audioPlayer;
@@ -2922,6 +2927,10 @@ export default function MushafScreen() {
         pageEnd: String(target.pageNumber),
         session: "1",
         recite: options?.recite ? "1" : undefined,
+        reciteFromReading: options?.recite ? "1" : undefined,
+        startAyah: options?.recite ? String(target.ayahNumber) : undefined,
+        returnPage: options?.recite ? String(currentPage) : undefined,
+        returnMushafViewMode: options?.recite ? mushafViewMode : undefined,
         mushafViewMode: options?.recite ? "test" : undefined,
       },
     });

@@ -140,6 +140,8 @@ type SessionTarget = {
   pageEnd?: number | null;
   isReviewOnly?: boolean;
   startInRecitationCheck?: boolean;
+  startInReciteMode?: boolean;
+  fromReadingRecite?: boolean;
 };
 
 type AyahSheetTarget = {
@@ -357,6 +359,12 @@ function formatAyahRange(start: number | undefined | null, end: number | undefin
 
 function clampNumber(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, value));
+}
+
+function parseRouteInt(value: string | undefined): number | null {
+  if (value === undefined) return null;
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) ? parsed : null;
 }
 
 function formatPageRange(start: number | undefined | null, end: number | undefined | null) {
@@ -681,10 +689,15 @@ export default function MemorizationScreen() {
     pageEnd?: string;
     session?: string;
     recite?: string;
+    reciteFromReading?: string;
     viewMode?: MemorizationViewMode;
     mushafViewMode?: string;
+    startAyah?: string;
+    returnPage?: string;
+    returnMushafViewMode?: MushafViewMode;
   }>();
   const childId = params.childId;
+  const routeIsReadingRecite = params.reciteFromReading === "1";
   const routeForcesTestMushaf = params.mushafViewMode === "test";
   const routeParamViewMode =
     params.viewMode === "page" ||
@@ -693,11 +706,34 @@ export default function MemorizationScreen() {
       ? params.viewMode
       : null;
   const routeViewMode = routeForcesTestMushaf ? "test-mushaf" : routeParamViewMode;
+  const routeSurahNumber = parseRouteInt(params.surahNumber);
+  const routeStartAyah = parseRouteInt(params.startAyah) ?? parseRouteInt(params.ayahStart);
+  const routePageStart = parseRouteInt(params.pageStart);
+  const routePageEnd = parseRouteInt(params.pageEnd);
+  const readingReciteReturnPage = parseRouteInt(params.returnPage);
+  const readingReciteReturnMushafViewMode =
+    params.returnMushafViewMode === "swipe" || params.returnMushafViewMode === "scroll"
+      ? params.returnMushafViewMode
+      : undefined;
+  const readingReciteInitialTarget: SessionTarget | null =
+    routeIsReadingRecite && routeSurahNumber !== null && routeStartAyah !== null
+      ? {
+          surahNumber: routeSurahNumber,
+          ayahStart: routeStartAyah,
+          ayahEnd: routeStartAyah,
+          currentAyah: routeStartAyah,
+          pageStart: routePageStart,
+          pageEnd: routePageEnd,
+          fromReadingRecite: true,
+          startInReciteMode: true,
+        }
+      : null;
   const initialSessionRequested =
-    params.session === "1" ||
-    (params.surahNumber !== undefined &&
-      params.ayahStart !== undefined &&
-      params.ayahEnd !== undefined);
+    !routeIsReadingRecite &&
+    (params.session === "1" ||
+      (params.surahNumber !== undefined &&
+        params.ayahStart !== undefined &&
+        params.ayahEnd !== undefined));
 
   const [surahNumber, setSurahNumber] = useState<number | null>(
     params.surahNumber ? Number(params.surahNumber) : null,
@@ -723,6 +759,10 @@ export default function MemorizationScreen() {
   const [startInRecitationCheck, setStartInRecitationCheck] = useState(false);
   const [startInReciteMode, setStartInReciteMode] = useState(params.recite === "1");
   const [pendingSessionTarget, setPendingSessionTarget] = useState<SessionTarget | null>(null);
+  const [readingRecitePendingTarget, setReadingRecitePendingTarget] =
+    useState<SessionTarget | null>(readingReciteInitialTarget);
+  const [readingReciteSession, setReadingReciteSession] = useState(false);
+  const [readingReciteExitOpen, setReadingReciteExitOpen] = useState(false);
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -1111,6 +1151,11 @@ export default function MemorizationScreen() {
   );
 
   usePreventRemove(sessionRequested && !loading && !error && !submitting, () => {
+    if (readingReciteSession) {
+      setSaveError(null);
+      setReadingReciteExitOpen(true);
+      return;
+    }
     setSaveError(null);
     setLeaveSheetOpen(true);
   });
@@ -1148,6 +1193,7 @@ export default function MemorizationScreen() {
 
   function startConfiguredSession(target: SessionTarget) {
     setPendingSessionTarget(null);
+    setReadingRecitePendingTarget(null);
     beginSession(target);
   }
 
@@ -1163,8 +1209,10 @@ export default function MemorizationScreen() {
     const nextStart = Math.max(1, target.ayahStart);
     const nextEnd = Math.max(nextStart, target.ayahEnd);
     const nextCurrent = clampNumber(target.currentAyah ?? nextStart, nextStart, nextEnd);
+    const nextReadingReciteSession = Boolean(target.fromReadingRecite);
     setSessionRequested(true);
     setSessionLoadId((value) => value + 1);
+    if (nextReadingReciteSession) setViewMode("test-mushaf");
     setMushafViewMode(profileMushafViewMode);
     setMushafDefaultSaved(false);
     setLoading(true);
@@ -1189,6 +1237,8 @@ export default function MemorizationScreen() {
     setAyahTranslations({});
     setSessionReviewOnly(Boolean(target.isReviewOnly));
     setStartInRecitationCheck(Boolean(target.isReviewOnly && target.startInRecitationCheck));
+    setReadingReciteSession(nextReadingReciteSession);
+    setReadingReciteExitOpen(false);
     setLeaveSheetOpen(false);
     setPauseSheetOpen(false);
     setPauseCompletedAyahEnd(null);
@@ -1200,7 +1250,7 @@ export default function MemorizationScreen() {
     setRatingAyahEnd(null);
     setRecitationCheckSource("teacher");
     setRecitationScore(null);
-    setStartInReciteMode(false);
+    setStartInReciteMode(Boolean(target.startInReciteMode));
     setSaveError(null);
     setCelebration(null);
     setCumAyahIdx(0);
@@ -2733,6 +2783,11 @@ export default function MemorizationScreen() {
       return;
     }
     if (submitting) return;
+    if (readingReciteSession) {
+      setSaveError(null);
+      setReadingReciteExitOpen(true);
+      return;
+    }
     setSaveError(null);
     restoreReadyPromptAfterLeaveRef.current = readyToReciteSheetOpenRef.current;
     updateReadyToReciteSheet(false);
@@ -2747,6 +2802,56 @@ export default function MemorizationScreen() {
       return;
     }
     restoreReadyPromptAfterLeaveRef.current = false;
+  }
+
+  function getReadingReciteCompletedThroughAyah() {
+    if (ayahStartRef.current === null || ayahEndRef.current === null) return null;
+    const completedThrough = Math.min(ayahEndRef.current, currentVerseRef.current - 1);
+    return completedThrough >= ayahStartRef.current ? completedThrough : null;
+  }
+
+  function returnToReadingMushaf() {
+    const targetPage = clampMushafPage(
+      readingReciteReturnPage ?? pageStart ?? activeMushafPage ?? 1,
+    );
+    setTimeout(() => {
+      router.replace({
+        pathname: "/child/[childId]/mushaf",
+        params: {
+          childId,
+          name: params.name ?? "",
+          page: String(targetPage),
+          fromMemorization: "1",
+          mushafViewMode: readingReciteReturnMushafViewMode,
+        },
+      });
+    }, 0);
+  }
+
+  function openReadingReciteSavePrompt() {
+    setSettingsOpen(false);
+    setSaveError(null);
+    setReadingReciteExitOpen(true);
+  }
+
+  function saveReadingReciteAndReturn() {
+    const completedThrough = getReadingReciteCompletedThroughAyah();
+    if (completedThrough === null) {
+      setSaveError("No full ayah has been completed yet.");
+      return;
+    }
+    setReadingReciteExitOpen(false);
+    openRecitationCheck({
+      completedToAyah: completedThrough,
+      source: "teacher",
+      score: null,
+    });
+  }
+
+  async function discardReadingReciteAndReturn() {
+    setReadingReciteExitOpen(false);
+    await handleLeaveWithoutSaving();
+    returnToReadingMushaf();
   }
 
   function handleSaveAndLeave() {
@@ -2876,6 +2981,8 @@ export default function MemorizationScreen() {
     ExpoSpeechRecognitionModule.stop();
     await stopAudioCompletely();
     setSessionReviewOnly(false);
+    setReadingReciteSession(false);
+    setReadingReciteExitOpen(false);
     setSurahNumber(null);
     setAyahStart(null);
     setAyahEnd(null);
@@ -2952,6 +3059,10 @@ export default function MemorizationScreen() {
 
   async function handleToggleReciteMode() {
     if (reciteModeRef.current) {
+      if (readingReciteSession) {
+        openReadingReciteSavePrompt();
+        return;
+      }
       reciteModeRef.current = false;
       setReciteMode(false);
       setReciteListening(false);
@@ -3031,6 +3142,7 @@ export default function MemorizationScreen() {
     const sessionAyahs = buildAyahRange(ayahStart, completedThroughAyah);
     setSubmitting(true);
     setSaveError(null);
+    const shouldReturnToReading = readingReciteSession;
     try {
       const [dashboardBeforeSave, latestProgress] = await Promise.all([
         fetchDashboard(childId),
@@ -3093,10 +3205,16 @@ export default function MemorizationScreen() {
       setRecitationCheckSource("teacher");
       setRecitationScore(null);
       setStartInRecitationCheck(false);
+      setReadingReciteSession(false);
+      setReadingReciteExitOpen(false);
       setSessionBookmark(null);
       await clearMemorizationSessionBookmark(childId);
       setSessionRequested(false);
       setLoading(false);
+      if (shouldReturnToReading) {
+        returnToReadingMushaf();
+        return;
+      }
       if (nextCelebration && confettiEnabled) {
         setCelebration(nextCelebration);
       } else if (!nextCelebration) {
@@ -4573,6 +4691,22 @@ export default function MemorizationScreen() {
     currentReciteWordPage < displayedRecitePage
       ? "arrow-back-outline"
       : "arrow-forward-outline";
+  const showReadingReciteReturnButton =
+    readingReciteSession &&
+    reciteMode &&
+    viewMode === "test-mushaf" &&
+    currentReciteWordPage !== null &&
+    displayedRecitePage !== null &&
+    currentReciteWordPage !== displayedRecitePage;
+  const readingReciteReturnIcon: keyof typeof Ionicons.glyphMap =
+    currentReciteWordPage !== null &&
+    displayedRecitePage !== null &&
+    currentReciteWordPage < displayedRecitePage
+      ? "arrow-up-outline"
+      : "arrow-down-outline";
+  const readingReciteCompletedThroughAyah = readingReciteSession
+    ? getReadingReciteCompletedThroughAyah()
+    : null;
   const getMushafItemLayout = useCallback(
     (_data: ArrayLike<number> | null | undefined, index: number) => ({
       length: mushafPageWidth,
@@ -4621,8 +4755,9 @@ export default function MemorizationScreen() {
 
   useEffect(() => {
     if (viewMode !== "test-mushaf" || activeMushafPage === null) return;
+    if (readingReciteSession && reciteMode) return;
     updateDisplayedMushafPage(activeMushafPage);
-  }, [activeMushafPage, viewMode, sessionLoadId]);
+  }, [activeMushafPage, readingReciteSession, reciteMode, viewMode, sessionLoadId]);
 
   useEffect(() => {
     if (!reciteMode || viewMode !== "page" || currentReciteWordPage === null) return;
@@ -4869,6 +5004,25 @@ export default function MemorizationScreen() {
   // ── Render ───────────────────────────────────────────────────────────────────
 
   if (!sessionRequested) {
+    if (readingRecitePendingTarget) {
+      return (
+        <ReadingReciteRangeSetup
+          childId={childId}
+          name={params.name}
+          target={readingRecitePendingTarget}
+          chaptersMap={chaptersMap}
+          onCancel={returnToReadingMushaf}
+          onStart={(target) =>
+            startConfiguredSession({
+              ...target,
+              fromReadingRecite: true,
+              startInReciteMode: true,
+            })
+          }
+        />
+      );
+    }
+
     if (pendingSessionTarget) {
       return (
         <MemorizationSetup
@@ -5044,6 +5198,7 @@ export default function MemorizationScreen() {
           reciteActive={reciteMode}
           reciteCurrentWord={reciteCurrentWord}
           reciteRange={reciteRange}
+          reciteAutoPage={!readingReciteSession}
           sessionFocusRange={sessionFocusRange}
           onWordSeek={(word) => {
             void handleTestMushafWordSeek(word);
@@ -5149,6 +5304,18 @@ export default function MemorizationScreen() {
           )}
         </View>
       )}
+
+      {showReadingReciteReturnButton && currentReciteWordPage !== null ? (
+        <Pressable
+          style={styles.readingReciteReturnButton}
+          onPress={() => updateDisplayedMushafPage(currentReciteWordPage)}
+          accessibilityRole="button"
+          accessibilityLabel={`Return to current recite ayah on page ${currentReciteWordPage}`}
+        >
+          <Ionicons name={readingReciteReturnIcon} size={16} color="#ffffff" />
+          <Text style={styles.readingReciteReturnText}>Current ayah</Text>
+        </Pressable>
+      ) : null}
 
       {reciteMode && currentReciteExpectedIndex !== null && (
         <View style={styles.reciteAssistRow}>
@@ -5302,6 +5469,64 @@ export default function MemorizationScreen() {
       {reciteError && (
         <Text style={styles.errorText}>{reciteError}</Text>
       )}
+
+      {/* Reading recite exit sheet */}
+      <Modal
+        visible={readingReciteExitOpen}
+        transparent
+        animationType="slide"
+        onRequestClose={() => {
+          if (!submitting) void discardReadingReciteAndReturn();
+        }}
+      >
+        <Pressable
+          style={styles.backdrop}
+          onPress={() => {
+            if (!submitting) void discardReadingReciteAndReturn();
+          }}
+        />
+        <View style={styles.completionSheet}>
+          <Text style={styles.sheetTitle}>End this recitation?</Text>
+          <Text style={styles.completionSubtitle}>
+            {chaptersMap.get(surahNumber ?? 0)?.name_simple ?? "Current surah"} ·{" "}
+            {formatAyahRange(ayahStart, ayahEnd)}
+          </Text>
+
+          <View style={[styles.pauseSummaryCard, styles.leaveWarningCard]}>
+            <Text style={styles.pauseSummaryTitle}>
+              {readingReciteCompletedThroughAyah !== null
+                ? `Completed through ayah ${readingReciteCompletedThroughAyah}`
+                : "No completed ayahs yet"}
+            </Text>
+            <Text style={styles.pauseSummaryDetail}>
+              Save opens the rating step and stores completed ayahs for review. Discard returns to Reading without saving this recitation.
+            </Text>
+          </View>
+
+          {saveError ? <Text style={styles.saveErrorText}>{saveError}</Text> : null}
+
+          <Pressable
+            style={[
+              styles.completeButton,
+              (readingReciteCompletedThroughAyah === null || submitting) &&
+                styles.completeButtonDisabled,
+            ]}
+            onPress={saveReadingReciteAndReturn}
+            disabled={readingReciteCompletedThroughAyah === null || submitting}
+          >
+            <Text style={styles.completeButtonText}>Rate & Save</Text>
+          </Pressable>
+          <Pressable
+            style={styles.leaveDestructiveButton}
+            onPress={() => {
+              void discardReadingReciteAndReturn();
+            }}
+            disabled={submitting}
+          >
+            <Text style={styles.leaveDestructiveText}>Discard & Return</Text>
+          </Pressable>
+        </View>
+      </Modal>
 
       {/* Leave confirmation sheet */}
       <Modal
@@ -6730,6 +6955,165 @@ function MemorizationSetup({
   );
 }
 
+function ReadingReciteRangeSetup({
+  childId,
+  name,
+  target,
+  chaptersMap,
+  onCancel,
+  onStart,
+}: {
+  childId: string | undefined;
+  name: string | undefined;
+  target: SessionTarget;
+  chaptersMap: Map<number, ApiChapter>;
+  onCancel: () => void;
+  onStart: (target: SessionTarget) => void;
+}) {
+  const surah = MUSHAF_SURAHS.find((item) => item.number === target.surahNumber);
+  const maxAyah = Math.max(1, surah?.verseCount ?? target.ayahStart);
+  const fromAyah = clampNumber(target.ayahStart, 1, maxAyah);
+  const [toAyah, setToAyah] = useState(clampNumber(target.ayahEnd, fromAyah, maxAyah));
+  const [toInput, setToInput] = useState(String(clampNumber(target.ayahEnd, fromAyah, maxAyah)));
+
+  useEffect(() => {
+    const nextTo = clampNumber(Math.max(target.ayahEnd, fromAyah), fromAyah, maxAyah);
+    setToAyah(nextTo);
+    setToInput(String(nextTo));
+  }, [fromAyah, maxAyah, target.ayahEnd]);
+
+  useEffect(() => {
+    setToInput(String(toAyah));
+  }, [toAyah]);
+
+  function commitToInput() {
+    const parsed = Number.parseInt(toInput, 10);
+    const nextTo = clampNumber(Number.isNaN(parsed) ? toAyah : parsed, fromAyah, maxAyah);
+    setToAyah(nextTo);
+    setToInput(String(nextTo));
+  }
+
+  function buildTarget(): SessionTarget {
+    const pages = estimatePageRange(target.surahNumber, fromAyah, toAyah);
+    return {
+      surahNumber: target.surahNumber,
+      ayahStart: fromAyah,
+      ayahEnd: toAyah,
+      currentAyah: fromAyah,
+      pageStart: pages.pageStart,
+      pageEnd: pages.pageEnd,
+      fromReadingRecite: true,
+      startInReciteMode: true,
+    };
+  }
+
+  const surahName =
+    chaptersMap.get(target.surahNumber)?.name_simple ??
+    surah?.name ??
+    `Surah ${target.surahNumber}`;
+  const surahArabic = chaptersMap.get(target.surahNumber)?.name_arabic ?? "";
+  const surahTranslation = surah?.translation ?? "";
+  const totalAyahs = toAyah - fromAyah + 1;
+  const pageRange = formatPageRange(buildTarget().pageStart, buildTarget().pageEnd);
+
+  return (
+    <View style={styles.setupContainer}>
+      <View style={styles.discoveryHeader}>
+        <Pressable onPress={onCancel} style={styles.discoveryBackButton}>
+          <Text style={styles.back}>← Back</Text>
+        </Pressable>
+        <View style={styles.discoveryHeaderText}>
+          <Text style={styles.discoveryTitle}>Recite from Reading</Text>
+          <Text style={styles.discoverySubtitle}>
+            {name ? `${name}'s Test Mushaf recitation` : "Test Mushaf recitation"}
+          </Text>
+        </View>
+        <View style={styles.discoveryHeaderActionPlaceholder} />
+      </View>
+
+      <ScrollView
+        style={styles.setupScroll}
+        contentContainerStyle={styles.setupContent}
+        keyboardDismissMode="on-drag"
+        keyboardShouldPersistTaps="handled"
+      >
+        <View style={styles.setupHero}>
+          <View style={styles.setupHeroText}>
+            <Text style={styles.setupKicker}>Surah {target.surahNumber}</Text>
+            <Text style={styles.setupTitle}>{surahName}</Text>
+            <Text style={styles.setupDetail}>
+              {surahTranslation} · {maxAyah} ayahs{pageRange ? ` · ${pageRange}` : ""}
+            </Text>
+          </View>
+          {surahArabic ? <Text style={styles.setupArabic}>{surahArabic}</Text> : null}
+        </View>
+
+        <View style={styles.setupCard}>
+          <View>
+            <Text style={styles.setupCardTitle}>Ayah Range</Text>
+            <Text style={styles.setupCardDetail}>
+              Starts at ayah {fromAyah}. Choose where this recitation should end.
+            </Text>
+          </View>
+          <View style={styles.setupRangeRow}>
+            <View style={styles.setupInputBlock}>
+              <Text style={styles.setupInputLabel}>From</Text>
+              <View style={styles.setupStepperRow}>
+                <TextInput
+                  value={String(fromAyah)}
+                  editable={false}
+                  style={[styles.setupInput, styles.setupInputDisabled]}
+                />
+              </View>
+            </View>
+
+            <View style={styles.setupInputBlock}>
+              <Text style={styles.setupInputLabel}>To</Text>
+              <View style={styles.setupStepperRow}>
+                <Pressable
+                  style={styles.setupMiniStepButton}
+                  onPress={() => setToAyah((value) => clampNumber(value - 1, fromAyah, maxAyah))}
+                  disabled={toAyah <= fromAyah}
+                >
+                  <Text style={styles.stepperButtonText}>-</Text>
+                </Pressable>
+                <TextInput
+                  value={toInput}
+                  onChangeText={setToInput}
+                  onEndEditing={commitToInput}
+                  onSubmitEditing={commitToInput}
+                  keyboardType="number-pad"
+                  returnKeyType="done"
+                  style={styles.setupInput}
+                />
+                <Pressable
+                  style={styles.setupMiniStepButton}
+                  onPress={() => setToAyah((value) => clampNumber(value + 1, fromAyah, maxAyah))}
+                  disabled={toAyah >= maxAyah}
+                >
+                  <Text style={styles.stepperButtonText}>+</Text>
+                </Pressable>
+              </View>
+            </View>
+          </View>
+          <Text style={styles.setupCardDetail}>
+            {totalAyahs} ayah{totalAyahs === 1 ? "" : "s"} selected for Test Mushaf recitation.
+          </Text>
+        </View>
+
+        <Pressable style={styles.setupPrimaryButton} onPress={() => onStart(buildTarget())}>
+          <Text style={styles.setupPrimaryButtonText}>
+            Start Reciting · Ayah {fromAyah}
+            {fromAyah === toAyah ? "" : `-${toAyah}`}
+          </Text>
+        </Pressable>
+      </ScrollView>
+
+      <ChildBottomNav active="memorization" childId={childId} name={name ?? ""} />
+    </View>
+  );
+}
+
 function MemorizationDiscovery({
   childId,
   name,
@@ -7622,6 +8006,10 @@ const styles = StyleSheet.create({
   },
   discoveryHeaderSpacer: {
     width: 70,
+  },
+  discoveryHeaderActionPlaceholder: {
+    width: 70,
+    minHeight: 36,
   },
   discoveryHeaderAction: {
     width: 70,
@@ -8971,6 +9359,29 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(255, 255, 255, 0.96)",
     borderTopWidth: 1,
     borderTopColor: "#e2e8f0",
+  },
+  readingReciteReturnButton: {
+    position: "absolute",
+    right: 16,
+    bottom: 132,
+    zIndex: 20,
+    minHeight: 42,
+    borderRadius: 999,
+    paddingHorizontal: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 7,
+    backgroundColor: "#2563eb",
+    shadowColor: "#1d4ed8",
+    shadowOpacity: 0.24,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 6,
+  },
+  readingReciteReturnText: {
+    color: "#ffffff",
+    fontSize: 12,
+    fontWeight: "900",
   },
   reciteAssistPill: {
     minHeight: 40,
