@@ -80,7 +80,6 @@ const QURAN_COM_1405_PAGE_ASPECT_RATIO =
 const MUSHAF_AUDIO_SPEEDS = [0.75, 0.85, 1, 1.15, 1.25, 1.5] as const;
 const MUSHAF_AUDIO_AYAH_REPEATS = [1, 2, 3, 5] as const;
 const MUSHAF_AUDIO_RANGE_REPEATS = [1, 2, 3] as const;
-const MUSHAF_CONTROL_SLOT_HEIGHT = 170;
 
 type ReadingStatus = "not_started" | "in_progress" | "completed";
 type ToolMode = "none" | "blind" | "recite";
@@ -967,6 +966,196 @@ function MushafAudioSettingsModal({
   );
 }
 
+function ReaderSettingsModal({
+  visible,
+  bottomInset,
+  currentPage,
+  currentSurah,
+  currentJuz,
+  mushafViewMode,
+  pageBookmarked,
+  toolMode,
+  audioPlayer,
+  audioSettings,
+  onClose,
+  onChangeViewMode,
+  onTogglePageBookmark,
+  onToggleToolMode,
+  onOpenCredits,
+  onAudioToggle,
+  onAudioStop,
+  onAudioPrevious,
+  onAudioNext,
+  onOpenAudioSettings,
+}: {
+  visible: boolean;
+  bottomInset: number;
+  currentPage: number;
+  currentSurah: MushafSurah;
+  currentJuz: number;
+  mushafViewMode: MushafViewMode;
+  pageBookmarked: boolean;
+  toolMode: ToolMode;
+  audioPlayer: MushafAudioPlayer | null;
+  audioSettings: MushafAudioSettings;
+  onClose: () => void;
+  onChangeViewMode: (mode: MushafViewMode) => void;
+  onTogglePageBookmark: () => void;
+  onToggleToolMode: (mode: ToolMode) => void;
+  onOpenCredits: () => void;
+  onAudioToggle: () => void;
+  onAudioStop: () => void;
+  onAudioPrevious: () => void;
+  onAudioNext: () => void;
+  onOpenAudioSettings: () => void;
+}) {
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <Pressable style={styles.backdrop} onPress={onClose} />
+      <View pointerEvents="box-none" style={styles.readerSettingsWrap}>
+        <View style={styles.readerSettingsPanel}>
+          <View style={styles.readerSettingsHeader}>
+            <View style={styles.readerSettingsTitleBlock}>
+              <Text style={styles.readerSettingsTitle}>Reader settings</Text>
+              <Text style={styles.readerSettingsSubtitle}>
+                {currentSurah.number}. {currentSurah.name} · Page {currentPage} · Juz {currentJuz}
+              </Text>
+            </View>
+            <Pressable
+              style={styles.readerSettingsClose}
+              onPress={onClose}
+              accessibilityRole="button"
+              accessibilityLabel="Close reader settings"
+            >
+              <Ionicons name="close" size={18} color="#6b7280" />
+            </Pressable>
+          </View>
+
+          <ScrollView
+            style={styles.readerSettingsScroll}
+            contentContainerStyle={[
+              styles.readerSettingsContent,
+              { paddingBottom: 18 + bottomInset },
+            ]}
+          >
+            <View style={styles.readerSettingsSection}>
+              <Text style={styles.sectionLabel}>View</Text>
+              <View style={[styles.viewModeSegment, styles.readerViewModeSegment]}>
+                {(["swipe", "scroll"] as const).map((mode) => {
+                  const active = mushafViewMode === mode;
+                  return (
+                    <Pressable
+                      key={mode}
+                      style={[styles.viewModePill, active && styles.viewModePillSelected]}
+                      onPress={() => onChangeViewMode(mode)}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected: active }}
+                      accessibilityLabel={`Use ${mode} Mushaf view`}
+                    >
+                      <Ionicons
+                        name={mode === "swipe" ? "swap-horizontal-outline" : "reorder-four-outline"}
+                        size={15}
+                        color={active ? "#ffffff" : "#475569"}
+                      />
+                      <Text
+                        style={[
+                          styles.viewModePillText,
+                          active && styles.viewModePillTextSelected,
+                        ]}
+                      >
+                        {mode === "swipe" ? "Swipe" : "Scroll"}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </View>
+
+            <View style={styles.readerSettingsSection}>
+              <Text style={styles.sectionLabel}>Page</Text>
+              <Pressable
+                style={styles.readerSettingsRow}
+                onPress={onTogglePageBookmark}
+                accessibilityRole="button"
+                accessibilityLabel={pageBookmarked ? "Remove page bookmark" : "Bookmark page"}
+              >
+                <View style={[styles.readerSettingsRowIcon, { backgroundColor: "#fef3c7" }]}>
+                  <Ionicons
+                    name={pageBookmarked ? "bookmark" : "bookmark-outline"}
+                    size={18}
+                    color="#b45309"
+                  />
+                </View>
+                <View style={styles.readerSettingsRowText}>
+                  <Text style={styles.readerSettingsRowTitle}>
+                    {pageBookmarked ? "Remove page bookmark" : "Bookmark page"}
+                  </Text>
+                  <Text style={styles.readerSettingsRowSubtitle}>
+                    Page {currentPage} · {currentSurah.name}
+                  </Text>
+                </View>
+                {pageBookmarked ? (
+                  <Ionicons name="checkmark-circle" size={19} color="#16a34a" />
+                ) : null}
+              </Pressable>
+              <Pressable
+                style={styles.readerSettingsRow}
+                onPress={onOpenCredits}
+                accessibilityRole="button"
+                accessibilityLabel="Mushaf credits"
+              >
+                <View style={[styles.readerSettingsRowIcon, { backgroundColor: "#dbeafe" }]}>
+                  <Ionicons name="information-circle-outline" size={18} color="#2563eb" />
+                </View>
+                <View style={styles.readerSettingsRowText}>
+                  <Text style={styles.readerSettingsRowTitle}>Mushaf credits</Text>
+                  <Text style={styles.readerSettingsRowSubtitle}>Quran.com 1405 page images</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={17} color="#9ca3af" />
+              </Pressable>
+            </View>
+
+            <View style={styles.readerSettingsSection}>
+              <Text style={styles.sectionLabel}>Practice</Text>
+              <View style={styles.readerToolPills}>
+                <ToolButton
+                  label="Blind"
+                  iconName={toolMode === "blind" ? "eye-off-outline" : "eye-outline"}
+                  color="#7c3aed"
+                  active={toolMode === "blind"}
+                  onPress={() => onToggleToolMode("blind")}
+                />
+                <ToolButton
+                  label="Recite"
+                  iconName="mic-outline"
+                  color="#be123c"
+                  active={toolMode === "recite"}
+                  onPress={() => onToggleToolMode("recite")}
+                />
+              </View>
+            </View>
+
+            {audioPlayer ? (
+              <View style={styles.readerSettingsSection}>
+                <Text style={styles.sectionLabel}>Audio</Text>
+                <MushafAudioBar
+                  player={audioPlayer}
+                  settings={audioSettings}
+                  onToggle={onAudioToggle}
+                  onStop={onAudioStop}
+                  onPrevious={onAudioPrevious}
+                  onNext={onAudioNext}
+                  onOpenSettings={onOpenAudioSettings}
+                />
+              </View>
+            ) : null}
+          </ScrollView>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
 function AyahActionSheet({
   target,
   pageBookmarked,
@@ -1614,8 +1803,6 @@ export default function MushafScreen() {
     () => Math.max(1, Math.round(fittedPageLayout.height)),
     [fittedPageLayout.height],
   );
-  const controlSlotHeight = MUSHAF_CONTROL_SLOT_HEIGHT + safeAreaInsets.bottom;
-  const controlSlotPaddingBottom = 10 + safeAreaInsets.bottom;
   const requestedInitialPage = useMemo(() => parsePageParam(params.page), [params.page]);
 
   const [initialPage, setInitialPage] = useState<number | null>(null);
@@ -1635,6 +1822,7 @@ export default function MushafScreen() {
   const [selectedAyah, setSelectedAyah] = useState<PageAyahTarget | null>(null);
   const [pageVerses, setPageVerses] = useState<ApiPageVerse[]>([]);
   const [attributionOpen, setAttributionOpen] = useState(false);
+  const [readerSettingsOpen, setReaderSettingsOpen] = useState(false);
   const [audioSettings, setAudioSettings] = useState<MushafAudioSettings>(
     DEFAULT_MUSHAF_AUDIO_SETTINGS,
   );
@@ -2438,6 +2626,16 @@ export default function MushafScreen() {
     openMemorizationFromAyah(target, { recite: true });
   }
 
+  function openCreditsFromReaderSettings() {
+    setReaderSettingsOpen(false);
+    setAttributionOpen(true);
+  }
+
+  function openAudioSettingsFromReaderSettings() {
+    setReaderSettingsOpen(false);
+    setAudioSettingsOpen(true);
+  }
+
   return (
     <View style={styles.container}>
       <View style={styles.header}>
@@ -2463,12 +2661,12 @@ export default function MushafScreen() {
           </Text>
         </Pressable>
         <Pressable
-          style={styles.headerInfoButton}
-          onPress={() => setAttributionOpen(true)}
+          style={styles.headerIconButton}
+          onPress={() => setReaderSettingsOpen(true)}
           accessibilityRole="button"
-          accessibilityLabel="Mushaf credits"
+          accessibilityLabel="Reader settings"
         >
-          <Ionicons name="information-circle-outline" size={21} color="#2563eb" />
+          <Ionicons name="settings-outline" size={21} color="#2563eb" />
         </Pressable>
       </View>
 
@@ -2591,78 +2789,28 @@ export default function MushafScreen() {
         )}
       </View>
 
-      {initialPage !== null ? (
-        <View
-          style={[
-            styles.controlSlot,
-            {
-              height: controlSlotHeight,
-              paddingBottom: controlSlotPaddingBottom,
-            },
-          ]}
-        >
-          <View style={styles.viewModeSegment}>
-            {(["swipe", "scroll"] as const).map((mode) => {
-              const active = mushafViewMode === mode;
-              return (
-                <Pressable
-                  key={mode}
-                  style={[
-                    styles.viewModePill,
-                    active && styles.viewModePillSelected,
-                  ]}
-                  onPress={() => updateMushafViewMode(mode)}
-                  accessibilityRole="button"
-                  accessibilityState={{ selected: active }}
-                  accessibilityLabel={`Use ${mode} Mushaf view`}
-                >
-                  <Ionicons
-                    name={mode === "swipe" ? "swap-horizontal-outline" : "reorder-four-outline"}
-                    size={15}
-                    color={active ? "#ffffff" : "#475569"}
-                  />
-                  <Text
-                    style={[
-                      styles.viewModePillText,
-                      active && styles.viewModePillTextSelected,
-                    ]}
-                  >
-                    {mode === "swipe" ? "Swipe" : "Scroll"}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </View>
-          {audioPlayer ? (
-            <MushafAudioBar
-              player={audioPlayer}
-              settings={audioSettings}
-              onToggle={() => void toggleMushafAudio()}
-              onStop={() => void stopMushafAudio()}
-              onPrevious={() => jumpMushafAudio(-1)}
-              onNext={() => jumpMushafAudio(1)}
-              onOpenSettings={() => setAudioSettingsOpen(true)}
-            />
-          ) : (
-            <View style={styles.controlPills}>
-              <ToolButton
-                label="Blind"
-                iconName={toolMode === "blind" ? "eye-off-outline" : "eye-outline"}
-                color="#7c3aed"
-                active={toolMode === "blind"}
-                onPress={() => toggleToolMode("blind")}
-              />
-              <ToolButton
-                label="Recite"
-                iconName="mic-outline"
-                color="#be123c"
-                active={toolMode === "recite"}
-                onPress={() => toggleToolMode("recite")}
-              />
-            </View>
-          )}
-        </View>
-      ) : null}
+      <ReaderSettingsModal
+        visible={readerSettingsOpen}
+        bottomInset={safeAreaInsets.bottom}
+        currentPage={currentPage}
+        currentSurah={currentSurah}
+        currentJuz={currentJuz}
+        mushafViewMode={mushafViewMode}
+        pageBookmarked={bookmarkedPages.includes(currentPage)}
+        toolMode={toolMode}
+        audioPlayer={audioPlayer}
+        audioSettings={audioSettings}
+        onClose={() => setReaderSettingsOpen(false)}
+        onChangeViewMode={updateMushafViewMode}
+        onTogglePageBookmark={() => toggleBookmark(currentPage)}
+        onToggleToolMode={toggleToolMode}
+        onOpenCredits={openCreditsFromReaderSettings}
+        onAudioToggle={() => void toggleMushafAudio()}
+        onAudioStop={() => void stopMushafAudio()}
+        onAudioPrevious={() => jumpMushafAudio(-1)}
+        onAudioNext={() => jumpMushafAudio(1)}
+        onOpenAudioSettings={openAudioSettingsFromReaderSettings}
+      />
 
       <AyahActionSheet
         target={selectedAyah}
@@ -2970,7 +3118,7 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     textAlign: "center",
   },
-  headerInfoButton: {
+  headerIconButton: {
     width: 42,
     height: 42,
     borderRadius: 21,
@@ -2979,20 +3127,6 @@ const styles = StyleSheet.create({
     backgroundColor: "#eff6ff",
     borderWidth: 1,
     borderColor: "#bfdbfe",
-  },
-  controlSlot: {
-    height: MUSHAF_CONTROL_SLOT_HEIGHT,
-    backgroundColor: "#f5efe0",
-    borderTopWidth: 1,
-    borderTopColor: "#e3d5bd",
-    justifyContent: "center",
-    paddingBottom: 10,
-  },
-  controlPills: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 10,
   },
   viewModeSegment: {
     alignSelf: "center",
@@ -3049,6 +3183,103 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: "#374151",
     fontWeight: "900",
+  },
+  readerSettingsWrap: {
+    flex: 1,
+    justifyContent: "flex-end",
+  },
+  readerSettingsPanel: {
+    maxHeight: "82%",
+    borderTopLeftRadius: 18,
+    borderTopRightRadius: 18,
+    backgroundColor: "#ffffff",
+    overflow: "hidden",
+  },
+  readerSettingsHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    paddingHorizontal: 18,
+    paddingTop: 16,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "#e2e8f0",
+  },
+  readerSettingsTitleBlock: {
+    flex: 1,
+    minWidth: 0,
+  },
+  readerSettingsTitle: {
+    fontSize: 19,
+    color: "#111827",
+    fontWeight: "900",
+  },
+  readerSettingsSubtitle: {
+    marginTop: 2,
+    fontSize: 12,
+    color: "#666666",
+    fontWeight: "700",
+  },
+  readerSettingsClose: {
+    width: 34,
+    height: 34,
+    borderRadius: 10,
+    backgroundColor: "#f3f4f6",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  readerSettingsScroll: {
+    maxHeight: "100%",
+  },
+  readerSettingsContent: {
+    paddingHorizontal: 18,
+    paddingTop: 14,
+    gap: 16,
+  },
+  readerSettingsSection: {
+    gap: 10,
+  },
+  readerViewModeSegment: {
+    marginBottom: 0,
+  },
+  readerSettingsRow: {
+    minHeight: 56,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    backgroundColor: "#ffffff",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  readerSettingsRowIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  readerSettingsRowText: {
+    flex: 1,
+    minWidth: 0,
+  },
+  readerSettingsRowTitle: {
+    fontSize: 14,
+    color: "#111827",
+    fontWeight: "900",
+  },
+  readerSettingsRowSubtitle: {
+    marginTop: 2,
+    fontSize: 11,
+    color: "#64748b",
+    fontWeight: "700",
+  },
+  readerToolPills: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
   },
   errorBanner: {
     backgroundColor: "#fef2f2",
@@ -3191,7 +3422,6 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   audioBar: {
-    marginHorizontal: 16,
     borderRadius: 12,
     borderWidth: 1,
     borderColor: "#bfdbfe",
