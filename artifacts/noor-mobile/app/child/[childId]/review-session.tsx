@@ -14,7 +14,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Audio } from "expo-av";
-import { BayaanMushafPage } from "@/src/components/bayaan-mushaf-page";
+import { ReviewMushafPage } from "@/src/components/review-mushaf-page";
 import { ayahAudioUrl } from "@/src/lib/audio";
 import { DEFAULT_RECITER_ID, findReciter, RECITERS } from "@/src/lib/reciters";
 import { submitReview } from "@/src/lib/reviews";
@@ -657,7 +657,7 @@ export default function ReviewSession() {
     const pageIsLoading = !pageError && !pageVersesByPage[pageNumber];
 
     return (
-      <BayaanMushafPage
+      <ReviewMushafPage
         pageNumber={pageNumber}
         verses={pageVerses}
         width={imageWidth}
