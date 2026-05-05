@@ -92,6 +92,7 @@ type MushafTestPageViewProps = {
   // Phase 1g.a: recite visualization props
   reciteActive?: boolean;
   reciteCurrentWord?: ReciteWordPointer | null;
+  reciteCurrentWordRevealed?: boolean;
   reciteRange?: ReciteRange | null;
   reciteAutoPage?: boolean;
   sessionFocusRange?: ReciteRange | null;
@@ -267,6 +268,7 @@ function MushafTestPage({
   revealedAyahs,
   reciteActive,
   reciteCurrentWord,
+  reciteCurrentWordRevealed,
   reciteRange,
   sessionFocusRange,
   actionSheetVisible,
@@ -290,6 +292,7 @@ function MushafTestPage({
   revealedAyahs: Set<string>;
   reciteActive: boolean;
   reciteCurrentWord?: ReciteWordPointer | null;
+  reciteCurrentWordRevealed: boolean;
   reciteRange?: ReciteRange | null;
   sessionFocusRange?: ReciteRange | null;
   actionSheetVisible: boolean;
@@ -579,6 +582,9 @@ function MushafTestPage({
                   style={[
                     styles.reciteMask,
                     state === "current" && styles.reciteMaskCurrent,
+                    state === "current" &&
+                      reciteCurrentWordRevealed &&
+                      styles.reciteMaskCurrentRevealed,
                     {
                       top: rect.top,
                       left: rect.left,
@@ -712,6 +718,7 @@ export function MushafTestPageView({
   blurMode = false,
   reciteActive = false,
   reciteCurrentWord = null,
+  reciteCurrentWordRevealed = false,
   reciteRange = null,
   reciteAutoPage = true,
   sessionFocusRange = null,
@@ -1085,6 +1092,7 @@ export function MushafTestPageView({
         revealedAyahs={revealedAyahs}
         reciteActive={reciteActive}
         reciteCurrentWord={reciteCurrentWord}
+        reciteCurrentWordRevealed={reciteCurrentWordRevealed}
         reciteRange={reciteRange}
         sessionFocusRange={sessionFocusRange}
         actionSheetVisible={actionSheetVisible}
@@ -1248,6 +1256,9 @@ const styles = StyleSheet.create({
     borderColor: "#3b82f6",
     backgroundColor: "#eff6ff",
     zIndex: 5,
+  },
+  reciteMaskCurrentRevealed: {
+    backgroundColor: "transparent",
   },
   blindMask: {
     position: "absolute",

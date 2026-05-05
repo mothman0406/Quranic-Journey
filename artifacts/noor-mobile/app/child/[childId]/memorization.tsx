@@ -144,6 +144,13 @@ type SessionTarget = {
   fromReadingRecite?: boolean;
 };
 
+type ManualAyahToggleRequest = {
+  surahNumber: number;
+  totalVerses: number;
+  ayah: number;
+  memorized: boolean;
+};
+
 type AyahSheetTarget = {
   verseKey: string;
   surahNumber: number;
@@ -2653,6 +2660,46 @@ export default function MemorizationScreen() {
     setDiscoveryState({ status: "ready", dashboard, progress, surahs });
   }
 
+  async function handleManualAyahToggle(request: ManualAyahToggleRequest) {
+    const latestProgress = await fetchMemorizationProgress(childId);
+    const existingProgress = latestProgress.find(
+      (item) => item.surahNumber === request.surahNumber,
+    );
+    const totalVerses = existingProgress?.totalVerses ?? request.totalVerses;
+    const memorizedSet = new Set(existingProgress?.memorizedAyahs ?? []);
+
+    if (request.memorized) {
+      memorizedSet.add(request.ayah);
+    } else {
+      memorizedSet.delete(request.ayah);
+    }
+
+    const memorizedAyahs = Array.from(memorizedSet)
+      .filter((ayah) => Number.isInteger(ayah) && ayah >= 1 && ayah <= totalVerses)
+      .sort((a, b) => a - b);
+    const status: MemorizationStatus = hasFullSurahMemorized(memorizedAyahs, totalVerses)
+      ? "memorized"
+      : memorizedAyahs.length > 0
+        ? "in_progress"
+        : "not_started";
+    const qualityRating = clampStrength(
+      request.memorized
+        ? existingProgress?.ayahStrengths?.[String(request.ayah)] ??
+            existingProgress?.strength ??
+            4
+        : existingProgress?.strength ?? 4,
+    );
+
+    await submitMemorization(childId, {
+      surahId: request.surahNumber,
+      memorizedAyahs,
+      ratedAyahs: request.memorized ? [request.ayah] : [],
+      qualityRating,
+      status,
+    });
+    await refreshDiscoverySnapshot();
+  }
+
   async function submitTodayMemorizationProgress(
     dashboard: DashboardResponse,
     progressBeforeSave: MemorizationProgress[],
@@ -3027,6 +3074,10 @@ export default function MemorizationScreen() {
       source: "teacher",
       score: null,
     });
+  }
+
+  function dismissReadyToRecitePrompt() {
+    updateReadyToReciteSheet(false);
   }
 
   async function enterReciteMode(startVerse: number) {
@@ -4579,6 +4630,10 @@ export default function MemorizationScreen() {
         : currentReciteExpectedIndex + 1;
     return { surah: surahNumber, ayah: playingVerseNumber, position };
   }, [currentReciteExpectedIndex, playingVerseNumber, reciteMode, surahNumber, words]);
+  const reciteCurrentWordRevealed =
+    reciteMode &&
+    currentReciteExpectedIndex !== null &&
+    revealedReciteWords.has(makeReciteWordKey(playingVerseNumber, currentReciteExpectedIndex));
   const reciteRange = useMemo<ReciteRange | null>(() => {
     if (!reciteMode || surahNumber === null || ayahStart === null || ayahEnd === null) {
       return null;
@@ -5070,6 +5125,7 @@ export default function MemorizationScreen() {
         onStart={prepareSession}
         onStartDirect={startConfiguredSession}
         onStartBookmark={startBookmarkedSession}
+        onToggleAyah={handleManualAyahToggle}
       />
     );
   }
@@ -5197,6 +5253,7 @@ export default function MemorizationScreen() {
           blurMode={blurMode}
           reciteActive={reciteMode}
           reciteCurrentWord={reciteCurrentWord}
+          reciteCurrentWordRevealed={reciteCurrentWordRevealed}
           reciteRange={reciteRange}
           reciteAutoPage={!readingReciteSession}
           sessionFocusRange={sessionFocusRange}
@@ -5592,30 +5649,35 @@ export default function MemorizationScreen() {
         visible={readyToReciteSheetOpen}
         transparent
         animationType="slide"
-        onRequestClose={() => {}}
+        onRequestClose={dismissReadyToRecitePrompt}
       >
-        <View style={styles.backdrop} />
+        <Pressable style={styles.backdrop} onPress={dismissReadyToRecitePrompt} />
         <View style={styles.completionSheet}>
-          <Text style={styles.sheetTitle}>Ready to Recite?</Text>
-          <Text style={styles.completionSubtitle}>
-            {chaptersMap.get(surahNumber ?? 0)?.name_simple ?? "Current surah"} ·{" "}
-            {formatAyahRange(ayahStart, ayahEnd)}
-          </Text>
+          <View style={styles.readySheetHeader}>
+            <View style={styles.readySheetTitleBlock}>
+              <Text style={styles.sheetTitle}>Ready to Recite?</Text>
+              <Text style={styles.completionSubtitle}>
+                {chaptersMap.get(surahNumber ?? 0)?.name_simple ?? "Current surah"} ·{" "}
+                {formatAyahRange(ayahStart, ayahEnd)}
+              </Text>
+            </View>
+            <Pressable
+              style={styles.sheetCloseIconButton}
+              onPress={dismissReadyToRecitePrompt}
+              accessibilityRole="button"
+              accessibilityLabel="Dismiss ready to recite prompt"
+            >
+              <Ionicons name="close" size={22} color="#475569" />
+            </Pressable>
+          </View>
 
           <View style={styles.pauseSummaryCard}>
             <Text style={styles.pauseSummaryTitle}>Choose the recitation check</Text>
             <Text style={styles.pauseSummaryDetail}>
-              The session is complete. Pick whether the child will recite to a teacher now or recite to NoorPath first.
+              The session is complete. Pick a recitation check, or close this and keep practicing from the audio controls.
             </Text>
           </View>
 
-          <Pressable
-            style={[styles.readyTeacherButton, submitting && styles.completeButtonDisabled]}
-            onPress={handleReciteToTeacher}
-            disabled={submitting}
-          >
-            <Text style={styles.readyTeacherButtonText}>Recite to Teacher →</Text>
-          </Pressable>
           <Pressable
             style={[styles.readyNoorPathButton, submitting && styles.readyNoorPathButtonDisabled]}
             onPress={() => {
@@ -5624,6 +5686,13 @@ export default function MemorizationScreen() {
             disabled={submitting}
           >
             <Text style={styles.readyNoorPathButtonText}>Recite to NoorPath →</Text>
+          </Pressable>
+          <Pressable
+            style={[styles.readyTeacherButton, submitting && styles.completeButtonDisabled]}
+            onPress={handleReciteToTeacher}
+            disabled={submitting}
+          >
+            <Text style={styles.readyTeacherButtonText}>Recite to Teacher →</Text>
           </Pressable>
         </View>
       </Modal>
@@ -7131,6 +7200,7 @@ function MemorizationDiscovery({
   onStart,
   onStartDirect,
   onStartBookmark,
+  onToggleAyah,
 }: {
   childId: string | undefined;
   name: string | undefined;
@@ -7148,8 +7218,11 @@ function MemorizationDiscovery({
   onStart: (target: SessionTarget) => void;
   onStartDirect: (target: SessionTarget) => void;
   onStartBookmark: (bookmark: MemorizationSessionBookmark) => void;
+  onToggleAyah: (request: ManualAyahToggleRequest) => Promise<void>;
 }) {
   const childName = state.status === "ready" ? state.dashboard.child?.name ?? name : name;
+  const [selectedSurahNumber, setSelectedSurahNumber] = useState<number | null>(null);
+  const [pendingToggleAyah, setPendingToggleAyah] = useState<number | null>(null);
 
   const content = useMemo(() => {
     if (state.status !== "ready") return null;
@@ -7234,6 +7307,36 @@ function MemorizationDiscovery({
       ...buildFullWorkTarget(work),
       startInRecitationCheck: true,
     });
+  }
+
+  const selectedSurahRow =
+    selectedSurahNumber === null
+      ? null
+      : content?.rows.find(({ surah }) => surah.number === selectedSurahNumber) ?? null;
+
+  function startSelectedSurahSession(progress: MemorizationProgress) {
+    setSelectedSurahNumber(null);
+    startProgress(progress);
+  }
+
+  async function toggleSelectedAyah(ayah: number, memorized: boolean) {
+    if (!selectedSurahRow) return;
+    setPendingToggleAyah(ayah);
+    try {
+      await onToggleAyah({
+        surahNumber: selectedSurahRow.surah.number,
+        totalVerses: selectedSurahRow.progress.totalVerses,
+        ayah,
+        memorized,
+      });
+    } catch (e) {
+      Alert.alert(
+        "Could not update ayah",
+        e instanceof Error ? e.message : "Try again in a moment.",
+      );
+    } finally {
+      setPendingToggleAyah(null);
+    }
   }
 
   return (
@@ -7387,7 +7490,7 @@ function MemorizationDiscovery({
                     (content.todayWork?.currentWorkSurahNumber ?? content.todayWork?.surahNumber) ===
                     surah.number
                   }
-                  onPress={() => startProgress(progress)}
+                  onPress={() => setSelectedSurahNumber(surah.number)}
                 />
               ))
             )}
@@ -7396,7 +7499,137 @@ function MemorizationDiscovery({
       ) : null}
 
       <ChildBottomNav active="memorization" childId={childId} name={childName ?? ""} />
+      <SurahAyahStatusSheet
+        row={selectedSurahRow}
+        pendingAyah={pendingToggleAyah}
+        onDismiss={() => setSelectedSurahNumber(null)}
+        onStartSession={(progress) => startSelectedSurahSession(progress)}
+        onToggleAyah={(ayah, memorized) => {
+          void toggleSelectedAyah(ayah, memorized);
+        }}
+      />
     </View>
+  );
+}
+
+type SurahDiscoveryRow = {
+  surah: SurahSummary;
+  progress: MemorizationProgress;
+};
+
+function SurahAyahStatusSheet({
+  row,
+  pendingAyah,
+  onDismiss,
+  onStartSession,
+  onToggleAyah,
+}: {
+  row: SurahDiscoveryRow | null;
+  pendingAyah: number | null;
+  onDismiss: () => void;
+  onStartSession: (progress: MemorizationProgress) => void;
+  onToggleAyah: (ayah: number, memorized: boolean) => void;
+}) {
+  const memorizedSet = useMemo(
+    () => new Set(row?.progress.memorizedAyahs ?? []),
+    [row?.progress.memorizedAyahs],
+  );
+
+  if (!row) {
+    return (
+      <Modal visible={false} transparent animationType="slide" onRequestClose={onDismiss} />
+    );
+  }
+
+  const memorizedCount = row.progress.memorizedAyahs?.length ?? 0;
+  const totalVerses = row.progress.totalVerses || row.surah.verseCount;
+  const percent = totalVerses > 0 ? Math.round((memorizedCount / totalVerses) * 100) : 0;
+
+  return (
+    <Modal visible transparent animationType="slide" onRequestClose={onDismiss}>
+      <Pressable style={styles.backdrop} onPress={onDismiss} />
+      <View style={styles.surahAyahSheet}>
+        <View style={styles.surahAyahSheetHeader}>
+          <View style={styles.surahAyahSheetTitleBlock}>
+            <Text style={styles.sheetKicker}>Surah {row.surah.number}</Text>
+            <Text style={styles.sheetTitle}>{row.surah.nameTransliteration}</Text>
+            <Text style={styles.completionSubtitle}>
+              {memorizedCount}/{totalVerses} ayahs memorized · {percent}%
+            </Text>
+          </View>
+          <Pressable
+            style={styles.sheetCloseIconButton}
+            onPress={onDismiss}
+            accessibilityRole="button"
+            accessibilityLabel="Close ayah status"
+          >
+            <Ionicons name="close" size={22} color="#475569" />
+          </Pressable>
+        </View>
+
+        <Pressable
+          style={styles.surahAyahStartButton}
+          onPress={() => onStartSession(row.progress)}
+        >
+          <Ionicons name="play-circle" size={20} color="#ffffff" />
+          <Text style={styles.surahAyahStartButtonText}>Start memorization session</Text>
+        </Pressable>
+
+        <Text style={styles.surahAyahHint}>
+          Toggle ayahs that are memorized. Marked ayahs join the same memorization progress and review path as session saves.
+        </Text>
+
+        <ScrollView
+          style={styles.surahAyahList}
+          contentContainerStyle={styles.surahAyahListContent}
+          showsVerticalScrollIndicator={false}
+        >
+          {Array.from({ length: totalVerses }, (_, index) => {
+            const ayah = index + 1;
+            const memorized = memorizedSet.has(ayah);
+            const tone = getAyahTone(
+              ayah,
+              memorizedSet,
+              row.progress.ayahStrengths,
+              row.progress.strength,
+            );
+            const pending = pendingAyah === ayah;
+            return (
+              <Pressable
+                key={`${row.surah.number}-${ayah}`}
+                style={[
+                  styles.ayahToggleRow,
+                  memorized && styles.ayahToggleRowMemorized,
+                  tone === "red" && styles.ayahToggleRowRed,
+                  tone === "orange" && styles.ayahToggleRowOrange,
+                  tone === "green" && styles.ayahToggleRowGreen,
+                  pending && styles.ayahToggleRowPending,
+                ]}
+                onPress={() => onToggleAyah(ayah, !memorized)}
+                disabled={pendingAyah !== null}
+                accessibilityRole="switch"
+                accessibilityState={{ checked: memorized, disabled: pendingAyah !== null }}
+                accessibilityLabel={`Ayah ${ayah} memorized`}
+              >
+                <View style={styles.ayahToggleTextBlock}>
+                  <Text style={styles.ayahToggleTitle}>Ayah {ayah}</Text>
+                  <Text style={styles.ayahToggleDetail}>
+                    {memorized ? getStrengthLabel(row.progress.ayahStrengths?.[String(ayah)] ?? row.progress.strength) : "Not memorized"}
+                  </Text>
+                </View>
+                {pending ? (
+                  <ActivityIndicator color="#2563eb" />
+                ) : (
+                  <View style={[styles.ayahToggleSwitch, memorized && styles.ayahToggleSwitchOn]}>
+                    <View style={[styles.ayahToggleKnob, memorized && styles.ayahToggleKnobOn]} />
+                  </View>
+                )}
+              </Pressable>
+            );
+          })}
+        </ScrollView>
+      </View>
+    </Modal>
   );
 }
 
@@ -7734,8 +7967,7 @@ function SurahProgressRow({
   const reviewTone = getReviewStrengthTone(progress);
   const toneMeta = reviewTone ? REVIEW_TONE_META[reviewTone] : null;
   const tajweedNotes = (surah.tajweedNotes ?? []).filter((note) => note.trim().length > 0);
-  const actionLabel =
-    progress.status === "memorized" ? "Practice" : progress.status === "in_progress" ? "Resume" : "Start";
+  const actionLabel = "Manage";
 
   return (
     <View
@@ -9805,6 +10037,150 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: "#6b7280",
     textAlign: "center",
+  },
+  readySheetHeader: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+  readySheetTitleBlock: {
+    flex: 1,
+    minWidth: 0,
+  },
+  sheetKicker: {
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: "900",
+    color: "#2563eb",
+    textAlign: "center",
+    textTransform: "uppercase",
+  },
+  sheetCloseIconButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: "#f8fafc",
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  surahAyahSheet: {
+    backgroundColor: "#ffffff",
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingTop: 18,
+    paddingHorizontal: 18,
+    paddingBottom: 30,
+    gap: 12,
+    maxHeight: "88%",
+  },
+  surahAyahSheetHeader: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+  surahAyahSheetTitleBlock: {
+    flex: 1,
+    minWidth: 0,
+  },
+  surahAyahStartButton: {
+    minHeight: 48,
+    borderRadius: 14,
+    backgroundColor: "#2563eb",
+    alignItems: "center",
+    justifyContent: "center",
+    flexDirection: "row",
+    gap: 8,
+  },
+  surahAyahStartButtonText: {
+    color: "#ffffff",
+    fontSize: 15,
+    fontWeight: "900",
+  },
+  surahAyahHint: {
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: "600",
+    color: "#64748b",
+    textAlign: "center",
+  },
+  surahAyahList: {
+    flexGrow: 0,
+  },
+  surahAyahListContent: {
+    gap: 8,
+    paddingBottom: 4,
+  },
+  ayahToggleRow: {
+    minHeight: 54,
+    borderRadius: 13,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    backgroundColor: "#ffffff",
+    paddingVertical: 9,
+    paddingHorizontal: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+  ayahToggleRowMemorized: {
+    backgroundColor: "#f8fafc",
+  },
+  ayahToggleRowRed: {
+    borderColor: "#fecdd3",
+    backgroundColor: "#fff1f2",
+  },
+  ayahToggleRowOrange: {
+    borderColor: "#fde68a",
+    backgroundColor: "#fffbeb",
+  },
+  ayahToggleRowGreen: {
+    borderColor: "#a7f3d0",
+    backgroundColor: "#ecfdf5",
+  },
+  ayahToggleRowPending: {
+    opacity: 0.68,
+  },
+  ayahToggleTextBlock: {
+    flex: 1,
+    minWidth: 0,
+  },
+  ayahToggleTitle: {
+    fontSize: 14,
+    lineHeight: 18,
+    fontWeight: "900",
+    color: "#111827",
+  },
+  ayahToggleDetail: {
+    marginTop: 2,
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: "700",
+    color: "#64748b",
+  },
+  ayahToggleSwitch: {
+    width: 44,
+    height: 26,
+    borderRadius: 13,
+    padding: 3,
+    backgroundColor: "#e5e7eb",
+    justifyContent: "center",
+  },
+  ayahToggleSwitchOn: {
+    backgroundColor: "#2563eb",
+  },
+  ayahToggleKnob: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: "#ffffff",
+  },
+  ayahToggleKnobOn: {
+    alignSelf: "flex-end",
   },
   ayahSheetHeader: {
     flexDirection: "row",

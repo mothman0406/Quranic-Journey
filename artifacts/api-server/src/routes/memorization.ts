@@ -683,6 +683,13 @@ router.post("/children/:childId/memorization", async (req, res) => {
         ),
       ).sort((a, b) => a - b)
     : [];
+  const previousMemorizedSet = new Set(previousMemorizedAyahs);
+  const nextMemorizedSet = new Set(newMemoizedAyahs);
+  const addedMemorizedAyahs = newMemoizedAyahs.filter((ayah) => !previousMemorizedSet.has(ayah));
+  const removedMemorizedAyahs = previousMemorizedAyahs.filter((ayah) => !nextMemorizedSet.has(ayah));
+  const shouldAdvanceDailyProgress =
+    ratedAyahs.length > 0 ||
+    (addedMemorizedAyahs.length > 0 && removedMemorizedAyahs.length === 0);
   const ayahStrengths = mergeAyahStrengths({
     memorizedAyahs: newMemoizedAyahs,
     existingStrengths: existingAyahStrengths,
@@ -748,74 +755,84 @@ router.post("/children/:childId/memorization", async (req, res) => {
     }
   }
 
+  if (!isFullyDoneReviewSurah(record)) {
+    await db.delete(reviewScheduleTable)
+      .where(and(
+        eq(reviewScheduleTable.childId, childId),
+        eq(reviewScheduleTable.surahId, normalizedSurahId),
+      ));
+  }
+
   console.log("[memorization POST] wrote to DB:", { id: record.id, surahId: record.surahId, status: record.status, versesMemorized: record.versesMemorized });
 
   // Auto-advance daily progress status so the assignment freezes once the session starts
-  try {
-    const todayStr = getRequestLocalDate(req);
-    const todayRows = await db.select().from(dailyProgressTable)
-      .where(and(eq(dailyProgressTable.childId, childId), eq(dailyProgressTable.date, todayStr)))
-      .orderBy(desc(dailyProgressTable.id));
-    const sortedTodayRows = [...todayRows].sort((a, b) => a.id - b.id);
-    const savedAyahStart = ratedAyahs[0] ?? newMemoizedAyahs[0] ?? null;
-    const savedAyahEnd =
-      ratedAyahs[ratedAyahs.length - 1] ??
-      newMemoizedAyahs[newMemoizedAyahs.length - 1] ??
-      null;
-    const todayProg =
-      sortedTodayRows.find((candidate) => {
-        const targetNum = candidate.memTargetSurah;
-        const endNum = candidate.memTargetEndSurah ?? targetNum;
-        if (!targetNum || !endNum) return false;
+  if (shouldAdvanceDailyProgress) {
+    try {
+      const todayStr = getRequestLocalDate(req);
+      const todayRows = await db.select().from(dailyProgressTable)
+        .where(and(eq(dailyProgressTable.childId, childId), eq(dailyProgressTable.date, todayStr)))
+        .orderBy(desc(dailyProgressTable.id));
+      const sortedTodayRows = [...todayRows].sort((a, b) => a.id - b.id);
+      const savedAyahStart = ratedAyahs[0] ?? newMemoizedAyahs[0] ?? null;
+      const savedAyahEnd =
+        ratedAyahs[ratedAyahs.length - 1] ??
+        newMemoizedAyahs[newMemoizedAyahs.length - 1] ??
+        null;
+      const todayProg =
+        sortedTodayRows.find((candidate) => {
+          const targetNum = candidate.memTargetSurah;
+          const endNum = candidate.memTargetEndSurah ?? targetNum;
+          if (!targetNum || !endNum) return false;
 
-        const rangeMin = Math.min(targetNum, endNum);
-        const rangeMax = Math.max(targetNum, endNum);
-        if (surah.number < rangeMin || surah.number > rangeMax) return false;
-
-        if (
-          targetNum === endNum &&
-          targetNum === surah.number &&
-          savedAyahStart != null &&
-          savedAyahEnd != null &&
-          candidate.memTargetAyahStart != null &&
-          candidate.memTargetAyahEnd != null
-        ) {
-          return savedAyahStart <= candidate.memTargetAyahEnd && savedAyahEnd >= candidate.memTargetAyahStart;
-        }
-
-        return true;
-      }) ??
-      sortedTodayRows.find((candidate) => candidate.memTargetSurah != null) ??
-      sortedTodayRows[0];
-
-    if (todayProg) {
-      if (todayProg.memStatus === 'not_started') {
-        await db.update(dailyProgressTable).set({ memStatus: 'in_progress', updatedAt: now })
-          .where(eq(dailyProgressTable.id, todayProg.id));
-      } else if (todayProg.memStatus === 'in_progress') {
-        const targetNum = todayProg.memTargetSurah;
-        const endNum = todayProg.memTargetEndSurah ?? targetNum;
-        if (targetNum && endNum) {
           const rangeMin = Math.min(targetNum, endNum);
           const rangeMax = Math.max(targetNum, endNum);
-          // Re-fetch AFTER the current save so we see the just-updated status
-          const freshProg = await db.select().from(memorizationProgressTable)
-            .where(eq(memorizationProgressTable.childId, childId));
-          const allDone = Array.from({ length: rangeMax - rangeMin + 1 }, (_, i) => rangeMin + i).every(n => {
-            const s = SURAHS.find(ss => ss.number === n);
-            if (!s) return true;
-            const mp = freshProg.find(m => m.surahId === s.id);
-            return mp?.status === 'memorized';
-          });
-          if (allDone) {
-            await db.update(dailyProgressTable).set({ memStatus: 'completed', updatedAt: now })
-              .where(eq(dailyProgressTable.id, todayProg.id));
+          if (surah.number < rangeMin || surah.number > rangeMax) return false;
+
+          if (
+            targetNum === endNum &&
+            targetNum === surah.number &&
+            savedAyahStart != null &&
+            savedAyahEnd != null &&
+            candidate.memTargetAyahStart != null &&
+            candidate.memTargetAyahEnd != null
+          ) {
+            return savedAyahStart <= candidate.memTargetAyahEnd && savedAyahEnd >= candidate.memTargetAyahStart;
+          }
+
+          return true;
+        }) ??
+        sortedTodayRows.find((candidate) => candidate.memTargetSurah != null) ??
+        sortedTodayRows[0];
+
+      if (todayProg) {
+        if (todayProg.memStatus === 'not_started') {
+          await db.update(dailyProgressTable).set({ memStatus: 'in_progress', updatedAt: now })
+            .where(eq(dailyProgressTable.id, todayProg.id));
+        } else if (todayProg.memStatus === 'in_progress') {
+          const targetNum = todayProg.memTargetSurah;
+          const endNum = todayProg.memTargetEndSurah ?? targetNum;
+          if (targetNum && endNum) {
+            const rangeMin = Math.min(targetNum, endNum);
+            const rangeMax = Math.max(targetNum, endNum);
+            // Re-fetch AFTER the current save so we see the just-updated status
+            const freshProg = await db.select().from(memorizationProgressTable)
+              .where(eq(memorizationProgressTable.childId, childId));
+            const allDone = Array.from({ length: rangeMax - rangeMin + 1 }, (_, i) => rangeMin + i).every(n => {
+              const s = SURAHS.find(ss => ss.number === n);
+              if (!s) return true;
+              const mp = freshProg.find(m => m.surahId === s.id);
+              return mp?.status === 'memorized';
+            });
+            if (allDone) {
+              await db.update(dailyProgressTable).set({ memStatus: 'completed', updatedAt: now })
+                .where(eq(dailyProgressTable.id, todayProg.id));
+            }
           }
         }
       }
+    } catch (e) {
+      console.error('[memorization POST] failed to update daily progress status:', e);
     }
-  } catch (e) {
-    console.error('[memorization POST] failed to update daily progress status:', e);
   }
 
   const returnedAyahs: number[] = (() => { try { return JSON.parse(record.memorizedAyahs || "[]"); } catch { return []; } })();

@@ -255,7 +255,7 @@ export async function submitMemorization(
     memorizedAyahs: number[];
     ratedAyahs: number[];
     qualityRating: number;
-    status: "memorized" | "in_progress";
+    status: MemorizationStatus;
   },
 ): Promise<void> {
   await apiFetch(`/api/children/${childId}/memorization`, {
