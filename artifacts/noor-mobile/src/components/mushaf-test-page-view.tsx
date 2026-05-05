@@ -34,6 +34,8 @@ type MushafTestWordTarget = {
   position: number;
 };
 
+type MushafTestAyahTarget = Pick<MushafTestWordTarget, "surah" | "ayah">;
+
 // Audio word pointer passed in from the memorization engine.
 // position is 1-based reciteable-only audio order; audioToGlyphPositions maps it to QPC2.
 export type AudioWordPointer = {
@@ -82,6 +84,7 @@ type MushafTestPageViewProps = {
   onWordLongPress?: (word: MushafTestWordTarget) => void;
   actionSheetVisible?: boolean;
   onActionSheetBackdropPress?: () => void;
+  blindMode?: boolean;
   // Phase 1g.a: recite visualization props
   reciteActive?: boolean;
   reciteCurrentWord?: ReciteWordPointer | null;
@@ -252,6 +255,8 @@ function MushafTestPage({
   flashOpacity,
   currentAudioWord,
   audioToGlyphPositions,
+  blindMode,
+  revealedAyah,
   reciteActive,
   reciteCurrentWord,
   reciteRange,
@@ -270,6 +275,8 @@ function MushafTestPage({
   flashOpacity: Animated.Value;
   currentAudioWord?: AudioWordPointer | null;
   audioToGlyphPositions?: readonly number[] | null;
+  blindMode: boolean;
+  revealedAyah: MushafTestAyahTarget | null;
   reciteActive: boolean;
   reciteCurrentWord?: ReciteWordPointer | null;
   reciteRange?: ReciteRange | null;
@@ -549,6 +556,32 @@ function MushafTestPage({
                     },
                   ]}
                 />
+            ))}
+          </>
+        ) : null}
+
+        {blindMode && !reciteActive ? (
+          <>
+            {overlayRects
+              .filter((rect) =>
+                revealedAyah === null ||
+                rect.surah !== revealedAyah.surah ||
+                rect.ayah !== revealedAyah.ayah
+              )
+              .map((rect) => (
+                <View
+                  key={`blind-mask-${rect.key}`}
+                  pointerEvents="none"
+                  style={[
+                    styles.blindMask,
+                    {
+                      top: rect.top,
+                      left: rect.left,
+                      width: rect.width,
+                      height: rect.height,
+                    },
+                  ]}
+                />
               ))}
           </>
         ) : null}
@@ -587,6 +620,7 @@ export function MushafTestPageView({
   mushafViewMode = "swipe",
   currentAudioWord,
   audioToGlyphPositions,
+  blindMode = false,
   reciteActive = false,
   reciteCurrentWord = null,
   reciteRange = null,
@@ -610,6 +644,7 @@ export function MushafTestPageView({
     useState<WordTranslationTarget | null>(null);
   const [wordTranslationText, setWordTranslationText] = useState<string | null>(null);
   const [wordTranslationLoading, setWordTranslationLoading] = useState(false);
+  const [lastTappedAyah, setLastTappedAyah] = useState<MushafTestAyahTarget | null>(null);
   const flashOpacity = useRef(new Animated.Value(0)).current;
   const flashAnimationRef = useRef<Animated.CompositeAnimation | null>(null);
   const flashTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -784,6 +819,32 @@ export function MushafTestPageView({
     if (!actionSheetVisible) clearWordTranslationPopover();
   }, [actionSheetVisible]);
 
+  useEffect(() => {
+    if (!blindMode) setLastTappedAyah(null);
+  }, [blindMode]);
+
+  useEffect(() => {
+    if (!blindMode || !currentAudioWord) return;
+    setLastTappedAyah((current) =>
+      current?.surah === currentAudioWord.surah && current?.ayah === currentAudioWord.ayah
+        ? current
+        : { surah: currentAudioWord.surah, ayah: currentAudioWord.ayah },
+    );
+  }, [blindMode, currentAudioWord?.ayah, currentAudioWord?.surah]);
+
+  const revealedAyah = useMemo(() => {
+    if (!blindMode) return null;
+    if (currentAudioWord) {
+      return { surah: currentAudioWord.surah, ayah: currentAudioWord.ayah };
+    }
+    return lastTappedAyah;
+  }, [
+    blindMode,
+    currentAudioWord?.ayah,
+    currentAudioWord?.surah,
+    lastTappedAyah,
+  ]);
+
   function handleWordTap(pageNumber: number, word: QuranCom1405WordRect, scaledRect: ScaledWordRect) {
     const [surah, ayah, position, _line, minX, maxX, minY, maxY] = word;
     const target = { surah, ayah, position };
@@ -816,6 +877,7 @@ export function MushafTestPageView({
     });
 
     onWordPress?.(target);
+    if (blindMode) setLastTappedAyah({ surah, ayah });
     if (actionSheetVisible) {
       const requestId = wordTranslationRequestRef.current + 1;
       wordTranslationRequestRef.current = requestId;
@@ -904,6 +966,8 @@ export function MushafTestPageView({
         flashOpacity={flashOpacity}
         currentAudioWord={currentAudioWord}
         audioToGlyphPositions={audioToGlyphPositions}
+        blindMode={blindMode}
+        revealedAyah={revealedAyah}
         reciteActive={reciteActive}
         reciteCurrentWord={reciteCurrentWord}
         reciteRange={reciteRange}
@@ -1068,6 +1132,15 @@ const styles = StyleSheet.create({
     borderColor: "#3b82f6",
     backgroundColor: "#eff6ff",
     zIndex: 5,
+  },
+  blindMask: {
+    position: "absolute",
+    // Same cream tone as recite mask for visual consistency.
+    backgroundColor: "#fffbeb",
+    borderRadius: 3,
+    borderWidth: 1,
+    borderColor: "#fef3c7",
+    zIndex: 4,
   },
   wordTranslationPopover: {
     position: "absolute",
