@@ -83,6 +83,7 @@ type MushafTestPageViewProps = {
   actionSheetVisible?: boolean;
   onActionSheetBackdropPress?: () => void;
   blindMode?: boolean;
+  blurMode?: boolean;
   // Phase 1g.a: recite visualization props
   reciteActive?: boolean;
   reciteCurrentWord?: ReciteWordPointer | null;
@@ -254,6 +255,7 @@ function MushafTestPage({
   currentAudioWord,
   audioToGlyphPositions,
   blindMode,
+  blurMode,
   revealedAyahs,
   reciteActive,
   reciteCurrentWord,
@@ -274,6 +276,7 @@ function MushafTestPage({
   currentAudioWord?: AudioWordPointer | null;
   audioToGlyphPositions?: readonly number[] | null;
   blindMode: boolean;
+  blurMode: boolean;
   revealedAyahs: Set<string>;
   reciteActive: boolean;
   reciteCurrentWord?: ReciteWordPointer | null;
@@ -603,6 +606,32 @@ function MushafTestPage({
           </>
         ) : null}
 
+        {blurMode && currentAudioWord && !reciteActive && !blindMode ? (
+          <>
+            {overlayRects
+              .filter(
+                (rect) =>
+                  rect.surah !== currentAudioWord.surah ||
+                  rect.ayah !== currentAudioWord.ayah,
+              )
+              .map((rect) => (
+                <View
+                  key={`blur-dim-${rect.key}`}
+                  pointerEvents="none"
+                  style={[
+                    styles.blurDim,
+                    {
+                      top: rect.top,
+                      left: rect.left,
+                      width: rect.width,
+                      height: rect.height,
+                    },
+                  ]}
+                />
+              ))}
+          </>
+        ) : null}
+
         {activeWordTranslationTarget && popoverLayout ? (
           <View
             pointerEvents="none"
@@ -638,6 +667,7 @@ export function MushafTestPageView({
   currentAudioWord,
   audioToGlyphPositions,
   blindMode = false,
+  blurMode = false,
   reciteActive = false,
   reciteCurrentWord = null,
   reciteRange = null,
@@ -975,6 +1005,7 @@ export function MushafTestPageView({
         currentAudioWord={currentAudioWord}
         audioToGlyphPositions={audioToGlyphPositions}
         blindMode={blindMode}
+        blurMode={blurMode}
         revealedAyahs={revealedAyahs}
         reciteActive={reciteActive}
         reciteCurrentWord={reciteCurrentWord}
@@ -1148,6 +1179,13 @@ const styles = StyleSheet.create({
     borderRadius: 3,
     borderWidth: 1,
     borderColor: "#fef3c7",
+    zIndex: 4,
+  },
+  blurDim: {
+    position: "absolute",
+    // Dark translucent veil keeps words legible while de-emphasizing them.
+    backgroundColor: "rgba(15, 23, 42, 0.32)",
+    borderRadius: 3,
     zIndex: 4,
   },
   wordTranslationPopover: {

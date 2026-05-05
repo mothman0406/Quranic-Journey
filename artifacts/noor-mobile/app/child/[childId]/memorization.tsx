@@ -5015,6 +5015,7 @@ export default function MemorizationScreen() {
           audioToGlyphPositions={currentAudioToGlyphPositions}
           isAudioActive={isPlaying}
           blindMode={blindMode}
+          blurMode={blurMode}
           reciteActive={reciteMode}
           reciteCurrentWord={reciteCurrentWord}
           reciteRange={reciteRange}
