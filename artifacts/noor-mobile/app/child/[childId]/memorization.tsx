@@ -83,7 +83,11 @@ import {
 import { extractTajweedColor } from "@/src/lib/tajweed";
 import { CelebrationOverlay } from "@/src/components/celebration-overlay";
 import { MushafTestActionSheet } from "@/src/components/mushaf-test-action-sheet";
-import { MushafTestPageView } from "@/src/components/mushaf-test-page-view";
+import {
+  MushafTestPageView,
+  type ReciteRange,
+  type ReciteWordPointer,
+} from "@/src/components/mushaf-test-page-view";
 import {
   saveMushafAyahBookmark,
   type MushafAyahTarget,
@@ -4400,6 +4404,26 @@ export default function MemorizationScreen() {
     if (!Number.isFinite(surah) || !Number.isFinite(ayah)) return null;
     return { surah, ayah, position: highlightedPage.position };
   }, [highlightedPage]);
+  const reciteCurrentWord = useMemo<ReciteWordPointer | null>(() => {
+    if (!reciteMode || surahNumber === null || currentReciteExpectedIndex === null) return null;
+    const word = words[currentReciteExpectedIndex];
+    const position =
+      word && Number.isFinite(word.position) && word.position > 0
+        ? word.position
+        : currentReciteExpectedIndex + 1;
+    return { surah: surahNumber, ayah: playingVerseNumber, position };
+  }, [currentReciteExpectedIndex, playingVerseNumber, reciteMode, surahNumber, words]);
+  const reciteRange = useMemo<ReciteRange | null>(() => {
+    if (!reciteMode || surahNumber === null || ayahStart === null || ayahEnd === null) {
+      return null;
+    }
+    return {
+      startSurah: surahNumber,
+      startAyah: ayahStart,
+      endSurah: surahNumber,
+      endAyah: ayahEnd,
+    };
+  }, [ayahEnd, ayahStart, reciteMode, surahNumber]);
   const sessionMushafPages = useMemo(() => {
     if (pageStart !== null && pageEnd !== null) {
       return Array.from(
@@ -4954,6 +4978,9 @@ export default function MemorizationScreen() {
           onPageChange={updateDisplayedMushafPage}
           currentAudioWord={currentAudioWord}
           isAudioActive={isPlaying}
+          reciteActive={reciteMode}
+          reciteCurrentWord={reciteCurrentWord}
+          reciteRange={reciteRange}
           onWordSeek={(word) => {
             void handleTestMushafWordSeek(word);
           }}

@@ -41,6 +41,21 @@ export type AudioWordPointer = {
   position: number;
 };
 
+// Recite word pointer passed in from the existing memorization recite engine.
+// position is 1-based and matches QPC2 glyph position directly.
+export type ReciteWordPointer = {
+  surah: number;
+  ayah: number;
+  position: number;
+};
+
+export type ReciteRange = {
+  startSurah: number;
+  startAyah: number;
+  endSurah: number;
+  endAyah: number;
+};
+
 type FlashedWord = MushafTestWordTarget & {
   pageNumber: number;
   minX: number;
@@ -64,6 +79,10 @@ type MushafTestPageViewProps = {
   onWordLongPress?: (word: MushafTestWordTarget) => void;
   actionSheetVisible?: boolean;
   onActionSheetBackdropPress?: () => void;
+  // Phase 1g.a: recite visualization props
+  reciteActive?: boolean;
+  reciteCurrentWord?: ReciteWordPointer | null;
+  reciteRange?: ReciteRange | null;
 };
 
 type PageLayout = {
@@ -86,6 +105,8 @@ type WordTranslationTarget = MushafTestWordTarget & {
   pageNumber: number;
   rect: ScaledWordRect;
 };
+
+type WordReciteState = "past" | "current" | "future" | "out-of-range";
 
 const PAGE_NUMBERS = Array.from(
   { length: TOTAL_QURAN_COM_1405_PAGES },
@@ -169,12 +190,67 @@ function buildWordOverlayRects(pageNumber: number, layout: PageLayout): WordOver
   return rects;
 }
 
+function compareVersePosition(
+  a: Pick<MushafTestWordTarget, "surah" | "ayah">,
+  b: Pick<MushafTestWordTarget, "surah" | "ayah">,
+) {
+  if (a.surah !== b.surah) return a.surah - b.surah;
+  return a.ayah - b.ayah;
+}
+
+function compareWordPosition(
+  a: MushafTestWordTarget,
+  b: MushafTestWordTarget,
+) {
+  const verseCmp = compareVersePosition(a, b);
+  if (verseCmp !== 0) return verseCmp;
+  return a.position - b.position;
+}
+
+function isWordWithinRange(word: MushafTestWordTarget, range: ReciteRange) {
+  if (
+    compareVersePosition(word, {
+      surah: range.startSurah,
+      ayah: range.startAyah,
+    }) < 0
+  ) {
+    return false;
+  }
+  if (
+    compareVersePosition(word, {
+      surah: range.endSurah,
+      ayah: range.endAyah,
+    }) > 0
+  ) {
+    return false;
+  }
+  return true;
+}
+
+function classifyWordForRecite(
+  word: MushafTestWordTarget,
+  current: ReciteWordPointer | null | undefined,
+  range: ReciteRange | null | undefined,
+  active: boolean | undefined,
+): WordReciteState {
+  if (!active || !current || !range) return "out-of-range";
+  if (!isWordWithinRange(word, range)) return "out-of-range";
+
+  const cmp = compareWordPosition(word, current);
+  if (cmp < 0) return "past";
+  if (cmp === 0) return "current";
+  return "future";
+}
+
 function MushafTestPage({
   pageNumber,
   width,
   flashedWord,
   flashOpacity,
   currentAudioWord,
+  reciteActive,
+  reciteCurrentWord,
+  reciteRange,
   actionSheetVisible,
   wordTranslationTarget,
   wordTranslationText,
@@ -189,6 +265,9 @@ function MushafTestPage({
   flashedWord: FlashedWord | null;
   flashOpacity: Animated.Value;
   currentAudioWord?: AudioWordPointer | null;
+  reciteActive: boolean;
+  reciteCurrentWord?: ReciteWordPointer | null;
+  reciteRange?: ReciteRange | null;
   actionSheetVisible: boolean;
   wordTranslationTarget: WordTranslationTarget | null;
   wordTranslationText: string | null;
@@ -222,6 +301,7 @@ function MushafTestPage({
   const audioHighlightRect = useMemo(() => {
     if (!currentAudioWord) return null;
     if (actionSheetVisible) return null;
+    if (reciteActive) return null;
     return (
       overlayRects.find(
         (r) =>
@@ -230,7 +310,20 @@ function MushafTestPage({
           r.position === currentAudioWord.position,
       ) ?? null
     );
-  }, [actionSheetVisible, currentAudioWord, overlayRects]);
+  }, [actionSheetVisible, currentAudioWord, overlayRects, reciteActive]);
+
+  const reciteClassifiedRects = useMemo(() => {
+    if (!reciteActive) return [];
+    return overlayRects.map((rect) => ({
+      rect,
+      state: classifyWordForRecite(
+        { surah: rect.surah, ayah: rect.ayah, position: rect.position },
+        reciteCurrentWord,
+        reciteRange,
+        reciteActive,
+      ),
+    }));
+  }, [overlayRects, reciteActive, reciteCurrentWord, reciteRange]);
 
   // Green highlight uses a different color than the amber tap-flash (Phase 1b)
   // to make audio-following distinct from user-initiated feedback.
@@ -266,8 +359,8 @@ function MushafTestPage({
     audioHighlightAnimRef.current?.stop();
     audioHighlightAnimRef.current = null;
 
-    if (!currentAudioWord) {
-      // Audio stopped/ended: fade out over 250 ms
+    if (!currentAudioWord || reciteActive) {
+      // Audio stopped/ended, or recite mode is owning the visual cursor.
       const anim = Animated.timing(audioHighlightOpacity, {
         toValue: 0,
         duration: 250,
@@ -298,6 +391,7 @@ function MushafTestPage({
     currentAudioWord?.surah,
     currentAudioWord?.ayah,
     currentAudioWord?.position,
+    reciteActive,
     audioHighlightOpacity,
   ]);
 
@@ -422,6 +516,46 @@ function MushafTestPage({
           />
         ) : null}
 
+        {reciteActive ? (
+          <>
+            {reciteClassifiedRects
+              .filter(({ state }) => state === "future")
+              .map(({ rect }) => (
+                <View
+                  key={`recite-mask-${rect.key}`}
+                  pointerEvents="none"
+                  style={[
+                    styles.reciteMask,
+                    {
+                      top: rect.top,
+                      left: rect.left,
+                      width: rect.width,
+                      height: rect.height,
+                    },
+                  ]}
+                />
+              ))}
+
+            {reciteClassifiedRects
+              .filter(({ state }) => state === "current")
+              .map(({ rect }) => (
+                <View
+                  key={`recite-current-${rect.key}`}
+                  pointerEvents="none"
+                  style={[
+                    styles.reciteCurrent,
+                    {
+                      top: rect.top,
+                      left: rect.left,
+                      width: rect.width,
+                      height: rect.height,
+                    },
+                  ]}
+                />
+              ))}
+          </>
+        ) : null}
+
         {activeWordTranslationTarget && popoverLayout ? (
           <View
             pointerEvents="none"
@@ -454,6 +588,9 @@ export function MushafTestPageView({
   currentPage,
   onPageChange,
   currentAudioWord,
+  reciteActive = false,
+  reciteCurrentWord = null,
+  reciteRange = null,
   onWordPress,
   onWordSeek,
   onWordLongPress,
@@ -483,7 +620,7 @@ export function MushafTestPageView({
   // lastAutoPagedRef avoids firing duplicate onPageChange calls for the same target page.
   const lastAutoPagedRef = useRef<number | null>(null);
   useEffect(() => {
-    if (!currentAudioWord) {
+    if (!currentAudioWord || reciteActive) {
       lastAutoPagedRef.current = null;
       return;
     }
@@ -499,7 +636,27 @@ export function MushafTestPageView({
     if (audioPage === lastAutoPagedRef.current) return;
     lastAutoPagedRef.current = audioPage;
     onPageChangeRef.current(audioPage);
-  }, [currentAudioWord, safeCurrentPage]);
+  }, [currentAudioWord, reciteActive, safeCurrentPage]);
+
+  const lastReciteAutoPagedRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (!reciteActive || !reciteCurrentWord) {
+      lastReciteAutoPagedRef.current = null;
+      return;
+    }
+    const recitePage = getMushafPageForVerse(
+      reciteCurrentWord.surah,
+      reciteCurrentWord.ayah,
+    );
+    if (recitePage === null) return;
+    if (recitePage === safeCurrentPage) {
+      lastReciteAutoPagedRef.current = null;
+      return;
+    }
+    if (recitePage === lastReciteAutoPagedRef.current) return;
+    lastReciteAutoPagedRef.current = recitePage;
+    onPageChangeRef.current(recitePage);
+  }, [reciteActive, reciteCurrentWord, safeCurrentPage]);
 
   const getItemLayout = useCallback(
     (_data: ArrayLike<number> | null | undefined, index: number) => ({
@@ -712,6 +869,9 @@ export function MushafTestPageView({
             flashedWord={flashedWord}
             flashOpacity={flashOpacity}
             currentAudioWord={currentAudioWord}
+            reciteActive={reciteActive}
+            reciteCurrentWord={reciteCurrentWord}
+            reciteRange={reciteRange}
             actionSheetVisible={actionSheetVisible}
             wordTranslationTarget={wordTranslationTarget}
             wordTranslationText={wordTranslationText}
@@ -788,6 +948,22 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(34, 197, 94, 0.35)",
     borderRadius: 4,
     zIndex: 3,
+  },
+  reciteMask: {
+    position: "absolute",
+    // Cream matches the page tone closely enough to hide future recite words.
+    backgroundColor: "#fffbeb",
+    borderRadius: 3,
+    borderWidth: 1,
+    borderColor: "#fef3c7",
+    zIndex: 4,
+  },
+  reciteCurrent: {
+    position: "absolute",
+    // Blue distinguishes the recite cursor from green audio and amber taps.
+    backgroundColor: "rgba(59, 130, 246, 0.4)",
+    borderRadius: 4,
+    zIndex: 5,
   },
   wordTranslationPopover: {
     position: "absolute",
