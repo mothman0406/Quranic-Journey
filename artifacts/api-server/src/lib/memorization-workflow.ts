@@ -1,6 +1,7 @@
 import {
   getPageForVerse,
   resolveSurahBoundedPageRange,
+  type ResolveSurahBoundedPageRangeOptions,
 } from "../data/quran-meta.js";
 
 export type MemorizationWorkType =
@@ -122,8 +123,9 @@ export function getConsecutiveMemorizedAyahEnd(
 export function buildSurahMemorizationWorkflow(
   surah: SurahLike,
   pagesTarget: number,
+  rangeOptions?: ResolveSurahBoundedPageRangeOptions,
 ): SurahMemorizationWorkflow {
-  const chunks = buildSurahPageChunks(surah, pagesTarget);
+  const chunks = buildSurahPageChunks(surah, pagesTarget, rangeOptions);
 
   const schedule: SurahMemorizationWorkItem[] = [];
   const pushWork = (
@@ -192,6 +194,7 @@ export function buildSurahMemorizationWorkflow(
 export function buildSurahPageChunks(
   surah: SurahLike,
   pagesTarget: number,
+  rangeOptions?: ResolveSurahBoundedPageRangeOptions,
 ): SurahMemorizationChunk[] {
   const safePagesTarget = Math.max(pagesTarget, 0.25);
   const chunks: SurahMemorizationChunk[] = [];
@@ -202,11 +205,15 @@ export function buildSurahPageChunks(
       surah.number,
       ayahStart,
       safePagesTarget,
+      rangeOptions,
     );
-    const ayahEnd = Math.max(
-      ayahStart,
-      Math.min(target.endAyah, surah.verseCount),
-    );
+    const crossedSurah = target.endSurah !== surah.number;
+    const ayahEnd = crossedSurah
+      ? surah.verseCount
+      : Math.max(
+          ayahStart,
+          Math.min(target.endAyah, surah.verseCount),
+        );
 
     chunks.push({
       index: chunks.length,
@@ -217,6 +224,7 @@ export function buildSurahPageChunks(
     });
 
     ayahStart = ayahEnd + 1;
+    if (crossedSurah) break;
   }
 
   return chunks;

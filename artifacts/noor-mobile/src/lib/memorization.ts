@@ -36,6 +36,7 @@ export type TodayProgress = {
   memTargetSurah: number | null;
   memTargetAyahStart: number | null;
   memTargetAyahEnd: number | null;
+  memTargetEndSurah: number | null;
   memCompletedAyahEnd: number | null;
   reviewStatus: WorkStatus;
   reviewTargetCount: number | null;

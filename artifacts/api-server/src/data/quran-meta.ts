@@ -22,6 +22,18 @@ export interface PageTargetResult {
   snapReason: 'surah_end' | 'juz' | 'hizb_quarter' | 'page_end' | 'verse_split';
 }
 
+export type SurahRangeDirection = "forward" | "backward";
+
+export type NextSurahNumberResolver = (
+  surahNumber: number,
+  direction: SurahRangeDirection,
+) => number | null;
+
+export type ResolveSurahBoundedPageRangeOptions = {
+  direction?: SurahRangeDirection;
+  getNextSurahNumber?: NextSurahNumberResolver;
+};
+
 // ─── Surah verse counts (114 surahs, index 0 = Surah 1) ──────────────────────
 export const SURAH_VERSE_COUNTS: number[] = [
   7,286,200,176,120,165,206,75,129,109,
@@ -226,6 +238,14 @@ function getLastVerseOnPage(page: number): VerseRef {
   return { surah: 114, ayah: 6 };
 }
 
+function getDefaultNextSurahNumber(
+  surahNumber: number,
+  direction: SurahRangeDirection,
+): number | null {
+  const next = direction === "backward" ? surahNumber - 1 : surahNumber + 1;
+  return next >= 1 && next <= 114 ? next : null;
+}
+
 /**
  * Full-page, cross-surah resolver for reading assignments.
  * It returns the last verse on the final full page in the page budget.
@@ -258,26 +278,85 @@ export function resolveSurahBoundedPageRange(
   startSurah: number,
   startAyah: number,
   pagesTarget: number,
+  options: ResolveSurahBoundedPageRangeOptions = {},
 ): PageTargetResult {
+  const direction = options.direction ?? "forward";
+  const getNextSurahNumber = options.getNextSurahNumber ?? getDefaultNextSurahNumber;
   const start: VerseRef = { surah: startSurah, ayah: startAyah };
   const startPage = getPageForVerse(startSurah, startAyah);
   const endPage = getLastBudgetPage(startPage, pagesTarget);
   const pageEnd = getLastVerseOnPage(endPage);
+
+  if (direction === "backward") {
+    const activeSurahEnd: VerseRef = {
+      surah: startSurah,
+      ayah: SURAH_VERSE_COUNTS[startSurah - 1] ?? 1,
+    };
+
+    if (compareVerseRefs(activeSurahEnd, pageEnd) > 0) {
+      const fallbackEndRef = compareVerseRefs(pageEnd, start) >= 0 ? pageEnd : start;
+      const startFrac = getFractionalPage(startSurah, startAyah);
+      const endFrac = getFractionalPage(fallbackEndRef.surah, fallbackEndRef.ayah, true);
+
+      return {
+        endSurah: fallbackEndRef.surah,
+        endAyah: fallbackEndRef.ayah,
+        actualPages: Math.max(0, endFrac - startFrac),
+        snapReason: "page_end",
+      };
+    }
+
+    let endRef = activeSurahEnd;
+    let currentSurah = startSurah;
+    const budgetPageStart = Math.max(1, startPage - (endPage - startPage));
+    const visited = new Set<number>([startSurah]);
+
+    for (let i = 0; i < 114; i += 1) {
+      const nextSurah = getNextSurahNumber(currentSurah, direction);
+      if (nextSurah == null || nextSurah < 1 || nextSurah > 114 || visited.has(nextSurah)) break;
+
+      const nextSurahLastAyah = SURAH_VERSE_COUNTS[nextSurah - 1] ?? 0;
+      if (nextSurahLastAyah <= 0) break;
+
+      const nextStartPage = getPageForVerse(nextSurah, 1);
+      const nextEndPage = getPageForVerse(nextSurah, nextSurahLastAyah);
+      if (nextStartPage < budgetPageStart || nextEndPage > startPage) break;
+
+      endRef = { surah: nextSurah, ayah: nextSurahLastAyah };
+      currentSurah = nextSurah;
+      visited.add(nextSurah);
+    }
+
+    return {
+      endSurah: endRef.surah,
+      endAyah: endRef.ayah,
+      actualPages: Math.max(1, startPage - budgetPageStart + 1),
+      snapReason: "surah_end",
+    };
+  }
+
   let endRef = compareVerseRefs(pageEnd, start) >= 0 ? pageEnd : start;
   let snapReason: PageTargetResult["snapReason"] = "page_end";
   let crossedSurah = false;
 
-  for (let surah = startSurah; surah <= 114; surah += 1) {
+  let surah: number | null = startSurah;
+  const visited = new Set<number>();
+  while (surah != null && surah >= 1 && surah <= 114 && !visited.has(surah)) {
+    visited.add(surah);
     const surahEnd: VerseRef = {
       surah,
       ayah: SURAH_VERSE_COUNTS[surah - 1] ?? 1,
     };
-    if (compareVerseRefs(surahEnd, start) < 0) continue;
+    if (compareVerseRefs(surahEnd, start) < 0) {
+      surah = getNextSurahNumber(surah, direction);
+      continue;
+    }
 
     if (compareVerseRefs(surahEnd, pageEnd) <= 0) {
       endRef = surahEnd;
       snapReason = "surah_end";
       if (surah > startSurah) crossedSurah = true;
+      surah = getNextSurahNumber(surah, direction);
       continue;
     }
 

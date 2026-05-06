@@ -39,11 +39,13 @@ type ChildDetail = DashboardChild & {
 type NewMemorization = {
   surahName: string;
   surahNumber: number;
+  currentWorkSurahNumber?: number;
   currentWorkSurahName?: string;
   currentWorkAyahStart?: number;
   currentWorkAyahEnd?: number;
   ayahStart: number;
   ayahEnd: number;
+  endSurahNumber?: number;
   pageStart: number;
   pageEnd: number;
   workLabel?: string;
@@ -125,6 +127,10 @@ type NextSurah = {
 
 type TodayProgress = {
   memStatus: WorkStatus;
+  memTargetSurah?: number | null;
+  memTargetAyahStart?: number | null;
+  memTargetAyahEnd?: number | null;
+  memTargetEndSurah?: number | null;
   reviewStatus: WorkStatus;
   reviewTargetCount: number | null;
   reviewCompletedCount: number;

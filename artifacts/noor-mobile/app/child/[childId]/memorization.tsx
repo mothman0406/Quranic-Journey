@@ -147,13 +147,20 @@ type SessionTarget = {
 type AssignmentAyahRange = {
   ayahStart: number;
   ayahEnd: number;
+  label?: string;
 };
 
 type OverviewDailyTarget = {
-  ayahStart: number;
-  ayahEnd: number;
   pageStart: number | null;
   pageEnd: number | null;
+  label: string;
+};
+
+type DailyTargetSegment = {
+  surahNumber: number;
+  surahName: string;
+  ayahStart: number;
+  ayahEnd: number;
 };
 
 type ManualAyahToggleRequest = {
@@ -376,17 +383,101 @@ function formatAyahRange(start: number | undefined | null, end: number | undefin
   return start === end ? `Ayah ${start}` : `Ayahs ${start}-${end}`;
 }
 
+function formatCompactAyahRange(start: number, end: number) {
+  return start === end ? `${start}` : `${start}-${end}`;
+}
+
+function getSurahsInLearningOrder(surahs: SurahSummary[]) {
+  return [...surahs].sort((a, b) => a.recommendedOrder - b.recommendedOrder);
+}
+
+function getLearningOrderRangeNumbers(
+  startSurah: number,
+  endSurah: number,
+  surahs: SurahSummary[],
+) {
+  if (startSurah === endSurah) return [startSurah];
+
+  const ordered = getSurahsInLearningOrder(surahs);
+  const startIndex = ordered.findIndex((surah) => surah.number === startSurah);
+  const endIndex = ordered.findIndex((surah) => surah.number === endSurah);
+  if (startIndex === -1 || endIndex === -1) return [startSurah, endSurah];
+
+  const step = startIndex <= endIndex ? 1 : -1;
+  const result: number[] = [];
+  for (let index = startIndex; index !== endIndex + step; index += step) {
+    const surah = ordered[index];
+    if (surah) result.push(surah.number);
+  }
+  return result;
+}
+
+function buildDailyTargetSegments(
+  todayProgress: TodayProgress | undefined,
+  todayWork: NewMemorization | null | undefined,
+  surahs: SurahSummary[],
+): DailyTargetSegment[] {
+  if (
+    todayProgress?.memTargetSurah == null ||
+    todayProgress.memTargetAyahStart == null ||
+    todayProgress.memTargetAyahEnd == null
+  ) {
+    return [];
+  }
+
+  const startSurah = todayProgress.memTargetSurah;
+  const endSurah = todayProgress.memTargetEndSurah ?? todayWork?.endSurahNumber ?? startSurah;
+  return getLearningOrderRangeNumbers(startSurah, endSurah, surahs)
+    .map((surahNumber) => {
+      const surah = surahs.find((candidate) => candidate.number === surahNumber);
+      if (!surah) return null;
+
+      const isStart = surahNumber === startSurah;
+      const isEnd = surahNumber === endSurah;
+      const ayahStart = isStart ? todayProgress.memTargetAyahStart! : 1;
+      const ayahEnd = isEnd
+        ? todayProgress.memTargetAyahEnd!
+        : isStart && todayWork?.ayahEnd != null
+          ? todayWork.ayahEnd
+          : surah.verseCount;
+
+      return {
+        surahNumber,
+        surahName: surah.nameTransliteration,
+        ayahStart,
+        ayahEnd,
+      };
+    })
+    .filter((segment): segment is DailyTargetSegment => segment != null);
+}
+
+function formatDailyTargetSegments(segments: DailyTargetSegment[]) {
+  if (segments.length === 0) return null;
+  if (segments.length === 1) {
+    return formatAyahRange(segments[0].ayahStart, segments[0].ayahEnd);
+  }
+
+  return segments
+    .map((segment) =>
+      `${segment.surahName} ${formatCompactAyahRange(segment.ayahStart, segment.ayahEnd)}`,
+    )
+    .join(" + ");
+}
+
 function getTodayAssignmentRangeForSurah(
   todayProgress: TodayProgress | undefined,
-  surahNumber: number,
+  todayWork: NewMemorization | null | undefined,
+  surah: SurahSummary,
+  surahs: SurahSummary[],
 ): AssignmentAyahRange | null {
-  if (todayProgress?.memTargetSurah !== surahNumber) return null;
-  if (todayProgress.memTargetAyahStart == null || todayProgress.memTargetAyahEnd == null) {
-    return null;
-  }
+  const segments = buildDailyTargetSegments(todayProgress, todayWork, surahs);
+  const segment = segments.find((candidate) => candidate.surahNumber === surah.number);
+  if (!segment) return null;
+
   return {
-    ayahStart: todayProgress.memTargetAyahStart,
-    ayahEnd: todayProgress.memTargetAyahEnd,
+    ayahStart: segment.ayahStart,
+    ayahEnd: segment.ayahEnd,
+    label: formatDailyTargetSegments(segments) ?? undefined,
   };
 }
 
@@ -2787,7 +2878,7 @@ export default function MemorizationScreen() {
     const targetSurah = todayProgress?.memTargetSurah ?? todayWork.surahNumber;
     const targetAyahStart = todayProgress?.memTargetAyahStart ?? todayWork.ayahStart;
     const targetAyahEnd = todayProgress?.memTargetAyahEnd ?? todayWork.ayahEnd;
-    const targetEndSurah = todayWork.endSurahNumber ?? targetSurah;
+    const targetEndSurah = todayProgress?.memTargetEndSurah ?? todayWork.endSurahNumber ?? targetSurah;
     const currentWorkSurah = todayWork.currentWorkSurahNumber ?? todayWork.surahNumber;
     const currentWorkAyahStart = todayWork.currentWorkAyahStart ?? todayWork.ayahStart;
     const currentWorkAyahEnd = todayWork.currentWorkAyahEnd ?? todayWork.ayahEnd;
@@ -7331,6 +7422,13 @@ function MemorizationDiscovery({
     const currentSurahNumber = todayWork?.currentWorkSurahNumber ?? todayWork?.surahNumber ?? null;
     const currentNumbers = new Set<number>();
     if (currentSurahNumber !== null) currentNumbers.add(currentSurahNumber);
+    for (const segment of buildDailyTargetSegments(
+      state.dashboard.todayProgress,
+      todayWork,
+      state.surahs,
+    )) {
+      currentNumbers.add(segment.surahNumber);
+    }
     for (const item of state.progress) {
       if (item.status === "in_progress") currentNumbers.add(item.surahNumber);
     }
@@ -7500,6 +7598,7 @@ function MemorizationDiscovery({
             upNext={content.upNext}
             todayStatus={content.todayStatus}
             todayProgress={state.dashboard.todayProgress}
+            surahs={state.surahs}
             onStart={onStart}
           />
           {content.reviewCheckShortcut ? (
@@ -7587,7 +7686,9 @@ function MemorizationDiscovery({
                   progress={progress}
                   assignmentRange={getTodayAssignmentRangeForSurah(
                     state.dashboard.todayProgress,
-                    surah.number,
+                    content.todayWork,
+                    surah,
+                    state.surahs,
                   )}
                   isCurrent={
                     (content.todayWork?.currentWorkSurahNumber ?? content.todayWork?.surahNumber) ===
@@ -7970,6 +8071,7 @@ function getWorkRangeDetail(work: NewMemorization, mode: "full" | "current") {
 function getOverviewDailyTarget(
   todayProgress: TodayProgress | undefined,
   todayWork: NewMemorization | null,
+  surahs: SurahSummary[],
 ): OverviewDailyTarget | null {
   if (
     todayProgress?.memTargetSurah == null ||
@@ -7979,13 +8081,15 @@ function getOverviewDailyTarget(
     return null;
   }
 
-  const endSurah = todayWork?.endSurahNumber ?? todayProgress.memTargetSurah;
+  const endSurah = todayProgress.memTargetEndSurah ?? todayWork?.endSurahNumber ?? todayProgress.memTargetSurah;
+  const segments = buildDailyTargetSegments(todayProgress, todayWork, surahs);
+  const label = formatDailyTargetSegments(segments);
+  if (!label) return null;
 
   return {
-    ayahStart: todayProgress.memTargetAyahStart,
-    ayahEnd: todayProgress.memTargetAyahEnd,
     pageStart: getMushafPageForVerse(todayProgress.memTargetSurah, todayProgress.memTargetAyahStart),
     pageEnd: getMushafPageForVerse(endSurah, todayProgress.memTargetAyahEnd),
+    label,
   };
 }
 
@@ -7995,10 +8099,9 @@ function getDailyTargetRangeDetail(
 ) {
   if (!target) return null;
   const pageRange = formatPageRange(target.pageStart, target.pageEnd);
-  return `${todayWork?.workLabel ?? "Memorization"} · ${formatAyahRange(
-    target.ayahStart,
-    target.ayahEnd,
-  )}${pageRange ? ` · ${pageRange}` : ""}`;
+  return `${todayWork?.workLabel ?? "Memorization"} · ${target.label}${
+    pageRange ? ` · ${pageRange}` : ""
+  }`;
 }
 
 function MemorizationOverviewCards({
@@ -8006,12 +8109,14 @@ function MemorizationOverviewCards({
   upNext,
   todayStatus,
   todayProgress,
+  surahs,
   onStart,
 }: {
   todayWork: NewMemorization | null;
   upNext: NewMemorization | null | undefined;
   todayStatus: WorkStatus;
   todayProgress: TodayProgress | undefined;
+  surahs: SurahSummary[];
   onStart: (target: SessionTarget) => void;
 }) {
   const todayTone: OverviewCardTone = todayWork
@@ -8019,7 +8124,7 @@ function MemorizationOverviewCards({
       ? "todayDone"
       : "today"
     : "empty";
-  const todayTarget = getOverviewDailyTarget(todayProgress, todayWork);
+  const todayTarget = getOverviewDailyTarget(todayProgress, todayWork, surahs);
   const todayTargetDetail = getDailyTargetRangeDetail(todayWork, todayTarget);
   const todayCardTarget =
     todayWork && todayTarget && todayTargetDetail
@@ -8266,7 +8371,7 @@ function SurahProgressRow({
   const tajweedNotes = (surah.tajweedNotes ?? []).filter((note) => note.trim().length > 0);
   const actionLabel = "Manage";
   const nextLabel = assignmentRange
-    ? `Next: ${formatAyahRange(assignmentRange.ayahStart, assignmentRange.ayahEnd)}`
+    ? `Next: ${assignmentRange.label ?? formatAyahRange(assignmentRange.ayahStart, assignmentRange.ayahEnd)}`
     : progress.status === "memorized"
       ? "Ready for a practice pass"
       : null;

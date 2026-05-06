@@ -3,7 +3,12 @@ import { db } from "@workspace/db";
 import { childrenTable, memorizationProgressTable, reviewScheduleTable, reviewDailySetTable, learningSessionsTable, childDuasTable, dailyProgressTable } from "@workspace/db/schema";
 import { eq, desc, and, gte, lte } from "drizzle-orm";
 import { SURAHS } from "../data/surahs.js";
-import { resolveSurahBoundedPageRange, getPageForVerse } from "../data/quran-meta.js";
+import {
+  resolveSurahBoundedPageRange,
+  getPageForVerse,
+  type NextSurahNumberResolver,
+  type ResolveSurahBoundedPageRangeOptions,
+} from "../data/quran-meta.js";
 import { STORIES } from "../data/stories.js";
 import { DUAS } from "../data/duas.js";
 import { addDaysToLocalDate, getRequestLocalDate } from "../lib/local-date.js";
@@ -37,6 +42,38 @@ function formatChild(c: typeof childrenTable.$inferSelect) {
 // Sorted by recommended learning order (Al-Fatihah first, then back from 114)
 const SURAHS_IN_ORDER = [...SURAHS].sort((a, b) => a.recommendedOrder - b.recommendedOrder);
 
+const getNextMemorizationSurahNumber: NextSurahNumberResolver = (surahNumber, direction) => {
+  const index = SURAHS_IN_ORDER.findIndex((surah) => surah.number === surahNumber);
+  if (index === -1) return null;
+
+  const nextIndex = direction === "backward" ? index + 1 : index - 1;
+  return SURAHS_IN_ORDER[nextIndex]?.number ?? null;
+};
+
+const MEMORIZATION_PAGE_RANGE_OPTIONS: ResolveSurahBoundedPageRangeOptions = {
+  direction: "backward",
+  getNextSurahNumber: getNextMemorizationSurahNumber,
+};
+
+function getMemorizationRangeSurahNumbers(startSurah: number, endSurah: number): number[] {
+  const startIndex = SURAHS_IN_ORDER.findIndex((surah) => surah.number === startSurah);
+  const endIndex = SURAHS_IN_ORDER.findIndex((surah) => surah.number === endSurah);
+
+  if (startIndex !== -1 && endIndex !== -1) {
+    const step = startIndex <= endIndex ? 1 : -1;
+    const result: number[] = [];
+    for (let index = startIndex; index !== endIndex + step; index += step) {
+      const surah = SURAHS_IN_ORDER[index];
+      if (surah) result.push(surah.number);
+    }
+    return result;
+  }
+
+  const first = Math.min(startSurah, endSurah);
+  const last = Math.max(startSurah, endSurah);
+  return Array.from({ length: last - first + 1 }, (_, index) => first + index);
+}
+
 function isFullyMemorizedSurah(
   surah: typeof SURAHS[0],
   progress: typeof memorizationProgressTable.$inferSelect | undefined,
@@ -64,7 +101,11 @@ function isMemorizationModuleDone(
 ): boolean {
   if (!isFullyMemorizedSurah(surah, progress)) return false;
 
-  const workflow = buildSurahMemorizationWorkflow(surah, pagesTarget);
+  const workflow = buildSurahMemorizationWorkflow(
+    surah,
+    pagesTarget,
+    MEMORIZATION_PAGE_RANGE_OPTIONS,
+  );
   if (!hasStartedIntraSurahWorkflow(workflow, completedDailyRows)) {
     return true;
   }
@@ -91,7 +132,11 @@ function getCanonicalActiveMemorizationSurah(
 
   if (previousSurah) {
     const previousProgress = progressBySurahId.get(previousSurah.id);
-    const workflow = buildSurahMemorizationWorkflow(previousSurah, pagesTarget);
+    const workflow = buildSurahMemorizationWorkflow(
+      previousSurah,
+      pagesTarget,
+      MEMORIZATION_PAGE_RANGE_OPTIONS,
+    );
 
     if (
       isFullyMemorizedSurah(previousSurah, previousProgress) &&
@@ -742,59 +787,37 @@ router.get("/children/:childId/dashboard", async (req, res) => {
   }
 
   let memorizationWorkflow = memorizationSurahData
-    ? buildSurahMemorizationWorkflow(memorizationSurahData, child.memorizePagePerDay)
+    ? buildSurahMemorizationWorkflow(
+        memorizationSurahData,
+        child.memorizePagePerDay,
+        MEMORIZATION_PAGE_RANGE_OPTIONS,
+      )
     : null;
 
-  // Extend start backward on the same Mushaf page so the daily assignment
-  // fills as close to memorizePagePerDay as possible (e.g. 0.75 pages on a
-  // 15-verse page → prefer 11 verses over 6).
-  // Use getPageForVerse so this preview stays aligned with the same verse→page
-  // map the scheduler uses for chunking and daily assignment.
-  if (memorizationSurahData && !inProgressSurah && !memorizationWorkflow?.enabled) {
-    const surahPage = getPageForVerse(nextStartSurah, memorizationSurahData.verseCount);
-    const totalVersesOnPage = SURAHS.reduce(
-      (acc, s) => (getPageForVerse(s.number, s.verseCount) === surahPage ? acc + s.verseCount : acc), 0
-    );
-    if (totalVersesOnPage > 0) {
-      const targetVerseCount = child.memorizePagePerDay * totalVersesOnPage;
-      let accumulated = memorizationSurahData.verseCount - (nextStartAyah - 1);
-      let bestStartSurah = nextStartSurah;
-
-      for (let s = nextStartSurah - 1; s >= 2; s--) {
-        const sd = SURAHS.find(ss => ss.number === s);
-        if (!sd || doneSurahIds.has(sd.id)) break;
-        if (getPageForVerse(s, sd.verseCount) !== surahPage) break;
-        const newTotal = accumulated + sd.verseCount;
-        if (Math.abs(targetVerseCount - newTotal) < Math.abs(targetVerseCount - accumulated)) {
-          accumulated = newTotal;
-          bestStartSurah = s;
-        } else {
-          break;
-        }
-      }
-
-      if (bestStartSurah !== nextStartSurah) {
-        const bestSurahData = SURAHS.find(ss => ss.number === bestStartSurah)!;
-        const earlyInProg = memProgress.find(m => m.surahId === bestSurahData.id && m.status === 'in_progress');
-        nextStartSurah = bestStartSurah;
-        nextStartAyah = earlyInProg
-          ? getNextContiguousAyahStart(earlyInProg, bestSurahData.verseCount)
-          : 1;
-        memorizationSurahData = bestSurahData;
-        inProgressSurah = earlyInProg;
-      }
-    }
-  }
-
   if (memorizationSurahData) {
-    memorizationWorkflow = buildSurahMemorizationWorkflow(memorizationSurahData, child.memorizePagePerDay);
+    memorizationWorkflow = buildSurahMemorizationWorkflow(
+      memorizationSurahData,
+      child.memorizePagePerDay,
+      MEMORIZATION_PAGE_RANGE_OPTIONS,
+    );
   }
 
   const activeMemorizationProgress = memorizationSurahData
     ? memProgress.find((progress) => progress.surahId === memorizationSurahData.id)
     : undefined;
+  const directMemTarget = memorizationSurahData
+    ? resolveSurahBoundedPageRange(
+        nextStartSurah,
+        nextStartAyah,
+        child.memorizePagePerDay,
+        MEMORIZATION_PAGE_RANGE_OPTIONS,
+      )
+    : null;
+  const shouldUseMemorizationWorkflow =
+    !!memorizationWorkflow?.enabled &&
+    directMemTarget?.endSurah === nextStartSurah;
   const scheduledWorkItem =
-    memorizationSurahData && memorizationWorkflow?.enabled
+    memorizationSurahData && memorizationWorkflow && shouldUseMemorizationWorkflow
       ? findPendingWorkItem(
           memorizationWorkflow,
           activeMemorizationProgress,
@@ -804,9 +827,7 @@ router.get("/children/:childId/dashboard", async (req, res) => {
       : null;
 
   const memTarget = memorizationSurahData
-    ? (memorizationWorkflow?.enabled
-        ? null
-        : resolveSurahBoundedPageRange(nextStartSurah, nextStartAyah, child.memorizePagePerDay))
+    ? (scheduledWorkItem ? null : directMemTarget)
     : null;
 
   const desiredMemTargetSurah = scheduledWorkItem?.surahNumber ?? nextStartSurah;
@@ -937,34 +958,32 @@ router.get("/children/:childId/dashboard", async (req, res) => {
         : (memTarget?.endSurah ?? displaySurahNumber);
       const endSurahData = SURAHS.find(s => s.number === endSurah) ?? displaySurahDataFinal;
       const isSameSurah = endSurah === displaySurahNumber;
-      // Learning order is descending: higher surah number (e.g. 114) is studied before lower (e.g. 113)
-      const isDescending = endSurah > displaySurahNumber;
-      const firstWorkData = isDescending ? endSurahData : displaySurahDataFinal;
-      const lastWorkData = isDescending ? displaySurahDataFinal : endSurahData;
+      const rangeSurahNumbers = isSameSurah
+        ? [displaySurahNumber]
+        : getMemorizationRangeSurahNumbers(displaySurahNumber, endSurah);
+      const firstWorkData = SURAHS.find(s => s.number === rangeSurahNumbers[0]) ?? displaySurahDataFinal;
+      const lastWorkData =
+        SURAHS.find(s => s.number === rangeSurahNumbers[rangeSurahNumbers.length - 1]) ??
+        endSurahData;
 
-      // Current work = first incomplete surah in today's range (descending learning order).
-      // Defaults to the last in learning order (displaySurahNumber) if all are done.
+      // Current work = first incomplete surah in today's memorization-order range.
       let cwNum: number;
       let cwAyahStart: number;
       let cwAyahEnd: number;
-      if (!isSameSurah && isDescending) {
-        cwNum = displaySurahNumber;
-        cwAyahStart = displayAyahStart;
-        cwAyahEnd = displaySurahDataFinal.verseCount;
-        for (let n = endSurah; n >= displaySurahNumber; n--) {
-          const s = SURAHS.find(ss => ss.number === n);
-          const mp = s ? memProgress.find(m => m.surahId === s.id) : undefined;
-          if (!mp || mp.status !== 'memorized') {
-            cwNum = n;
-            cwAyahStart = n === displaySurahNumber ? displayAyahStart : 1;
-            cwAyahEnd = n === endSurah ? (endSurahData?.verseCount ?? displayAyahEnd) : (s?.verseCount ?? displayAyahEnd);
-            break;
-          }
-        }
-      } else {
-        cwNum = isDescending ? endSurah : displaySurahNumber;
-        cwAyahStart = isDescending ? 1 : displayAyahStart;
-        cwAyahEnd = isDescending ? (endSurahData?.verseCount ?? displayAyahEnd) : displayAyahEnd;
+      const startSegmentAyahEnd = isSameSurah ? displayAyahEnd : displaySurahDataFinal.verseCount;
+      cwNum = displaySurahNumber;
+      cwAyahStart = displayAyahStart;
+      cwAyahEnd = startSegmentAyahEnd;
+      for (const n of rangeSurahNumbers) {
+        const s = SURAHS.find(ss => ss.number === n);
+        if (!s) continue;
+        const mp = memProgress.find(m => m.surahId === s.id);
+        if (mp?.status === 'memorized') continue;
+
+        cwNum = n;
+        cwAyahStart = n === displaySurahNumber ? displayAyahStart : 1;
+        cwAyahEnd = n === endSurah ? displayAyahEnd : s.verseCount;
+        break;
       }
       const cwData = SURAHS.find(s => s.number === cwNum);
 
@@ -979,7 +998,7 @@ router.get("/children/:childId/dashboard", async (req, res) => {
         currentWorkAyahEnd: cwAyahEnd,
         surahNameArabic: displaySurahDataFinal.nameArabic,
         ayahStart: displayAyahStart,
-        ayahEnd: Math.min(displayAyahEnd, endSurahData?.verseCount ?? displayAyahEnd),
+        ayahEnd: startSegmentAyahEnd,
         endSurahNumber: endSurah,
         pageStart: getPageForVerse(displaySurahNumber, displayAyahStart),
         pageEnd: getPageForVerse(endSurah, displayAyahEnd),
@@ -1044,6 +1063,7 @@ router.get("/children/:childId/dashboard", async (req, res) => {
       memTargetSurah: todayProgress.memTargetSurah,
       memTargetAyahStart: todayProgress.memTargetAyahStart,
       memTargetAyahEnd: todayProgress.memTargetAyahEnd,
+      memTargetEndSurah: todayProgress.memTargetEndSurah,
       memCompletedAyahEnd: todayProgress.memCompletedAyahEnd,
       reviewStatus: todayProgress.reviewStatus,
       reviewTargetCount: todayProgress.reviewTargetCount,
@@ -1058,16 +1078,29 @@ router.get("/children/:childId/dashboard", async (req, res) => {
     },
     upNextMemorization: (() => {
       const buildNextUpMemorization = (surah: (typeof SURAHS_IN_ORDER)[number], ayahStart: number) => {
-        const nextUpTarget = resolveSurahBoundedPageRange(surah.number, ayahStart, child.memorizePagePerDay);
-        const ayahEnd = Math.min(nextUpTarget.endAyah, surah.verseCount);
+        const nextUpTarget = resolveSurahBoundedPageRange(
+          surah.number,
+          ayahStart,
+          child.memorizePagePerDay,
+          MEMORIZATION_PAGE_RANGE_OPTIONS,
+        );
+        const ayahEnd =
+          nextUpTarget.endSurah === surah.number
+            ? Math.min(nextUpTarget.endAyah, surah.verseCount)
+            : surah.verseCount;
 
         return {
           surahName: surah.nameTransliteration,
           surahNumber: surah.number,
+          currentWorkSurahNumber: surah.number,
+          currentWorkSurahName: surah.nameTransliteration,
+          currentWorkAyahStart: ayahStart,
+          currentWorkAyahEnd: ayahEnd,
           ayahStart,
           ayahEnd,
+          endSurahNumber: nextUpTarget.endSurah,
           pageStart: getPageForVerse(surah.number, ayahStart),
-          pageEnd: getPageForVerse(surah.number, ayahEnd),
+          pageEnd: getPageForVerse(nextUpTarget.endSurah, nextUpTarget.endAyah),
           workType: "new_memorization",
           workLabel: "New Memorization",
           isReviewOnly: false,
@@ -1106,9 +1139,7 @@ router.get("/children/:childId/dashboard", async (req, res) => {
       const completedTodayTargetNumbers = new Set<number>();
       if (todayProgress.memStatus === "completed" && todayProgress.memTargetSurah != null) {
         const endSurah = todayProgress.memTargetEndSurah ?? todayProgress.memTargetSurah;
-        const start = Math.min(todayProgress.memTargetSurah, endSurah);
-        const end = Math.max(todayProgress.memTargetSurah, endSurah);
-        for (let number = start; number <= end; number += 1) {
+        for (const number of getMemorizationRangeSurahNumbers(todayProgress.memTargetSurah, endSurah)) {
           completedTodayTargetNumbers.add(number);
         }
       }
@@ -1335,7 +1366,11 @@ router.post("/children/:childId/daily-progress", async (req, res) => {
         .where(and(eq(memorizationProgressTable.childId, childId), eq(memorizationProgressTable.surahId, surah.id)));
 
       if (memProgressRow && memProgressRow.versesMemorized >= surah.verseCount) {
-        const workflow = buildSurahMemorizationWorkflow(surah, child.memorizePagePerDay);
+        const workflow = buildSurahMemorizationWorkflow(
+          surah,
+          child.memorizePagePerDay,
+          MEMORIZATION_PAGE_RANGE_OPTIONS,
+        );
         const refreshedDailyRows = await db.select().from(dailyProgressTable)
           .where(eq(dailyProgressTable.childId, childId));
         const completedMemRows = refreshedDailyRows.filter((dailyRow) => dailyRow.memStatus === "completed");
