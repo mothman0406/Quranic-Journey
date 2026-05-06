@@ -7,9 +7,11 @@ export function stripTashkeel(s: string): string {
   // Dagger alif
   r = r.replace(/\u0670/g, "ا");
   // Tashkeel (harakat) and other combining marks
-  r = r.replace(/[\u0610-\u061A\u064B-\u065F\u06D6-\u06DC\u06DF-\u06E4\u06E7\u06E8\u06EA-\u06ED]/g, "");
+  r = r.replace(/[\u0610-\u061A\u064B-\u0653\u0655-\u065F\u06D6-\u06DC\u06DF-\u06E4\u06E7\u06E8\u06EA-\u06ED]/g, "");
   // Tatweel
   r = r.replace(/[ـ]/g, "");
+  // Combining hamza above is a spoken hamza phoneme in Uthmani carriers.
+  r = r.replace(/\u0654/g, "ا");
   // Arabic presentation forms — decompose
   r = r.replace(/[\uFB50-\uFDFF]/g, (c) => c.normalize("NFKD").replace(/[\u0300-\u036f]/g, ""));
   // Alef variants → bare alef
