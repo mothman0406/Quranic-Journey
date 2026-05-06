@@ -8,7 +8,7 @@ import {
   QURAN_COM_1405_PAGE_WIDTH,
   TOTAL_QURAN_COM_1405_PAGES,
 } from "./quran-com-1405-page-images";
-import { fetchAyahWithWords } from "./quran";
+import { fetchAyahWithWords, type ApiWord } from "./quran";
 
 // Extractor tuple order: [surah, ayah, line, minX, maxX, minY, maxY, glyphCount].
 export type QuranCom1405AyahRect = readonly [
@@ -58,7 +58,7 @@ type QuranCom1405AyahInfo = {
 
 const ayahInfo = ayahInfoJson as unknown as QuranCom1405AyahInfo;
 const MIN_WORD_HIT_WIDTH_PX = 24;
-const QURAN_COM_1405_HIZB_ORNAMENT_SIZE_PX = 107;
+const RUB_EL_HIZB_MARK = "۞";
 const audioToGlyphPositionMapCache = new Map<string, Promise<number[] | null>>();
 let wordPageCache: Map<string, number> | null = null;
 
@@ -130,34 +130,48 @@ function getQuranCom1405GlyphRectsForVerse(
   return glyphs.sort((a, b) => a[4] - b[4]);
 }
 
-function isQuranCom1405HizbOrnamentGlyph(glyph: QuranCom1405GlyphRect): boolean {
-  const [_glyphId, _line, _surah, _ayah, _position, minX, maxX, minY, maxY] = glyph;
-  return (
-    maxX - minX === QURAN_COM_1405_HIZB_ORNAMENT_SIZE_PX &&
-    maxY - minY === QURAN_COM_1405_HIZB_ORNAMENT_SIZE_PX
-  );
+function hasRubElHizbMark(word: ApiWord): boolean {
+  return word.text_uthmani.includes(RUB_EL_HIZB_MARK);
 }
 
 function getLikelyReciteableGlyphPositions(
   surah: number,
   ayah: number,
-  reciteableWordCount: number,
+  reciteableWords: ReadonlyArray<ApiWord>,
 ): number[] | null {
   const glyphs = getQuranCom1405GlyphRectsForVerse(surah, ayah);
   if (glyphs.length === 0) return null;
 
   // QuranEngine stores waqf marks as tiny or negative-width glyph rects.
   // It also stores non-recited ornaments with the verse's surah/ayah: ayah
-  // markers are usually the final word-like glyph, while some hizb/rub el hizb
-  // markers are inserted before the recited words as exact 107x107 glyphs.
-  // Drop those ornaments before taking the first N reciteable audio words.
+  // markers are usually the final word-like glyph, while Quran.com's `۞`
+  // rub-el-hizb marker is split into its own glyph before the marked word.
+  // Skip that standalone marker while preserving real same-sized short words.
   const wordLikeGlyphs = glyphs.filter((glyph) => {
     const [_glyphId, _line, _surah, _ayah, _position, minX, maxX] = glyph;
-    return maxX - minX > MIN_WORD_HIT_WIDTH_PX && !isQuranCom1405HizbOrnamentGlyph(glyph);
+    return maxX - minX > MIN_WORD_HIT_WIDTH_PX;
   });
-  if (wordLikeGlyphs.length < reciteableWordCount) return null;
+  if (wordLikeGlyphs.length < reciteableWords.length) return null;
 
-  return wordLikeGlyphs.slice(0, reciteableWordCount).map((glyph) => glyph[4]);
+  const markedWordCount = reciteableWords.filter(hasRubElHizbMark).length;
+  const canAccountForStandaloneMarks =
+    markedWordCount > 0 &&
+    wordLikeGlyphs.length >= reciteableWords.length + markedWordCount + 1;
+
+  const positions: number[] = [];
+  let glyphIndex = 0;
+  for (const word of reciteableWords) {
+    if (canAccountForStandaloneMarks && hasRubElHizbMark(word)) {
+      glyphIndex += 1;
+    }
+
+    const glyph = wordLikeGlyphs[glyphIndex];
+    if (!glyph) return null;
+    positions.push(glyph[4]);
+    glyphIndex += 1;
+  }
+
+  return positions;
 }
 
 // Maps audio-segment wordIdx (1-based, reciteable-only order) to QPC2 glyph position.
@@ -172,12 +186,12 @@ export async function getAudioToGlyphPositionMap(
 
   const promise = (async () => {
     const verse = await fetchAyahWithWords(verseKey);
-    const reciteableWordCount = verse.words.filter(
+    const reciteableWords = verse.words.filter(
       (word) => word.char_type_name === "word",
-    ).length;
-    if (reciteableWordCount <= 0) return null;
+    );
+    if (reciteableWords.length <= 0) return null;
 
-    return getLikelyReciteableGlyphPositions(surah, ayah, reciteableWordCount);
+    return getLikelyReciteableGlyphPositions(surah, ayah, reciteableWords);
   })().catch(() => null);
 
   audioToGlyphPositionMapCache.set(verseKey, promise);
