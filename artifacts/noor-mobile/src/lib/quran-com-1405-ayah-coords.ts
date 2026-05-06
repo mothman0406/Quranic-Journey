@@ -58,6 +58,7 @@ type QuranCom1405AyahInfo = {
 
 const ayahInfo = ayahInfoJson as unknown as QuranCom1405AyahInfo;
 const MIN_WORD_HIT_WIDTH_PX = 24;
+const QURAN_COM_1405_HIZB_ORNAMENT_SIZE_PX = 107;
 const audioToGlyphPositionMapCache = new Map<string, Promise<number[] | null>>();
 let wordPageCache: Map<string, number> | null = null;
 
@@ -129,6 +130,14 @@ function getQuranCom1405GlyphRectsForVerse(
   return glyphs.sort((a, b) => a[4] - b[4]);
 }
 
+function isQuranCom1405HizbOrnamentGlyph(glyph: QuranCom1405GlyphRect): boolean {
+  const [_glyphId, _line, _surah, _ayah, _position, minX, maxX, minY, maxY] = glyph;
+  return (
+    maxX - minX === QURAN_COM_1405_HIZB_ORNAMENT_SIZE_PX &&
+    maxY - minY === QURAN_COM_1405_HIZB_ORNAMENT_SIZE_PX
+  );
+}
+
 function getLikelyReciteableGlyphPositions(
   surah: number,
   ayah: number,
@@ -138,16 +147,13 @@ function getLikelyReciteableGlyphPositions(
   if (glyphs.length === 0) return null;
 
   // QuranEngine stores waqf marks as tiny or negative-width glyph rects.
-  // It also stores wide non-recited ornaments (hizb/rub el hizb/sajdah and
-  // ayah markers) with the verse's surah/ayah. Quran.com audio word timing is
-  // reciteable-only, so keep only QPC2 positions that can map to word slots.
+  // It also stores non-recited ornaments with the verse's surah/ayah: ayah
+  // markers are usually the final word-like glyph, while some hizb/rub el hizb
+  // markers are inserted before the recited words as exact 107x107 glyphs.
+  // Drop those ornaments before taking the first N reciteable audio words.
   const wordLikeGlyphs = glyphs.filter((glyph) => {
-    const [_glyphId, _line, _surah, _ayah, position, minX, maxX] = glyph;
-    return (
-      maxX - minX > MIN_WORD_HIT_WIDTH_PX &&
-      position >= 1 &&
-      position <= reciteableWordCount
-    );
+    const [_glyphId, _line, _surah, _ayah, _position, minX, maxX] = glyph;
+    return maxX - minX > MIN_WORD_HIT_WIDTH_PX && !isQuranCom1405HizbOrnamentGlyph(glyph);
   });
   if (wordLikeGlyphs.length < reciteableWordCount) return null;
 
