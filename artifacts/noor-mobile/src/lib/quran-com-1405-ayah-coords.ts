@@ -138,11 +138,16 @@ function getLikelyReciteableGlyphPositions(
   if (glyphs.length === 0) return null;
 
   // QuranEngine stores waqf marks as tiny or negative-width glyph rects.
-  // The final remaining glyph is the ayah marker, so the first N word-like
-  // positions are the reciteable words in audio/display order.
+  // It also stores wide non-recited ornaments (hizb/rub el hizb/sajdah and
+  // ayah markers) with the verse's surah/ayah. Quran.com audio word timing is
+  // reciteable-only, so keep only QPC2 positions that can map to word slots.
   const wordLikeGlyphs = glyphs.filter((glyph) => {
-    const [_glyphId, _line, _surah, _ayah, _position, minX, maxX] = glyph;
-    return maxX - minX > MIN_WORD_HIT_WIDTH_PX;
+    const [_glyphId, _line, _surah, _ayah, position, minX, maxX] = glyph;
+    return (
+      maxX - minX > MIN_WORD_HIT_WIDTH_PX &&
+      position >= 1 &&
+      position <= reciteableWordCount
+    );
   });
   if (wordLikeGlyphs.length < reciteableWordCount) return null;
 
