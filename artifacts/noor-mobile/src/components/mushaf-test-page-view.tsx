@@ -1251,11 +1251,8 @@ const styles = StyleSheet.create({
   },
   reciteMask: {
     position: "absolute",
-    // Cream matches the page tone closely enough to hide recite words.
-    backgroundColor: "#fffbeb",
-    borderRadius: 3,
-    borderWidth: 1,
-    borderColor: "#fef3c7",
+    // Match the Quran.com 1405 page background so hidden words blend into the printed page.
+    backgroundColor: "#ffffff",
     zIndex: 4,
   },
   reciteMaskCurrent: {
@@ -1270,11 +1267,8 @@ const styles = StyleSheet.create({
   },
   blindMask: {
     position: "absolute",
-    // Same cream tone as recite mask for visual consistency.
-    backgroundColor: "#fffbeb",
-    borderRadius: 3,
-    borderWidth: 1,
-    borderColor: "#fef3c7",
+    // Match the Quran.com 1405 page background so hidden words blend into the printed page.
+    backgroundColor: "#ffffff",
     zIndex: 4,
   },
   blurDim: {
