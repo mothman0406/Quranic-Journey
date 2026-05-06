@@ -254,6 +254,10 @@ export default function HomeScreen() {
     router.push("/profile/new");
   }
 
+  function openGeneralMushaf() {
+    router.push("/mushaf");
+  }
+
   function openChildRoute(child: Child, pathname: ChildRoute, extras?: Record<string, string>) {
     setSelectedChild(null);
     router.push({
@@ -399,10 +403,30 @@ export default function HomeScreen() {
           <Pressable style={styles.primaryButton} onPress={openCreateProfile}>
             <Text style={styles.primaryButtonText}>Add Child</Text>
           </Pressable>
+          <Pressable style={styles.secondaryButton} onPress={openGeneralMushaf}>
+            <Ionicons name="reader-outline" size={17} color="#0f766e" />
+            <Text style={styles.secondaryButtonText}>Read Quran</Text>
+          </Pressable>
         </View>
       ) : (
         <View style={styles.content}>
           <View style={styles.tools}>
+            <Pressable
+              style={styles.readerEntry}
+              onPress={openGeneralMushaf}
+              accessibilityRole="button"
+              accessibilityLabel="Read Quran without selecting a profile"
+            >
+              <View style={styles.readerEntryIcon}>
+                <Ionicons name="reader-outline" size={20} color="#0f766e" />
+              </View>
+              <View style={styles.readerEntryText}>
+                <Text style={styles.readerEntryTitle}>Read Quran</Text>
+                <Text style={styles.readerEntryDetail}>Standalone mushaf</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color="#94a3b8" />
+            </Pressable>
+
             {recentlyActiveChildren.length > 0 ? (
               <View style={styles.activeStrip}>
                 <View style={styles.activeStripHeader}>
@@ -1056,6 +1080,58 @@ const styles = StyleSheet.create({
   primaryButtonText: {
     color: "#ffffff",
     fontSize: 15,
+    fontWeight: "800",
+  },
+  secondaryButton: {
+    minHeight: 46,
+    borderRadius: 12,
+    paddingVertical: 11,
+    paddingHorizontal: 18,
+    borderWidth: 1,
+    borderColor: "#99f6e4",
+    backgroundColor: "#f0fdfa",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 7,
+  },
+  secondaryButtonText: {
+    color: "#0f766e",
+    fontSize: 15,
+    fontWeight: "900",
+  },
+  readerEntry: {
+    minHeight: 62,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#99f6e4",
+    backgroundColor: "#f0fdfa",
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  readerEntryIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: "#ccfbf1",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  readerEntryText: {
+    flex: 1,
+    minWidth: 0,
+    gap: 2,
+  },
+  readerEntryTitle: {
+    color: "#0f172a",
+    fontSize: 15,
+    fontWeight: "900",
+  },
+  readerEntryDetail: {
+    color: "#0f766e",
+    fontSize: 12,
     fontWeight: "800",
   },
   noResults: {
