@@ -6,6 +6,7 @@ import { SURAHS } from "../data/surahs.js";
 import {
   resolveSurahBoundedPageRange,
   getPageForVerse,
+  SURAH_VERSE_COUNTS,
   type NextSurahNumberResolver,
   type ResolveSurahBoundedPageRangeOptions,
 } from "../data/quran-meta.js";
@@ -1166,6 +1167,47 @@ router.get("/children/:childId/dashboard", async (req, res) => {
         : 1;
       return buildNextUpMemorization(nextUp, ayahStart);
     })(),
+  });
+});
+
+router.get("/children/:childId/memorization/resolve-range", async (req, res) => {
+  const childId = parseInt(req.params.childId);
+  const [child] = await db.select().from(childrenTable).where(eq(childrenTable.id, childId));
+  if (!child) { res.status(404).json({ error: "Child not found" }); return; }
+  if (child.parentId !== req.user.id) { res.status(403).json({ error: "Forbidden" }); return; }
+
+  const surahNumber = Number(req.query.surah);
+  if (!Number.isInteger(surahNumber) || surahNumber < 1 || surahNumber > 114) {
+    res.status(400).json({ error: "surah must be an integer between 1 and 114" });
+    return;
+  }
+
+  const verseCount = SURAH_VERSE_COUNTS[surahNumber - 1] ?? 0;
+  const ayahStart = Number(req.query.fromAyah);
+  if (!Number.isInteger(ayahStart) || ayahStart < 1 || ayahStart > verseCount) {
+    res.status(400).json({ error: `fromAyah must be an integer between 1 and ${verseCount}` });
+    return;
+  }
+
+  const target = resolveSurahBoundedPageRange(
+    surahNumber,
+    ayahStart,
+    child.memorizePagePerDay,
+    MEMORIZATION_PAGE_RANGE_OPTIONS,
+  );
+  const crossesSurah = target.endSurah !== surahNumber;
+  // Discovery rows launch a single-surah session, so clip cross-surah resolver
+  // output to the tapped surah even when the page budget can include more.
+  const endSurahNumber = crossesSurah ? surahNumber : target.endSurah;
+  const ayahEnd = crossesSurah ? verseCount : Math.min(target.endAyah, verseCount);
+
+  res.json({
+    surahNumber,
+    ayahStart,
+    ayahEnd,
+    endSurahNumber,
+    pageStart: getPageForVerse(surahNumber, ayahStart),
+    pageEnd: getPageForVerse(endSurahNumber, ayahEnd),
   });
 });
 

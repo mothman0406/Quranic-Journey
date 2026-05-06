@@ -33,6 +33,7 @@ import { stripTashkeel, wordMatches, stripAlPrefix, tokenize, SKIP_CHARS } from 
 import {
   fetchDashboard,
   fetchMemorizationProgress,
+  fetchResolvedSurahRange,
   fetchSurahs,
   fetchTimingsForReciter,
   submitDailyProgress,
@@ -66,7 +67,12 @@ import {
   type ThemeKey,
   type MushafTheme,
 } from "@/src/lib/mushaf-theme";
-import { MUSHAF_SURAHS, clampMushafPage, getMushafPageForVerse } from "@/src/lib/mushaf";
+import {
+  MUSHAF_SURAHS,
+  TOTAL_MUSHAF_PAGES,
+  clampMushafPage,
+  getMushafPageForVerse,
+} from "@/src/lib/mushaf";
 import {
   getAudioToGlyphPositionMap,
   getQuranCom1405PageForWord,
@@ -590,7 +596,7 @@ function firstUnmemorizedAyah(progress: MemorizationProgress) {
   return Math.min(progress.totalVerses, Math.max(1, progress.versesMemorized + 1));
 }
 
-function buildProgressTarget(progress: MemorizationProgress): SessionTarget {
+function buildFiveAyahProgressTarget(progress: MemorizationProgress): SessionTarget {
   const start = progress.status === "memorized" ? 1 : firstUnmemorizedAyah(progress);
   const end = Math.min(progress.totalVerses, start + DISCOVERY_CHUNK_AYAHS - 1);
   const fallbackPages = estimatePageRange(progress.surahNumber, start, end);
@@ -601,6 +607,62 @@ function buildProgressTarget(progress: MemorizationProgress): SessionTarget {
     pageStart: fallbackPages.pageStart,
     pageEnd: fallbackPages.pageEnd,
   };
+}
+
+function buildLocalPageBoundedProgressTarget(
+  progress: MemorizationProgress,
+  pagesTarget: number | undefined | null,
+): SessionTarget {
+  const fallback = buildFiveAyahProgressTarget(progress);
+  const startPage = getMushafPageForVerse(progress.surahNumber, fallback.ayahStart);
+  if (startPage == null) return fallback;
+
+  const safePagesTarget = Number.isFinite(pagesTarget ?? NaN)
+    ? Math.max(1, Math.floor(pagesTarget!))
+    : 1;
+  const lastBudgetPage = Math.min(TOTAL_MUSHAF_PAGES, startPage + safePagesTarget - 1);
+  let ayahEnd = fallback.ayahStart;
+
+  for (let ayah = fallback.ayahStart; ayah <= progress.totalVerses; ayah += 1) {
+    const page = getMushafPageForVerse(progress.surahNumber, ayah);
+    if (page == null || page > lastBudgetPage) break;
+    ayahEnd = ayah;
+  }
+
+  const pageEnd = getMushafPageForVerse(progress.surahNumber, ayahEnd) ?? startPage;
+  return {
+    surahNumber: progress.surahNumber,
+    ayahStart: fallback.ayahStart,
+    ayahEnd,
+    pageStart: startPage,
+    pageEnd,
+  };
+}
+
+async function resolveProgressTarget(
+  childId: string | undefined,
+  progress: MemorizationProgress,
+  pagesTarget: number | undefined | null,
+): Promise<SessionTarget> {
+  const localTarget = buildLocalPageBoundedProgressTarget(progress, pagesTarget);
+  if (!childId) return localTarget;
+
+  try {
+    const range = await fetchResolvedSurahRange(childId, progress.surahNumber, localTarget.ayahStart);
+    return {
+      surahNumber: range.surahNumber,
+      ayahStart: range.ayahStart,
+      ayahEnd: range.ayahEnd,
+      pageStart: range.pageStart,
+      pageEnd: range.pageEnd,
+    };
+  } catch (error) {
+    console.log(
+      "[memorization] failed to resolve page-bounded range from API, falling back to local page-bounded range",
+      { surahNumber: progress.surahNumber, error },
+    );
+    return localTarget;
+  }
 }
 
 function estimatePageRange(surahNumber: number, ayahStart: number, ayahEnd: number) {
@@ -7438,6 +7500,15 @@ function MemorizationDiscovery({
   const [pendingToggleAyahs, setPendingToggleAyahs] = useState<Set<number>>(
     () => new Set(),
   );
+  const pendingProgressRequestRef = useRef(0);
+  const [pendingProgressSurahNumber, setPendingProgressSurahNumber] = useState<number | null>(null);
+  const [visiblePendingProgressSurahNumber, setVisiblePendingProgressSurahNumber] = useState<number | null>(null);
+
+  useEffect(() => {
+    return () => {
+      pendingProgressRequestRef.current += 1;
+    };
+  }, []);
 
   const content = useMemo(() => {
     if (state.status !== "ready") return null;
@@ -7513,15 +7584,45 @@ function MemorizationDiscovery({
     };
   }, [childId, filter, query, state]);
 
-  function startProgress(progress: MemorizationProgress) {
+  async function startProgress(progress: MemorizationProgress) {
     if (content?.todayWork) {
       const workSurah = content.todayWork.currentWorkSurahNumber ?? content.todayWork.surahNumber;
       if (workSurah === progress.surahNumber) {
+        pendingProgressRequestRef.current += 1;
+        setPendingProgressSurahNumber(null);
+        setVisiblePendingProgressSurahNumber(null);
         onStart(buildWorkTarget(content.todayWork));
         return;
       }
     }
-    onStart(buildProgressTarget(progress));
+
+    const requestId = pendingProgressRequestRef.current + 1;
+    pendingProgressRequestRef.current = requestId;
+    setPendingProgressSurahNumber(progress.surahNumber);
+    setVisiblePendingProgressSurahNumber(null);
+
+    const showTimer = setTimeout(() => {
+      if (pendingProgressRequestRef.current === requestId) {
+        setVisiblePendingProgressSurahNumber(progress.surahNumber);
+      }
+    }, 250);
+
+    let target: SessionTarget;
+    try {
+      target = await resolveProgressTarget(
+        childId,
+        progress,
+        state.status === "ready" ? state.dashboard.child?.memorizePagePerDay : undefined,
+      );
+    } finally {
+      clearTimeout(showTimer);
+    }
+
+    if (pendingProgressRequestRef.current !== requestId) return;
+
+    setPendingProgressSurahNumber(null);
+    setVisiblePendingProgressSurahNumber(null);
+    onStart(target);
   }
 
   function startReviewCheck(work: NewMemorization) {
@@ -7538,7 +7639,7 @@ function MemorizationDiscovery({
 
   function startSelectedSurahSession(progress: MemorizationProgress) {
     setSelectedSurahNumber(null);
-    startProgress(progress);
+    void startProgress(progress);
   }
 
   async function toggleSelectedAyahs(ayahs: number[], memorized: boolean) {
@@ -7649,7 +7750,7 @@ function MemorizationDiscovery({
               </View>
               <View style={styles.discoveryCardList}>
                 {content.resumeItems.map((item) => (
-                  <ResumeWorkCard key={item.surahNumber} progress={item} onPress={() => startProgress(item)} />
+                  <ResumeWorkCard key={item.surahNumber} progress={item} onPress={() => { void startProgress(item); }} />
                 ))}
               </View>
             </>
@@ -7720,7 +7821,9 @@ function MemorizationDiscovery({
                     (content.todayWork?.currentWorkSurahNumber ?? content.todayWork?.surahNumber) ===
                     surah.number
                   }
-                  onPress={() => startProgress(progress)}
+                  isResolving={pendingProgressSurahNumber === surah.number}
+                  showResolving={visiblePendingProgressSurahNumber === surah.number}
+                  onPress={() => { void startProgress(progress); }}
                   onManage={() => setSelectedSurahNumber(surah.number)}
                 />
               ))
@@ -8379,6 +8482,8 @@ function SurahProgressRow({
   progress,
   assignmentRange,
   isCurrent,
+  isResolving,
+  showResolving,
   onPress,
   onManage,
 }: {
@@ -8386,6 +8491,8 @@ function SurahProgressRow({
   progress: MemorizationProgress;
   assignmentRange: AssignmentAyahRange | null;
   isCurrent: boolean;
+  isResolving: boolean;
+  showResolving: boolean;
   onPress: () => void;
   onManage: () => void;
 }) {
@@ -8411,10 +8518,19 @@ function SurahProgressRow({
       ]}
     >
       {toneMeta ? <View style={[styles.surahToneRail, { backgroundColor: toneMeta.color }]} /> : null}
-      <Pressable style={styles.surahRowPressArea} onPress={onPress}>
+      <Pressable
+        style={[styles.surahRowPressArea, isResolving && styles.surahRowPressAreaDisabled]}
+        onPress={onPress}
+        disabled={isResolving}
+        accessibilityState={{ busy: isResolving, disabled: isResolving }}
+      >
         <View style={styles.surahRowTop}>
           <View style={styles.surahNumber}>
-            <Text style={styles.surahNumberText}>{surah.number}</Text>
+            {showResolving ? (
+              <ActivityIndicator size="small" color="#2563eb" />
+            ) : (
+              <Text style={styles.surahNumberText}>{surah.number}</Text>
+            )}
           </View>
           <View style={styles.surahTitleBlock}>
             <View style={styles.surahTitleLine}>
@@ -8466,7 +8582,11 @@ function SurahProgressRow({
             <View style={styles.surahNextSpacer} />
           )}
           <Pressable
-            style={styles.surahManageButton}
+            style={[
+              styles.surahManageButton,
+              isResolving && styles.surahManageButtonDisabled,
+            ]}
+            disabled={isResolving}
             onPress={(event) => {
               event.stopPropagation();
               onManage();
@@ -9339,6 +9459,9 @@ const styles = StyleSheet.create({
   surahRowPressArea: {
     gap: 10,
   },
+  surahRowPressAreaDisabled: {
+    opacity: 0.72,
+  },
   surahToneRail: {
     position: "absolute",
     left: 0,
@@ -9536,6 +9659,9 @@ const styles = StyleSheet.create({
     borderColor: "#bfdbfe",
     backgroundColor: "#eff6ff",
     paddingHorizontal: 12,
+  },
+  surahManageButtonDisabled: {
+    opacity: 0.6,
   },
   tajweedAccordion: {
     borderRadius: 12,

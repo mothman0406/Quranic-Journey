@@ -22,6 +22,15 @@ export type NewMemorization = {
   estimatedMinutes: number;
 };
 
+export type ResolvedSurahRange = {
+  surahNumber: number;
+  ayahStart: number;
+  ayahEnd: number;
+  endSurahNumber: number;
+  pageStart: number;
+  pageEnd: number;
+};
+
 export type WorkStatus = "not_started" | "in_progress" | "completed";
 
 export type DashboardChild = {
@@ -102,6 +111,16 @@ export async function fetchMemorizationProgress(
     `/api/children/${childId}/memorization`,
   );
   return response.progress;
+}
+
+export async function fetchResolvedSurahRange(
+  childId: string,
+  surahNumber: number,
+  fromAyah: number,
+): Promise<ResolvedSurahRange> {
+  return apiFetch<ResolvedSurahRange>(
+    `/api/children/${childId}/memorization/resolve-range?surah=${surahNumber}&fromAyah=${fromAyah}`,
+  );
 }
 
 export async function fetchSurahs(): Promise<SurahSummary[]> {
