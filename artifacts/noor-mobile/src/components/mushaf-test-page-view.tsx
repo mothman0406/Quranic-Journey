@@ -129,6 +129,8 @@ const QURAN_COM_1405_PAGE_ASPECT_RATIO =
   QURAN_COM_1405_PAGE_WIDTH / QURAN_COM_1405_PAGE_HEIGHT;
 const MASK_PAD_TOP_NATIVE_PX = 22;
 const MASK_PAD_BOTTOM_NATIVE_PX = 12;
+const MASK_PAD_LEFT_NATIVE_PX = 30;
+const MASK_PAD_RIGHT_NATIVE_PX = 30;
 
 function clampPage(page: number) {
   return Math.max(1, Math.min(TOTAL_QURAN_COM_1405_PAGES, Math.round(page)));
@@ -212,8 +214,8 @@ function buildMaskOverlayRects(pageNumber: number, layout: PageLayout): WordOver
     const [surah, ayah, position, line, minX, maxX, minY, maxY] = wordRect;
     const scaledRect = scaleNativeWordBounds(
       {
-        minX,
-        maxX,
+        minX: minX - MASK_PAD_LEFT_NATIVE_PX,
+        maxX: maxX + MASK_PAD_RIGHT_NATIVE_PX,
         minY: minY - MASK_PAD_TOP_NATIVE_PX,
         maxY: maxY + MASK_PAD_BOTTOM_NATIVE_PX,
       },
