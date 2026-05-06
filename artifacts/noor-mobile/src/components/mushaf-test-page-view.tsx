@@ -15,7 +15,9 @@ import { Image } from "expo-image";
 import {
   QURAN_COM_1405_NATIVE_HEIGHT,
   QURAN_COM_1405_NATIVE_WIDTH,
+  buildQuranCom1405MaskOverlayRects,
   getQuranCom1405PageForWord,
+  getQuranCom1405VerseMarkerKeys,
   getQuranCom1405WordRectsForPage,
   type QuranCom1405WordRect,
 } from "@/src/lib/quran-com-1405-ayah-coords";
@@ -127,10 +129,6 @@ const PAGE_NUMBERS = Array.from(
 );
 const QURAN_COM_1405_PAGE_ASPECT_RATIO =
   QURAN_COM_1405_PAGE_WIDTH / QURAN_COM_1405_PAGE_HEIGHT;
-const MASK_PAD_TOP_NATIVE_PX = 22;
-const MASK_PAD_BOTTOM_NATIVE_PX = 12;
-const MASK_PAD_LEFT_NATIVE_PX = 30;
-const MASK_PAD_RIGHT_NATIVE_PX = 30;
 
 function clampPage(page: number) {
   return Math.max(1, Math.min(TOTAL_QURAN_COM_1405_PAGES, Math.round(page)));
@@ -192,35 +190,6 @@ function buildWordOverlayRects(pageNumber: number, layout: PageLayout): WordOver
   getQuranCom1405WordRectsForPage(pageNumber).forEach((wordRect, index) => {
     const [surah, ayah, position, line, minX, maxX, minY, maxY] = wordRect;
     const scaledRect = scaleNativeWordBounds({ minX, maxX, minY, maxY }, layout);
-    if (!scaledRect) return;
-
-    rects.push({
-      key: `${pageNumber}:${surah}:${ayah}:${position}:${line}:${index}`,
-      wordRect,
-      surah,
-      ayah,
-      position,
-      ...scaledRect,
-    });
-  });
-
-  return rects;
-}
-
-function buildMaskOverlayRects(pageNumber: number, layout: PageLayout): WordOverlayRect[] {
-  const rects: WordOverlayRect[] = [];
-
-  getQuranCom1405WordRectsForPage(pageNumber).forEach((wordRect, index) => {
-    const [surah, ayah, position, line, minX, maxX, minY, maxY] = wordRect;
-    const scaledRect = scaleNativeWordBounds(
-      {
-        minX: minX - MASK_PAD_LEFT_NATIVE_PX,
-        maxX: maxX + MASK_PAD_RIGHT_NATIVE_PX,
-        minY: minY - MASK_PAD_TOP_NATIVE_PX,
-        maxY: maxY + MASK_PAD_BOTTOM_NATIVE_PX,
-      },
-      layout,
-    );
     if (!scaledRect) return;
 
     rects.push({
@@ -349,8 +318,12 @@ function MushafTestPage({
     [imageLayout, pageNumber],
   );
   const maskOverlayRects = useMemo(
-    () => buildMaskOverlayRects(pageNumber, imageLayout),
+    () => buildQuranCom1405MaskOverlayRects(pageNumber, imageLayout),
     [imageLayout, pageNumber],
+  );
+  const verseMarkerKeys = useMemo(
+    () => getQuranCom1405VerseMarkerKeys(maskOverlayRects),
+    [maskOverlayRects],
   );
   const flashedRect = useMemo(
     () =>
@@ -387,36 +360,18 @@ function MushafTestPage({
 
   const reciteClassifiedRects = useMemo(() => {
     if (!reciteActive) return [];
-    return maskOverlayRects.map((rect) => ({
-      rect,
-      state: classifyWordForRecite(
-        { surah: rect.surah, ayah: rect.ayah, position: rect.position },
-        reciteCurrentWord,
-        reciteRange,
-        reciteActive,
-      ),
-    }));
-  }, [maskOverlayRects, reciteActive, reciteCurrentWord, reciteRange]);
-  const verseMarkerKeys = useMemo(() => {
-    const maxPositionByAyah = new Map<string, number>();
-
-    overlayRects.forEach((rect) => {
-      const key = `${rect.surah}:${rect.ayah}`;
-      const current = maxPositionByAyah.get(key) ?? -Infinity;
-      if (rect.position > current) maxPositionByAyah.set(key, rect.position);
-    });
-
-    const markers = new Set<string>();
-    overlayRects.forEach((rect) => {
-      const ayahKey = `${rect.surah}:${rect.ayah}`;
-      if (maxPositionByAyah.get(ayahKey) === rect.position) {
-        markers.add(rect.key);
-      }
-    });
-
-    return markers;
-  }, [overlayRects]);
-
+    return maskOverlayRects
+      .filter((rect) => !verseMarkerKeys.has(rect.key))
+      .map((rect) => ({
+        rect,
+        state: classifyWordForRecite(
+          { surah: rect.surahNumber, ayah: rect.ayahNumber, position: rect.position },
+          reciteCurrentWord,
+          reciteRange,
+          reciteActive,
+        ),
+      }));
+  }, [maskOverlayRects, reciteActive, reciteCurrentWord, reciteRange, verseMarkerKeys]);
   // Green highlight uses a different color than the amber tap-flash (Phase 1b)
   // to make audio-following distinct from user-initiated feedback.
   const audioHighlightOpacity = useRef(new Animated.Value(0)).current;
@@ -639,7 +594,7 @@ function MushafTestPage({
             {maskOverlayRects
               .filter((rect) => {
                 if (verseMarkerKeys.has(rect.key)) return false;
-                if (revealedAyahs.has(`${rect.surah}:${rect.ayah}`)) return false;
+                if (revealedAyahs.has(rect.verseKey)) return false;
                 return true;
               })
               .map((rect) => (

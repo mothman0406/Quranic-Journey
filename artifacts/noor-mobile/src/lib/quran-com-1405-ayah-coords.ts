@@ -64,6 +64,28 @@ let wordPageCache: Map<string, number> | null = null;
 
 export const QURAN_COM_1405_NATIVE_WIDTH = QURAN_COM_1405_PAGE_WIDTH;
 export const QURAN_COM_1405_NATIVE_HEIGHT = QURAN_COM_1405_PAGE_HEIGHT;
+export const QURAN_COM_1405_MASK_PAD_TOP_NATIVE_PX = 22;
+export const QURAN_COM_1405_MASK_PAD_BOTTOM_NATIVE_PX = 12;
+export const QURAN_COM_1405_MASK_PAD_LEFT_NATIVE_PX = 30;
+export const QURAN_COM_1405_MASK_PAD_RIGHT_NATIVE_PX = 30;
+
+export type QuranCom1405MaskRect = {
+  key: string;
+  verseKey: string;
+  surahNumber: number;
+  ayahNumber: number;
+  position: number;
+  lineNumber: number;
+  top: number;
+  left: number;
+  width: number;
+  height: number;
+};
+
+type QuranCom1405MaskLayout = {
+  width: number;
+  height: number;
+};
 
 export function getQuranCom1405AyahRectsForPage(
   pageNumber: number,
@@ -91,6 +113,100 @@ export function getQuranCom1405WordRectsForPage(
 
     return [surah, ayah, position, line, minX, maxX, minY, maxY] as const;
   });
+}
+
+function scaleQuranCom1405MaskBounds(
+  bounds: Pick<QuranCom1405MaskRect, "top" | "left" | "width" | "height">,
+  layout: QuranCom1405MaskLayout,
+): Pick<QuranCom1405MaskRect, "top" | "left" | "width" | "height"> | null {
+  if (layout.width <= 0 || layout.height <= 0) return null;
+
+  const { top, left, width, height } = bounds;
+  if (top >= layout.height || top + height <= 0 || left >= layout.width || left + width <= 0) {
+    return null;
+  }
+
+  const clampedTop = Math.max(0, top);
+  const clampedLeft = Math.max(0, left);
+  const clampedWidth = Math.max(0, Math.min(width, layout.width - clampedLeft));
+  const clampedHeight = Math.max(0, Math.min(height, layout.height - clampedTop));
+  if (clampedWidth <= 0 || clampedHeight <= 0) return null;
+
+  return {
+    top: clampedTop,
+    left: clampedLeft,
+    width: clampedWidth,
+    height: clampedHeight,
+  };
+}
+
+export function buildQuranCom1405MaskOverlayRects(
+  pageNumber: number,
+  layout: QuranCom1405MaskLayout,
+): QuranCom1405MaskRect[] {
+  if (layout.width <= 0 || layout.height <= 0) return [];
+
+  const widthCoeff = layout.width / QURAN_COM_1405_NATIVE_WIDTH;
+  const heightCoeff = layout.height / QURAN_COM_1405_NATIVE_HEIGHT;
+  const rects: QuranCom1405MaskRect[] = [];
+
+  getQuranCom1405WordRectsForPage(pageNumber).forEach((wordRect, index) => {
+    const [surahNumber, ayahNumber, position, lineNumber, minX, maxX, minY, maxY] = wordRect;
+    const scaledRect = scaleQuranCom1405MaskBounds(
+      {
+        top: (minY - QURAN_COM_1405_MASK_PAD_TOP_NATIVE_PX) * heightCoeff,
+        left: (minX - QURAN_COM_1405_MASK_PAD_LEFT_NATIVE_PX) * widthCoeff,
+        width:
+          (
+            maxX -
+            minX +
+            QURAN_COM_1405_MASK_PAD_LEFT_NATIVE_PX +
+            QURAN_COM_1405_MASK_PAD_RIGHT_NATIVE_PX
+          ) * widthCoeff,
+        height:
+          (
+            maxY -
+            minY +
+            QURAN_COM_1405_MASK_PAD_TOP_NATIVE_PX +
+            QURAN_COM_1405_MASK_PAD_BOTTOM_NATIVE_PX
+          ) * heightCoeff,
+      },
+      layout,
+    );
+    if (!scaledRect) return;
+
+    rects.push({
+      key: `${pageNumber}:${surahNumber}:${ayahNumber}:${position}:${lineNumber}:${index}`,
+      verseKey: `${surahNumber}:${ayahNumber}`,
+      surahNumber,
+      ayahNumber,
+      position,
+      lineNumber,
+      ...scaledRect,
+    });
+  });
+
+  return rects;
+}
+
+export function getQuranCom1405VerseMarkerKeys(
+  rects: ReadonlyArray<QuranCom1405MaskRect>,
+): Set<string> {
+  const maxPositionByAyah = new Map<string, number>();
+
+  rects.forEach((rect) => {
+    const current = maxPositionByAyah.get(rect.verseKey) ?? -Infinity;
+    if (rect.position > current) maxPositionByAyah.set(rect.verseKey, rect.position);
+  });
+
+  const markers = new Set<string>();
+  rects.forEach((rect) => {
+    if (maxPositionByAyah.get(rect.verseKey) === rect.position) {
+      markers.add(rect.key);
+    }
+  });
+
+  return markers;
 }
 
 function ensureWordPageCache() {

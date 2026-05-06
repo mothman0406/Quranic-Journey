@@ -30,8 +30,9 @@ import { ayahAudioUrl } from "@/src/lib/audio";
 import {
   QURAN_COM_1405_NATIVE_HEIGHT,
   QURAN_COM_1405_NATIVE_WIDTH,
+  buildQuranCom1405MaskOverlayRects,
   getQuranCom1405AyahRectsForPage,
-  getQuranCom1405WordRectsForPage,
+  getQuranCom1405VerseMarkerKeys,
 } from "@/src/lib/quran-com-1405-ayah-coords";
 import {
   QURAN_COM_1405_PAGE_HEIGHT,
@@ -136,10 +137,6 @@ type PageOverlayRect = {
   left: number;
   width: number;
   height: number;
-};
-
-type PageWordMaskRect = PageOverlayRect & {
-  position: number;
 };
 
 const HIGHLIGHT_COLORS: Record<HighlightColor, { bg: string; dot: string; label: string }> = {
@@ -386,54 +383,6 @@ function buildQuranCom1405OverlayRects(pageNumber: number, layout: PageImageLayo
   return rects;
 }
 
-function buildQuranCom1405WordMaskRects(
-  pageNumber: number,
-  layout: PageImageLayout,
-): PageWordMaskRect[] {
-  if (layout.width <= 0 || layout.height <= 0) return [];
-
-  const wordRects = getQuranCom1405WordRectsForPage(pageNumber);
-  if (wordRects.length === 0) return [];
-
-  const widthCoeff = layout.width / QURAN_COM_1405_NATIVE_WIDTH;
-  const heightCoeff = layout.height / QURAN_COM_1405_NATIVE_HEIGHT;
-  const rects: PageWordMaskRect[] = [];
-
-  wordRects.forEach(
-    ([surahNumber, ayahNumber, position, lineNumber, minX, maxX, minY, maxY], index) => {
-      if (!isKnownAyah(surahNumber, ayahNumber)) return;
-
-      const top = minY * heightCoeff;
-      const left = minX * widthCoeff;
-      const width = (maxX - minX) * widthCoeff;
-      const height = (maxY - minY) * heightCoeff;
-      if (top >= layout.height || top + height <= 0 || left >= layout.width || left + width <= 0) {
-        return;
-      }
-
-      const clampedTop = Math.max(0, top);
-      const clampedLeft = Math.max(0, left);
-      const clampedHeight = Math.max(0, Math.min(height, layout.height - clampedTop));
-      const clampedWidth = Math.max(0, Math.min(width, layout.width - clampedLeft));
-      if (clampedHeight < 6 || clampedWidth < 8) return;
-
-      rects.push({
-        key: `${pageNumber}:${surahNumber}:${ayahNumber}:${position}:${lineNumber}:${index}`,
-        verseKey: verseKeyFor(surahNumber, ayahNumber),
-        surahNumber,
-        ayahNumber,
-        position,
-        top: clampedTop,
-        left: clampedLeft,
-        width: clampedWidth,
-        height: clampedHeight,
-      });
-    },
-  );
-
-  return rects;
-}
-
 function sortAyahTargets(targets: PageAyahTarget[]) {
   return [...targets].sort((a, b) => {
     if (a.surahNumber !== b.surahNumber) return a.surahNumber - b.surahNumber;
@@ -568,26 +517,13 @@ function PageView({
     [imageLayout, pageNumber],
   );
   const wordMaskRects = useMemo(
-    () => buildQuranCom1405WordMaskRects(pageNumber, imageLayout),
+    () => buildQuranCom1405MaskOverlayRects(pageNumber, imageLayout),
     [imageLayout, pageNumber],
   );
-  const verseMarkerKeys = useMemo(() => {
-    const maxPositionByAyah = new Map<string, number>();
-
-    wordMaskRects.forEach((rect) => {
-      const current = maxPositionByAyah.get(rect.verseKey) ?? -Infinity;
-      if (rect.position > current) maxPositionByAyah.set(rect.verseKey, rect.position);
-    });
-
-    const markers = new Set<string>();
-    wordMaskRects.forEach((rect) => {
-      if (maxPositionByAyah.get(rect.verseKey) === rect.position) {
-        markers.add(rect.key);
-      }
-    });
-
-    return markers;
-  }, [wordMaskRects]);
+  const verseMarkerKeys = useMemo(
+    () => getQuranCom1405VerseMarkerKeys(wordMaskRects),
+    [wordMaskRects],
+  );
   const blindMaskRects = useMemo(() => {
     if (!blindMode) return [];
     return wordMaskRects.filter((rect) => {
@@ -3619,10 +3555,7 @@ const styles = StyleSheet.create({
   },
   ayahBlindMask: {
     position: "absolute",
-    backgroundColor: "#fffbeb",
-    borderRadius: 3,
-    borderWidth: 1,
-    borderColor: "#fef3c7",
+    backgroundColor: "#ffffff",
     zIndex: 4,
   },
   pageDataBadge: {
