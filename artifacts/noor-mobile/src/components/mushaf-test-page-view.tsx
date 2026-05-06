@@ -127,6 +127,8 @@ const PAGE_NUMBERS = Array.from(
 );
 const QURAN_COM_1405_PAGE_ASPECT_RATIO =
   QURAN_COM_1405_PAGE_WIDTH / QURAN_COM_1405_PAGE_HEIGHT;
+const MASK_PAD_TOP_NATIVE_PX = 22;
+const MASK_PAD_BOTTOM_NATIVE_PX = 12;
 
 function clampPage(page: number) {
   return Math.max(1, Math.min(TOTAL_QURAN_COM_1405_PAGES, Math.round(page)));
@@ -188,6 +190,35 @@ function buildWordOverlayRects(pageNumber: number, layout: PageLayout): WordOver
   getQuranCom1405WordRectsForPage(pageNumber).forEach((wordRect, index) => {
     const [surah, ayah, position, line, minX, maxX, minY, maxY] = wordRect;
     const scaledRect = scaleNativeWordBounds({ minX, maxX, minY, maxY }, layout);
+    if (!scaledRect) return;
+
+    rects.push({
+      key: `${pageNumber}:${surah}:${ayah}:${position}:${line}:${index}`,
+      wordRect,
+      surah,
+      ayah,
+      position,
+      ...scaledRect,
+    });
+  });
+
+  return rects;
+}
+
+function buildMaskOverlayRects(pageNumber: number, layout: PageLayout): WordOverlayRect[] {
+  const rects: WordOverlayRect[] = [];
+
+  getQuranCom1405WordRectsForPage(pageNumber).forEach((wordRect, index) => {
+    const [surah, ayah, position, line, minX, maxX, minY, maxY] = wordRect;
+    const scaledRect = scaleNativeWordBounds(
+      {
+        minX,
+        maxX,
+        minY: minY - MASK_PAD_TOP_NATIVE_PX,
+        maxY: maxY + MASK_PAD_BOTTOM_NATIVE_PX,
+      },
+      layout,
+    );
     if (!scaledRect) return;
 
     rects.push({
@@ -315,6 +346,10 @@ function MushafTestPage({
     () => buildWordOverlayRects(pageNumber, imageLayout),
     [imageLayout, pageNumber],
   );
+  const maskOverlayRects = useMemo(
+    () => buildMaskOverlayRects(pageNumber, imageLayout),
+    [imageLayout, pageNumber],
+  );
   const flashedRect = useMemo(
     () =>
       flashedWord?.pageNumber === pageNumber
@@ -350,7 +385,7 @@ function MushafTestPage({
 
   const reciteClassifiedRects = useMemo(() => {
     if (!reciteActive) return [];
-    return overlayRects.map((rect) => ({
+    return maskOverlayRects.map((rect) => ({
       rect,
       state: classifyWordForRecite(
         { surah: rect.surah, ayah: rect.ayah, position: rect.position },
@@ -359,7 +394,7 @@ function MushafTestPage({
         reciteActive,
       ),
     }));
-  }, [overlayRects, reciteActive, reciteCurrentWord, reciteRange]);
+  }, [maskOverlayRects, reciteActive, reciteCurrentWord, reciteRange]);
   const verseMarkerKeys = useMemo(() => {
     const maxPositionByAyah = new Map<string, number>();
 
@@ -599,7 +634,7 @@ function MushafTestPage({
 
         {blindMode && !reciteActive ? (
           <>
-            {overlayRects
+            {maskOverlayRects
               .filter((rect) => {
                 if (verseMarkerKeys.has(rect.key)) return false;
                 if (revealedAyahs.has(`${rect.surah}:${rect.ayah}`)) return false;
