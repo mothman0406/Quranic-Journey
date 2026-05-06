@@ -901,15 +901,14 @@ router.get("/children/:childId/dashboard", async (req, res) => {
       ? findMatchingWorkItem(memorizationWorkflow, todayProgress)
       : null;
   const activeWorkflowItem = hasFrozenTodayMemTarget ? frozenWorkflowItem : scheduledWorkItem;
-  const nextWorkflowAnchor = frozenWorkflowItem ?? scheduledWorkItem;
   const nextWorkflowItem =
-    memorizationSurahData && memorizationWorkflow?.enabled && nextWorkflowAnchor
+    memorizationSurahData && memorizationWorkflow?.enabled
       ? findPendingWorkItem(
           memorizationWorkflow,
           activeMemorizationProgress,
           memorizationSurahData.verseCount,
           completedMemDailyRows,
-          nextWorkflowAnchor.scheduleIndex,
+          frozenWorkflowItem ? frozenWorkflowItem.scheduleIndex : -1,
         )
       : null;
   const upcomingWorkflowItem = memorizationWorkflow?.enabled ? nextWorkflowItem : null;
