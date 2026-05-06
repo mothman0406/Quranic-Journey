@@ -67,7 +67,11 @@ import {
   type MushafTheme,
 } from "@/src/lib/mushaf-theme";
 import { MUSHAF_SURAHS, clampMushafPage, getMushafPageForVerse } from "@/src/lib/mushaf";
-import { getAudioToGlyphPositionMap } from "@/src/lib/quran-com-1405-ayah-coords";
+import {
+  getAudioToGlyphPositionMap,
+  getQuranCom1405PageForWord,
+  getQuranCom1405PageForVerse,
+} from "@/src/lib/quran-com-1405-ayah-coords";
 import { findReciter, RECITERS } from "@/src/lib/reciters";
 import {
   clearMemorizationSessionBookmark,
@@ -693,7 +697,20 @@ async function fetchMushafPageVerses(pageNumber: number) {
 
 function getResolvedMushafPageForVerse(surahNumber: number, ayahNumber: number) {
   return clampMushafPage(
-    getMushafPageForVerse(surahNumber, ayahNumber) ??
+    getQuranCom1405PageForVerse(surahNumber, ayahNumber) ??
+      MUSHAF_SURAHS[surahNumber - 1]?.startPage ??
+      1,
+  );
+}
+
+function getResolvedMushafPageForWord(
+  surahNumber: number,
+  ayahNumber: number,
+  positionNumber: number,
+) {
+  return clampMushafPage(
+    getQuranCom1405PageForWord(surahNumber, ayahNumber, positionNumber) ??
+      getQuranCom1405PageForVerse(surahNumber, ayahNumber) ??
       MUSHAF_SURAHS[surahNumber - 1]?.startPage ??
       1,
   );
@@ -1536,9 +1553,10 @@ export default function MemorizationScreen() {
         const map = new Map<number, ApiWord[]>();
         const nextVersePageMap = new Map<number, number>();
         for (const verse of verses) {
-          if (typeof verse.page_number === "number") {
-            nextVersePageMap.set(verse.verse_number, verse.page_number);
-          }
+          nextVersePageMap.set(
+            verse.verse_number,
+            getResolvedMushafPageForVerse(surahNumber, verse.verse_number),
+          );
           map.set(
             verse.verse_number,
             verse.words.filter((w) => w.char_type_name === "word"),
@@ -4866,6 +4884,13 @@ export default function MemorizationScreen() {
   const canGoNextMushafPage = displayedMushafPageIndex < sessionMushafPages.length - 1;
   const currentReciteWordPage = useMemo(() => {
     if (!reciteMode) return null;
+    if (reciteCurrentWord) {
+      return getResolvedMushafPageForWord(
+        reciteCurrentWord.surah,
+        reciteCurrentWord.ayah,
+        reciteCurrentWord.position,
+      );
+    }
     if (
       surahNumber !== null &&
       currentReciteExpectedIndex !== null &&
@@ -4891,6 +4916,7 @@ export default function MemorizationScreen() {
   }, [
     activeMushafPage,
     currentReciteExpectedIndex,
+    reciteCurrentWord,
     pageEnd,
     pageStart,
     pageWordsMap,

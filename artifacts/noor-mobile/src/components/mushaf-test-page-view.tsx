@@ -15,6 +15,7 @@ import { Image } from "expo-image";
 import {
   QURAN_COM_1405_NATIVE_HEIGHT,
   QURAN_COM_1405_NATIVE_WIDTH,
+  getQuranCom1405PageForWord,
   getQuranCom1405WordRectsForPage,
   type QuranCom1405WordRect,
 } from "@/src/lib/quran-com-1405-ayah-coords";
@@ -24,7 +25,6 @@ import {
   TOTAL_QURAN_COM_1405_PAGES,
   getQuranCom1405PageImage,
 } from "@/src/lib/quran-com-1405-page-images";
-import { getMushafPageForVerse } from "@/src/lib/mushaf";
 import { fetchWordTranslation } from "@/src/lib/quran";
 import type { MushafViewMode } from "@/src/lib/settings";
 
@@ -792,7 +792,14 @@ export function MushafTestPageView({
       lastAutoPagedRef.current = null;
       return;
     }
-    const audioPage = getMushafPageForVerse(currentAudioWord.surah, currentAudioWord.ayah);
+    const audioGlyphPosition =
+      audioToGlyphPositions?.[currentAudioWord.position - 1] ??
+      currentAudioWord.position;
+    const audioPage = getQuranCom1405PageForWord(
+      currentAudioWord.surah,
+      currentAudioWord.ayah,
+      audioGlyphPosition,
+    );
     if (audioPage === null) return;
     // Already on the correct page: clear the tracker so a future manual navigation
     // can re-trigger auto-paging back to this page.
@@ -805,7 +812,7 @@ export function MushafTestPageView({
     lastAutoPagedRef.current = audioPage;
     programmaticPageChangeRef.current = true;
     onPageChangeRef.current(audioPage);
-  }, [currentAudioWord, reciteActive, safeCurrentPage]);
+  }, [audioToGlyphPositions, currentAudioWord, reciteActive, safeCurrentPage]);
 
   const lastReciteAutoPagedRef = useRef<number | null>(null);
   useEffect(() => {
@@ -813,9 +820,10 @@ export function MushafTestPageView({
       lastReciteAutoPagedRef.current = null;
       return;
     }
-    const recitePage = getMushafPageForVerse(
+    const recitePage = getQuranCom1405PageForWord(
       reciteCurrentWord.surah,
       reciteCurrentWord.ayah,
+      reciteCurrentWord.position,
     );
     if (recitePage === null) return;
     if (recitePage === safeCurrentPage) {

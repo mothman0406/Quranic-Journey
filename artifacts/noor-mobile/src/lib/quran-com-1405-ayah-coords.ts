@@ -59,6 +59,7 @@ type QuranCom1405AyahInfo = {
 const ayahInfo = ayahInfoJson as unknown as QuranCom1405AyahInfo;
 const MIN_WORD_HIT_WIDTH_PX = 24;
 const audioToGlyphPositionMapCache = new Map<string, Promise<number[] | null>>();
+let wordPageCache: Map<string, number> | null = null;
 
 export const QURAN_COM_1405_NATIVE_WIDTH = QURAN_COM_1405_PAGE_WIDTH;
 export const QURAN_COM_1405_NATIVE_HEIGHT = QURAN_COM_1405_PAGE_HEIGHT;
@@ -89,6 +90,26 @@ export function getQuranCom1405WordRectsForPage(
 
     return [surah, ayah, position, line, minX, maxX, minY, maxY] as const;
   });
+}
+
+function ensureWordPageCache() {
+  if (wordPageCache) return;
+  const cache = new Map<string, number>();
+  for (const [pageStr, pageData] of Object.entries(ayahInfo.pages)) {
+    if (!pageData?.glyphs) continue;
+    const pageNumber = Number(pageStr);
+    if (!Number.isInteger(pageNumber)) continue;
+    for (const glyph of pageData.glyphs) {
+      const surah = glyph[2];
+      const ayah = glyph[3];
+      const position = glyph[4];
+      const key = `${surah}:${ayah}:${position}`;
+      if (!cache.has(key)) {
+        cache.set(key, pageNumber);
+      }
+    }
+  }
+  wordPageCache = cache;
 }
 
 function getQuranCom1405GlyphRectsForVerse(
@@ -150,6 +171,22 @@ export async function getAudioToGlyphPositionMap(
 
   audioToGlyphPositionMapCache.set(verseKey, promise);
   return promise;
+}
+
+export function getQuranCom1405PageForWord(
+  surah: number,
+  ayah: number,
+  position: number,
+): number | null {
+  ensureWordPageCache();
+  return wordPageCache?.get(`${surah}:${ayah}:${position}`) ?? null;
+}
+
+export function getQuranCom1405PageForVerse(
+  surah: number,
+  ayah: number,
+): number | null {
+  return getQuranCom1405PageForWord(surah, ayah, 1);
 }
 
 if (__DEV__) {
