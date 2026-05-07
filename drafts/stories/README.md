@@ -28,6 +28,8 @@ Start from `_template.json`. Drafts match the app's `StoryData` shape plus metad
 - `sourceVerseRanges`: candidate verse ranges and corpus files used
 - `reviewNotes`: human review notes
 
+`ageGroup` is assigned after the story is drafted by assessing the finished content. Candidate rows intentionally do not include age bands. Write the source-faithful story first, then choose `toddler`, `child`, `preteen`, or `teen` using the post-generation assessment in `_authoring-prompt.md`.
+
 ## Approval Paths
 
 Use `reviewStatus: "approved"` for a new story. The merge script assigns the next available ID and rejects duplicate slugs.
@@ -50,9 +52,9 @@ The script validates approved drafts, strips metadata, updates `stories.json`, d
 2. Fetch the source corpus if needed.
 3. Copy `_authoring-prompt.md` into Claude as the system prompt.
 4. Paste the candidate row plus the relevant Arabic Ibn Kathir raw text.
-5. Save the JSON output as `drafts/stories/{slug}.json`.
-6. Review with `_review-checklist.md`.
-7. Mark the draft `approved` or `approved-replace`.
-8. Run `node scripts/merge-story-drafts.mjs`.
-9. Typecheck and verify the API endpoint for the new slug.
-
+5. Confirm the prompt's post-generation `ageGroup` assessment matches the finished story content.
+6. Save the JSON output as `drafts/stories/{slug}.json`.
+7. Review with `_review-checklist.md`.
+8. Mark the draft `approved` or `approved-replace`.
+9. Run `node scripts/merge-story-drafts.mjs`.
+10. Typecheck and verify the API endpoint for the new slug.
