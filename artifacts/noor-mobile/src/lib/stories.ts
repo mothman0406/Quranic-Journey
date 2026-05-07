@@ -64,16 +64,34 @@ function buildQuery(params: ListStoriesParams) {
   return value ? `?${value}` : "";
 }
 
+function normalizeStory(story: Story): Story {
+  return {
+    ...story,
+    morals: story.morals ?? [],
+    relatedAyahs: story.relatedAyahs ?? [],
+    sources: story.sources ?? {},
+  };
+}
+
+function normalizeStoryDetail(story: StoryDetail): StoryDetail {
+  return {
+    ...normalizeStory(story),
+    content: story.content ?? "",
+    discussionQuestions: story.discussionQuestions ?? [],
+  };
+}
+
 export async function fetchStoryCategories(): Promise<StoryTypeSummary[]> {
   const response = await apiFetch<{ storyTypes: StoryTypeSummary[] }>("/api/stories/categories");
-  return response.storyTypes;
+  return response.storyTypes ?? [];
 }
 
 export async function fetchStories(params: ListStoriesParams = {}): Promise<Story[]> {
   const response = await apiFetch<{ stories: Story[] }>(`/api/stories${buildQuery(params)}`);
-  return response.stories;
+  return (response.stories ?? []).map(normalizeStory);
 }
 
 export async function fetchStory(idOrSlug: string): Promise<StoryDetail> {
-  return apiFetch<StoryDetail>(`/api/stories/${encodeURIComponent(idOrSlug)}`);
+  const story = await apiFetch<StoryDetail>(`/api/stories/${encodeURIComponent(idOrSlug)}`);
+  return normalizeStoryDetail(story);
 }

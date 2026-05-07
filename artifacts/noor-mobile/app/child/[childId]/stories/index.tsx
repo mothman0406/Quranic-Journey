@@ -103,7 +103,7 @@ export default function StoriesScreen() {
     if (!isValidChildId(childId)) return;
     router.push({
       pathname: "/child/[childId]/stories/[storyIdOrSlug]",
-      params: { childId, storyIdOrSlug: story.slug, name: name ?? "" },
+      params: { childId, storyIdOrSlug: story.slug || String(story.id), name: name ?? "" },
     } as unknown as Href);
   }
 
@@ -133,7 +133,7 @@ export default function StoriesScreen() {
               selected={selectedType === "all"}
               onPress={() => setSelectedType("all")}
             />
-            {state.storyTypes.map((item) => (
+            {(state.storyTypes ?? []).map((item) => (
               <FilterPill
                 key={item.storyType}
                 label={`${getStoryTypeMeta(item.storyType).label} ${item.count}`}
@@ -143,16 +143,16 @@ export default function StoriesScreen() {
             ))}
           </View>
 
-          <SectionLabel>{state.stories.length} stories</SectionLabel>
-          {state.stories.length === 0 ? (
+          <SectionLabel>{state.stories?.length ?? 0} stories</SectionLabel>
+          {(state.stories?.length ?? 0) === 0 ? (
             <EmptyState title="No stories yet" detail="Try another filter or browse all stories." />
           ) : (
             <CardGroup>
-              {state.stories.map((story) => {
+              {(state.stories ?? []).map((story) => {
                 const meta = getStoryTypeMeta(story.storyType);
                 return (
                   <ListRow
-                    key={story.slug}
+                    key={story.slug || String(story.id)}
                     title={story.title}
                     detail={story.summary}
                     iconName={meta.icon}

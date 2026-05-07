@@ -94,20 +94,20 @@ export default function StoryDetailScreen() {
           </View>
 
           <View style={styles.storyCard}>
-            {state.story.content.split("\n\n").map((paragraph, index) => (
+            {(state.story.content ?? "").split("\n\n").map((paragraph, index) => (
               <Text key={index} style={styles.paragraph}>
                 {paragraph}
               </Text>
             ))}
           </View>
 
-          {state.story.morals.length > 0 ? (
+          {(state.story.morals?.length ?? 0) > 0 ? (
             <View style={styles.lessonCard}>
               <View style={styles.sectionHeader}>
                 <Ionicons name="sparkles-outline" size={16} color="#b45309" />
                 <Text style={styles.lessonTitle}>Lessons</Text>
               </View>
-              {state.story.morals.map((moral) => (
+              {(state.story.morals ?? []).map((moral) => (
                 <View key={moral} style={styles.bulletRow}>
                   <Text style={styles.lessonBullet}>•</Text>
                   <Text style={styles.lessonText}>{moral}</Text>
@@ -116,14 +116,14 @@ export default function StoryDetailScreen() {
             </View>
           ) : null}
 
-          {state.story.relatedAyahs.length > 0 ? (
+          {(state.story.relatedAyahs?.length ?? 0) > 0 ? (
             <View style={styles.relatedCard}>
               <View style={styles.sectionHeader}>
                 <Ionicons name="book-outline" size={16} color="#0f766e" />
                 <Text style={styles.relatedTitle}>Related Ayahs</Text>
               </View>
               <View style={styles.relatedWrap}>
-                {state.story.relatedAyahs.map((ref) => (
+                {(state.story.relatedAyahs ?? []).map((ref) => (
                   <BadgePill
                     key={`${ref.surahNumber}-${ref.ayahStart}-${ref.ayahEnd}`}
                     label={ref.label ?? `${ref.surahNumber}:${ref.ayahStart}-${ref.ayahEnd}`}
@@ -136,13 +136,13 @@ export default function StoryDetailScreen() {
             </View>
           ) : null}
 
-          {state.story.discussionQuestions.length > 0 ? (
+          {(state.story.discussionQuestions?.length ?? 0) > 0 ? (
             <View style={styles.questionCard}>
               <View style={styles.sectionHeader}>
                 <Ionicons name="chatbubbles-outline" size={16} color="#475569" />
                 <Text style={styles.questionTitle}>Talk About It</Text>
               </View>
-              {state.story.discussionQuestions.map((question, index) => (
+              {(state.story.discussionQuestions ?? []).map((question, index) => (
                 <View key={question} style={styles.questionRow}>
                   <View style={styles.questionNumber}>
                     <Text style={styles.questionNumberText}>{index + 1}</Text>
@@ -153,8 +153,8 @@ export default function StoryDetailScreen() {
             </View>
           ) : null}
 
-          {state.story.sources.primary ? (
-            <Text style={styles.sourceFooter}>Adapted from {state.story.sources.primary}</Text>
+          {state.story.sources?.primary ? (
+            <Text style={styles.sourceFooter}>Adapted from {state.story.sources?.primary}</Text>
           ) : null}
         </ScreenScrollView>
       )}
