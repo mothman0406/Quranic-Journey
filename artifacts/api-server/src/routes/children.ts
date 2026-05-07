@@ -11,7 +11,7 @@ import {
   type ResolveSurahBoundedPageRangeOptions,
 } from "../data/quran-meta.js";
 import { STORIES } from "../data/stories.js";
-import { DUAS } from "../data/duas.js";
+import { getCategoryBySlug, getRandomDua } from "../data/duas.js";
 import { addDaysToLocalDate, getRequestLocalDate } from "../lib/local-date.js";
 import {
   calculateReadingCompletedPages,
@@ -684,7 +684,7 @@ router.get("/children/:childId/dashboard", async (req, res) => {
   const weeklyProgress = dayNames.map(day => ({ day, versesMemorized: 0, minutesPracticed: 0 }));
 
   const randomStory = child.hideStories ? null : (STORIES.find(s => s.ageGroup === child.ageGroup || s.ageGroup === "child") ?? null);
-  const randomDua = child.hideDuas ? null : DUAS[0];
+  const randomDua = child.hideDuas ? null : getRandomDua();
 
   const memorizedCount = memorizedSurahIds.length;
 
@@ -1017,7 +1017,18 @@ router.get("/children/:childId/dashboard", async (req, res) => {
       };
     }),
     story: randomStory ? { id: randomStory.id, title: randomStory.title } : null,
-    dua: randomDua ? { id: randomDua.id, arabic: randomDua.arabic, transliteration: randomDua.transliteration, translation: randomDua.translation } : null,
+    dua: randomDua ? {
+      id: randomDua.id,
+      arabic: randomDua.arabic,
+      transliteration: randomDua.transliteration,
+      translation: randomDua.translation,
+      title: randomDua.title,
+      categorySlug: randomDua.categorySlug,
+      categoryName: getCategoryBySlug(randomDua.categorySlug)?.nameEnglish ?? null,
+      reference: randomDua.reference,
+      repetitions: randomDua.repetitions,
+      benefits: randomDua.benefits,
+    } : null,
     totalEstimatedMinutes: child.practiceMinutesPerDay
   };
 

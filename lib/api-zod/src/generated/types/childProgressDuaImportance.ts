@@ -6,9 +6,10 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export type DuaImportance = (typeof DuaImportance)[keyof typeof DuaImportance];
+export type ChildProgressDuaImportance =
+  (typeof ChildProgressDuaImportance)[keyof typeof ChildProgressDuaImportance];
 
-export const DuaImportance = {
+export const ChildProgressDuaImportance = {
   essential: "essential",
   important: "important",
   recommended: "recommended",

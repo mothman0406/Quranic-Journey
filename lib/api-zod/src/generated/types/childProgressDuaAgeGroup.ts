@@ -6,9 +6,10 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export type DuaAgeGroup = (typeof DuaAgeGroup)[keyof typeof DuaAgeGroup];
+export type ChildProgressDuaAgeGroup =
+  (typeof ChildProgressDuaAgeGroup)[keyof typeof ChildProgressDuaAgeGroup];
 
-export const DuaAgeGroup = {
+export const ChildProgressDuaAgeGroup = {
   toddler: "toddler",
   child: "child",
   preteen: "preteen",

@@ -722,9 +722,37 @@ export type StoryDetail = Story & {
   discussionQuestions: string[];
 };
 
-export type DuaCategory = (typeof DuaCategory)[keyof typeof DuaCategory];
+export interface DuaCategory {
+  slug: string;
+  nameEnglish: string;
+  nameArabic: string | null;
+  orderIndex: number;
+  description: string | null;
+}
 
-export const DuaCategory = {
+export type DuaCategoryWithCount = DuaCategory & {
+  duaCount: number;
+};
+
+export interface Dua {
+  id: number;
+  categorySlug: string;
+  orderInCategory: number;
+  title: string;
+  arabic: string;
+  transliteration: string;
+  translation: string;
+  reference: string | null;
+  repetitions: number | null;
+  notes: string | null;
+  benefits: string | null;
+  audioUrl: string | null;
+}
+
+export type ChildProgressDuaCategory =
+  (typeof ChildProgressDuaCategory)[keyof typeof ChildProgressDuaCategory];
+
+export const ChildProgressDuaCategory = {
   morning: "morning",
   evening: "evening",
   eating: "eating",
@@ -734,9 +762,10 @@ export const DuaCategory = {
   prayer: "prayer",
 } as const;
 
-export type DuaAgeGroup = (typeof DuaAgeGroup)[keyof typeof DuaAgeGroup];
+export type ChildProgressDuaAgeGroup =
+  (typeof ChildProgressDuaAgeGroup)[keyof typeof ChildProgressDuaAgeGroup];
 
-export const DuaAgeGroup = {
+export const ChildProgressDuaAgeGroup = {
   toddler: "toddler",
   child: "child",
   preteen: "preteen",
@@ -744,29 +773,26 @@ export const DuaAgeGroup = {
   all: "all",
 } as const;
 
-export type DuaImportance = (typeof DuaImportance)[keyof typeof DuaImportance];
+export type ChildProgressDuaImportance =
+  (typeof ChildProgressDuaImportance)[keyof typeof ChildProgressDuaImportance];
 
-export const DuaImportance = {
+export const ChildProgressDuaImportance = {
   essential: "essential",
   important: "important",
   recommended: "recommended",
 } as const;
 
-export interface Dua {
-  id: number;
-  arabic: string;
-  transliteration: string;
-  translation: string;
+export type ChildProgressDua = Dua & {
   occasion: string;
-  category: DuaCategory;
-  ageGroup: DuaAgeGroup;
+  category: ChildProgressDuaCategory;
+  ageGroup: ChildProgressDuaAgeGroup;
   source: string;
-  importance: DuaImportance;
+  importance: ChildProgressDuaImportance;
   memorizationOrder: number;
-}
+};
 
 export interface ChildDua {
-  dua: Dua;
+  dua: ChildProgressDua;
   learned: boolean;
   learnedAt?: string | null;
   practicedCount: number;
@@ -864,34 +890,23 @@ export type ListStories200 = {
   stories: Story[];
 };
 
-export type ListDuasParams = {
-  ageGroup?: ListDuasAgeGroup;
-  category?: ListDuasCategory;
+export type ListDuaCategories200 = {
+  categories: DuaCategoryWithCount[];
 };
 
-export type ListDuasAgeGroup =
-  (typeof ListDuasAgeGroup)[keyof typeof ListDuasAgeGroup];
-
-export const ListDuasAgeGroup = {
-  toddler: "toddler",
-  child: "child",
-  preteen: "preteen",
-  teen: "teen",
-} as const;
-
-export type ListDuasCategory =
-  (typeof ListDuasCategory)[keyof typeof ListDuasCategory];
-
-export const ListDuasCategory = {
-  morning: "morning",
-  evening: "evening",
-  eating: "eating",
-  sleeping: "sleeping",
-  travel: "travel",
-  general: "general",
-  prayer: "prayer",
-} as const;
-
-export type ListDuas200 = {
+export type GetDuaCategory200 = {
+  category: DuaCategory;
   duas: Dua[];
+};
+
+export type GetRandomDuaParams = {
+  categorySlug?: string;
+};
+
+export type GetRandomDua200 = {
+  dua: Dua;
+};
+
+export type GetDua200 = {
+  dua: Dua;
 };

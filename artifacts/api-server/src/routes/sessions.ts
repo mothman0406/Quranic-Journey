@@ -2,8 +2,31 @@ import { Router, type IRouter } from "express";
 import { db } from "@workspace/db";
 import { learningSessionsTable, childrenTable, childDuasTable } from "@workspace/db/schema";
 import { and, eq, desc } from "drizzle-orm";
-import { DUAS } from "../data/duas.js";
+import { DUA_CATEGORIES, getDuasByCategory, type Dua } from "../data/duas.js";
 import { STORIES } from "../data/stories.js";
+
+function getAllDuas(): Dua[] {
+  return DUA_CATEGORIES.flatMap((category) => getDuasByCategory(category.slug));
+}
+
+function getLegacyCategory(categorySlug: string): "morning" | "evening" | "general" | "prayer" {
+  if (categorySlug === "morning-dhikr") return "morning";
+  if (categorySlug === "evening-dhikr") return "evening";
+  if (categorySlug === "dhikr-after-salah") return "prayer";
+  return "general";
+}
+
+function formatChildProgressDua(dua: Dua) {
+  return {
+    ...dua,
+    occasion: dua.title,
+    category: getLegacyCategory(dua.categorySlug),
+    ageGroup: "all" as const,
+    source: dua.reference ?? "",
+    importance: dua.repetitions && dua.repetitions > 1 ? "important" as const : "recommended" as const,
+    memorizationOrder: dua.id,
+  };
+}
 
 async function ownsChild(parentId: string, childId: number): Promise<boolean> {
   const [child] = await db.select({ parentId: childrenTable.parentId })
@@ -74,10 +97,10 @@ router.get("/children/:childId/duas", async (req, res) => {
   if (!await ownsChild(req.user.id, childId)) { res.status(403).json({ error: "Forbidden" }); return; }
   const childDuaRecords = await db.select().from(childDuasTable).where(eq(childDuasTable.childId, childId));
 
-  const result = DUAS.map(dua => {
+  const result = getAllDuas().map(dua => {
     const record = childDuaRecords.find(r => r.duaId === dua.id);
     return {
-      dua,
+      dua: formatChildProgressDua(dua),
       learned: record ? record.learned === 1 : false,
       learnedAt: record?.learnedAt?.toISOString() || null,
       practicedCount: record?.practicedCount || 0
@@ -92,7 +115,7 @@ router.post("/children/:childId/duas", async (req, res) => {
   if (!await ownsChild(req.user.id, childId)) { res.status(403).json({ error: "Forbidden" }); return; }
   const duaId = Number(req.body.duaId);
   const { learned } = req.body;
-  const dua = DUAS.find(d => d.id === duaId);
+  const dua = getAllDuas().find(d => d.id === duaId);
   if (!dua) { res.status(404).json({ error: "Dua not found" }); return; }
 
   const [existing] = await db.select().from(childDuasTable)
@@ -116,7 +139,7 @@ router.post("/children/:childId/duas", async (req, res) => {
     }).returning();
   }
 
-  res.json({ dua, learned: record.learned === 1, learnedAt: record.learnedAt?.toISOString() || null, practicedCount: record.practicedCount });
+  res.json({ dua: formatChildProgressDua(dua), learned: record.learned === 1, learnedAt: record.learnedAt?.toISOString() || null, practicedCount: record.practicedCount });
 });
 
 router.get("/stories", async (req, res) => {
@@ -134,15 +157,6 @@ router.get("/stories/:storyId", async (req, res) => {
   const story = STORIES.find(s => s.id === storyId);
   if (!story) { res.status(404).json({ error: "Story not found" }); return; }
   res.json(story);
-});
-
-router.get("/duas", async (req, res) => {
-  const { ageGroup, category } = req.query;
-  let duas = DUAS;
-  if (ageGroup) duas = duas.filter(d => d.ageGroup === ageGroup || d.ageGroup === "all");
-  if (category) duas = duas.filter(d => d.category === category);
-  duas = duas.sort((a, b) => a.memorizationOrder - b.memorizationOrder);
-  res.json({ duas });
 });
 
 export default router;

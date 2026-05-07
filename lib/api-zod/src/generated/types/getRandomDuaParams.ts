@@ -6,10 +6,6 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export interface DuaCategory {
-  slug: string;
-  nameEnglish: string;
-  nameArabic: string | null;
-  orderIndex: number;
-  description: string | null;
-}
+export type GetRandomDuaParams = {
+  categorySlug?: string;
+};

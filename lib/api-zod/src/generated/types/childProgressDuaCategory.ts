@@ -6,10 +6,10 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export type ListDuasCategory =
-  (typeof ListDuasCategory)[keyof typeof ListDuasCategory];
+export type ChildProgressDuaCategory =
+  (typeof ChildProgressDuaCategory)[keyof typeof ChildProgressDuaCategory];
 
-export const ListDuasCategory = {
+export const ChildProgressDuaCategory = {
   morning: "morning",
   evening: "evening",
   eating: "eating",

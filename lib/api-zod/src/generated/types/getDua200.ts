@@ -7,6 +7,6 @@
  */
 import type { Dua } from "./dua";
 
-export type ListDuas200 = {
-  duas: Dua[];
+export type GetDua200 = {
+  dua: Dua;
 };

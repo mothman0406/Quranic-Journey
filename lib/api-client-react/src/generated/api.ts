@@ -24,6 +24,10 @@ import type {
   CreateChildRequest,
   CreateSessionRequest,
   DailyProgress,
+  GetDua200,
+  GetDuaCategory200,
+  GetRandomDua200,
+  GetRandomDuaParams,
   GetWeeklyProgressParams,
   GoalsResponse,
   HealthStatus,
@@ -31,8 +35,7 @@ import type {
   LearningSession,
   ListChildDuas200,
   ListChildren200,
-  ListDuas200,
-  ListDuasParams,
+  ListDuaCategories200,
   ListMemorization200,
   ListReviews200,
   ListSessions200,
@@ -2287,9 +2290,171 @@ export function useGetStory<
 }
 
 /**
- * @summary List all duaas
+ * @summary List dua categories
  */
-export const getListDuasUrl = (params?: ListDuasParams) => {
+export const getListDuaCategoriesUrl = () => {
+  return `/api/duas/categories`;
+};
+
+export const listDuaCategories = async (
+  options?: RequestInit,
+): Promise<ListDuaCategories200> => {
+  return customFetch<ListDuaCategories200>(getListDuaCategoriesUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListDuaCategoriesQueryKey = () => {
+  return [`/api/duas/categories`] as const;
+};
+
+export const getListDuaCategoriesQueryOptions = <
+  TData = Awaited<ReturnType<typeof listDuaCategories>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listDuaCategories>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListDuaCategoriesQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listDuaCategories>>
+  > = ({ signal }) => listDuaCategories({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listDuaCategories>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListDuaCategoriesQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listDuaCategories>>
+>;
+export type ListDuaCategoriesQueryError = ErrorType<unknown>;
+
+/**
+ * @summary List dua categories
+ */
+
+export function useListDuaCategories<
+  TData = Awaited<ReturnType<typeof listDuaCategories>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listDuaCategories>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListDuaCategoriesQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Get a dua category and its duas
+ */
+export const getGetDuaCategoryUrl = (slug: string) => {
+  return `/api/duas/categories/${slug}`;
+};
+
+export const getDuaCategory = async (
+  slug: string,
+  options?: RequestInit,
+): Promise<GetDuaCategory200> => {
+  return customFetch<GetDuaCategory200>(getGetDuaCategoryUrl(slug), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetDuaCategoryQueryKey = (slug: string) => {
+  return [`/api/duas/categories/${slug}`] as const;
+};
+
+export const getGetDuaCategoryQueryOptions = <
+  TData = Awaited<ReturnType<typeof getDuaCategory>>,
+  TError = ErrorType<void>,
+>(
+  slug: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getDuaCategory>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetDuaCategoryQueryKey(slug);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getDuaCategory>>> = ({
+    signal,
+  }) => getDuaCategory(slug, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!slug,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getDuaCategory>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetDuaCategoryQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getDuaCategory>>
+>;
+export type GetDuaCategoryQueryError = ErrorType<void>;
+
+/**
+ * @summary Get a dua category and its duas
+ */
+
+export function useGetDuaCategory<
+  TData = Awaited<ReturnType<typeof getDuaCategory>>,
+  TError = ErrorType<void>,
+>(
+  slug: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getDuaCategory>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetDuaCategoryQueryOptions(slug, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Get a random dua
+ */
+export const getGetRandomDuaUrl = (params?: GetRandomDuaParams) => {
   const normalizedParams = new URLSearchParams();
 
   Object.entries(params || {}).forEach(([key, value]) => {
@@ -2301,32 +2466,32 @@ export const getListDuasUrl = (params?: ListDuasParams) => {
   const stringifiedParams = normalizedParams.toString();
 
   return stringifiedParams.length > 0
-    ? `/api/duas?${stringifiedParams}`
-    : `/api/duas`;
+    ? `/api/duas/random?${stringifiedParams}`
+    : `/api/duas/random`;
 };
 
-export const listDuas = async (
-  params?: ListDuasParams,
+export const getRandomDua = async (
+  params?: GetRandomDuaParams,
   options?: RequestInit,
-): Promise<ListDuas200> => {
-  return customFetch<ListDuas200>(getListDuasUrl(params), {
+): Promise<GetRandomDua200> => {
+  return customFetch<GetRandomDua200>(getGetRandomDuaUrl(params), {
     ...options,
     method: "GET",
   });
 };
 
-export const getListDuasQueryKey = (params?: ListDuasParams) => {
-  return [`/api/duas`, ...(params ? [params] : [])] as const;
+export const getGetRandomDuaQueryKey = (params?: GetRandomDuaParams) => {
+  return [`/api/duas/random`, ...(params ? [params] : [])] as const;
 };
 
-export const getListDuasQueryOptions = <
-  TData = Awaited<ReturnType<typeof listDuas>>,
-  TError = ErrorType<unknown>,
+export const getGetRandomDuaQueryOptions = <
+  TData = Awaited<ReturnType<typeof getRandomDua>>,
+  TError = ErrorType<void>,
 >(
-  params?: ListDuasParams,
+  params?: GetRandomDuaParams,
   options?: {
     query?: UseQueryOptions<
-      Awaited<ReturnType<typeof listDuas>>,
+      Awaited<ReturnType<typeof getRandomDua>>,
       TError,
       TData
     >;
@@ -2335,43 +2500,118 @@ export const getListDuasQueryOptions = <
 ) => {
   const { query: queryOptions, request: requestOptions } = options ?? {};
 
-  const queryKey = queryOptions?.queryKey ?? getListDuasQueryKey(params);
+  const queryKey = queryOptions?.queryKey ?? getGetRandomDuaQueryKey(params);
 
-  const queryFn: QueryFunction<Awaited<ReturnType<typeof listDuas>>> = ({
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getRandomDua>>> = ({
     signal,
-  }) => listDuas(params, { signal, ...requestOptions });
+  }) => getRandomDua(params, { signal, ...requestOptions });
 
   return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
-    Awaited<ReturnType<typeof listDuas>>,
+    Awaited<ReturnType<typeof getRandomDua>>,
     TError,
     TData
   > & { queryKey: QueryKey };
 };
 
-export type ListDuasQueryResult = NonNullable<
-  Awaited<ReturnType<typeof listDuas>>
+export type GetRandomDuaQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getRandomDua>>
 >;
-export type ListDuasQueryError = ErrorType<unknown>;
+export type GetRandomDuaQueryError = ErrorType<void>;
 
 /**
- * @summary List all duaas
+ * @summary Get a random dua
  */
 
-export function useListDuas<
-  TData = Awaited<ReturnType<typeof listDuas>>,
-  TError = ErrorType<unknown>,
+export function useGetRandomDua<
+  TData = Awaited<ReturnType<typeof getRandomDua>>,
+  TError = ErrorType<void>,
 >(
-  params?: ListDuasParams,
+  params?: GetRandomDuaParams,
   options?: {
     query?: UseQueryOptions<
-      Awaited<ReturnType<typeof listDuas>>,
+      Awaited<ReturnType<typeof getRandomDua>>,
       TError,
       TData
     >;
     request?: SecondParameter<typeof customFetch>;
   },
 ): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
-  const queryOptions = getListDuasQueryOptions(params, options);
+  const queryOptions = getGetRandomDuaQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Get a single dua
+ */
+export const getGetDuaUrl = (duaId: number) => {
+  return `/api/duas/${duaId}`;
+};
+
+export const getDua = async (
+  duaId: number,
+  options?: RequestInit,
+): Promise<GetDua200> => {
+  return customFetch<GetDua200>(getGetDuaUrl(duaId), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetDuaQueryKey = (duaId: number) => {
+  return [`/api/duas/${duaId}`] as const;
+};
+
+export const getGetDuaQueryOptions = <
+  TData = Awaited<ReturnType<typeof getDua>>,
+  TError = ErrorType<void>,
+>(
+  duaId: number,
+  options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof getDua>>, TError, TData>;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetDuaQueryKey(duaId);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getDua>>> = ({
+    signal,
+  }) => getDua(duaId, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!duaId,
+    ...queryOptions,
+  } as UseQueryOptions<Awaited<ReturnType<typeof getDua>>, TError, TData> & {
+    queryKey: QueryKey;
+  };
+};
+
+export type GetDuaQueryResult = NonNullable<Awaited<ReturnType<typeof getDua>>>;
+export type GetDuaQueryError = ErrorType<void>;
+
+/**
+ * @summary Get a single dua
+ */
+
+export function useGetDua<
+  TData = Awaited<ReturnType<typeof getDua>>,
+  TError = ErrorType<void>,
+>(
+  duaId: number,
+  options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof getDua>>, TError, TData>;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetDuaQueryOptions(duaId, options);
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;

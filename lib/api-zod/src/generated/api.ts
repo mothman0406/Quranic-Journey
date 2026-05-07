@@ -908,26 +908,39 @@ export const ListChildDuasParams = zod.object({
 export const ListChildDuasResponse = zod.object({
   duas: zod.array(
     zod.object({
-      dua: zod.object({
-        id: zod.number(),
-        arabic: zod.string(),
-        transliteration: zod.string(),
-        translation: zod.string(),
-        occasion: zod.string(),
-        category: zod.enum([
-          "morning",
-          "evening",
-          "eating",
-          "sleeping",
-          "travel",
-          "general",
-          "prayer",
-        ]),
-        ageGroup: zod.enum(["toddler", "child", "preteen", "teen", "all"]),
-        source: zod.string(),
-        importance: zod.enum(["essential", "important", "recommended"]),
-        memorizationOrder: zod.number(),
-      }),
+      dua: zod
+        .object({
+          id: zod.number(),
+          categorySlug: zod.string(),
+          orderInCategory: zod.number(),
+          title: zod.string(),
+          arabic: zod.string(),
+          transliteration: zod.string(),
+          translation: zod.string(),
+          reference: zod.string().nullable(),
+          repetitions: zod.number().nullable(),
+          notes: zod.string().nullable(),
+          benefits: zod.string().nullable(),
+          audioUrl: zod.string().nullable(),
+        })
+        .and(
+          zod.object({
+            occasion: zod.string(),
+            category: zod.enum([
+              "morning",
+              "evening",
+              "eating",
+              "sleeping",
+              "travel",
+              "general",
+              "prayer",
+            ]),
+            ageGroup: zod.enum(["toddler", "child", "preteen", "teen", "all"]),
+            source: zod.string(),
+            importance: zod.enum(["essential", "important", "recommended"]),
+            memorizationOrder: zod.number(),
+          }),
+        ),
       learned: zod.boolean(),
       learnedAt: zod.date().nullish(),
       practicedCount: zod.number(),
@@ -948,26 +961,39 @@ export const MarkDuaLearnedBody = zod.object({
 });
 
 export const MarkDuaLearnedResponse = zod.object({
-  dua: zod.object({
-    id: zod.number(),
-    arabic: zod.string(),
-    transliteration: zod.string(),
-    translation: zod.string(),
-    occasion: zod.string(),
-    category: zod.enum([
-      "morning",
-      "evening",
-      "eating",
-      "sleeping",
-      "travel",
-      "general",
-      "prayer",
-    ]),
-    ageGroup: zod.enum(["toddler", "child", "preteen", "teen", "all"]),
-    source: zod.string(),
-    importance: zod.enum(["essential", "important", "recommended"]),
-    memorizationOrder: zod.number(),
-  }),
+  dua: zod
+    .object({
+      id: zod.number(),
+      categorySlug: zod.string(),
+      orderInCategory: zod.number(),
+      title: zod.string(),
+      arabic: zod.string(),
+      transliteration: zod.string(),
+      translation: zod.string(),
+      reference: zod.string().nullable(),
+      repetitions: zod.number().nullable(),
+      notes: zod.string().nullable(),
+      benefits: zod.string().nullable(),
+      audioUrl: zod.string().nullable(),
+    })
+    .and(
+      zod.object({
+        occasion: zod.string(),
+        category: zod.enum([
+          "morning",
+          "evening",
+          "eating",
+          "sleeping",
+          "travel",
+          "general",
+          "prayer",
+        ]),
+        ageGroup: zod.enum(["toddler", "child", "preteen", "teen", "all"]),
+        source: zod.string(),
+        importance: zod.enum(["essential", "important", "recommended"]),
+        memorizationOrder: zod.number(),
+      }),
+    ),
   learned: zod.boolean(),
   learnedAt: zod.date().nullish(),
   practicedCount: zod.number(),
@@ -1098,44 +1124,103 @@ export const GetStoryResponse = zod
   );
 
 /**
- * @summary List all duaas
+ * @summary List dua categories
  */
-export const ListDuasQueryParams = zod.object({
-  ageGroup: zod.enum(["toddler", "child", "preteen", "teen"]).optional(),
-  category: zod
-    .enum([
-      "morning",
-      "evening",
-      "eating",
-      "sleeping",
-      "travel",
-      "general",
-      "prayer",
-    ])
-    .optional(),
+export const ListDuaCategoriesResponse = zod.object({
+  categories: zod.array(
+    zod
+      .object({
+        slug: zod.string(),
+        nameEnglish: zod.string(),
+        nameArabic: zod.string().nullable(),
+        orderIndex: zod.number(),
+        description: zod.string().nullable(),
+      })
+      .and(
+        zod.object({
+          duaCount: zod.number(),
+        }),
+      ),
+  ),
 });
 
-export const ListDuasResponse = zod.object({
+/**
+ * @summary Get a dua category and its duas
+ */
+export const GetDuaCategoryParams = zod.object({
+  slug: zod.coerce.string(),
+});
+
+export const GetDuaCategoryResponse = zod.object({
+  category: zod.object({
+    slug: zod.string(),
+    nameEnglish: zod.string(),
+    nameArabic: zod.string().nullable(),
+    orderIndex: zod.number(),
+    description: zod.string().nullable(),
+  }),
   duas: zod.array(
     zod.object({
       id: zod.number(),
+      categorySlug: zod.string(),
+      orderInCategory: zod.number(),
+      title: zod.string(),
       arabic: zod.string(),
       transliteration: zod.string(),
       translation: zod.string(),
-      occasion: zod.string(),
-      category: zod.enum([
-        "morning",
-        "evening",
-        "eating",
-        "sleeping",
-        "travel",
-        "general",
-        "prayer",
-      ]),
-      ageGroup: zod.enum(["toddler", "child", "preteen", "teen", "all"]),
-      source: zod.string(),
-      importance: zod.enum(["essential", "important", "recommended"]),
-      memorizationOrder: zod.number(),
+      reference: zod.string().nullable(),
+      repetitions: zod.number().nullable(),
+      notes: zod.string().nullable(),
+      benefits: zod.string().nullable(),
+      audioUrl: zod.string().nullable(),
     }),
   ),
+});
+
+/**
+ * @summary Get a random dua
+ */
+export const GetRandomDuaQueryParams = zod.object({
+  categorySlug: zod.coerce.string().optional(),
+});
+
+export const GetRandomDuaResponse = zod.object({
+  dua: zod.object({
+    id: zod.number(),
+    categorySlug: zod.string(),
+    orderInCategory: zod.number(),
+    title: zod.string(),
+    arabic: zod.string(),
+    transliteration: zod.string(),
+    translation: zod.string(),
+    reference: zod.string().nullable(),
+    repetitions: zod.number().nullable(),
+    notes: zod.string().nullable(),
+    benefits: zod.string().nullable(),
+    audioUrl: zod.string().nullable(),
+  }),
+});
+
+/**
+ * @summary Get a single dua
+ */
+export const GetDuaParams = zod.object({
+  duaId: zod.coerce.number(),
+});
+
+export const GetDuaResponse = zod.object({
+  dua: zod.object({
+    id: zod.number(),
+    categorySlug: zod.string(),
+    orderInCategory: zod.number(),
+    title: zod.string(),
+    arabic: zod.string(),
+    transliteration: zod.string(),
+    translation: zod.string(),
+    reference: zod.string().nullable(),
+    repetitions: zod.number().nullable(),
+    notes: zod.string().nullable(),
+    benefits: zod.string().nullable(),
+    audioUrl: zod.string().nullable(),
+  }),
 });

@@ -5,11 +5,10 @@
  * NoorPath - Muslim Parenting & Quran Learning App API
  * OpenAPI spec version: 0.1.0
  */
+import type { Dua } from "./dua";
+import type { DuaCategory } from "./duaCategory";
 
-export interface DuaCategory {
-  slug: string;
-  nameEnglish: string;
-  nameArabic: string | null;
-  orderIndex: number;
-  description: string | null;
-}
+export type GetDuaCategory200 = {
+  category: DuaCategory;
+  duas: Dua[];
+};

@@ -5,19 +5,18 @@
  * NoorPath - Muslim Parenting & Quran Learning App API
  * OpenAPI spec version: 0.1.0
  */
-import type { DuaAgeGroup } from "./duaAgeGroup";
-import type { DuaCategory } from "./duaCategory";
-import type { DuaImportance } from "./duaImportance";
 
 export interface Dua {
   id: number;
+  categorySlug: string;
+  orderInCategory: number;
+  title: string;
   arabic: string;
   transliteration: string;
   translation: string;
-  occasion: string;
-  category: DuaCategory;
-  ageGroup: DuaAgeGroup;
-  source: string;
-  importance: DuaImportance;
-  memorizationOrder: number;
+  reference: string | null;
+  repetitions: number | null;
+  notes: string | null;
+  benefits: string | null;
+  audioUrl: string | null;
 }

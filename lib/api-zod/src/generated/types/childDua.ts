@@ -5,10 +5,10 @@
  * NoorPath - Muslim Parenting & Quran Learning App API
  * OpenAPI spec version: 0.1.0
  */
-import type { Dua } from "./dua";
+import type { ChildProgressDua } from "./childProgressDua";
 
 export interface ChildDua {
-  dua: Dua;
+  dua: ChildProgressDua;
   learned: boolean;
   learnedAt?: Date | null;
   practicedCount: number;

@@ -597,35 +597,103 @@ paths:
               schema:
                 $ref: "#/components/schemas/StoryDetail"
 
-  /duas:
+  /duas/categories:
     get:
-      operationId: listDuas
+      operationId: listDuaCategories
       tags: [duas]
-      summary: List all duaas
-      parameters:
-        - name: ageGroup
-          in: query
-          schema:
-            type: string
-            enum: [toddler, child, preteen, teen]
-        - name: category
-          in: query
-          schema:
-            type: string
-            enum: [morning, evening, eating, sleeping, travel, general, prayer]
+      summary: List dua categories
       responses:
         "200":
-          description: List of duaas
+          description: List of dua categories
           content:
             application/json:
               schema:
                 type: object
                 properties:
+                  categories:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/DuaCategoryWithCount"
+                required: [categories]
+
+  /duas/categories/{slug}:
+    get:
+      operationId: getDuaCategory
+      tags: [duas]
+      summary: Get a dua category and its duas
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Dua category with duas
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  category:
+                    $ref: "#/components/schemas/DuaCategory"
                   duas:
                     type: array
                     items:
                       $ref: "#/components/schemas/Dua"
-                required: [duas]
+                required: [category, duas]
+        "404":
+          description: Dua category not found
+
+  /duas/random:
+    get:
+      operationId: getRandomDua
+      tags: [duas]
+      summary: Get a random dua
+      parameters:
+        - name: categorySlug
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Random dua
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  dua:
+                    $ref: "#/components/schemas/Dua"
+                required: [dua]
+        "404":
+          description: Dua category or dua not found
+
+  /duas/{duaId}:
+    get:
+      operationId: getDua
+      tags: [duas]
+      summary: Get a single dua
+      parameters:
+        - name: duaId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Single dua
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  dua:
+                    $ref: "#/components/schemas/Dua"
+                required: [dua]
+        "404":
+          description: Dua not found
 
 components:
   schemas:
@@ -1583,39 +1651,93 @@ components:
                 type: string
           required: [content, relatedSurahs, discussionQuestions]
 
+    DuaCategory:
+      type: object
+      properties:
+        slug:
+          type: string
+        nameEnglish:
+          type: string
+        nameArabic:
+          type: string
+          nullable: true
+        orderIndex:
+          type: integer
+        description:
+          type: string
+          nullable: true
+      required: [slug, nameEnglish, nameArabic, orderIndex, description]
+
+    DuaCategoryWithCount:
+      allOf:
+        - $ref: "#/components/schemas/DuaCategory"
+        - type: object
+          properties:
+            duaCount:
+              type: integer
+          required: [duaCount]
+
     Dua:
       type: object
       properties:
         id:
           type: integer
+        categorySlug:
+          type: string
+        orderInCategory:
+          type: integer
+        title:
+          type: string
         arabic:
           type: string
         transliteration:
           type: string
         translation:
           type: string
-        occasion:
+        reference:
           type: string
-        category:
-          type: string
-          enum: [morning, evening, eating, sleeping, travel, general, prayer]
-        ageGroup:
-          type: string
-          enum: [toddler, child, preteen, teen, all]
-        source:
-          type: string
-        importance:
-          type: string
-          enum: [essential, important, recommended]
-        memorizationOrder:
+          nullable: true
+        repetitions:
           type: integer
-      required: [id, arabic, transliteration, translation, occasion, category, ageGroup, source, importance, memorizationOrder]
+          nullable: true
+        notes:
+          type: string
+          nullable: true
+        benefits:
+          type: string
+          nullable: true
+        audioUrl:
+          type: string
+          nullable: true
+      required: [id, categorySlug, orderInCategory, title, arabic, transliteration, translation, reference, repetitions, notes, benefits, audioUrl]
+
+    ChildProgressDua:
+      allOf:
+        - $ref: "#/components/schemas/Dua"
+        - type: object
+          properties:
+            occasion:
+              type: string
+            category:
+              type: string
+              enum: [morning, evening, eating, sleeping, travel, general, prayer]
+            ageGroup:
+              type: string
+              enum: [toddler, child, preteen, teen, all]
+            source:
+              type: string
+            importance:
+              type: string
+              enum: [essential, important, recommended]
+            memorizationOrder:
+              type: integer
+          required: [occasion, category, ageGroup, source, importance, memorizationOrder]
 
     ChildDua:
       type: object
       properties:
         dua:
-          $ref: "#/components/schemas/Dua"
+          $ref: "#/components/schemas/ChildProgressDua"
         learned:
           type: boolean
         learnedAt:
