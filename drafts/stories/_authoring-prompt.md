@@ -16,6 +16,7 @@ Return a JSON object matching the NoorPath `StoryData` schema plus draft metadat
 - `id`: use `0` in drafts; the merge script assigns or preserves the final ID.
 - `slug`: lowercase kebab-case.
 - `title`
+- `previousStoryId`: use a prior story ID for multi-part arcs, otherwise `null`.
 - `storyType`: one of `quranic_narrative`, `seerah_context`, `companion_profile`, `moral_lesson`.
 - `ageGroup`: one of `toddler`, `child`, `preteen`, `teen`, assigned after writing the story.
 - `summary`
@@ -27,6 +28,7 @@ Return a JSON object matching the NoorPath `StoryData` schema plus draft metadat
 - `discussionQuestions`: 3-5 open-ended questions.
 - `sources`: `{ "primary": string, "hadith": string[], "seerah": string[], "notes": string }`.
 - `reviewStatus`: use `"draft"` unless the human reviewer tells you otherwise.
+- `replaceStoryId`: use a positive existing story ID only for `approved-replace`, otherwise `null`.
 - `aiModel`
 - `generatedAt`
 - `sourceVerseRanges`

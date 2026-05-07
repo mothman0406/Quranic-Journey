@@ -1,7 +1,7 @@
 import { useCallback, useState } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
+import { type Href, useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { ChildBottomNav } from "@/src/components/child-bottom-nav";
 import {
   BadgePill,
@@ -37,6 +37,12 @@ function describeError(error: unknown) {
   return error instanceof Error ? error.message : "This story could not load.";
 }
 
+function truncateSummary(summary: string | undefined) {
+  const normalized = (summary ?? "").trim();
+  if (normalized.length <= 100) return normalized;
+  return `${normalized.slice(0, 97).trimEnd()}...`;
+}
+
 export default function StoryDetailScreen() {
   const { childId, storyIdOrSlug, name } = useLocalSearchParams<{
     childId: string;
@@ -69,6 +75,20 @@ export default function StoryDetailScreen() {
 
   const title = state.status === "ready" ? state.story.title : "Story";
 
+  function openPreviousStory() {
+    if (!isValidChildId(childId) || state.status !== "ready" || !state.story.previousStory) return;
+
+    const previousStory = state.story.previousStory;
+    router.push({
+      pathname: "/child/[childId]/stories/[storyIdOrSlug]",
+      params: {
+        childId,
+        storyIdOrSlug: previousStory.slug || String(previousStory.id),
+        name: name ?? "",
+      },
+    } as unknown as Href);
+  }
+
   return (
     <ScreenContainer>
       <ScreenHeader title={title} onBack={() => router.back()} />
@@ -92,6 +112,30 @@ export default function StoryDetailScreen() {
             <Text style={styles.title}>{state.story.title}</Text>
             <Text style={styles.summary}>{state.story.summary}</Text>
           </View>
+
+          {state.story.previousStory ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`Previously in this story: ${state.story.previousStory.title}`}
+              onPress={openPreviousStory}
+              style={({ pressed }) => [
+                styles.previousCard,
+                pressed ? styles.previousCardPressed : null,
+              ]}
+            >
+              <View style={styles.previousIcon}>
+                <Ionicons name="arrow-back" size={16} color="#2563eb" />
+              </View>
+              <View style={styles.previousBody}>
+                <Text style={styles.previousLabel}>Previously in this story:</Text>
+                <Text style={styles.previousTitle}>{state.story.previousStory.title}</Text>
+                <Text style={styles.previousSummary}>
+                  {truncateSummary(state.story.previousStory.summary)}
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color="#64748b" />
+            </Pressable>
+          ) : null}
 
           <View style={styles.storyCard}>
             {(state.story.content ?? "").split("\n\n").map((paragraph, index) => (
@@ -195,6 +239,49 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 16,
     gap: 12,
+  },
+  previousCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    backgroundColor: "#eff6ff",
+    borderWidth: 1,
+    borderColor: "#bfdbfe",
+    borderRadius: 12,
+    padding: 14,
+  },
+  previousCardPressed: {
+    opacity: 0.82,
+  },
+  previousIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: "#ffffff",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  previousBody: {
+    flex: 1,
+    gap: 3,
+  },
+  previousLabel: {
+    color: "#1d4ed8",
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: "900",
+  },
+  previousTitle: {
+    color: "#111827",
+    fontSize: 15,
+    lineHeight: 20,
+    fontWeight: "900",
+  },
+  previousSummary: {
+    color: "#475569",
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: "600",
   },
   paragraph: {
     color: "#1f2937",

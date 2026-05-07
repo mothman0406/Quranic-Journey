@@ -75,6 +75,7 @@ export * from "./memorizationProgressStatus";
 export * from "./memorizationStats";
 export * from "./memorizationStatsWeeklyProgressItem";
 export * from "./milestone";
+export * from "./previousStorySummary";
 export * from "./readingGoal";
 export * from "./readingGoalStatus";
 export * from "./readingProgressResponse";

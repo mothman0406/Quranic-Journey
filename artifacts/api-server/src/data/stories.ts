@@ -26,6 +26,7 @@ export interface StoryData {
   id: number;
   slug: string;
   title: string;
+  previousStoryId: number | null;
   storyType: StoryType;
   ageGroup: StoryAgeGroup;
   summary: string;
@@ -39,6 +40,10 @@ export interface StoryData {
 }
 
 export type StorySummary = Omit<StoryData, "content" | "discussionQuestions">;
+export type PreviousStorySummary = Pick<StoryData, "id" | "slug" | "title" | "summary">;
+export type StoryDetail = StoryData & {
+  previousStory: PreviousStorySummary | null;
+};
 
 export const STORIES: readonly StoryData[] = storiesData.stories as StoryData[];
 
@@ -52,6 +57,22 @@ export const STORY_TYPE_LABELS: Record<StoryType, string> = {
 export function summarizeStory(story: StoryData): StorySummary {
   const { content: _content, discussionQuestions: _discussionQuestions, ...summary } = story;
   return summary;
+}
+
+export function summarizePreviousStory(story: StoryData): PreviousStorySummary {
+  const { id, slug, title, summary } = story;
+  return { id, slug, title, summary };
+}
+
+export function includePreviousStory(story: StoryData): StoryDetail {
+  const previousStory = story.previousStoryId == null
+    ? null
+    : STORIES.find((candidate) => candidate.id === story.previousStoryId);
+
+  return {
+    ...story,
+    previousStory: previousStory ? summarizePreviousStory(previousStory) : null,
+  };
 }
 
 export function getStoryByIdOrSlug(idOrSlug: string): StoryData | undefined {

@@ -2,6 +2,7 @@
   "id": 0,
   "slug": "example-story-slug",
   "title": "Example Story Title",
+  "previousStoryId": null,
   "storyType": "quranic_narrative",
   "ageGroup": "child",
   "summary": "One concise child-friendly summary sentence.",
@@ -33,6 +34,7 @@
     "notes": "Mention uncertainty, omitted disputed details, or narration variance here."
   },
   "reviewStatus": "draft",
+  "replaceStoryId": null,
   "aiModel": "",
   "generatedAt": "",
   "sourceVerseRanges": [

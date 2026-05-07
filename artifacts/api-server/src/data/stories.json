@@ -1,40 +1,374 @@
 {
   "stories": [
     {
-      "id": 6,
-      "slug": "yusuf-and-the-brothers",
-      "title": "Yusuf and the Brothers",
-      "storyType": "quranic_narrative",
-      "ageGroup": "preteen",
-      "summary": "Prophet Yusuf was thrown in a well by his jealous brothers, sold as a slave, put in prison — yet he never lost hope in Allah. And in the end, Allah raised him to greatness.",
-      "readingTimeMinutes": 8,
-      "featuredCharacter": "Prophet Yusuf ﷺ",
+      "id": 14,
+      "slug": "abu-bakr-as-siddiq",
+      "title": "Abu Bakr as-Siddiq",
+      "previousStoryId": null,
+      "storyType": "companion_profile",
+      "ageGroup": "child",
+      "summary": "Abu Bakr believed the Prophet, gave generously for Allah, and was the loyal companion in the cave during the Hijrah.",
+      "readingTimeMinutes": 6,
+      "featuredCharacter": "Abu Bakr as-Siddiq",
       "morals": [
-        "Never lose hope in Allah",
-        "Patience leads to relief",
-        "Forgiveness is the mark of the great",
-        "Allah's plan is always better"
+        "Truthfulness is shown by trusting Allah and His Messenger",
+        "A friend can strengthen another believer in hardship",
+        "Giving for Allah purifies the heart",
+        "Allah's help is greater than people's plans"
       ],
-      "content": "Yusuf was the son of Prophet Ya'qub (Jacob), and his father loved him deeply. One night, young Yusuf had a dream: eleven stars, the sun, and the moon were all bowing to him. He told his father, who warned him to keep it secret.\n\nBut his brothers were jealous. \"Our father loves Yusuf more than us!\" they complained. They made a plan: they took Yusuf into the wilderness and threw him into a deep, dark well. They dipped his shirt in goat's blood and told their father a wolf had eaten him.\n\nYa'qub wept so much he lost his sight from grief.\n\nYusuf was found by travelers and sold as a slave in Egypt. He was bought by a nobleman named Al-Aziz. Though Yusuf worked faithfully, the nobleman's wife tried to tempt him into doing wrong. Yusuf refused and ran from the room. She lied about him, and Yusuf was thrown into prison.\n\nIn prison, Yusuf helped fellow prisoners understand their dreams. He asked one prisoner to mention him to the king — but the man forgot for years.\n\nThen one night, the King of Egypt had a dream no one could explain: seven fat cows eaten by seven thin ones, seven green ears of corn and seven dry ones. The prisoner who had forgotten Yusuf remembered him and told the king.\n\nYusuf explained the dream: Egypt would have seven years of plenty followed by seven years of famine. The King was so impressed that he freed Yusuf and put him in charge of the granaries of all Egypt!\n\nYears later, his brothers came to Egypt begging for food during the famine. They didn't recognize the powerful minister before them. But it was Yusuf. \n\nHe tested them, kept them with him, and finally revealed himself. Instead of punishing them, Yusuf wept and embraced them. \"Allah has been gracious to us all,\" he said. \"He who is patient and fears Allah — Allah does not let the reward of good-doers be lost.\"\n\nHis father regained his sight when Yusuf's shirt was placed on his face. The whole family was reunited in Egypt, and the dream from Yusuf's childhood — eleven stars bowing to him — came true.\n\nThe entire story of Yusuf is called \"Ahsan al-Qasas\" — the best of stories. And indeed it is.",
+      "content": "Abu Bakr was among the earliest believers in the Prophet. He was known for truthfulness, and Muslims remember him as as-Siddiq, the truthful one. When others doubted, he believed what Allah's Messenger brought.\n\nDuring the Hijrah, the Prophet left Makkah for Madinah by Allah's command. Abu Bakr was with him. Their enemies searched for them, and the two companions stayed in the cave. Abu Bakr worried, not for himself only, but for the safety of Allah's Messenger.\n\nThe Quran preserves the Prophet's words from that moment: do not grieve; Allah is with us. Allah sent down tranquility and supported His Messenger. The cave was small, but Allah's protection was greater than the search of the enemy.\n\nAbu Bakr was also known for giving. The Quran praises the one who gives his wealth to purify himself, not seeking repayment from anyone, but seeking the Face of his Lord Most High. Scholars of tafsir mention Abu Bakr in connection with these verses because of his sincere spending for Allah.\n\nHis story teaches that belief is not only a word. Abu Bakr believed, accompanied, gave, and stood firm. He was not protected because the cave was hidden by his own power. He was protected because Allah was with His Messenger, and Abu Bakr was honored by loyal faith.",
       "relatedAyahs": [
         {
-          "surahNumber": 12,
-          "ayahStart": 1,
-          "ayahEnd": 111,
-          "label": "Surat Yusuf"
+          "surahNumber": 9,
+          "ayahStart": 40,
+          "ayahEnd": 40,
+          "label": "At-Tawbah 9:40"
+        },
+        {
+          "surahNumber": 92,
+          "ayahStart": 5,
+          "ayahEnd": 7,
+          "label": "Al-Layl 92:5-7"
+        },
+        {
+          "surahNumber": 92,
+          "ayahStart": 17,
+          "ayahEnd": 21,
+          "label": "Al-Layl 92:17-21"
         }
       ],
       "discussionQuestions": [
-        "How did Yusuf manage to stay good even when people kept doing bad things to him?",
-        "What do you think made it possible for Yusuf to forgive his brothers?",
-        "Can you think of a time when something painful led to something good?"
+        "What did the Prophet tell Abu Bakr in the cave?",
+        "How can giving wealth be a sign of sincerity?",
+        "Why is Abu Bakr remembered for truthfulness?",
+        "What does this story teach about friendship for Allah's sake?"
       ],
-      "sources": {}
+      "sources": {
+        "primary": "Quran, At-Tawbah 9:40 and Al-Layl 92:5-7, 92:17-21; Arabic Tafsir Ibn Kathir, Wikisource",
+        "hadith": [
+          "Sahih al-Bukhari reports on Abu Bakr accompanying the Prophet during the Hijrah"
+        ],
+        "seerah": [],
+        "notes": "Post-generation age assessment: child, because the story has danger and pursuit but is framed around trust, companionship, and generosity. Al-Layl references follow common tafsir mention of Abu Bakr's sincere spending."
+      }
+    },
+    {
+      "id": 18,
+      "slug": "musab-ibn-umair",
+      "title": "Musab ibn Umair, the First Teacher in Madinah",
+      "previousStoryId": null,
+      "storyType": "companion_profile",
+      "ageGroup": "preteen",
+      "summary": "Musab gave up comfort for Islam and became a gentle teacher whose Quran helped prepare Madinah for the Prophet's migration.",
+      "readingTimeMinutes": 6,
+      "featuredCharacter": "Musab ibn Umair",
+      "morals": [
+        "Faith can be worth more than comfort and status",
+        "Teaching with patience can open hearts",
+        "Young believers can carry serious responsibility",
+        "A life is honored by truthfulness to Allah"
+      ],
+      "content": "Musab ibn Umair was known in Makkah before Islam as a young man of comfort and fine appearance. When he accepted Islam, his life changed. He chose faith even when it cost him worldly ease. The early Muslims learned that honor with Allah is greater than admiration from people.\n\nAfter some people from Yathrib accepted Islam, the Prophet sent Musab to them as a teacher. Yathrib would later be called Madinah. Musab taught the Quran and explained Islam. He did not go as a ruler or a wealthy man. He went as a believer carrying Allah's words.\n\nThrough patient teaching, homes in Madinah began to learn about Islam. Leaders and families heard the Quran. Musab's work helped prepare a place where the Prophet and the Muslims could later migrate safely by Allah's permission.\n\nMusab also stood with the Muslims in the difficult days that followed. At Uhud, he carried the banner and remained firm. Reports about his death show how much he had given up for Allah: the Muslims did not find enough cloth to fully cover him, so they covered what they could and used grass for the rest. The story is told with sorrow, but also with honor.\n\nThe Quran says that among the believers are men true to what they promised Allah; some fulfilled their vow, and some were still waiting, and they did not change. Musab is remembered among those who were true. His life teaches that a young person can leave vanity, serve the Quran, and meet Allah with a truthful heart.",
+      "relatedAyahs": [
+        {
+          "surahNumber": 33,
+          "ayahStart": 23,
+          "ayahEnd": 23,
+          "label": "Al-Ahzab 33:23"
+        }
+      ],
+      "discussionQuestions": [
+        "What did Musab give up when he chose Islam?",
+        "Why was teaching the Quran in Madinah such an important job?",
+        "How can someone teach with patience instead of harshness?",
+        "What does it mean to be true to a promise to Allah?"
+      ],
+      "sources": {
+        "primary": "Quran, Al-Ahzab 33:23 as a general companion virtue reference; seerah reports on Musab ibn Umair's Islam, teaching in Madinah, and Uhud",
+        "hadith": [
+          "Sahih al-Bukhari reports describing Musab's burial after Uhud"
+        ],
+        "seerah": [
+          "Ibn Ishaq/Ibn Hisham seerah reports on Musab teaching in Yathrib before the Hijrah"
+        ],
+        "notes": "Post-generation age assessment: preteen, because the story includes sacrifice, persecution pressure, and martyrdom at Uhud without graphic detail. Al-Ahzab 33:23 is a general virtue reference and does not name Musab directly."
+      }
+    },
+    {
+      "id": 19,
+      "slug": "the-man-with-two-gardens",
+      "title": "The Man with Two Gardens",
+      "previousStoryId": null,
+      "storyType": "moral_lesson",
+      "ageGroup": "child",
+      "summary": "A wealthy man boasted about his gardens and forgot Allah, while his believing companion reminded him to say, 'What Allah wills.'",
+      "readingTimeMinutes": 6,
+      "featuredCharacter": "The man with two gardens",
+      "morals": [
+        "Wealth should lead to gratitude, not pride",
+        "Say what Allah wills when admiring a blessing",
+        "A sincere friend reminds us of Allah",
+        "Worldly things can disappear, but Allah's reward is better"
+      ],
+      "content": "Allah gives an example of a man who had two gardens of grapevines. The gardens were surrounded by date palms, with crops between them. Both gardens produced fruit and did not fail, and Allah caused a river to flow between them.\n\nThe man had wealth, but instead of thanking Allah, he became proud. While speaking with his companion, he boasted that he had more wealth and a stronger group of people. Then he entered his garden wronging himself. He said he did not think the garden would ever perish, and he doubted the Hour would come. Even if he were returned to his Lord, he imagined he would find something better.\n\nHis companion answered him with faith. He reminded him of the One who created him from dust, then from a drop, then fashioned him as a man. The companion declared that Allah was his Lord, and that he would not associate anyone with his Lord.\n\nThen the companion gave advice that believers still learn from. When entering his garden, the man should have said, \"What Allah wills; there is no power except with Allah.\" If he saw his companion as poorer in wealth and children, Allah could give something better and could send a reckoning upon the garden.\n\nThe warning came true. The man's fruit was surrounded by ruin, and he began turning his hands over in regret for what he had spent on it. He wished he had not associated anyone with his Lord. His group could not help him against Allah.\n\nThe story ends by teaching that protection belongs to Allah, the True. He is best in reward and best in outcome. Gardens, wealth, and status can vanish. Gratitude and faith are the blessings that guide a person when the world changes.",
+      "relatedAyahs": [
+        {
+          "surahNumber": 18,
+          "ayahStart": 32,
+          "ayahEnd": 44,
+          "label": "Al-Kahf 18:32-44"
+        }
+      ],
+      "discussionQuestions": [
+        "What made the owner of the gardens proud?",
+        "What did his companion tell him to say when seeing his blessing?",
+        "How can a friend remind someone of Allah kindly?",
+        "Why is gratitude safer than boasting?"
+      ],
+      "sources": {
+        "primary": "Quran, Al-Kahf 18:32-44; Arabic Tafsir Ibn Kathir, Wikisource, Tafsir Ibn Kathir/Surah Al-Kahf",
+        "hadith": [],
+        "seerah": [],
+        "notes": "Post-generation age assessment: child, because the story is a clear moral example about pride, gratitude, and loss without mature themes. No invented names or details are added."
+      }
+    },
+    {
+      "id": 12,
+      "slug": "adam-creation-and-prostration",
+      "title": "Adam, Creation, and the Prostration",
+      "previousStoryId": null,
+      "storyType": "quranic_narrative",
+      "ageGroup": "child",
+      "summary": "Allah created Adam, taught him the names, honored him before the angels, and exposed Iblis's arrogant refusal.",
+      "readingTimeMinutes": 6,
+      "featuredCharacter": "Prophet Adam",
+      "morals": [
+        "Allah knows what His creation does not know",
+        "Knowledge is an honor from Allah",
+        "Arrogance can ruin a servant's obedience",
+        "Allah created people with purpose and guidance"
+      ],
+      "content": "Allah told the angels that He would place a khalifah on the earth. The angels asked about one who might cause corruption and shed blood, while they praised and glorified Allah. Allah answered, \"I know what you do not know.\"\n\nAllah created Adam from clay and taught him the names of things. Then Allah presented them to the angels and asked them to name them if they were truthful. The angels answered with humility. They said that they had no knowledge except what Allah had taught them. Allah is the All-Knowing, the All-Wise.\n\nThen Allah told Adam to inform them of the names. When Adam did so, Allah reminded the angels that He knows the unseen of the heavens and the earth, and He knows what is shown and what is hidden. Adam's knowledge was not from himself; it was a gift from Allah.\n\nAllah commanded the angels to prostrate to Adam. They obeyed. Iblis, however, refused. He was arrogant and became one of those who rejected. When Allah asked what prevented him from prostrating, Iblis pointed to his own creation and Adam's creation. He said he was better because he was created from fire while Adam was created from clay.\n\nIblis's answer showed pride, not wisdom. He compared materials but ignored the command of Allah. Allah rejected him from the honored place, and Iblis asked for time until the Day when people are raised. Allah allowed him time, but Iblis used that time to threaten Adam's children. He said he would try to mislead them from the straight path.\n\nAllah's story of Adam teaches the beginning of humanity with honor and warning together. Adam was honored by Allah's teaching and command. Iblis fell through arrogance and disobedience. From the start, people needed Allah's guidance, and they needed to beware of the enemy who wanted them to forget it.",
+      "relatedAyahs": [
+        {
+          "surahNumber": 2,
+          "ayahStart": 30,
+          "ayahEnd": 34,
+          "label": "Al-Baqarah 2:30-34"
+        },
+        {
+          "surahNumber": 7,
+          "ayahStart": 11,
+          "ayahEnd": 18,
+          "label": "Al-A'raf 7:11-18"
+        },
+        {
+          "surahNumber": 15,
+          "ayahStart": 26,
+          "ayahEnd": 44,
+          "label": "Al-Hijr 15:26-44"
+        },
+        {
+          "surahNumber": 38,
+          "ayahStart": 71,
+          "ayahEnd": 85,
+          "label": "Sad 38:71-85"
+        }
+      ],
+      "discussionQuestions": [
+        "What did the angels say when they did not know the names?",
+        "Why was Iblis wrong to compare fire and clay?",
+        "How does knowledge from Allah honor Adam?",
+        "What warning does this story give about arrogance?"
+      ],
+      "sources": {
+        "primary": "Quran, Al-Baqarah 2:30-39, Al-A'raf 7:11-25, Al-Hijr 15:26-44, Sad 38:71-85; Arabic Tafsir Ibn Kathir, Wikisource",
+        "hadith": [],
+        "seerah": [],
+        "notes": "Post-generation age assessment: child, because the story contains theological origin material and Iblis's threat, but no mature or graphic detail. The story avoids speculative details about the exact names taught beyond the Quranic wording."
+      }
+    },
+    {
+      "id": 13,
+      "slug": "adam-and-the-tree",
+      "title": "Adam and the Tree",
+      "previousStoryId": 12,
+      "storyType": "quranic_narrative",
+      "ageGroup": "child",
+      "summary": "Adam and his wife were warned away from one tree, slipped after Shaytan's whispering, then learned to repent to Allah.",
+      "readingTimeMinutes": 6,
+      "featuredCharacter": "Prophet Adam",
+      "morals": [
+        "Allah's limits are mercy and guidance",
+        "Shaytan beautifies disobedience with false promises",
+        "Repentance means turning back to Allah after a mistake",
+        "Allah gives guidance to those who follow His words"
+      ],
+      "content": "After Allah honored Adam, Allah allowed Adam and his wife to live in the Garden. They were told to eat from it freely and happily wherever they wished. But Allah gave them one clear limit: do not approach a certain tree, or they would become among the wrongdoers.\n\nShaytan came to them with whispers. He tried to make the forbidden thing seem like a path to something better. He claimed that the tree would lead to lasting life or a kingdom that would not fade. He swore to them as if he were a sincere adviser, but his words were deception.\n\nAdam and his wife ate from the tree. When they did, what had been covered became apparent to them, and they began covering themselves with leaves from the Garden. Allah called to them, reminding them that He had forbidden that tree and warned them that Shaytan was a clear enemy.\n\nThey did not answer with arrogance like Iblis had done. They admitted their wrong. They said that they had wronged themselves, and that if Allah did not forgive them and have mercy on them, they would be among the losers. Allah taught Adam words of repentance, and Adam turned back to his Lord.\n\nAllah accepted Adam's repentance. Then Allah sent them down from the Garden to the earth, where people would live for a time. This was not the end of Allah's care. Allah promised that guidance would come. Whoever followed Allah's guidance would not have fear over them, nor would they grieve.\n\nThe story of the tree teaches both warning and hope. A mistake is serious, but despair is not the way back. Adam's way back was humility, confession, and asking Allah for mercy. Allah is the One who teaches repentance and accepts it.",
+      "relatedAyahs": [
+        {
+          "surahNumber": 2,
+          "ayahStart": 35,
+          "ayahEnd": 39,
+          "label": "Al-Baqarah 2:35-39"
+        },
+        {
+          "surahNumber": 7,
+          "ayahStart": 19,
+          "ayahEnd": 25,
+          "label": "Al-A'raf 7:19-25"
+        },
+        {
+          "surahNumber": 20,
+          "ayahStart": 115,
+          "ayahEnd": 123,
+          "label": "Ta-Ha 20:115-123"
+        }
+      ],
+      "discussionQuestions": [
+        "How did Shaytan try to make disobedience sound good?",
+        "How was Adam's response different from Iblis's response?",
+        "Why is repentance hopeful instead of hopeless?",
+        "What does Allah's promise of guidance teach us?"
+      ],
+      "sources": {
+        "primary": "Quran, Al-Baqarah 2:35-37, Al-A'raf 7:19-25, Ta-Ha 20:115-123; Arabic Tafsir Ibn Kathir, Wikisource",
+        "hadith": [],
+        "seerah": [],
+        "notes": "Post-generation age assessment: child, because the story includes disobedience, shame, and repentance in a direct Quranic form without mature detail. No speculative identification of the tree is included."
+      }
+    },
+    {
+      "id": 16,
+      "slug": "hud-and-the-people-of-ad",
+      "title": "Hud and the People of Ad",
+      "previousStoryId": null,
+      "storyType": "quranic_narrative",
+      "ageGroup": "preteen",
+      "summary": "Prophet Hud called the powerful people of Ad to worship Allah alone, but their pride led them to reject the warning.",
+      "readingTimeMinutes": 6,
+      "featuredCharacter": "Prophet Hud",
+      "morals": [
+        "Strength and wealth do not make anyone independent of Allah",
+        "A prophet calls with sincerity even when people mock him",
+        "Pride can blind people to clear reminders",
+        "Allah saves those who believe and trust Him"
+      ],
+      "content": "The people of Ad were strong and powerful. Allah had given them bodies, buildings, and worldly ability that made them feel secure. Their brother Hud came to them with a simple call: worship Allah alone. They had no true god besides Him.\n\nHud did not ask them for payment. He reminded them that his reward was with Allah. He called them to seek forgiveness from their Lord and turn back to Him, promising that Allah could send them rain and add strength to their strength. But he also warned them not to turn away as criminals.\n\nThe leaders of Ad answered with pride. They accused Hud of foolishness and lying. They said they would not leave what their fathers had worshiped just because Hud spoke to them. They even challenged him to bring the punishment he warned about if he was truthful.\n\nHud stood firm. He said that Allah was his Lord and their Lord, and that every creature was under Allah's control. He declared that he relied upon Allah. Their idols could not harm him except by Allah's permission, and their threats could not shake the truth.\n\nThe warning came. The Quran describes a wind sent against Ad, and it did not pass over anything it was commanded to strike except that it left it ruined. What they thought was a cloud bringing rain became the punishment they had hastened. Their strength could not protect them from Allah.\n\nAllah saved Hud and those who believed with him by His mercy. The story of Ad remains as a warning: power without gratitude becomes arrogance, and arrogance rejects the very guidance that could save a people.",
+      "relatedAyahs": [
+        {
+          "surahNumber": 7,
+          "ayahStart": 65,
+          "ayahEnd": 72,
+          "label": "Al-A'raf 7:65-72"
+        },
+        {
+          "surahNumber": 11,
+          "ayahStart": 50,
+          "ayahEnd": 60,
+          "label": "Hud 11:50-60"
+        },
+        {
+          "surahNumber": 46,
+          "ayahStart": 21,
+          "ayahEnd": 26,
+          "label": "Al-Ahqaf 46:21-26"
+        }
+      ],
+      "discussionQuestions": [
+        "Why might powerful people forget that they still need Allah?",
+        "How did Hud show courage when his people rejected him?",
+        "What false hopes did the people of Ad depend on?",
+        "What does this story teach about gratitude for strength?"
+      ],
+      "sources": {
+        "primary": "Quran, Al-A'raf 7:65-72, Hud 11:50-60, Al-Ahqaf 46:21-26; Arabic Tafsir Ibn Kathir, Wikisource",
+        "hadith": [],
+        "seerah": [],
+        "notes": "Post-generation age assessment: preteen, because the story includes communal destruction and arrogance, described soberly without graphic detail."
+      }
+    },
+    {
+      "id": 6,
+      "slug": "yusuf-the-dream-and-the-brothers",
+      "title": "Yusuf, the Dream, and the Brothers",
+      "previousStoryId": null,
+      "storyType": "quranic_narrative",
+      "ageGroup": "preteen",
+      "summary": "Young Yusuf saw a truthful dream, but jealousy led his brothers to cast him into a well while Allah quietly prepared a greater future.",
+      "readingTimeMinutes": 6,
+      "featuredCharacter": "Prophet Yusuf",
+      "morals": [
+        "A blessing from Allah should be protected with wisdom",
+        "Jealousy can push people toward great wrong",
+        "Patient trust in Allah matters when events feel confusing",
+        "Allah's plan continues even when people plot harm"
+      ],
+      "content": "Yusuf was a young son of Prophet Yaqub. One day he told his father about a dream: he saw eleven stars, the sun, and the moon bowing down to him. Yaqub understood that this dream was important, and he warned Yusuf not to tell it to his brothers. He knew Shaytan could stir up jealousy between people.\n\nYaqub also told Yusuf that Allah would choose him, teach him the meaning of dreams, and complete His favor upon the family of Yaqub, just as He had completed it upon Ibrahim and Ishaq before him. The dream was not a small thing. It was a sign that Allah had a future for Yusuf that no one around him could yet see.\n\nYusuf's brothers noticed their father's special love for Yusuf and his brother. Instead of being grateful for their own blessings, they let jealousy grow. They said their father was clearly mistaken, and they began to plan a terrible thing. Some suggested killing Yusuf. Another said not to kill him, but to throw him into the bottom of a well so travelers might pick him up.\n\nThey came to Yaqub and asked to take Yusuf out with them. Yaqub said it would grieve him if they took Yusuf away, and he feared a wolf might eat him while they were careless. The brothers insisted they would guard him. At last, Yusuf went with them.\n\nWhen they were away from their father, they agreed to put Yusuf into the hidden depth of the well. Allah revealed to Yusuf that a day would come when he would tell them about this deed while they did not realize who he was. Even in the darkness of the well, Yusuf was not outside Allah's knowledge or care.\n\nThat evening the brothers returned to their father crying. They claimed they had gone racing and left Yusuf by their belongings, and that a wolf had eaten him. They brought his shirt with false blood on it. Yaqub did not believe their story. He said their own souls had made something seem easy to them, and he chose beautiful patience. He asked Allah for help against what they described.\n\nLater, travelers came to the well and sent someone to draw water. The man lowered his bucket and found Yusuf. They hid him as merchandise and sold him for a small price. People treated Yusuf as if he were cheap, but Allah knew his true worth. The story had only begun.",
+      "relatedAyahs": [
+        {
+          "surahNumber": 12,
+          "ayahStart": 4,
+          "ayahEnd": 20,
+          "label": "Yusuf 12:4-20"
+        }
+      ],
+      "discussionQuestions": [
+        "Why did Yaqub tell Yusuf not to share his dream with his brothers?",
+        "What warning does this story give about jealousy?",
+        "How did Yaqub respond when the brothers brought their false story?",
+        "Where can you see Allah's care for Yusuf even before the rescue came?"
+      ],
+      "sources": {
+        "primary": "Quran, Surah Yusuf 12:4-20; Arabic Tafsir Ibn Kathir, Wikisource, Tafsir Ibn Kathir/Surah Yusuf",
+        "hadith": [],
+        "seerah": [],
+        "notes": "Post-generation age assessment: preteen, because the story includes betrayal by siblings, false testimony, and a child being abandoned, described without graphic detail. Scope intentionally stops at Yusuf's sale and does not include Egypt, prison, famine, or reunion material from the previous single-story version."
+      }
+    },
+    {
+      "id": 11,
+      "slug": "yusuf-in-egypt-and-the-trial",
+      "title": "Yusuf in Egypt and the Trial",
+      "previousStoryId": 6,
+      "storyType": "quranic_narrative",
+      "ageGroup": "teen",
+      "summary": "Yusuf grew up in Egypt with wisdom from Allah, then faced temptation, false accusation, and prison while holding firmly to purity.",
+      "readingTimeMinutes": 7,
+      "featuredCharacter": "Prophet Yusuf",
+      "morals": [
+        "Seek Allah's protection when temptation appears",
+        "True strength includes refusing private sin",
+        "Allah sees the truth even when people twist it",
+        "A believer may choose hardship over disobedience"
+      ],
+      "content": "When Yusuf was taken to Egypt, the man who bought him told his wife to treat him honorably. The Quran says Allah established Yusuf in the land and taught him the interpretation of events. When Yusuf reached full maturity, Allah gave him judgment and knowledge. Allah rewards those who do good.\n\nA difficult trial then came to Yusuf inside the house where he lived. The wife of the Aziz tried to tempt him toward sin. She closed the doors and called him. Yusuf answered with words of faith: he sought refuge in Allah. He remembered the good treatment of his master and knew that wrongdoers do not succeed.\n\nYusuf ran toward the door to escape. She followed him, and his shirt was torn from behind. At the door they met her husband. She quickly accused Yusuf. Yusuf told the truth: she had tried to tempt him. A witness from her household pointed to the torn shirt as evidence. If the shirt was torn from the front, she would be truthful; if it was torn from the back, Yusuf would be truthful. The shirt was torn from the back, so the truth became clear.\n\nThe matter did not stay hidden. Women in the city began speaking about the wife of the Aziz and her desire for Yusuf. She invited them, gave each one a knife, and told Yusuf to come out before them. When they saw him, they were amazed and cut their hands without realizing it. She admitted she had tried to tempt him, and she threatened that if he did not obey, he would be imprisoned and humiliated.\n\nYusuf did not treat prison as worse than sin. He prayed to Allah, saying that prison was dearer to him than what they were calling him toward. He asked Allah to turn their plot away from him, because if Allah did not protect him, he might incline toward them and be among the ignorant.\n\nAllah answered Yusuf's prayer and turned their plot away. Even though the signs of Yusuf's innocence had appeared, the people in power decided to imprison him for a time. Yusuf entered prison wronged, but not abandoned. His honor with Allah was not harmed by a locked door or a false accusation.",
+      "relatedAyahs": [
+        {
+          "surahNumber": 12,
+          "ayahStart": 21,
+          "ayahEnd": 35,
+          "label": "Yusuf 12:21-35"
+        }
+      ],
+      "discussionQuestions": [
+        "What did Yusuf do first when he was called toward sin?",
+        "Why was the torn shirt important in showing the truth?",
+        "Why would Yusuf prefer prison over disobeying Allah?",
+        "What does this story teach about private choices?"
+      ],
+      "sources": {
+        "primary": "Quran, Surah Yusuf 12:21-35; Arabic Tafsir Ibn Kathir, Wikisource, Tafsir Ibn Kathir/Surah Yusuf",
+        "hadith": [],
+        "seerah": [],
+        "notes": "Post-generation age assessment: teen, because the central plot involves sexual temptation, attempted seduction, false accusation, and social pressure. The story is told chastely and does not add unsourced sensory details or invented dialogue."
+      }
     },
     {
       "id": 10,
       "slug": "people-of-the-cave",
       "title": "The Young Believers in the Cave",
+      "previousStoryId": null,
       "storyType": "quranic_narrative",
       "ageGroup": "child",
       "summary": "Young believers fled to a cave to protect their faith, and Allah made their sleep a sign of His mercy and the resurrection.",
@@ -69,9 +403,48 @@
       }
     },
     {
+      "id": 15,
+      "slug": "dhul-qarnayn",
+      "title": "Dhul-Qarnayn and the Barrier",
+      "previousStoryId": null,
+      "storyType": "quranic_narrative",
+      "ageGroup": "child",
+      "summary": "Allah gave Dhul-Qarnayn power and means, and he used them with justice, humility, and mercy.",
+      "readingTimeMinutes": 7,
+      "featuredCharacter": "Dhul-Qarnayn",
+      "morals": [
+        "Power should be used with justice",
+        "A leader should help the vulnerable without greed",
+        "Successful work is still a mercy from Allah",
+        "The promises of Allah will surely come"
+      ],
+      "content": "The Quran tells us about Dhul-Qarnayn, a ruler whom Allah established on earth and gave means to accomplish what he needed. The story does not tell us to argue over his exact identity. It shows how a person with power should act under Allah's authority.\n\nDhul-Qarnayn traveled until he reached the place where the sun appeared to set. He found a people there, and Allah gave him authority in how to deal with them. Dhul-Qarnayn chose justice: whoever did wrong would be punished, then returned to his Lord; whoever believed and did good would have a good reward and gentle command.\n\nThen he traveled another way until he reached a people near where the sun appeared to rise. Then he traveled again until he came between two barriers, where he found a people who could barely understand speech. They complained that Yajuj and Majuj were causing corruption in the land. They offered payment if he would build a barrier between them.\n\nDhul-Qarnayn did not become greedy. He said that what his Lord had given him was better. He asked them to help with strength. They brought pieces of iron, and he built between the two cliffs. Then he poured molten copper over it until Yajuj and Majuj could not climb over it or pierce it.\n\nWhen the work was finished, Dhul-Qarnayn did not praise himself as if the barrier were only his own greatness. He said it was a mercy from his Lord. He also knew it would not last forever. When the promise of his Lord came, Allah would make it level, and Allah's promise is true.\n\nThis story teaches that ability is a test. Dhul-Qarnayn had power, but he used it to judge fairly, protect people, refuse greed, and remember Allah. Strong hands did the work, but a humble heart knew where success came from.",
+      "relatedAyahs": [
+        {
+          "surahNumber": 18,
+          "ayahStart": 83,
+          "ayahEnd": 98,
+          "label": "Al-Kahf 18:83-98"
+        }
+      ],
+      "discussionQuestions": [
+        "How did Dhul-Qarnayn use power differently from a selfish ruler?",
+        "Why did he refuse to treat the people's payment as the most important thing?",
+        "What did he say after the barrier was built?",
+        "Why is it wise not to make claims about details the Quran does not name?"
+      ],
+      "sources": {
+        "primary": "Quran, Al-Kahf 18:83-98; Arabic Tafsir Ibn Kathir, Wikisource, Tafsir Ibn Kathir/Surah Al-Kahf",
+        "hadith": [],
+        "seerah": [],
+        "notes": "Post-generation age assessment: child, because the story has a clear justice-and-leadership arc with no mature themes. Speculative identity claims about Dhul-Qarnayn and unsupported details about Yajuj and Majuj are omitted."
+      }
+    },
+    {
       "id": 3,
       "slug": "musa-and-the-baby-basket",
       "title": "Musa and the Baby Basket",
+      "previousStoryId": null,
       "storyType": "quranic_narrative",
       "ageGroup": "toddler",
       "summary": "Baby Musa was placed in a basket on the river by his brave mother. See how Allah's plan kept him safe!",
@@ -108,6 +481,7 @@
       "id": 2,
       "slug": "ibrahim-and-the-fire",
       "title": "Ibrahim and the Fire",
+      "previousStoryId": null,
       "storyType": "quranic_narrative",
       "ageGroup": "child",
       "summary": "Prophet Ibrahim refused to worship idols even when thrown into a massive fire. Allah made it cool and safe for him!",
@@ -144,6 +518,7 @@
       "id": 7,
       "slug": "the-ant-and-prophet-sulayman",
       "title": "The Ant and Prophet Sulayman",
+      "previousStoryId": null,
       "storyType": "quranic_narrative",
       "ageGroup": "toddler",
       "summary": "Prophet Sulayman could talk to animals! When an ant warned its people to go underground before the army stepped on them, what did Sulayman do?",
@@ -174,6 +549,7 @@
       "id": 1,
       "slug": "the-elephant-army",
       "title": "The Elephant Army",
+      "previousStoryId": null,
       "storyType": "quranic_narrative",
       "ageGroup": "toddler",
       "summary": "A powerful king came with elephants to destroy the Ka'bah. See how Allah protected His house with tiny birds!",
@@ -204,6 +580,7 @@
       "id": 9,
       "slug": "battle-of-badr-help",
       "title": "Help at Badr",
+      "previousStoryId": null,
       "storyType": "seerah_context",
       "ageGroup": "preteen",
       "summary": "At Badr, the believers were outnumbered, so the Prophet Muhammad ﷺ made du'a, and Allah strengthened them with angels, calm, rain, and victory.",
@@ -247,6 +624,7 @@
       "id": 4,
       "slug": "the-cave-of-thawr",
       "title": "The Cave of Thawr",
+      "previousStoryId": null,
       "storyType": "seerah_context",
       "ageGroup": "child",
       "summary": "During the hijrah to Madinah, Prophet Muhammad ﷺ and Abu Bakr hid in a cave. The enemies were right outside — but Allah protected them!",
@@ -274,9 +652,56 @@
       "sources": {}
     },
     {
+      "id": 17,
+      "slug": "isra-and-miraj",
+      "title": "The Night Journey and the Ascent",
+      "previousStoryId": null,
+      "storyType": "seerah_context",
+      "ageGroup": "preteen",
+      "summary": "Allah honored the Prophet with the Night Journey to Al-Aqsa and the ascent through great signs, including the gift of prayer.",
+      "readingTimeMinutes": 7,
+      "featuredCharacter": "Prophet Muhammad",
+      "morals": [
+        "Allah can honor His messenger in ways beyond ordinary human power",
+        "Prayer is a precious gift from Allah",
+        "Some matters of the unseen are believed because Allah and His Messenger told the truth",
+        "Sacred places and worship connect believers to Allah's guidance"
+      ],
+      "content": "Allah tells us that He took His servant by night from the Sacred Mosque to the Farthest Mosque, whose surroundings Allah blessed, so that He might show him some of His signs. This was the Isra, the Night Journey, and it began by Allah's power.\n\nThe Quran also speaks in Surah An-Najm about the Prophet seeing great signs from his Lord. The verses describe the highest horizon, the Lote Tree of the Utmost Boundary, and that the Prophet's sight did not swerve or transgress. These words teach believers to approach the story with awe and humility.\n\nAuthentic hadith explain more of the journey. The Prophet was taken to Bayt al-Maqdis and then raised through the heavens. He met noble prophets by Allah's permission. He was shown great signs that ordinary people could not reach by themselves.\n\nAmong the greatest gifts connected to this night was the command of prayer. The prayers were first made many, then reduced by Allah's mercy until five daily prayers remained, with the reward of fifty. Every day, when Muslims pray, they remember a gift tied to this honored journey.\n\nThe story does not ask believers to imagine every unseen detail for themselves. It asks them to trust Allah's words and the authentic report of His Messenger. Allah is able to do all things, and He showed His servant signs that strengthened him and taught the believers.\n\nIsra and Miraj remind us that worship is not small. Prayer is a meeting with Allah's command in the middle of daily life. The same Lord who took His Messenger by night calls His servants to stand, bow, and prostrate with faith.",
+      "relatedAyahs": [
+        {
+          "surahNumber": 17,
+          "ayahStart": 1,
+          "ayahEnd": 1,
+          "label": "Al-Isra 17:1"
+        },
+        {
+          "surahNumber": 53,
+          "ayahStart": 1,
+          "ayahEnd": 18,
+          "label": "An-Najm 53:1-18"
+        }
+      ],
+      "discussionQuestions": [
+        "What does Al-Isra 17:1 teach about who caused the Night Journey?",
+        "Why is prayer an important part of this story?",
+        "How should we speak about unseen details that Allah did not fully explain?",
+        "What signs in the story show honor for the Prophet?"
+      ],
+      "sources": {
+        "primary": "Quran, Al-Isra 17:1 and An-Najm 53:1-18; Arabic Tafsir Ibn Kathir, Wikisource",
+        "hadith": [
+          "Sahih al-Bukhari and Sahih Muslim reports on Al-Isra wal-Miraj and the five daily prayers"
+        ],
+        "seerah": [],
+        "notes": "Post-generation age assessment: preteen, because the story includes unseen events and theological complexity. Details are kept to Quranic wording and widely authenticated hadith themes; disputed sequencing and speculative descriptions are omitted."
+      }
+    },
+    {
       "id": 5,
       "slug": "bilal-and-the-hot-desert",
       "title": "Bilal and the Hot Desert",
+      "previousStoryId": null,
       "storyType": "seerah_context",
       "ageGroup": "child",
       "summary": "Bilal was an enslaved man who became one of the greatest companions. He was tortured for saying 'Ahad! Ahad!' — but he never gave up faith.",
@@ -307,6 +732,7 @@
       "id": 8,
       "slug": "khadijah-the-first-believer",
       "title": "Khadijah: The First Believer",
+      "previousStoryId": null,
       "storyType": "seerah_context",
       "ageGroup": "preteen",
       "summary": "When the Prophet ﷺ came home shaking from his first revelation, it was Khadijah's firm faith and love that gave him strength. She was the first Muslim.",

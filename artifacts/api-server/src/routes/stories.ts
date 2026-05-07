@@ -4,6 +4,7 @@ import {
   STORY_TYPE_LABELS,
   getStoriesForAyahRange,
   getStoryByIdOrSlug,
+  includePreviousStory,
   summarizeStory,
   type StoryAgeGroup,
   type StoryType,
@@ -98,7 +99,7 @@ router.get("/stories/:storyIdOrSlug", (req, res) => {
     return;
   }
 
-  res.json(story);
+  res.json(includePreviousStory(story));
 });
 
 export default router;

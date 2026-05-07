@@ -14,6 +14,7 @@ export interface Story {
   id: number;
   slug: string;
   title: string;
+  previousStoryId: number | null;
   storyType: StoryType;
   ageGroup: StoryAgeGroup;
   summary: string;

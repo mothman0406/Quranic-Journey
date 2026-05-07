@@ -1735,6 +1735,9 @@ components:
           type: string
         title:
           type: string
+        previousStoryId:
+          type: integer
+          nullable: true
         storyType:
           $ref: "#/components/schemas/StoryType"
         ageGroup:
@@ -1756,7 +1759,20 @@ components:
             $ref: "#/components/schemas/StoryAyahRef"
         sources:
           $ref: "#/components/schemas/StorySources"
-      required: [id, slug, title, storyType, ageGroup, summary, readingTimeMinutes, featuredCharacter, morals, relatedAyahs, sources]
+      required: [id, slug, title, previousStoryId, storyType, ageGroup, summary, readingTimeMinutes, featuredCharacter, morals, relatedAyahs, sources]
+
+    PreviousStorySummary:
+      type: object
+      properties:
+        id:
+          type: integer
+        slug:
+          type: string
+        title:
+          type: string
+        summary:
+          type: string
+      required: [id, slug, title, summary]
 
     StoryDetail:
       allOf:
@@ -1769,7 +1785,11 @@ components:
               type: array
               items:
                 type: string
-          required: [content, discussionQuestions]
+            previousStory:
+              nullable: true
+              allOf:
+                - $ref: "#/components/schemas/PreviousStorySummary"
+          required: [content, discussionQuestions, previousStory]
 
     DuaCategory:
       type: object

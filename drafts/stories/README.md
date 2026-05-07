@@ -23,6 +23,7 @@ drafts/stories/{slug}.json
 Start from `_template.json`. Drafts match the app's `StoryData` shape plus metadata:
 
 - `reviewStatus`: `draft`, `needs-revision`, `approved`, or `approved-replace`
+- `replaceStoryId`: required for `approved-replace`; identifies the existing story ID to preserve
 - `aiModel`: model used to draft the story
 - `generatedAt`: ISO timestamp
 - `sourceVerseRanges`: candidate verse ranges and corpus files used
@@ -34,7 +35,7 @@ Start from `_template.json`. Drafts match the app's `StoryData` shape plus metad
 
 Use `reviewStatus: "approved"` for a new story. The merge script assigns the next available ID and rejects duplicate slugs.
 
-Use `reviewStatus: "approved-replace"` to update an existing story with the same slug. The merge script looks up the existing story, preserves its `id`, replaces the other `StoryData` fields, strips metadata, deletes the draft file, and reports it as a replacement.
+Use `reviewStatus: "approved-replace"` with `replaceStoryId` to update an existing story. The merge script looks up the existing story by ID, preserves its `id`, replaces the other `StoryData` fields including a changed slug when needed, strips metadata, deletes the draft file, and reports it as a replacement. Set `replaceStoryId` even when the slug stays the same so replacements are explicit.
 
 ## Merge Approved Drafts
 

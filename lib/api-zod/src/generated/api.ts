@@ -1119,6 +1119,7 @@ export const ListContextualStoriesResponse = zod.object({
       id: zod.number(),
       slug: zod.string(),
       title: zod.string(),
+      previousStoryId: zod.number().nullable(),
       storyType: zod.enum([
         "quranic_narrative",
         "seerah_context",
@@ -1171,6 +1172,7 @@ export const ListStoriesResponse = zod.object({
       id: zod.number(),
       slug: zod.string(),
       title: zod.string(),
+      previousStoryId: zod.number().nullable(),
       storyType: zod.enum([
         "quranic_narrative",
         "seerah_context",
@@ -1212,6 +1214,7 @@ export const GetStoryResponse = zod
     id: zod.number(),
     slug: zod.string(),
     title: zod.string(),
+    previousStoryId: zod.number().nullable(),
     storyType: zod.enum([
       "quranic_narrative",
       "seerah_context",
@@ -1242,6 +1245,14 @@ export const GetStoryResponse = zod
     zod.object({
       content: zod.string(),
       discussionQuestions: zod.array(zod.string()),
+      previousStory: zod
+        .object({
+          id: zod.number(),
+          slug: zod.string(),
+          title: zod.string(),
+          summary: zod.string(),
+        })
+        .nullable(),
     }),
   );
 

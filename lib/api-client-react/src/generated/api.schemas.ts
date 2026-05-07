@@ -732,6 +732,7 @@ export interface Story {
   id: number;
   slug: string;
   title: string;
+  previousStoryId: number | null;
   storyType: StoryType;
   ageGroup: StoryAgeGroup;
   summary: string;
@@ -742,9 +743,17 @@ export interface Story {
   sources: StorySources;
 }
 
+export interface PreviousStorySummary {
+  id: number;
+  slug: string;
+  title: string;
+  summary: string;
+}
+
 export type StoryDetail = Story & {
   content: string;
   discussionQuestions: string[];
+  previousStory: PreviousStorySummary | null;
 };
 
 export interface DuaCategory {

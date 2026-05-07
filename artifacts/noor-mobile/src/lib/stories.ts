@@ -26,6 +26,7 @@ export interface Story {
   id: number;
   slug: string;
   title: string;
+  previousStoryId: number | null;
   storyType: StoryType;
   ageGroup: StoryAgeGroup;
   summary: string;
@@ -36,9 +37,12 @@ export interface Story {
   sources: StorySources;
 }
 
+export type PreviousStorySummary = Pick<Story, "id" | "slug" | "title" | "summary">;
+
 export type StoryDetail = Story & {
   content: string;
   discussionQuestions: string[];
+  previousStory?: PreviousStorySummary | null;
 };
 
 export interface StoryTypeSummary {
@@ -67,6 +71,7 @@ function buildQuery(params: ListStoriesParams) {
 function normalizeStory(story: Story): Story {
   return {
     ...story,
+    previousStoryId: story.previousStoryId ?? null,
     morals: story.morals ?? [],
     relatedAyahs: story.relatedAyahs ?? [],
     sources: story.sources ?? {},
@@ -78,6 +83,7 @@ function normalizeStoryDetail(story: StoryDetail): StoryDetail {
     ...normalizeStory(story),
     content: story.content ?? "",
     discussionQuestions: story.discussionQuestions ?? [],
+    previousStory: story.previousStory ?? null,
   };
 }
 
