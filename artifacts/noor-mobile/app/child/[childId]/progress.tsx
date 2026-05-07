@@ -12,6 +12,11 @@ import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { ChildBottomNav } from "@/src/components/child-bottom-nav";
 import { ApiError, apiFetch } from "@/src/lib/api";
+import {
+  computeProjectedCompletionDate,
+  fetchHafidhProjections,
+  type ProjectionResponse,
+} from "@/src/lib/projections";
 
 type IconName = ComponentProps<typeof Ionicons>["name"];
 type ProgressRange = "week" | "month";
@@ -62,7 +67,12 @@ type ProgressResponse = {
 type ProgressState =
   | { status: "loading" }
   | { status: "error"; message: string }
-  | { status: "ready"; dashboard: DashboardResponse; progress: ProgressResponse };
+  | {
+      status: "ready";
+      dashboard: DashboardResponse;
+      progress: ProgressResponse;
+      projection: ProjectionResponse | null;
+    };
 
 const STAT_CARDS: Array<{
   key: "streak" | "points" | "surahs" | "badges";
@@ -137,6 +147,25 @@ function formatChartLabel(value: string, range: ProgressRange, index: number, to
 function formatPercent(value: number, target: number) {
   if (target <= 0) return 0;
   return Math.max(0, Math.min(100, Math.round((value / target) * 100)));
+}
+
+function formatProjectedDate(value: string | null) {
+  if (!value) return "Not enough data";
+  const date = parseLocalDate(value);
+  if (Number.isNaN(date.getTime())) return "Not enough data";
+  return date.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
+function getWeekDelta(firstValue: string | null, secondValue: string | null) {
+  if (!firstValue || !secondValue) return null;
+  const first = parseLocalDate(firstValue);
+  const second = parseLocalDate(secondValue);
+  if (Number.isNaN(first.getTime()) || Number.isNaN(second.getTime())) return null;
+  return Math.round((first.getTime() - second.getTime()) / (86_400_000 * 7));
 }
 
 function getAchievementPercent(achievement: Achievement) {
@@ -415,6 +444,77 @@ function AchievementsSection({ achievements }: { achievements: Achievement[] }) 
   );
 }
 
+function TrajectoryCard({ projection }: { projection: ProjectionResponse | null }) {
+  if (!projection) return null;
+
+  const activeTier =
+    projection.tiers.find((tier) => tier.tier === projection.activeTier) ??
+    projection.tiers.find((tier) => tier.tier === "full_hafidh") ??
+    projection.tiers[projection.tiers.length - 1];
+  if (!activeTier) return null;
+
+  const recentPace = projection.recentPacePagesPerWeek;
+  const actualDate =
+    recentPace == null
+      ? null
+      : computeProjectedCompletionDate(activeTier.pagesRemaining, recentPace);
+  const weekDelta = getWeekDelta(actualDate, activeTier.projectedCompletionDate);
+  const statusText =
+    recentPace == null
+      ? "Actual pace appears after completed memorization days."
+      : weekDelta == null || weekDelta === 0
+      ? "Actual pace is tracking close to plan."
+      : weekDelta < 0
+      ? `Currently ahead of plan by ${Math.abs(weekDelta)} week${Math.abs(weekDelta) === 1 ? "" : "s"}.`
+      : `Currently behind plan by ${weekDelta} week${weekDelta === 1 ? "" : "s"}.`;
+
+  return (
+    <View style={styles.trajectoryCard}>
+      <View style={styles.trajectoryHeader}>
+        <View style={styles.trajectoryHeadingText}>
+          <Text style={styles.cardTitle}>Trajectory</Text>
+          <Text style={styles.trajectoryDetail}>{activeTier.label}</Text>
+        </View>
+        <View style={styles.trajectoryIcon}>
+          <Ionicons name="navigate-outline" size={18} color="#0f766e" />
+        </View>
+      </View>
+
+      <View style={styles.trajectoryGrid}>
+        <View style={styles.trajectoryMetric}>
+          <Text style={styles.trajectoryMetricLabel}>Planned</Text>
+          <Text style={styles.trajectoryMetricValue}>
+            {projection.pacePagesPerWeek.toFixed(2).replace(/\.00$/, "")}
+          </Text>
+          <Text style={styles.trajectoryMetricDetail}>pages/week</Text>
+        </View>
+        <View style={styles.trajectoryMetric}>
+          <Text style={styles.trajectoryMetricLabel}>Actual</Text>
+          <Text style={styles.trajectoryMetricValue}>
+            {recentPace == null ? "-" : recentPace.toFixed(2).replace(/\.00$/, "")}
+          </Text>
+          <Text style={styles.trajectoryMetricDetail}>last 4 weeks</Text>
+        </View>
+      </View>
+
+      <View style={styles.trajectoryDates}>
+        <View style={styles.trajectoryDateRow}>
+          <Text style={styles.trajectoryDateLabel}>Plan date</Text>
+          <Text style={styles.trajectoryDateValue}>
+            {formatProjectedDate(activeTier.projectedCompletionDate)}
+          </Text>
+        </View>
+        <View style={styles.trajectoryDateRow}>
+          <Text style={styles.trajectoryDateLabel}>Actual date</Text>
+          <Text style={styles.trajectoryDateValue}>{formatProjectedDate(actualDate)}</Text>
+        </View>
+      </View>
+
+      <Text style={styles.trajectoryStatus}>{statusText}</Text>
+    </View>
+  );
+}
+
 export default function ProgressScreen() {
   const { childId, name } = useLocalSearchParams<{ childId: string; name: string }>();
   const [range, setRange] = useState<ProgressRange>("week");
@@ -439,11 +539,12 @@ export default function ProgressScreen() {
       }
 
       try {
-        const [dashboard, progress] = await Promise.all([
+        const [dashboard, progress, projection] = await Promise.all([
           apiFetch<DashboardResponse>(`/api/children/${childId}/dashboard?preview=true`),
           apiFetch<ProgressResponse>(`/api/children/${childId}/weekly-progress?range=${range}`),
+          fetchHafidhProjections(childId).catch(() => null),
         ]);
-        setState({ status: "ready", dashboard, progress });
+        setState({ status: "ready", dashboard, progress, projection });
       } catch (error) {
         setState({ status: "error", message: describeError(error) });
       } finally {
@@ -550,6 +651,8 @@ export default function ProgressScreen() {
             </View>
             <ActivityChart days={state.progress.days} range={range} />
           </View>
+
+          <TrajectoryCard projection={state.projection} />
 
           <AchievementsSection achievements={state.dashboard.achievements} />
         </ScrollView>
@@ -854,6 +957,103 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     fontWeight: "800",
     textAlign: "center",
+  },
+  trajectoryCard: {
+    backgroundColor: "#ffffff",
+    borderWidth: 1,
+    borderColor: "#ccfbf1",
+    borderRadius: 12,
+    padding: 14,
+    gap: 12,
+  },
+  trajectoryHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+  trajectoryHeadingText: {
+    flex: 1,
+    minWidth: 0,
+  },
+  trajectoryDetail: {
+    color: "#64748b",
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: "800",
+    marginTop: 2,
+  },
+  trajectoryIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 11,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#f0fdfa",
+  },
+  trajectoryGrid: {
+    flexDirection: "row",
+    gap: 10,
+  },
+  trajectoryMetric: {
+    flex: 1,
+    minHeight: 90,
+    borderWidth: 1,
+    borderColor: "#ccfbf1",
+    borderRadius: 12,
+    backgroundColor: "#f0fdfa",
+    padding: 12,
+    justifyContent: "center",
+  },
+  trajectoryMetricLabel: {
+    color: "#0f766e",
+    fontSize: 11,
+    fontWeight: "900",
+    textTransform: "uppercase",
+  },
+  trajectoryMetricValue: {
+    color: "#111827",
+    fontSize: 25,
+    lineHeight: 30,
+    fontWeight: "900",
+    marginTop: 2,
+  },
+  trajectoryMetricDetail: {
+    color: "#0f766e",
+    fontSize: 11,
+    lineHeight: 15,
+    fontWeight: "800",
+  },
+  trajectoryDates: {
+    borderTopWidth: 1,
+    borderTopColor: "#e5e7eb",
+    paddingTop: 4,
+  },
+  trajectoryDateRow: {
+    minHeight: 34,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+  trajectoryDateLabel: {
+    color: "#64748b",
+    fontSize: 12,
+    fontWeight: "800",
+  },
+  trajectoryDateValue: {
+    flexShrink: 0,
+    maxWidth: 160,
+    color: "#111827",
+    fontSize: 12,
+    fontWeight: "900",
+    textAlign: "right",
+  },
+  trajectoryStatus: {
+    color: "#0f766e",
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: "900",
   },
   achievementsCard: {
     backgroundColor: "#ffffff",

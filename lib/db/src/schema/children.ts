@@ -1,10 +1,16 @@
-import { pgTable, serial, text, integer, real, timestamp, pgEnum } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, integer, real, timestamp, date, pgEnum } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { authUserTable } from "./auth";
 
 export const ageGroupEnum = pgEnum("age_group", ["toddler", "child", "preteen", "teen"]);
 export const genderEnum = pgEnum("gender", ["male", "female"]);
+export const hafidhTierEnum = pgEnum("hafidh_tier", [
+  "juz_amma",
+  "last_10_juz",
+  "half_quran",
+  "full_hafidh",
+]);
 
 export const childrenTable = pgTable("children", {
   id: serial("id").primaryKey(),
@@ -26,8 +32,11 @@ export const childrenTable = pgTable("children", {
   hideStories: integer("hide_stories").notNull().default(0),
   hideDuas: integer("hide_duas").notNull().default(0),
   memorizePagePerDay: real("memorize_page_per_day").notNull().default(1.0),
+  memorizeDaysPerWeek: integer("memorize_days_per_week").notNull().default(5),
   reviewPagesPerDay: real("review_pages_per_day").notNull().default(2.0),
   readPagesPerDay: real("read_pages_per_day").notNull().default(0.0),
+  hafidhTier: hafidhTierEnum("hafidh_tier"),
+  hafidhTargetDate: date("hafidh_target_date"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 

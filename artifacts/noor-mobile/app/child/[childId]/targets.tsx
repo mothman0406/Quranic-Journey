@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useState, type ComponentProps } from "react";
+import { useCallback, useEffect, useMemo, useState, type ComponentProps } from "react";
 import {
   Pressable,
   StyleSheet,
   Switch,
   Text,
+  TextInput,
   View,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
@@ -32,12 +33,23 @@ import {
 } from "@/src/lib/settings";
 import { RECITERS } from "@/src/lib/reciters";
 import { THEMES, THEME_DISPLAY_NAMES, type ThemeKey } from "@/src/lib/mushaf-theme";
+import {
+  HAFIDH_TIERS,
+  computeProjectedCompletionDate,
+  fetchHafidhProjections,
+  type HafidhTier,
+  type ProjectionResponse,
+  type ProjectionTier,
+} from "@/src/lib/projections";
 
 type IconName = ComponentProps<typeof Ionicons>["name"];
 type TargetKey = "memorizePagePerDay" | "reviewPagesPerDay" | "readPagesPerDay";
 type ChildPatchKey =
   | TargetKey
   | "practiceMinutesPerDay"
+  | "memorizeDaysPerWeek"
+  | "hafidhTier"
+  | "hafidhTargetDate"
   | "hideStories"
   | "hideDuas";
 
@@ -50,8 +62,11 @@ type ChildSettings = {
   totalPoints: number;
   practiceMinutesPerDay: number;
   memorizePagePerDay: number;
+  memorizeDaysPerWeek: number;
   reviewPagesPerDay: number;
   readPagesPerDay: number;
+  hafidhTier: HafidhTier | null;
+  hafidhTargetDate: string | null;
   hideStories: boolean;
   hideDuas: boolean;
 };
@@ -190,6 +205,19 @@ const MUSHAF_VIEW_MODE_OPTIONS: Array<{
   { value: "scroll", label: "Scroll" },
 ];
 const THEME_OPTIONS = Object.keys(THEMES) as ThemeKey[];
+const DAYS_PER_WEEK_OPTIONS = [1, 2, 3, 4, 5, 6, 7];
+const HAFIDH_GOAL_OPTIONS: Array<{
+  tier: HafidhTier | null;
+  label: string;
+  detail: string;
+}> = [
+  { tier: null, label: "No specific tier", detail: "Show all milestones" },
+  ...HAFIDH_TIERS.map((tier) => ({
+    tier: tier.tier,
+    label: tier.label,
+    detail: `${tier.totalPages} pages`,
+  })),
+];
 
 function clamp(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, value));
@@ -209,6 +237,34 @@ function formatPages(value: number) {
 
 function formatDayStreak(days: number) {
   return `${days} day${days === 1 ? "" : "s"}`;
+}
+
+function formatDaysPerWeek(days: number) {
+  return `${days} day${days === 1 ? "" : "s"}/week`;
+}
+
+function formatProjectedDate(value: string | null) {
+  if (!value) return "Not enough pace";
+  const date = new Date(`${value}T12:00:00`);
+  if (Number.isNaN(date.getTime())) return "Not enough pace";
+  return date.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
+function getFutureDate(years: number) {
+  const date = new Date();
+  date.setFullYear(date.getFullYear() + years);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function dateInputIsValid(value: string) {
+  return value.trim() === "" || /^\d{4}-\d{2}-\d{2}$/.test(value.trim());
 }
 
 function isSameValue(a: number, b: number) {
@@ -253,6 +309,56 @@ function targetPresetIsActive(child: ChildSettings, preset: TargetPreset) {
     isSameValue(child.memorizePagePerDay, preset.values.memorizePagePerDay) &&
     isSameValue(child.reviewPagesPerDay, preset.values.reviewPagesPerDay) &&
     isSameValue(child.readPagesPerDay, preset.values.readPagesPerDay)
+  );
+}
+
+function ProjectionPreviewCard({
+  childName,
+  activeTier,
+  tiers,
+  pacePagesPerWeek,
+}: {
+  childName: string;
+  activeTier: HafidhTier | null;
+  tiers: ProjectionTier[];
+  pacePagesPerWeek: number;
+}) {
+  const selectedTier =
+    tiers.find((tier) => tier.tier === activeTier) ??
+    tiers.find((tier) => tier.tier === "full_hafidh") ??
+    tiers[tiers.length - 1];
+  if (!selectedTier) return null;
+
+  return (
+    <View style={styles.previewCard}>
+      <View style={styles.previewHeader}>
+        <View style={styles.titleBlock}>
+          <Text style={styles.previewKicker}>Plan preview</Text>
+          <Text style={styles.previewTitle}>
+            {childName} by {formatProjectedDate(selectedTier.projectedCompletionDate)}
+          </Text>
+        </View>
+        <View style={styles.previewIcon}>
+          <Ionicons name="calendar-outline" size={18} color="#0f766e" />
+        </View>
+      </View>
+      <Text style={styles.previewDetail}>
+        {pacePagesPerWeek.toFixed(2).replace(/\.00$/, "")} pages/week toward {selectedTier.label}.
+      </Text>
+
+      {activeTier ? (
+        <View style={styles.previewMilestones}>
+          {tiers.map((tier) => (
+            <View key={tier.tier} style={styles.previewMilestoneRow}>
+              <Text style={styles.previewMilestoneTitle}>{tier.label}</Text>
+              <Text style={styles.previewMilestoneDate}>
+                {formatProjectedDate(tier.projectedCompletionDate)}
+              </Text>
+            </View>
+          ))}
+        </View>
+      ) : null}
+    </View>
   );
 }
 
@@ -364,6 +470,10 @@ export default function TargetsScreen() {
     useState<DefaultSessionSettings>(DEFAULT_SESSION_SETTINGS);
   const [profileDefaults, setProfileDefaults] =
     useState<ProfileSettings>(DEFAULT_PROFILE_SETTINGS);
+  const [projection, setProjection] = useState<ProjectionResponse | null>(null);
+  const [draftTier, setDraftTier] = useState<HafidhTier | null>(null);
+  const [draftTargetDate, setDraftTargetDate] = useState("");
+  const [draftMemorizeDaysPerWeek, setDraftMemorizeDaysPerWeek] = useState(5);
   const [error, setError] = useState<string | null>(null);
   const [savingKey, setSavingKey] = useState<string | null>(null);
   const [savedKey, setSavedKey] = useState<string | null>(null);
@@ -376,14 +486,21 @@ export default function TargetsScreen() {
 
     setError(null);
     try {
-      const [childData, defaults, profile] = await Promise.all([
+      const [childData, defaults, profile, projectionData] = await Promise.all([
         apiFetch<ChildSettings>(`/api/children/${childId}`),
         loadDefaultSessionSettings(childId),
         loadProfileSettings(childId),
+        fetchHafidhProjections(childId).catch(() => null),
       ]);
       setChild(childData);
       setSessionDefaults(defaults);
       setProfileDefaults(normalizeProfileDefaults(profile));
+      setProjection(projectionData);
+      setDraftTier(childData.hafidhTier ?? null);
+      setDraftTargetDate(childData.hafidhTargetDate ?? "");
+      setDraftMemorizeDaysPerWeek(
+        Math.round(clamp(childData.memorizeDaysPerWeek ?? 5, 1, 7)),
+      );
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load settings.");
     }
@@ -426,6 +543,37 @@ export default function TargetsScreen() {
   function updateTarget(definition: TargetDefinition, nextValue: number) {
     const value = normalizeValue(clamp(nextValue, definition.min, definition.max));
     void updateChildSettings({ [definition.key]: value }, definition.key);
+  }
+
+  async function saveHafidhSettings() {
+    if (!isValidChildId(childId)) return;
+
+    const targetDate = draftTargetDate.trim();
+    if (!dateInputIsValid(targetDate)) {
+      setError("Use YYYY-MM-DD for the target date, or leave it blank.");
+      return;
+    }
+
+    setSavingKey("hafidh");
+    setSavedKey(null);
+    setError(null);
+    try {
+      const updated = await apiFetch<ChildSettings>(`/api/children/${childId}`, {
+        method: "PUT",
+        body: JSON.stringify({
+          memorizeDaysPerWeek: Math.round(clamp(draftMemorizeDaysPerWeek, 1, 7)),
+          hafidhTier: draftTier,
+          hafidhTargetDate: targetDate === "" ? null : targetDate,
+        }),
+      });
+      setChild(updated);
+      setProjection(await fetchHafidhProjections(childId).catch(() => projection));
+      markSaved("hafidh");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to save Hafidh goal.");
+    } finally {
+      setSavingKey(null);
+    }
   }
 
   function applyTargetPreset(preset: TargetPreset) {
@@ -489,6 +637,46 @@ export default function TargetsScreen() {
     });
   }
 
+  const previewPacePagesPerWeek = useMemo(
+    () => Math.max(0, (child?.memorizePagePerDay ?? 1) * draftMemorizeDaysPerWeek),
+    [child?.memorizePagePerDay, draftMemorizeDaysPerWeek],
+  );
+  const previewTiers = useMemo<ProjectionTier[]>(() => {
+    const baseTiers =
+      projection?.tiers.length
+        ? projection.tiers
+        : HAFIDH_TIERS.map((tier) => ({
+            tier: tier.tier,
+            label: tier.label,
+            totalPages: tier.totalPages,
+            pagesRemaining: tier.totalPages,
+            projectedCompletionDate: null,
+            meetsExplicitTarget: null,
+          }));
+
+    return baseTiers.map((tier) => ({
+      ...tier,
+      projectedCompletionDate: computeProjectedCompletionDate(
+        tier.pagesRemaining,
+        previewPacePagesPerWeek,
+      ),
+      meetsExplicitTarget:
+        draftTargetDate.trim() === "" || !dateInputIsValid(draftTargetDate)
+          ? null
+          : computeProjectedCompletionDate(tier.pagesRemaining, previewPacePagesPerWeek) != null &&
+            computeProjectedCompletionDate(tier.pagesRemaining, previewPacePagesPerWeek)! <=
+              draftTargetDate.trim(),
+    }));
+  }, [draftTargetDate, previewPacePagesPerWeek, projection?.tiers]);
+  const hafidhDateValid = dateInputIsValid(draftTargetDate);
+  const hafidhSaving = savingKey === "hafidh";
+  const hafidhSaved = savedKey === "hafidh";
+  const hasHafidhChanges =
+    child != null &&
+    (draftTier !== (child.hafidhTier ?? null) ||
+      draftTargetDate.trim() !== (child.hafidhTargetDate ?? "") ||
+      draftMemorizeDaysPerWeek !== child.memorizeDaysPerWeek);
+
   if (child === null && !error) {
     return (
       <ScreenContainer>
@@ -531,6 +719,93 @@ export default function TargetsScreen() {
         </View>
 
         {error ? <InlineError message={error} /> : null}
+
+        <SectionLabel>Hafidh Goal</SectionLabel>
+        <View style={styles.card}>
+          <View style={styles.cardHeader}>
+            <View style={[styles.iconBadge, { backgroundColor: "#fff7ed" }]}>
+              <Ionicons name="map-outline" size={19} color="#ea580c" />
+            </View>
+            <View style={styles.titleBlock}>
+              <Text style={styles.cardTitle}>Hafidh goal</Text>
+              <Text style={styles.cardDetail}>Pick a milestone and optional target date.</Text>
+            </View>
+            {hafidhSaving || hafidhSaved ? (
+              <Text style={[styles.statusText, hafidhSaved && styles.statusSaved]}>
+                {hafidhSaving ? "Saving" : "Saved"}
+              </Text>
+            ) : null}
+          </View>
+
+          <View style={styles.optionGrid}>
+            {HAFIDH_GOAL_OPTIONS.map((option) => {
+              const active = draftTier === option.tier;
+              return (
+                <Pressable
+                  key={option.tier ?? "none"}
+                  style={[styles.goalOption, active && styles.goalOptionActive]}
+                  onPress={() => setDraftTier(option.tier)}
+                  disabled={hafidhSaving}
+                >
+                  <Text style={[styles.goalOptionTitle, active && styles.goalOptionTitleActive]}>
+                    {option.label}
+                  </Text>
+                  <Text style={styles.goalOptionDetail}>{option.detail}</Text>
+                </Pressable>
+              );
+            })}
+          </View>
+
+          <View style={styles.dateBlock}>
+            <Text style={styles.settingGroupLabel}>Target date</Text>
+            <TextInput
+              value={draftTargetDate}
+              onChangeText={setDraftTargetDate}
+              placeholder="YYYY-MM-DD"
+              autoCapitalize="none"
+              autoCorrect={false}
+              keyboardType="numbers-and-punctuation"
+              style={[styles.dateInput, !hafidhDateValid && styles.dateInputInvalid]}
+            />
+            <View style={styles.optionGrid}>
+              <Pressable
+                style={[styles.optionButton, draftTargetDate.trim() === "" && styles.goalChipActive]}
+                onPress={() => setDraftTargetDate("")}
+              >
+                <Text style={styles.optionText}>No date</Text>
+              </Pressable>
+              {[1, 2, 3].map((years) => (
+                <Pressable
+                  key={years}
+                  style={styles.optionButton}
+                  onPress={() => setDraftTargetDate(getFutureDate(years))}
+                >
+                  <Text style={styles.optionText}>{years} yr</Text>
+                </Pressable>
+              ))}
+            </View>
+          </View>
+
+          <ProjectionPreviewCard
+            childName={child.name || name || "Child"}
+            activeTier={draftTier}
+            tiers={previewTiers}
+            pacePagesPerWeek={previewPacePagesPerWeek}
+          />
+
+          <Pressable
+            style={[
+              styles.saveButton,
+              (!hasHafidhChanges || !hafidhDateValid || hafidhSaving) && styles.saveButtonDisabled,
+            ]}
+            onPress={() => void saveHafidhSettings()}
+            disabled={!hasHafidhChanges || !hafidhDateValid || hafidhSaving}
+          >
+            <Text style={styles.saveButtonText}>
+              {hafidhSaving ? "Saving" : hasHafidhChanges ? "Save" : "Saved"}
+            </Text>
+          </Pressable>
+        </View>
 
         <SectionLabel>Profile</SectionLabel>
         <CardGroup>
@@ -649,7 +924,75 @@ export default function TargetsScreen() {
           </View>
         </View>
 
-        {TARGETS.map((definition) => (
+        <SectionLabel>Memorization pace</SectionLabel>
+        <TargetSection
+          definition={TARGETS[0]}
+          value={child[TARGETS[0].key]}
+          saving={savingKey === TARGETS[0].key}
+          saved={savedKey === TARGETS[0].key}
+          onChange={updateTarget}
+        />
+
+        <View style={styles.card}>
+          <View style={styles.cardHeader}>
+            <View style={[styles.iconBadge, { backgroundColor: "#ecfeff" }]}>
+              <Ionicons name="calendar-number-outline" size={19} color="#0891b2" />
+            </View>
+            <View style={styles.titleBlock}>
+              <Text style={styles.cardTitle}>Memorization days</Text>
+              <Text style={styles.cardDetail}>Days each week planned for new memorization.</Text>
+            </View>
+            <Text style={[styles.statusText, hasHafidhChanges && styles.statusSaving]}>
+              {formatDaysPerWeek(draftMemorizeDaysPerWeek)}
+            </Text>
+          </View>
+          <View style={styles.optionGrid}>
+            {DAYS_PER_WEEK_OPTIONS.map((days) => {
+              const active = draftMemorizeDaysPerWeek === days;
+              return (
+                <Pressable
+                  key={days}
+                  style={[styles.optionButton, active && styles.daysOptionActive]}
+                  onPress={() => setDraftMemorizeDaysPerWeek(days)}
+                  disabled={hafidhSaving}
+                >
+                  <Text style={[styles.optionText, active && styles.daysOptionTextActive]}>
+                    {days}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+          <View style={styles.stepperRow}>
+            <Pressable
+              style={[
+                styles.stepButton,
+                (draftMemorizeDaysPerWeek <= 1 || hafidhSaving) && styles.stepButtonDisabled,
+              ]}
+              onPress={() => setDraftMemorizeDaysPerWeek((current) => Math.max(1, current - 1))}
+              disabled={draftMemorizeDaysPerWeek <= 1 || hafidhSaving}
+            >
+              <Text style={styles.stepButtonText}>-</Text>
+            </Pressable>
+            <View style={styles.stepValueWrap}>
+              <Text style={styles.stepValue}>{formatDaysPerWeek(draftMemorizeDaysPerWeek)}</Text>
+              <Text style={styles.stepHint}>Saved with Hafidh goal</Text>
+            </View>
+            <Pressable
+              style={[
+                styles.stepButton,
+                (draftMemorizeDaysPerWeek >= 7 || hafidhSaving) && styles.stepButtonDisabled,
+              ]}
+              onPress={() => setDraftMemorizeDaysPerWeek((current) => Math.min(7, current + 1))}
+              disabled={draftMemorizeDaysPerWeek >= 7 || hafidhSaving}
+            >
+              <Text style={styles.stepButtonText}>+</Text>
+            </Pressable>
+          </View>
+        </View>
+
+        <SectionLabel>Daily pages</SectionLabel>
+        {TARGETS.slice(1).map((definition) => (
           <TargetSection
             key={definition.key}
             definition={definition}
@@ -1154,6 +1497,140 @@ const styles = StyleSheet.create({
     marginTop: 2,
     lineHeight: 18,
   },
+  goalOption: {
+    width: "48%",
+    minHeight: 76,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    borderRadius: 12,
+    backgroundColor: "#f8fafc",
+    padding: 12,
+    justifyContent: "center",
+    gap: 4,
+  },
+  goalOptionActive: {
+    borderColor: "#fed7aa",
+    backgroundColor: "#fff7ed",
+  },
+  goalOptionTitle: {
+    color: "#111827",
+    fontSize: 13,
+    lineHeight: 17,
+    fontWeight: "900",
+  },
+  goalOptionTitleActive: {
+    color: "#ea580c",
+  },
+  goalOptionDetail: {
+    color: "#64748b",
+    fontSize: 11,
+    lineHeight: 15,
+    fontWeight: "700",
+  },
+  dateBlock: {
+    gap: 9,
+  },
+  dateInput: {
+    minHeight: 44,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    borderRadius: 10,
+    backgroundColor: "#f8fafc",
+    paddingHorizontal: 12,
+    color: "#111827",
+    fontSize: 15,
+    fontWeight: "800",
+  },
+  dateInputInvalid: {
+    borderColor: "#fca5a5",
+    backgroundColor: "#fff7f7",
+  },
+  goalChipActive: {
+    backgroundColor: "#fff7ed",
+    borderColor: "#fed7aa",
+  },
+  previewCard: {
+    borderWidth: 1,
+    borderColor: "#ccfbf1",
+    borderRadius: 12,
+    backgroundColor: "#f0fdfa",
+    padding: 13,
+    gap: 10,
+  },
+  previewHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  previewKicker: {
+    color: "#0f766e",
+    fontSize: 11,
+    fontWeight: "900",
+    textTransform: "uppercase",
+  },
+  previewTitle: {
+    color: "#111827",
+    fontSize: 17,
+    lineHeight: 22,
+    fontWeight: "900",
+  },
+  previewIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 11,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#ffffff",
+  },
+  previewDetail: {
+    color: "#0f766e",
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: "800",
+  },
+  previewMilestones: {
+    borderTopWidth: 1,
+    borderTopColor: "#99f6e4",
+    paddingTop: 4,
+  },
+  previewMilestoneRow: {
+    minHeight: 32,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+  },
+  previewMilestoneTitle: {
+    flex: 1,
+    minWidth: 0,
+    color: "#115e59",
+    fontSize: 12,
+    fontWeight: "900",
+  },
+  previewMilestoneDate: {
+    flexShrink: 0,
+    maxWidth: 126,
+    color: "#111827",
+    fontSize: 12,
+    fontWeight: "900",
+    textAlign: "right",
+  },
+  saveButton: {
+    minHeight: 46,
+    borderRadius: 10,
+    backgroundColor: "#111827",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 14,
+  },
+  saveButtonDisabled: {
+    backgroundColor: "#cbd5e1",
+  },
+  saveButtonText: {
+    color: "#ffffff",
+    fontSize: 15,
+    fontWeight: "900",
+  },
   statusText: {
     fontSize: 13,
     color: "#64748b",
@@ -1196,6 +1673,13 @@ const styles = StyleSheet.create({
   },
   practiceOptionTextActive: {
     color: "#b45309",
+  },
+  daysOptionActive: {
+    backgroundColor: "#ecfeff",
+    borderColor: "#a5f3fc",
+  },
+  daysOptionTextActive: {
+    color: "#0891b2",
   },
   stepperRow: {
     flexDirection: "row",

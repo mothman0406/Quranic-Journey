@@ -34,6 +34,7 @@ type MoreRoute =
   | "/child/[childId]/stories"
   | "/child/[childId]/duas"
   | "/child/[childId]/progress"
+  | "/child/[childId]/plan"
   | "/child/[childId]/profile"
   | "/child/[childId]/targets";
 
@@ -76,6 +77,13 @@ const OPEN_ITEMS: MoreItem[] = [
     route: "/child/[childId]/progress",
   },
   {
+    title: "Learning Plan",
+    detail: "Milestones and goals",
+    icon: "map-outline",
+    tone: "#ea580c",
+    route: "/child/[childId]/plan",
+  },
+  {
     title: "Stories",
     detail: "Islamic stories",
     icon: "library-outline",
@@ -101,15 +109,7 @@ const OPEN_ITEMS: MoreItem[] = [
   },
 ];
 
-const PLANNED_ITEMS: MoreItem[] = [
-  {
-    title: "Learning Plan",
-    detail: "Milestones and goals",
-    icon: "map-outline",
-    tone: "#ea580c",
-    badge: "2I",
-  },
-];
+const PLANNED_ITEMS: MoreItem[] = [];
 
 function isValidChildId(childId: string | undefined) {
   return typeof childId === "string" && /^\d+$/.test(childId);
@@ -208,21 +208,25 @@ export default function MoreScreen() {
               })}
           </CardGroup>
 
-          <SectionLabel>Next</SectionLabel>
-          <CardGroup>
-            {PLANNED_ITEMS.map((item) => (
-              <ListRow
-                key={item.title}
-                title={item.title}
-                detail={item.detail}
-                iconName={item.icon}
-                iconColor={item.tone}
-                disabled
-                trailing={item.badge ? <BadgePill label={item.badge} /> : undefined}
-                showChevron={!item.badge}
-              />
-            ))}
-          </CardGroup>
+          {PLANNED_ITEMS.length > 0 ? (
+            <>
+              <SectionLabel>Next</SectionLabel>
+              <CardGroup>
+                {PLANNED_ITEMS.map((item) => (
+                  <ListRow
+                    key={item.title}
+                    title={item.title}
+                    detail={item.detail}
+                    iconName={item.icon}
+                    iconColor={item.tone}
+                    disabled
+                    trailing={item.badge ? <BadgePill label={item.badge} /> : undefined}
+                    showChevron={!item.badge}
+                  />
+                ))}
+              </CardGroup>
+            </>
+          ) : null}
         </ScreenScrollView>
       )}
 

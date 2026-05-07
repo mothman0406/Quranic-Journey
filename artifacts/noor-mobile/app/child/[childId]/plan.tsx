@@ -15,6 +15,11 @@ import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { ChildBottomNav } from "@/src/components/child-bottom-nav";
 import { ApiError, apiFetch } from "@/src/lib/api";
+import {
+  fetchHafidhProjections,
+  type ProjectionResponse,
+  type ProjectionTier,
+} from "@/src/lib/projections";
 
 type IconName = ComponentProps<typeof Ionicons>["name"];
 
@@ -80,7 +85,12 @@ type PlanResponse = {
 type PlanState =
   | { status: "loading" }
   | { status: "error"; message: string }
-  | { status: "ready"; plan: PlanResponse; dashboard: DashboardResponse };
+  | {
+      status: "ready";
+      plan: PlanResponse;
+      dashboard: DashboardResponse;
+      projection: ProjectionResponse | null;
+    };
 
 const AGE_GROUP_LABELS: Record<string, string> = {
   toddler: "Seeds of Faith (Ages 3–6)",
@@ -175,6 +185,29 @@ function formatTargetDate(value: string | undefined) {
     day: "numeric",
     year: "numeric",
   });
+}
+
+function formatProjectedDate(value: string | null) {
+  return formatTargetDate(value ?? undefined) ?? "Not enough pace";
+}
+
+function getWeeksBetween(startValue: string, endValue: string) {
+  const start = parseLocalDate(startValue);
+  const end = parseLocalDate(endValue);
+  if (!start || !end) return null;
+  return Math.ceil((end.getTime() - start.getTime()) / (86_400_000 * 7));
+}
+
+function getRequiredPagesPerDay(
+  pagesRemaining: number,
+  targetDate: string | null,
+  memorizationDays: number,
+) {
+  if (!targetDate || pagesRemaining <= 0) return null;
+  const weeks = getWeeksBetween(getLocalDateValue(), targetDate);
+  if (weeks == null || weeks <= 0) return null;
+  const days = Math.max(1, memorizationDays);
+  return Math.ceil((pagesRemaining / (weeks * days)) * 100) / 100;
 }
 
 function formatPercent(value: number, target: number) {
@@ -398,6 +431,88 @@ function TajweedRuleRow({
   );
 }
 
+function HafidhProjectionCard({
+  projection,
+  memorizationDays,
+}: {
+  projection: ProjectionResponse;
+  memorizationDays: number;
+}) {
+  const activeTier =
+    projection.tiers.find((tier) => tier.tier === projection.activeTier) ??
+    projection.tiers.find((tier) => tier.tier === "full_hafidh") ??
+    projection.tiers[projection.tiers.length - 1];
+  if (!activeTier) return null;
+
+  const targetLabel = formatTargetDate(projection.targetDate ?? undefined);
+  const requiredPagesPerDay = getRequiredPagesPerDay(
+    activeTier.pagesRemaining,
+    projection.targetDate,
+    memorizationDays,
+  );
+  const targetStatusText =
+    projection.targetDate == null
+      ? null
+      : activeTier.meetsExplicitTarget
+      ? `Will meet target date ${targetLabel ?? ""}`.trim()
+      : requiredPagesPerDay != null
+      ? `Increase to ${requiredPagesPerDay} page${requiredPagesPerDay === 1 ? "" : "s"}/day to stay on track`
+      : "Current pace is behind the target date";
+
+  return (
+    <Card>
+      <CardTitle iconName="map-outline" iconColor="#ea580c" title="Hafidh Projection" />
+      <View style={styles.projectionHero}>
+        <Text style={styles.projectionKicker}>{activeTier.label}</Text>
+        <Text style={styles.projectionDate}>{formatProjectedDate(activeTier.projectedCompletionDate)}</Text>
+        <Text style={styles.projectionMeta}>
+          {projection.pacePagesPerWeek.toFixed(2).replace(/\.00$/, "")} pages/week ·{" "}
+          {activeTier.pagesRemaining} page{activeTier.pagesRemaining === 1 ? "" : "s"} left
+        </Text>
+      </View>
+
+      {targetStatusText ? (
+        <View
+          style={[
+            styles.targetStatus,
+            activeTier.meetsExplicitTarget ? styles.targetStatusGood : styles.targetStatusWarning,
+          ]}
+        >
+          <Ionicons
+            name={activeTier.meetsExplicitTarget ? "checkmark-circle-outline" : "alert-circle-outline"}
+            size={16}
+            color={activeTier.meetsExplicitTarget ? "#047857" : "#b45309"}
+          />
+          <Text
+            style={[
+              styles.targetStatusText,
+              activeTier.meetsExplicitTarget ? styles.targetStatusTextGood : styles.targetStatusTextWarning,
+            ]}
+          >
+            {targetStatusText}
+          </Text>
+        </View>
+      ) : null}
+
+      <View style={styles.projectionTierList}>
+        {projection.tiers.map((tier: ProjectionTier) => (
+          <View key={tier.tier} style={styles.projectionTierRow}>
+            <View style={styles.projectionTierText}>
+              <Text style={styles.projectionTierTitle}>{tier.label}</Text>
+              <Text style={styles.projectionTierDetail}>
+                {tier.pagesRemaining} of {tier.totalPages} pages left
+              </Text>
+            </View>
+            <Text style={styles.projectionTierDate}>
+              {formatProjectedDate(tier.projectedCompletionDate)}
+            </Text>
+          </View>
+        ))}
+      </View>
+    </Card>
+  );
+}
+
 export default function PlanScreen() {
   const { childId, name } = useLocalSearchParams<{ childId: string; name: string }>();
   const [state, setState] = useState<PlanState>({ status: "loading" });
@@ -422,11 +537,12 @@ export default function PlanScreen() {
       }
 
       try {
-        const [plan, dashboard] = await Promise.all([
+        const [plan, dashboard, projection] = await Promise.all([
           apiFetch<PlanResponse>(`/api/children/${childId}/plan`),
           apiFetch<DashboardResponse>(`/api/children/${childId}/dashboard?preview=true`),
+          fetchHafidhProjections(childId).catch(() => null),
         ]);
-        setState({ status: "ready", plan, dashboard });
+        setState({ status: "ready", plan, dashboard, projection });
       } catch (error) {
         setState({ status: "error", message: describeError(error) });
       } finally {
@@ -444,6 +560,7 @@ export default function PlanScreen() {
 
   const child = state.status === "ready" ? state.dashboard.child : null;
   const plan = state.status === "ready" ? state.plan : null;
+  const projection = state.status === "ready" ? state.projection : null;
   const practiceMinutes = plan?.practiceMinutesPerDay ?? 20;
 
   async function resetGoals() {
@@ -548,6 +665,13 @@ export default function PlanScreen() {
                 Goals are auto-calculated based on your {practiceMinutes} min/day practice time
               </Text>
             </Card>
+          ) : null}
+
+          {projection ? (
+            <HafidhProjectionCard
+              projection={projection}
+              memorizationDays={plan.weeklyGoal.memorizationDays}
+            />
           ) : null}
 
           <Card>
@@ -892,6 +1016,99 @@ const styles = StyleSheet.create({
     lineHeight: 16,
     fontWeight: "700",
     textAlign: "center",
+  },
+  projectionHero: {
+    borderWidth: 1,
+    borderColor: "#fed7aa",
+    backgroundColor: "#fff7ed",
+    borderRadius: 12,
+    padding: 14,
+    gap: 4,
+  },
+  projectionKicker: {
+    color: "#c2410c",
+    fontSize: 12,
+    fontWeight: "900",
+    textTransform: "uppercase",
+  },
+  projectionDate: {
+    color: "#111827",
+    fontSize: 24,
+    lineHeight: 30,
+    fontWeight: "900",
+  },
+  projectionMeta: {
+    color: "#9a3412",
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: "800",
+  },
+  targetStatus: {
+    borderWidth: 1,
+    borderRadius: 10,
+    padding: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  targetStatusGood: {
+    borderColor: "#a7f3d0",
+    backgroundColor: "#ecfdf5",
+  },
+  targetStatusWarning: {
+    borderColor: "#fde68a",
+    backgroundColor: "#fffbeb",
+  },
+  targetStatusText: {
+    flex: 1,
+    minWidth: 0,
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: "900",
+  },
+  targetStatusTextGood: {
+    color: "#047857",
+  },
+  targetStatusTextWarning: {
+    color: "#b45309",
+  },
+  projectionTierList: {
+    borderTopWidth: 1,
+    borderTopColor: "#e5e7eb",
+  },
+  projectionTierRow: {
+    minHeight: 54,
+    paddingVertical: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "#f1f5f9",
+  },
+  projectionTierText: {
+    flex: 1,
+    minWidth: 0,
+    gap: 2,
+  },
+  projectionTierTitle: {
+    color: "#111827",
+    fontSize: 13,
+    fontWeight: "900",
+  },
+  projectionTierDetail: {
+    color: "#64748b",
+    fontSize: 11,
+    fontWeight: "700",
+  },
+  projectionTierDate: {
+    flexShrink: 0,
+    maxWidth: 124,
+    color: "#2563eb",
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: "900",
+    textAlign: "right",
   },
   descriptionText: {
     color: "#475569",

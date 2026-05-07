@@ -28,6 +28,12 @@ import {
   hasPendingIntraSurahWork,
   hasStartedIntraSurahWorkflow,
 } from "../lib/memorization-workflow.js";
+import {
+  buildMemorizedPagesSet,
+  computeProjections,
+  isHafidhTier,
+  type HafidhTier,
+} from "../lib/projections.js";
 
 const router: IRouter = Router();
 
@@ -291,6 +297,73 @@ function normalizeDailyProgressStatus(value: string): DailyProgressStatus {
   return "not_started";
 }
 
+function normalizeMemorizeDaysPerWeek(value: unknown): number | null {
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed)) return null;
+  return Math.max(1, Math.min(7, parsed));
+}
+
+function getEffectiveMemorizeDaysPerWeek(
+  child: Pick<typeof childrenTable.$inferSelect, "memorizeDaysPerWeek">,
+  fallback: number,
+) {
+  return normalizeMemorizeDaysPerWeek(child.memorizeDaysPerWeek) ?? fallback;
+}
+
+function normalizeDateInput(value: unknown): string | null | undefined {
+  if (value === null || value === "") return null;
+  if (typeof value !== "string") return undefined;
+  return /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : undefined;
+}
+
+function getDailyMemorizationPages(row: typeof dailyProgressTable.$inferSelect): number[] {
+  if (
+    row.memStatus !== "completed" ||
+    row.memTargetSurah == null ||
+    row.memTargetAyahStart == null ||
+    row.memTargetAyahEnd == null
+  ) {
+    return [];
+  }
+
+  const endSurah = row.memTargetEndSurah ?? row.memTargetSurah;
+  const startPage = getPageForVerse(row.memTargetSurah, row.memTargetAyahStart);
+  const endPage = getPageForVerse(endSurah, row.memTargetAyahEnd);
+  const firstPage = Math.min(startPage, endPage);
+  const lastPage = Math.max(startPage, endPage);
+
+  return Array.from(
+    { length: lastPage - firstPage + 1 },
+    (_, index) => firstPage + index,
+  );
+}
+
+function getRecentPacePagesPerWeek(
+  rows: (typeof dailyProgressTable.$inferSelect)[],
+  endDate: string,
+): number | null {
+  const completedRows = rows.filter((row) => row.memStatus === "completed");
+  if (completedRows.length === 0) return null;
+
+  const completedPageKeys = new Set<string>();
+  for (const row of completedRows) {
+    for (const page of getDailyMemorizationPages(row)) {
+      completedPageKeys.add(`${row.date}:${page}`);
+    }
+  }
+  if (completedPageKeys.size === 0) return null;
+
+  const earliestDate = completedRows
+    .map((row) => row.date)
+    .sort()[0];
+  const end = new Date(`${endDate}T12:00:00`);
+  const start = new Date(`${earliestDate}T12:00:00`);
+  const spanDays = Math.max(1, Math.ceil((end.getTime() - start.getTime()) / 86_400_000) + 1);
+  const weeks = Math.max(1, spanDays / 7);
+
+  return Math.round((completedPageKeys.size / weeks) * 100) / 100;
+}
+
 function strongerDailyProgressStatus(
   current: DailyProgressStatus,
   next: string,
@@ -517,11 +590,17 @@ router.post("/children", async (req, res) => {
     initialSurahSetups,
     practiceMinutesPerDay,
     memorizePagePerDay,
+    memorizeDaysPerWeek,
     reviewPagesPerDay,
     readPagesPerDay,
+    hafidhTier,
+    hafidhTargetDate,
   } = req.body;
   const ageGroup = getAgeGroup(age);
   const practiceMinutes = practiceMinutesPerDay || 20;
+  const normalizedMemorizeDaysPerWeek =
+    normalizeMemorizeDaysPerWeek(memorizeDaysPerWeek) ?? 5;
+  const normalizedHafidhTargetDate = normalizeDateInput(hafidhTargetDate);
 
   const [child] = await db.insert(childrenTable).values({
     parentId: req.user.id,
@@ -530,8 +609,11 @@ router.post("/children", async (req, res) => {
     lastActiveDate: new Date().toISOString().split("T")[0],
     practiceMinutesPerDay: practiceMinutes,
     memorizePagePerDay: memorizePagePerDay ?? 1.0,
+    memorizeDaysPerWeek: normalizedMemorizeDaysPerWeek,
     reviewPagesPerDay: reviewPagesPerDay ?? 2.0,
     readPagesPerDay: readPagesPerDay ?? 0.0,
+    hafidhTier: isHafidhTier(hafidhTier) ? hafidhTier : null,
+    hafidhTargetDate: normalizedHafidhTargetDate === undefined ? null : normalizedHafidhTargetDate,
     onboardingCompleted: 1
   }).returning();
 
@@ -622,8 +704,19 @@ router.put("/children/:childId", async (req, res) => {
   if (req.body.goals !== undefined) updates.goals = JSON.stringify(req.body.goals);
   if (req.body.practiceMinutesPerDay) updates.practiceMinutesPerDay = req.body.practiceMinutesPerDay;
   if (req.body.memorizePagePerDay != null) updates.memorizePagePerDay = req.body.memorizePagePerDay;
+  if (req.body.memorizeDaysPerWeek != null) {
+    const memorizeDaysPerWeek = normalizeMemorizeDaysPerWeek(req.body.memorizeDaysPerWeek);
+    if (memorizeDaysPerWeek != null) updates.memorizeDaysPerWeek = memorizeDaysPerWeek;
+  }
   if (req.body.reviewPagesPerDay != null) updates.reviewPagesPerDay = req.body.reviewPagesPerDay;
   if (req.body.readPagesPerDay != null) updates.readPagesPerDay = req.body.readPagesPerDay;
+  if (req.body.hafidhTier !== undefined) {
+    updates.hafidhTier = isHafidhTier(req.body.hafidhTier) ? req.body.hafidhTier : null;
+  }
+  if (req.body.hafidhTargetDate !== undefined) {
+    const normalizedDate = normalizeDateInput(req.body.hafidhTargetDate);
+    if (normalizedDate !== undefined) updates.hafidhTargetDate = normalizedDate;
+  }
   if (req.body.hideStories !== undefined) updates.hideStories = req.body.hideStories ? 1 : 0;
   if (req.body.hideDuas !== undefined) updates.hideDuas = req.body.hideDuas ? 1 : 0;
   const [child] = await db.update(childrenTable).set(updates).where(eq(childrenTable.id, childId)).returning();
@@ -1266,6 +1359,39 @@ router.get("/children/:childId/memorization/resolve-range", async (req, res) => 
   });
 });
 
+router.get("/children/:childId/projections", async (req, res) => {
+  const childId = parseInt(req.params.childId);
+  const [child] = await db.select().from(childrenTable).where(eq(childrenTable.id, childId));
+  if (!child) { res.status(404).json({ error: "Child not found" }); return; }
+  if (child.parentId !== req.user.id) { res.status(403).json({ error: "Forbidden" }); return; }
+
+  const today = getRequestLocalDate(req);
+  const startDate = addDaysToLocalDate(today, -27);
+  const [memProgress, recentDailyRows] = await Promise.all([
+    db.select().from(memorizationProgressTable)
+      .where(eq(memorizationProgressTable.childId, childId)),
+    db.select().from(dailyProgressTable)
+      .where(and(
+        eq(dailyProgressTable.childId, childId),
+        gte(dailyProgressTable.date, startDate),
+        lte(dailyProgressTable.date, today),
+      )),
+  ]);
+  const memorizeDaysPerWeek = getEffectiveMemorizeDaysPerWeek(child, 5);
+  const pacePagesPerWeek = Math.max(0, child.memorizePagePerDay ?? 0) * memorizeDaysPerWeek;
+  const activeTier: HafidhTier | null = isHafidhTier(child.hafidhTier)
+    ? child.hafidhTier
+    : null;
+
+  res.json(computeProjections({
+    memorizedPagesSet: buildMemorizedPagesSet(memProgress),
+    pacePagesPerWeek,
+    recentPacePagesPerWeek: getRecentPacePagesPerWeek(recentDailyRows, today),
+    activeTier,
+    targetDate: child.hafidhTargetDate ?? null,
+  }));
+});
+
 router.get("/children/:childId/plan", async (req, res) => {
   const childId = parseInt(req.params.childId);
   const [child] = await db.select().from(childrenTable).where(eq(childrenTable.id, childId));
@@ -1358,9 +1484,25 @@ router.get("/children/:childId/plan", async (req, res) => {
       ]
     }
   };
+  const selectedPlan = (plans[child.ageGroup] || plans.child) as {
+    weeklyGoal: {
+      memorizationDays: number;
+      reviewDays: number;
+      storyDays: number;
+      duasDays: number;
+    };
+  };
+  const weeklyGoal = {
+    ...selectedPlan.weeklyGoal,
+    memorizationDays: getEffectiveMemorizeDaysPerWeek(
+      child,
+      selectedPlan.weeklyGoal.memorizationDays,
+    ),
+  };
 
   res.json({
-    ...(plans[child.ageGroup] || plans.child),
+    ...selectedPlan,
+    weeklyGoal,
     goals: storedGoals || autoGoals,
     autoGoals,
     practiceMinutesPerDay: child.practiceMinutesPerDay
