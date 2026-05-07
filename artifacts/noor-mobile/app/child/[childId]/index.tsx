@@ -8,9 +8,11 @@ import {
   StyleSheet,
   Text,
   View,
+  type StyleProp,
+  type TextStyle,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
+import { useFocusEffect, useLocalSearchParams, useRouter, type Href } from "expo-router";
 import { ChildBottomNav } from "@/src/components/child-bottom-nav";
 import {
   NotesBookmarksPanel,
@@ -72,6 +74,12 @@ type DashboardDua = {
   arabic: string;
   transliteration: string;
   translation: string;
+  title?: string;
+  categorySlug?: string;
+  categoryName?: string | null;
+  reference?: string | null;
+  repetitions?: number | null;
+  benefits?: string | null;
 };
 
 type DashboardReviewSession = {
@@ -580,17 +588,21 @@ function AchievementPreview({ achievement }: { achievement: Achievement }) {
 
 function CompactSuggestionCard({
   title,
+  caption,
   detail,
   iconName,
   color,
   onPress,
+  detailTextStyle,
   children,
 }: {
   title: string;
+  caption?: string | null;
   detail: string;
   iconName: IconName;
   color: string;
   onPress: () => void;
+  detailTextStyle?: StyleProp<TextStyle>;
   children?: ReactNode;
 }) {
   return (
@@ -605,7 +617,15 @@ function CompactSuggestionCard({
         <Text style={styles.compactSuggestionTitle} numberOfLines={1}>
           {title}
         </Text>
-        <Text style={styles.compactSuggestionDetail} numberOfLines={1}>
+        {caption ? (
+          <Text style={styles.compactSuggestionCaption} numberOfLines={1}>
+            {caption}
+          </Text>
+        ) : null}
+        <Text
+          style={[styles.compactSuggestionDetail, detailTextStyle]}
+          numberOfLines={1}
+        >
           {detail}
         </Text>
         {children}
@@ -1201,6 +1221,14 @@ export default function ChildDashboard() {
     });
   }
 
+  function openDuaDetail(duaId: number) {
+    if (!isValidChildId(childId)) return;
+    router.push({
+      pathname: "/child/[childId]/duas/dua/[duaId]",
+      params: { childId, duaId: String(duaId), name: name ?? "" },
+    } as unknown as Href);
+  }
+
   function openChildRoute(
     pathname:
       | "/child/[childId]/memorization"
@@ -1490,12 +1518,18 @@ export default function ChildDashboard() {
             )}
             {dua && (
               <CompactSuggestionCard
-                title="Du'a"
-                detail={dua.translation}
+                title={dua.title ?? "Du'a"}
+                caption={dua.categoryName}
+                detail={dua.arabic}
                 iconName="heart-outline"
                 color="#be123c"
-                onPress={() => openChildRoute("/child/[childId]/more", child.name)}
-              />
+                detailTextStyle={styles.compactSuggestionArabic}
+                onPress={() => openDuaDetail(dua.id)}
+              >
+                <Text style={styles.compactSuggestionTranslation} numberOfLines={1}>
+                  {dua.translation}
+                </Text>
+              </CompactSuggestionCard>
             )}
           </View>
         )}
@@ -2209,11 +2243,34 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "900",
   },
+  compactSuggestionCaption: {
+    color: "#64748b",
+    fontSize: 10,
+    lineHeight: 13,
+    fontWeight: "900",
+    textTransform: "uppercase",
+    marginTop: 1,
+  },
   compactSuggestionDetail: {
     color: "#475569",
     fontSize: 12,
     lineHeight: 16,
     marginTop: 2,
+  },
+  compactSuggestionArabic: {
+    color: "#111827",
+    fontFamily: "AmiriQuran",
+    fontSize: 17,
+    lineHeight: 25,
+    textAlign: "right",
+    writingDirection: "rtl",
+  },
+  compactSuggestionTranslation: {
+    color: "#475569",
+    fontSize: 11,
+    lineHeight: 15,
+    marginTop: 1,
+    fontWeight: "600",
   },
   combinedCard: {
     backgroundColor: "#ffffff",

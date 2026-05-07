@@ -8,6 +8,7 @@ import {
   View,
   type ScrollViewProps,
   type StyleProp,
+  type TextStyle,
   type ViewStyle,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
@@ -36,7 +37,7 @@ export function ScreenHeader({
       <Pressable onPress={onBack} style={[styles.headerSide, { width: sideWidth }]}>
         <Text style={styles.backText}>{backLabel}</Text>
       </Pressable>
-      <Text style={styles.headerTitle}>{title}</Text>
+      <Text style={styles.headerTitle} numberOfLines={1}>{title}</Text>
       <View style={[styles.headerRight, { width: sideWidth }]}>{right}</View>
     </View>
   );
@@ -175,6 +176,8 @@ export function ListRow({
   disabled,
   trailing,
   showChevron = true,
+  detailNumberOfLines,
+  detailTextStyle,
 }: {
   title: string;
   detail?: string;
@@ -184,6 +187,8 @@ export function ListRow({
   disabled?: boolean;
   trailing?: ReactNode;
   showChevron?: boolean;
+  detailNumberOfLines?: number;
+  detailTextStyle?: StyleProp<TextStyle>;
 }) {
   return (
     <Pressable
@@ -196,7 +201,14 @@ export function ListRow({
       </View>
       <View style={styles.rowText}>
         <Text style={styles.rowTitle}>{title}</Text>
-        {detail ? <Text style={styles.rowDetail}>{detail}</Text> : null}
+        {detail ? (
+          <Text
+            numberOfLines={detailNumberOfLines}
+            style={[styles.rowDetail, detailTextStyle]}
+          >
+            {detail}
+          </Text>
+        ) : null}
       </View>
       {trailing ?? (showChevron ? <Ionicons name="chevron-forward" size={18} color="#9ca3af" /> : null)}
     </Pressable>

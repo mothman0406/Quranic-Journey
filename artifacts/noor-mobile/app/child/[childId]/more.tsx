@@ -30,6 +30,7 @@ type MoreRoute =
   | "/"
   | "/child/[childId]"
   | "/child/[childId]/mushaf"
+  | "/child/[childId]/duas"
   | "/child/[childId]/progress"
   | "/child/[childId]/profile"
   | "/child/[childId]/targets";
@@ -73,6 +74,15 @@ const OPEN_ITEMS: MoreItem[] = [
     route: "/child/[childId]/progress",
   },
   {
+    title: "Du'aas",
+    detail: "Practice and learned status",
+    icon: "heart-outline",
+    tone: "#0891b2",
+    route: "/child/[childId]/duas",
+    // Total JSON-backed adhkar catalog count as of kk.ac. Update if the catalog grows.
+    badge: "97",
+  },
+  {
     title: "Profiles",
     detail: "Parent dashboard",
     icon: "people-outline",
@@ -94,13 +104,6 @@ const PLANNED_ITEMS: MoreItem[] = [
     detail: "Islamic stories",
     icon: "library-outline",
     tone: "#be123c",
-    badge: "2I",
-  },
-  {
-    title: "Du'aas",
-    detail: "Practice and learned status",
-    icon: "heart-outline",
-    tone: "#0891b2",
     badge: "2I",
   },
 ];
@@ -188,6 +191,12 @@ export default function MoreScreen() {
                   detail={item.detail}
                   iconName={item.icon}
                   iconColor={item.tone}
+                  trailing={item.badge ? (
+                    <View style={styles.openBadgeTrailing}>
+                      <BadgePill label={item.badge} />
+                      <Ionicons name="chevron-forward" size={18} color="#9ca3af" />
+                    </View>
+                  ) : undefined}
                   onPress={route ? () => openRoute(route) : undefined}
                 />
               );
@@ -259,6 +268,11 @@ const styles = StyleSheet.create({
   summaryStats: {
     alignItems: "flex-end",
     gap: 2,
+  },
+  openBadgeTrailing: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
   },
   summaryStat: {
     fontSize: 13,
