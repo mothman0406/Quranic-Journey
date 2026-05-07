@@ -53,6 +53,50 @@
       }
     },
     {
+      "id": 42,
+      "slug": "harun-the-helper",
+      "title": "Harun the Helper",
+      "previousStoryId": null,
+      "storyType": "companion_profile",
+      "ageGroup": "child",
+      "summary": "Harun was the brother Musa asked Allah for as a helper, a prophet who supported the mission and tried to restrain his people.",
+      "readingTimeMinutes": 5,
+      "featuredCharacter": "Prophet Harun",
+      "morals": [
+        "A righteous helper can strengthen a difficult mission",
+        "Brothers and sisters can support one another in obeying Allah",
+        "Gentle restraint can be wise when a community is close to splitting",
+        "Leadership means advising people even when they resist"
+      ],
+      "content": "When Allah sent Musa to Pharaoh, Musa asked his Lord for help. He asked Allah to expand his chest, ease his task, loosen the knot from his tongue, and appoint a helper from his family: Harun, his brother. Musa wanted Harun to strengthen him and share in the mission of remembering and glorifying Allah.\n\nAllah accepted Musa's request. Harun became part of the mission to Pharaoh and the Children of Israel. His role was not to seek attention for himself. He was a helper in obedience to Allah.\n\nHarun's patience appeared clearly during the golden calf trial. While Musa was away, some of the people began worshiping the calf. Harun warned them that they were being tested and told them to follow him. They refused and insisted on staying devoted to the calf until Musa returned.\n\nWhen Musa came back angry and grieved, Harun explained that the people had weakened him and nearly killed him. He had feared causing a split among the Children of Israel before Musa returned. Harun's answer shows the burden of leadership: he hated the sin, warned against it, and still tried not to tear the community apart.\n\nHarun's life in these verses teaches that helpers matter. Musa asked for him, Allah honored him, and Harun stood in a difficult place with patience and restraint.",
+      "relatedAyahs": [
+        {
+          "surahNumber": 20,
+          "ayahStart": 25,
+          "ayahEnd": 36,
+          "label": "Ta-Ha 20:25-36"
+        },
+        {
+          "surahNumber": 20,
+          "ayahStart": 90,
+          "ayahEnd": 94,
+          "label": "Ta-Ha 20:90-94"
+        }
+      ],
+      "discussionQuestions": [
+        "Why did Musa ask Allah for Harun as a helper?",
+        "What makes a helper valuable in a hard mission?",
+        "How did Harun try to guide the people during the calf trial?",
+        "What can leaders learn from Harun's restraint?"
+      ],
+      "sources": {
+        "primary": "Quran, Ta-Ha 20:25-36 and 20:90-94; Arabic Tafsir Ibn Kathir, Wikisource",
+        "hadith": [],
+        "seerah": [],
+        "notes": "Post-generation age assessment: child, because the profile focuses on brotherly support, leadership, and warning against idolatry without mature themes. Story type is companion_profile by campaign convention for a person-centered role profile."
+      }
+    },
+    {
       "id": 18,
       "slug": "musab-ibn-umair",
       "title": "Musab ibn Umair, the First Teacher in Madinah",
@@ -239,6 +283,44 @@
       }
     },
     {
+      "id": 47,
+      "slug": "musa-and-the-cow",
+      "title": "Musa and the Cow",
+      "previousStoryId": 43,
+      "storyType": "quranic_narrative",
+      "ageGroup": "preteen",
+      "summary": "When Allah commanded the Children of Israel to slaughter a cow, their many questions showed how delay can make obedience harder.",
+      "readingTimeMinutes": 5,
+      "featuredCharacter": "Prophet Musa",
+      "morals": [
+        "Obedience becomes harder when people argue instead of listening",
+        "Allah's commands are serious and wise",
+        "Too many excuses can close the easy path",
+        "Allah can bring truth to light"
+      ],
+      "content": "Among the Children of Israel, a person had been killed, and the people disputed about it. Allah commanded Musa to tell them to slaughter a cow.\n\nInstead of obeying, they said, \"Do you take us in ridicule?\" Musa answered that he sought refuge in Allah from being among the ignorant. This command was from Allah, not a joke.\n\nThen they began asking for more details. They asked Musa to call upon his Lord to make clear what kind of cow it should be. Musa told them it was neither too old nor too young, but between the two, and he said, \"So do what you are commanded.\"\n\nThey asked again about its color. Musa told them it was a yellow cow, bright in color, pleasing to those who saw it. Still they asked again, saying cows looked alike to them and they wanted more guidance.\n\nMusa told them it was a cow not trained to plow the earth or water the fields, sound and without blemish. At last they said, \"Now you have come with the truth.\" They slaughtered it, but the Quran says they almost did not do it.\n\nThen Allah showed His power. The people were told to strike the slain person with part of the cow. Allah brought the truth out and showed that He brings the dead to life. In this way He showed His signs so they might understand.\n\nAfter such a sign, some hearts still became hard. The story teaches that when Allah makes a command clear, a believer should not turn obedience into delay. The easier path is to listen, trust, and act.",
+      "relatedAyahs": [
+        {
+          "surahNumber": 2,
+          "ayahStart": 67,
+          "ayahEnd": 74,
+          "label": "Al-Baqarah 2:67-74"
+        }
+      ],
+      "discussionQuestions": [
+        "Why did the people's extra questions make the command harder for them?",
+        "What did Musa remind them about Allah's command?",
+        "How did Allah bring the truth to light?",
+        "What is the difference between asking to understand and asking to delay?"
+      ],
+      "sources": {
+        "primary": "Quran, Al-Baqarah 2:67-74; Arabic Tafsir Ibn Kathir, Wikisource",
+        "hadith": [],
+        "seerah": [],
+        "notes": "Post-generation age assessment: preteen, because the passage includes a killing, communal dispute, and resurrection sign, handled without graphic detail. Extra narrative details about the victim or killer from Israeliyyat are omitted."
+      }
+    },
+    {
       "id": 36,
       "slug": "ibrahim-builds-the-kabah",
       "title": "Ibrahim Builds the Ka'bah",
@@ -286,6 +368,44 @@
         "hadith": [],
         "seerah": [],
         "notes": "Post-generation age assessment: child, because the story centers on worship, building, and dua with no mature themes. Extra architectural details and unsupported construction descriptions are omitted."
+      }
+    },
+    {
+      "id": 41,
+      "slug": "dawud-defeats-jalut",
+      "title": "Dawud Defeats Jalut",
+      "previousStoryId": null,
+      "storyType": "quranic_narrative",
+      "ageGroup": "preteen",
+      "summary": "A small faithful group stood firm against Jalut, and Allah gave Dawud victory, wisdom, and kingship.",
+      "readingTimeMinutes": 6,
+      "featuredCharacter": "Prophet Dawud",
+      "morals": [
+        "Victory comes from Allah, not numbers alone",
+        "Faithful people ask Allah for patience and firmness",
+        "Courage is strongest when joined with reliance on Allah",
+        "Allah can raise someone through sincere service"
+      ],
+      "content": "After Musa, some leaders from the Children of Israel asked their prophet to appoint a king so they could fight in Allah's cause. Allah appointed Talut as king, but some objected because he did not have great wealth. Their prophet told them that Allah had chosen him and increased him in knowledge and body.\n\nTalut tested the army at a river. Many drank from it in a way they had been told not to, and only a smaller group remained firm. When they faced Jalut and his forces, some said they had no power that day. But those certain of meeting Allah said that many a small group had overcome a large group by Allah's permission. Allah is with the patient.\n\nWhen they went out against Jalut, they prayed, \"Our Lord, pour upon us patience, make firm our feet, and give us victory over the disbelieving people.\" Their first weapon was dua.\n\nBy Allah's permission, they defeated the enemy. Dawud killed Jalut, and Allah gave Dawud kingship and wisdom and taught him from what He willed. The Quran then reminds us that if Allah did not repel some people by means of others, the earth would be corrupted, but Allah is full of bounty to the worlds.\n\nDawud's victory was not a story of personal boasting. It was a sign that Allah can support a smaller faithful group and raise a servant through courage, patience, and trust.",
+      "relatedAyahs": [
+        {
+          "surahNumber": 2,
+          "ayahStart": 246,
+          "ayahEnd": 251,
+          "label": "Al-Baqarah 2:246-251"
+        }
+      ],
+      "discussionQuestions": [
+        "Why did some people object to Talut as king?",
+        "What did the faithful group say when they saw the larger army?",
+        "What dua did they make before battle?",
+        "How did Allah honor Dawud after the victory?"
+      ],
+      "sources": {
+        "primary": "Quran, Al-Baqarah 2:246-251; Arabic Tafsir Ibn Kathir, Wikisource, Tafsir Ibn Kathir/Surah Al-Baqarah",
+        "hadith": [],
+        "seerah": [],
+        "notes": "Post-generation age assessment: preteen, because the story includes battle and killing Jalut, described briefly and without graphic detail. Unsupported battlefield details are omitted."
       }
     },
     {
@@ -685,6 +805,50 @@
       }
     },
     {
+      "id": 43,
+      "slug": "musa-and-the-golden-calf",
+      "title": "Musa and the Golden Calf",
+      "previousStoryId": 40,
+      "storyType": "quranic_narrative",
+      "ageGroup": "preteen",
+      "summary": "While Musa was away receiving Allah's command, his people were tested by the golden calf, and Harun tried to restrain them.",
+      "readingTimeMinutes": 7,
+      "featuredCharacter": "Prophet Musa",
+      "morals": [
+        "A community must hold firmly to tawhid even when its leader is absent",
+        "False worship can spread when people follow pressure and confusion",
+        "A patient adviser may be ignored by the people he is trying to save",
+        "True repentance means returning to Allah after serious wrongdoing"
+      ],
+      "content": "After Allah saved the Children of Israel from Pharaoh, Musa went to the appointed meeting with his Lord. His people were left with Harun, Musa's brother, who had been made a helper and leader among them.\n\nDuring Musa's absence, they were tested. A man called As-Samiri made for them a calf from ornaments, a body with a lowing sound. Some of the people began to treat it as an object of worship. Harun warned them clearly. He told them they were being tested, that their Lord was the Most Merciful, and that they should follow him and obey his command.\n\nThey refused to listen. They said they would keep devoted to the calf until Musa returned. Their answer showed how quickly people can cling to a false thing when their hearts become confused.\n\nWhen Musa returned to his people, he was angry and grieved. He asked why they had hastened ahead of their Lord's command. He also questioned Harun. Harun explained that the people had weakened him and nearly killed him, and he feared Musa would say he had divided the Children of Israel instead of waiting for him.\n\nMusa then turned to Allah and asked forgiveness for himself and his brother. He dealt with As-Samiri and made clear that the calf could not answer them, harm them, or benefit them. The people had wronged themselves by taking the calf.\n\nThe story is a painful warning after a great rescue. Seeing the sea split did not make people safe from future tests. Every generation still needs patience, knowledge, and firm worship of Allah alone.",
+      "relatedAyahs": [
+        {
+          "surahNumber": 7,
+          "ayahStart": 148,
+          "ayahEnd": 156,
+          "label": "Al-A'raf 7:148-156"
+        },
+        {
+          "surahNumber": 20,
+          "ayahStart": 83,
+          "ayahEnd": 98,
+          "label": "Ta-Ha 20:83-98"
+        }
+      ],
+      "discussionQuestions": [
+        "Why was the golden calf such a serious test after the rescue from Pharaoh?",
+        "How did Harun try to warn the people?",
+        "Why can false worship spread when people are impatient or confused?",
+        "What does Musa's dua for forgiveness teach us after conflict?"
+      ],
+      "sources": {
+        "primary": "Quran, Al-A'raf 7:148-156 and Ta-Ha 20:83-98; Arabic Tafsir Ibn Kathir, Wikisource",
+        "hadith": [],
+        "seerah": [],
+        "notes": "Post-generation age assessment: preteen, because the story includes communal idolatry after rescue, anger, leadership conflict, and serious repentance. Details about As-Samiri are kept to Quranic wording."
+      }
+    },
+    {
       "id": 22,
       "slug": "nuh-and-the-ark",
       "title": "Nuh and the Ark",
@@ -1045,6 +1209,44 @@
       }
     },
     {
+      "id": 49,
+      "slug": "musa-and-khidr",
+      "title": "Musa and the Servant Taught by Allah",
+      "previousStoryId": 47,
+      "storyType": "quranic_narrative",
+      "ageGroup": "teen",
+      "summary": "Musa traveled to learn from a servant whom Allah had given special knowledge, and three difficult events taught him that Allah's wisdom can be hidden from us.",
+      "readingTimeMinutes": 8,
+      "featuredCharacter": "Prophet Musa and the servant of Allah",
+      "morals": [
+        "Allah's wisdom can be greater than what people see at first",
+        "Seeking knowledge requires patience and humility",
+        "A learner should keep promises and accept correction",
+        "Some painful events have wisdom known fully only to Allah"
+      ],
+      "content": "Musa once told his young attendant that he would keep traveling until he reached the junction of the two seas, even if the journey took a long time. They carried a fish with them, and when they reached a certain rock, the fish took its way into the sea. Later, Musa asked for their meal, and his attendant remembered what had happened to the fish.\n\nMusa said, \"That is what we were seeking.\" They returned, following their tracks, and found a servant from among Allah's servants. Allah had granted him mercy from Himself and taught him knowledge from Himself.\n\nMusa asked to follow him so he could learn from what Allah had taught him. The servant said Musa would not be able to have patience with him, asking how he could be patient over something he did not fully understand. Musa promised, if Allah willed, to be patient and not disobey him.\n\nThe servant agreed on one condition: Musa should not ask about anything until the servant himself explained it.\n\nThey boarded a ship, and the servant damaged it. Musa said, \"Have you torn it open to drown its people?\" The servant reminded him that he had said Musa would not be able to have patience. Musa apologized and asked not to be held for forgetting.\n\nThen they met a boy, and the servant killed him. Musa objected strongly, saying that an innocent life had been taken. Again the servant reminded him that Musa would not be able to have patience. Musa said that if he asked after this, the servant should no longer keep him as a companion.\n\nThen they came to a town and asked its people for food, but the people refused to host them. In the town they found a wall about to collapse, and the servant repaired it. Musa said that if he wished, he could have taken payment for it.\n\nAt that point the servant said, \"This is parting between me and you.\" Then he explained the wisdom behind the three events.\n\nThe ship belonged to poor people working at sea. The servant had damaged it because there was a king ahead who was seizing every sound ship by force. The damage protected the poor people's ship from being taken.\n\nAs for the boy, his parents were believers, and Allah knew that the boy would burden them with rebellion and disbelief. Allah intended to replace him with someone purer and nearer in mercy.\n\nAs for the wall, it belonged to two orphan boys in the city. Under it was a treasure for them, and their father had been righteous. Allah wanted them to reach maturity and bring out their treasure as a mercy from their Lord.\n\nThe servant ended by saying that he had not done these things by his own command. Musa had seen events that looked confusing and painful, but Allah had wisdom behind them. The lesson was not that people may act without Allah's law. The lesson was that Allah's knowledge surrounds what people cannot see, and even a great prophet like Musa kept learning humility before his Lord.",
+      "relatedAyahs": [
+        {
+          "surahNumber": 18,
+          "ayahStart": 60,
+          "ayahEnd": 82,
+          "label": "Al-Kahf 18:60-82"
+        }
+      ],
+      "discussionQuestions": [
+        "Why did the servant say Musa would need patience?",
+        "Which of the three events was hardest for you to understand, and why?",
+        "What wisdom was explained about the ship, the boy, and the wall?",
+        "How does this story teach humility when we do not understand something?"
+      ],
+      "sources": {
+        "primary": "Quran, Al-Kahf 18:60-82; Arabic Tafsir Ibn Kathir, Wikisource",
+        "hadith": [],
+        "seerah": [],
+        "notes": "Post-generation age assessment: teen, because the story includes the killing of a boy and deep questions about divine knowledge and hidden wisdom. The Quran does not name the servant in this passage; unsupported biographical speculation is omitted."
+      }
+    },
+    {
       "id": 15,
       "slug": "dhul-qarnayn",
       "title": "Dhul-Qarnayn and the Barrier",
@@ -1289,6 +1491,56 @@
       }
     },
     {
+      "id": 45,
+      "slug": "yunus-and-the-whale",
+      "title": "Yunus and the Whale",
+      "previousStoryId": null,
+      "storyType": "quranic_narrative",
+      "ageGroup": "child",
+      "summary": "Yunus called on Allah from darkness with words of repentance, and Allah saved him and turned his people back to faith.",
+      "readingTimeMinutes": 6,
+      "featuredCharacter": "Prophet Yunus",
+      "morals": [
+        "Turn to Allah immediately after a mistake",
+        "No darkness is beyond Allah's hearing",
+        "Repentance begins with admitting our own wrong",
+        "Allah can save and guide a whole people by His mercy"
+      ],
+      "content": "Yunus was one of Allah's messengers. The Quran tells that he left in anger and thought Allah would not decree hardship upon him. He boarded a loaded ship, and lots were drawn. Yunus was among those who lost the draw, and the great fish swallowed him while he was blameworthy.\n\nInside layers of darkness, Yunus called on Allah with a dua that believers still remember: \"There is no god but You; glory be to You; indeed I have been among the wrongdoers.\" He did not blame others. He praised Allah and admitted his own wrong.\n\nAllah answered him and saved him from distress. Allah says that He likewise saves the believers. If Yunus had not been among those who glorify Allah, he would have remained in the belly of the fish until the Day they are raised.\n\nAllah cast him onto the open shore while he was ill, and caused a plant to grow over him. Then Allah sent him to a people of a hundred thousand or more. They believed, so Allah allowed them to enjoy life for a time.\n\nThe story of Yunus teaches hope without carelessness. A prophet made a mistake and turned back to Allah. Allah heard him in the darkness, saved him, and brought his people to faith by His mercy.",
+      "relatedAyahs": [
+        {
+          "surahNumber": 21,
+          "ayahStart": 87,
+          "ayahEnd": 88,
+          "label": "Al-Anbiya 21:87-88"
+        },
+        {
+          "surahNumber": 37,
+          "ayahStart": 139,
+          "ayahEnd": 148,
+          "label": "As-Saffat 37:139-148"
+        },
+        {
+          "surahNumber": 10,
+          "ayahStart": 98,
+          "ayahEnd": 98,
+          "label": "Yunus 10:98"
+        }
+      ],
+      "discussionQuestions": [
+        "What did Yunus say in his dua from the darkness?",
+        "Why is admitting our own wrong important in repentance?",
+        "How does this story show that Allah hears every servant?",
+        "What mercy did Allah show to Yunus's people?"
+      ],
+      "sources": {
+        "primary": "Quran, Al-Anbiya 21:87-88, As-Saffat 37:139-148, Yunus 10:98; Arabic Tafsir Ibn Kathir, Wikisource",
+        "hadith": [],
+        "seerah": [],
+        "notes": "Post-generation age assessment: child, because the story has danger and repentance but no mature themes. Fish species, island/cave details, and unsupported travel details are omitted."
+      }
+    },
+    {
       "id": 40,
       "slug": "musa-splitting-the-sea",
       "title": "Musa and the Splitting Sea",
@@ -1333,10 +1585,60 @@
       }
     },
     {
+      "id": 44,
+      "slug": "sulayman-and-the-jinn",
+      "title": "Sulayman and the Jinn",
+      "previousStoryId": null,
+      "storyType": "quranic_narrative",
+      "ageGroup": "child",
+      "summary": "Allah gave Sulayman a kingdom with wind, jinn, birds, and great works, and even his death taught the unseen belongs to Allah.",
+      "readingTimeMinutes": 6,
+      "featuredCharacter": "Prophet Sulayman",
+      "morals": [
+        "Great gifts should lead to gratitude",
+        "Power is safest when a servant knows it comes from Allah",
+        "The unseen belongs to Allah alone",
+        "Allah can teach lessons through small signs"
+      ],
+      "content": "Allah gave Dawud and Sulayman knowledge, and they said praise belongs to Allah who favored them over many of His believing servants. Sulayman inherited from Dawud and said that he had been taught the speech of birds and given from all things. He knew these were clear favors from Allah.\n\nAllah subjected the wind for Sulayman. It traveled by his command. Allah also caused a spring of molten brass to flow for him. Some of the jinn worked before him by his Lord's permission. They made for him structures, statues, basins like reservoirs, and large fixed cauldrons.\n\nThese gifts did not mean Sulayman was independent. Allah commanded the family of Dawud to work in gratitude, and few of Allah's servants are truly grateful. Sulayman's kingdom was a test of thankfulness as well as a sign of honor.\n\nThe Quran also tells how Sulayman's death became a lesson. When Allah decreed death for him, nothing showed the jinn that he had died except a creature of the earth eating his staff. When he fell, the jinn realized that if they had known the unseen, they would not have remained in humiliating labor.\n\nSulayman's story teaches that Allah may give a servant extraordinary authority, but the unseen still belongs only to Allah. Even a small creature eating a staff can expose the limits of those who claim hidden knowledge.",
+      "relatedAyahs": [
+      {
+        "surahNumber": 27,
+        "ayahStart": 15,
+        "ayahEnd": 19,
+        "label": "An-Naml 27:15-19"
+      },
+        {
+          "surahNumber": 34,
+          "ayahStart": 12,
+          "ayahEnd": 14,
+          "label": "Saba 34:12-14"
+        },
+        {
+          "surahNumber": 38,
+          "ayahStart": 30,
+          "ayahEnd": 40,
+          "label": "Sad 38:30-40"
+        }
+      ],
+      "discussionQuestions": [
+        "Which gifts did Allah give Sulayman?",
+        "Why should great power lead to gratitude?",
+        "What did the staff-and-termite event teach about the unseen?",
+        "How can small signs teach big lessons?"
+      ],
+      "sources": {
+        "primary": "Quran, An-Naml 27:15-19, Saba 34:12-14, Sad 38:30-40; Arabic Tafsir Ibn Kathir, Wikisource",
+        "hadith": [],
+        "seerah": [],
+        "notes": "Post-generation age assessment: child, because the story is about gifts, gratitude, and the unseen with no mature themes. Speculative ring stories and unsupported kingdom legends are omitted."
+      }
+    },
+    {
       "id": 7,
       "slug": "the-ant-and-prophet-sulayman",
       "title": "The Ant and Prophet Sulayman",
-      "previousStoryId": null,
+      "previousStoryId": 44,
       "storyType": "quranic_narrative",
       "ageGroup": "toddler",
       "summary": "Prophet Sulayman could talk to animals! When an ant warned its people to go underground before the army stepped on them, what did Sulayman do?",
@@ -1362,6 +1664,44 @@
         "How can we show kindness to animals?"
       ],
       "sources": {}
+    },
+    {
+      "id": 48,
+      "slug": "sulayman-and-the-queen-of-sheba",
+      "title": "Sulayman and the Queen of Sheba",
+      "previousStoryId": 7,
+      "storyType": "quranic_narrative",
+      "ageGroup": "child",
+      "summary": "When the hoopoe told Sulayman about a queen and her people worshipping the sun, Sulayman sent a letter calling them to Allah.",
+      "readingTimeMinutes": 7,
+      "featuredCharacter": "Prophet Sulayman",
+      "morals": [
+        "A leader should seek truth before acting",
+        "Allah's guidance is greater than worldly power",
+        "Wisdom can invite people without arrogance",
+        "Recognizing the truth should lead to submission to Allah"
+      ],
+      "content": "One day, Sulayman inspected the birds and noticed that the hoopoe was missing. He said he would punish it unless it brought a clear reason for its absence.\n\nThe hoopoe soon came and said, \"I have encompassed in knowledge that which you have not encompassed.\" It brought news from Saba. There was a woman ruling over the people, and she had been given many things, including a great throne. But the hoopoe also reported that she and her people prostrated to the sun instead of Allah.\n\nSulayman did not rush. He gave the hoopoe a letter and told it to deliver the letter, then step aside and see what answer they would return.\n\nThe queen read the letter to her chiefs. It began in the name of Allah, the Most Merciful, the Especially Merciful. Its message was not to be arrogant against Sulayman, but to come to him in submission. The queen asked her chiefs for counsel. They spoke of strength, but she chose caution and sent a gift.\n\nWhen the gift reached Sulayman, he said that what Allah had given him was better than what they had been given. He would not be distracted from calling them to the truth.\n\nBefore the queen arrived, Sulayman asked who could bring her throne to him. One with knowledge from the Scripture said he could bring it before Sulayman's glance returned to him. When Sulayman saw it placed before him, he said, \"This is from the favor of my Lord to test me whether I will be grateful or ungrateful.\"\n\nWhen the queen came, she was asked whether her throne was like this. She said, \"It is as though it was it.\" Then she entered a palace whose floor appeared to be water. When she realized the truth of what she had seen and the truth of Sulayman's call, she said, \"My Lord, indeed I have wronged myself, and I submit with Sulayman to Allah, Lord of the worlds.\"\n\nThe queen came with worldly power, but she left with something greater: submission to the Lord who gave power to every king and queen.",
+      "relatedAyahs": [
+        {
+          "surahNumber": 27,
+          "ayahStart": 20,
+          "ayahEnd": 44,
+          "label": "An-Naml 27:20-44"
+        }
+      ],
+      "discussionQuestions": [
+        "What did the hoopoe report to Sulayman?",
+        "Why did Sulayman send a letter instead of rushing into action?",
+        "What did Sulayman say when he saw the throne brought before him?",
+        "What does the queen's final statement teach about recognizing truth?"
+      ],
+      "sources": {
+        "primary": "Quran, An-Naml 27:20-44; Arabic Tafsir Ibn Kathir, Wikisource",
+        "hadith": [],
+        "seerah": [],
+        "notes": "Post-generation age assessment: child, because the story centers on leadership, da'wah, recognition, and submission with no mature themes. Unsupported names and legends beyond the Quranic account are omitted."
+      }
     },
     {
       "id": 32,
@@ -1437,6 +1777,44 @@
         "hadith": [],
         "seerah": [],
         "notes": "Post-generation age assessment: preteen, because the story centers on a commanded sacrifice of a child, though the Quranic account is told soberly and ends with ransom and mercy. The son is not named in the Quranic verses, so the story avoids asserting the name in the prose."
+      }
+    },
+    {
+      "id": 46,
+      "slug": "dawud-the-two-disputants",
+      "title": "Dawud and the Two Disputants",
+      "previousStoryId": 41,
+      "storyType": "quranic_narrative",
+      "ageGroup": "preteen",
+      "summary": "Two disputants came to Dawud with a case about sheep, and Allah taught him to seek forgiveness and judge with truth.",
+      "readingTimeMinutes": 5,
+      "featuredCharacter": "Prophet Dawud",
+      "morals": [
+        "Judges must listen carefully and rule with truth",
+        "A righteous person returns to Allah when corrected",
+        "Power is a trust, not a reason to follow desire",
+        "Allah loves repentance"
+      ],
+      "content": "Allah strengthened Dawud's kingdom and gave him wisdom and sound judgment. Then the Quran tells of a test that came to him.\n\nTwo disputants climbed over the wall into his private place of prayer. Dawud was startled by them, but they said, \"Do not fear.\" They explained that they were two people in a dispute and asked him to judge between them with truth.\n\nOne of them said, \"Indeed this is my brother. He has ninety-nine ewes, and I have one ewe. He said, 'Entrust her to me,' and he overpowered me in speech.\"\n\nDawud answered that the man had wronged him by asking to add his one ewe to the many ewes he already had. He also said that many partners wrong one another, except those who believe and do righteous deeds, and such people are few.\n\nThen Dawud realized that Allah had tested him. He sought forgiveness from his Lord, bowed, and turned back to Allah. Allah forgave him and gave him a near place with Him and a good return.\n\nAllah then addressed Dawud: \"O Dawud, indeed We have made you a successor upon the earth, so judge between the people in truth and do not follow desire.\" A ruler or judge may have strength, but strength must serve justice.\n\nDawud's greatness was not only that he judged. It was that when Allah reminded him, he humbled himself and returned to his Lord.",
+      "relatedAyahs": [
+        {
+          "surahNumber": 38,
+          "ayahStart": 21,
+          "ayahEnd": 26,
+          "label": "Sad 38:21-26"
+        }
+      ],
+      "discussionQuestions": [
+        "Why is it important for a judge to listen carefully?",
+        "What did Dawud do when he realized Allah had tested him?",
+        "Why can desire be dangerous for someone with authority?",
+        "How can a person return to Allah after making a mistake?"
+      ],
+      "sources": {
+        "primary": "Quran, Sad 38:21-26; Arabic Tafsir Ibn Kathir, Wikisource",
+        "hadith": [],
+        "seerah": [],
+        "notes": "Post-generation age assessment: preteen, because the story involves judicial responsibility, repentance, and avoiding desire. Later speculative accounts about Dawud's test are omitted; the narrative stays with the Quranic wording."
       }
     },
     {
