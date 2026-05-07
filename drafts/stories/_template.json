@@ -1,0 +1,47 @@
+{
+  "id": 0,
+  "slug": "example-story-slug",
+  "title": "Example Story Title",
+  "storyType": "quranic_narrative",
+  "ageGroup": "child",
+  "summary": "One concise child-friendly summary sentence.",
+  "readingTimeMinutes": 4,
+  "featuredCharacter": "Featured character or group",
+  "morals": [
+    "Specific moral from the source",
+    "Specific moral from the source",
+    "Specific moral from the source"
+  ],
+  "content": "Full story prose with paragraph breaks.",
+  "relatedAyahs": [
+    {
+      "surahNumber": 18,
+      "ayahStart": 9,
+      "ayahEnd": 26,
+      "label": "Al-Kahf 18:9-26"
+    }
+  ],
+  "discussionQuestions": [
+    "Open-ended question one?",
+    "Open-ended question two?",
+    "Open-ended question three?"
+  ],
+  "sources": {
+    "primary": "Arabic Tafsir Ibn Kathir, Wikisource, Tafsir Ibn Kathir/Surah Example, verses X:Y-Z",
+    "hadith": [],
+    "seerah": [],
+    "notes": "Mention uncertainty, omitted disputed details, or narration variance here."
+  },
+  "reviewStatus": "draft",
+  "aiModel": "",
+  "generatedAt": "",
+  "sourceVerseRanges": [
+    {
+      "surahNumber": 18,
+      "ayahStart": 9,
+      "ayahEnd": 26,
+      "corpusFile": ".local/corpus/ibn-kathir-ar/raw/surah-018.wiki.txt"
+    }
+  ],
+  "reviewNotes": []
+}
