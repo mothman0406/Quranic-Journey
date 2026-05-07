@@ -10,33 +10,33 @@ import { ChevronLeft, Clock, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const CATEGORY_COLORS: Record<string, string> = {
-  prophet: "bg-emerald-100 text-emerald-700",
-  companion: "bg-blue-100 text-blue-700",
-  quran: "bg-amber-100 text-amber-700",
-  moral: "bg-purple-100 text-purple-700"
+  quranic_narrative: "bg-emerald-100 text-emerald-700",
+  seerah_context: "bg-blue-100 text-blue-700",
+  companion_profile: "bg-amber-100 text-amber-700",
+  moral_lesson: "bg-purple-100 text-purple-700"
 };
 
 const CATEGORY_LABELS: Record<string, string> = {
-  prophet: "Prophets",
-  companion: "Companions",
-  quran: "Quran Stories",
-  moral: "Moral Stories"
+  quranic_narrative: "Quran Stories",
+  seerah_context: "Seerah",
+  companion_profile: "Companions",
+  moral_lesson: "Moral Lessons"
 };
 
 const CATEGORY_EMOJIS: Record<string, string> = {
-  prophet: "🌟",
-  companion: "⚔️",
-  quran: "📖",
-  moral: "💎"
+  quranic_narrative: "📖",
+  seerah_context: "🌙",
+  companion_profile: "⭐",
+  moral_lesson: "💎"
 };
 
 export default function StoriesPage() {
   const { childId } = useParams<{ childId: string }>();
-  const [category, setCategory] = useState<string>("all");
+  const [storyType, setStoryType] = useState<string>("all");
 
   const { data, isLoading } = useQuery({
-    queryKey: ["stories", category],
-    queryFn: () => listStories(category !== "all" ? { category: category as "prophet" | "companion" | "quran" | "moral" } : undefined)
+    queryKey: ["stories", storyType],
+    queryFn: () => listStories(storyType !== "all" ? { storyType: storyType as "quranic_narrative" | "seerah_context" | "companion_profile" | "moral_lesson" } : undefined)
   });
 
   const stories = data?.stories || [];
@@ -56,10 +56,10 @@ export default function StoriesPage() {
       <div className="max-w-lg mx-auto px-4 -mt-6 space-y-4">
         {/* Category filters */}
         <div className="bg-white rounded-2xl border border-border p-1 flex gap-1 shadow-sm overflow-x-auto">
-          {["all", "prophet", "companion", "quran", "moral"].map(c => (
-            <button key={c} onClick={() => setCategory(c)}
+          {["all", "quranic_narrative", "seerah_context", "companion_profile", "moral_lesson"].map(c => (
+            <button key={c} onClick={() => setStoryType(c)}
               className={cn("flex-1 text-xs py-2 px-2 rounded-xl font-medium whitespace-nowrap transition-colors",
-                category === c ? "bg-primary text-white" : "text-muted-foreground hover:text-foreground"
+                storyType === c ? "bg-primary text-white" : "text-muted-foreground hover:text-foreground"
               )}>
               {c === "all" ? "All" : CATEGORY_LABELS[c]}
             </button>
@@ -70,7 +70,7 @@ export default function StoriesPage() {
           <div className="space-y-3">{[1,2,3].map(i => <Skeleton key={i} className="h-32 rounded-2xl" />)}</div>
         ) : stories.length === 0 ? (
           <Card className="border-border"><CardContent className="p-8 text-center">
-            <p className="text-muted-foreground">No stories found for this category.</p>
+            <p className="text-muted-foreground">No stories found for this filter.</p>
           </CardContent></Card>
         ) : (
           <div className="space-y-3">
@@ -80,7 +80,7 @@ export default function StoriesPage() {
                   <CardContent className="p-4">
                     <div className="flex items-start gap-3">
                       <div className="w-12 h-12 rounded-2xl bg-primary/10 flex items-center justify-center text-2xl flex-shrink-0">
-                        {CATEGORY_EMOJIS[story.category]}
+                        {CATEGORY_EMOJIS[story.storyType]}
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-start justify-between gap-2">
@@ -88,7 +88,7 @@ export default function StoriesPage() {
                           <ChevronRight size={14} className="text-muted-foreground flex-shrink-0 mt-0.5" />
                         </div>
                         <div className="flex items-center gap-2 mt-1">
-                          <Badge className={cn("text-[10px] border-0", CATEGORY_COLORS[story.category])}>{story.category}</Badge>
+                          <Badge className={cn("text-[10px] border-0", CATEGORY_COLORS[story.storyType])}>{CATEGORY_LABELS[story.storyType]}</Badge>
                           <span className="flex items-center gap-1 text-[10px] text-muted-foreground"><Clock size={9} />{story.readingTimeMinutes} min</span>
                         </div>
                         <p className="text-xs text-muted-foreground mt-1.5 leading-relaxed line-clamp-2">{story.summary}</p>

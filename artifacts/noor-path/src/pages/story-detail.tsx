@@ -7,12 +7,19 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { ChildNav } from "@/components/child-nav";
 import { ChevronLeft, Clock, MessageSquare, BookOpen } from "lucide-react";
 
+const STORY_TYPE_LABELS: Record<string, string> = {
+  quranic_narrative: "Quran Story",
+  seerah_context: "Seerah Context",
+  companion_profile: "Companion Profile",
+  moral_lesson: "Moral Lesson",
+};
+
 export default function StoryDetailPage() {
   const { childId, storyId } = useParams<{ childId: string; storyId: string }>();
 
   const { data: story, isLoading } = useQuery({
     queryKey: ["story", storyId],
-    queryFn: () => getStory(parseInt(storyId))
+    queryFn: () => getStory(storyId)
   });
 
   if (isLoading) {
@@ -36,7 +43,9 @@ export default function StoryDetailPage() {
           <Link href={`/child/${childId}/stories`}>
             <button className="flex items-center gap-1 text-emerald-200 text-sm mb-4"><ChevronLeft size={16} /> Stories</button>
           </Link>
-          <Badge className="bg-white/20 text-white border-0 mb-2">{story.category}</Badge>
+          <Badge className="bg-white/20 text-white border-0 mb-2">
+            {STORY_TYPE_LABELS[story.storyType] ?? story.storyType}
+          </Badge>
           <h1 className="text-xl font-bold text-white">{story.title}</h1>
           <div className="flex items-center gap-3 mt-2">
             <span className="text-emerald-200 text-xs flex items-center gap-1"><Clock size={11} />{story.readingTimeMinutes} min read</span>
@@ -75,13 +84,15 @@ export default function StoryDetailPage() {
         )}
 
         {/* Related surahs */}
-        {story.relatedSurahs.length > 0 && (
+        {story.relatedAyahs.length > 0 && (
           <Card className="border-border bg-emerald-50/50">
             <CardContent className="p-4">
-              <p className="text-sm font-semibold text-primary mb-2 flex items-center gap-2"><BookOpen size={14} /> Related Surahs</p>
+              <p className="text-sm font-semibold text-primary mb-2 flex items-center gap-2"><BookOpen size={14} /> Related Ayahs</p>
               <div className="flex flex-wrap gap-2">
-                {story.relatedSurahs.map(s => (
-                  <Badge key={s} variant="secondary" className="text-xs">{s}</Badge>
+                {story.relatedAyahs.map((ref) => (
+                  <Badge key={`${ref.surahNumber}-${ref.ayahStart}-${ref.ayahEnd}`} variant="secondary" className="text-xs">
+                    {ref.label ?? `${ref.surahNumber}:${ref.ayahStart}-${ref.ayahEnd}`}
+                  </Badge>
                 ))}
               </div>
             </CardContent>
@@ -105,6 +116,12 @@ export default function StoryDetailPage() {
             </CardContent>
           </Card>
         )}
+
+        {story.sources.primary ? (
+          <p className="text-xs text-muted-foreground px-1 pb-2">
+            Adapted from {story.sources.primary}
+          </p>
+        ) : null}
       </div>
 
       <ChildNav childId={childId} />

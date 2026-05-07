@@ -7,10 +7,8 @@
  */
 import type { StoryType } from "./storyType";
 
-export type DailyPlanStory = {
-  id: number;
-  slug: string;
-  title: string;
+export interface StoryTypeSummary {
   storyType: StoryType;
-  summary: string;
-} | null;
+  label: string;
+  count: number;
+}

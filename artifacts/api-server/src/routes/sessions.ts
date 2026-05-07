@@ -3,7 +3,6 @@ import { db } from "@workspace/db";
 import { learningSessionsTable, childrenTable, childDuasTable } from "@workspace/db/schema";
 import { and, eq, desc } from "drizzle-orm";
 import { DUA_CATEGORIES, getDuasByCategory, type Dua } from "../data/duas.js";
-import { STORIES } from "../data/stories.js";
 
 function getAllDuas(): Dua[] {
   return DUA_CATEGORIES.flatMap((category) => getDuasByCategory(category.slug));
@@ -140,23 +139,6 @@ router.post("/children/:childId/duas", async (req, res) => {
   }
 
   res.json({ dua: formatChildProgressDua(dua), learned: record.learned === 1, learnedAt: record.learnedAt?.toISOString() || null, practicedCount: record.practicedCount });
-});
-
-router.get("/stories", async (req, res) => {
-  const { ageGroup, category } = req.query;
-  let stories = STORIES;
-  if (ageGroup) stories = stories.filter(s => s.ageGroup === ageGroup);
-  if (category) stories = stories.filter(s => s.category === category);
-  res.json({
-    stories: stories.map(({ content: _, discussionQuestions: __, ...s }) => s)
-  });
-});
-
-router.get("/stories/:storyId", async (req, res) => {
-  const storyId = parseInt(req.params.storyId);
-  const story = STORIES.find(s => s.id === storyId);
-  if (!story) { res.status(404).json({ error: "Story not found" }); return; }
-  res.json(story);
 });
 
 export default router;

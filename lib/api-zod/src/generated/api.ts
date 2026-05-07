@@ -240,7 +240,15 @@ export const GetChildDashboardResponse = zod.object({
     story: zod
       .object({
         id: zod.number(),
+        slug: zod.string(),
         title: zod.string(),
+        storyType: zod.enum([
+          "quranic_narrative",
+          "seerah_context",
+          "companion_profile",
+          "moral_lesson",
+        ]),
+        summary: zod.string(),
       })
       .nullish(),
     dua: zod
@@ -1075,24 +1083,119 @@ export const GetSurahResponse = zod
   );
 
 /**
+ * @summary List story type categories
+ */
+export const ListStoryCategoriesResponse = zod.object({
+  totalCount: zod.number(),
+  storyTypes: zod.array(
+    zod.object({
+      storyType: zod.enum([
+        "quranic_narrative",
+        "seerah_context",
+        "companion_profile",
+        "moral_lesson",
+      ]),
+      label: zod.string(),
+      count: zod.number(),
+    }),
+  ),
+});
+
+/**
+ * @summary List stories related to a surah or ayah
+ */
+export const ListContextualStoriesQueryParams = zod.object({
+  surahNumber: zod.coerce.number(),
+  ayah: zod.coerce.number().optional(),
+});
+
+export const ListContextualStoriesResponse = zod.object({
+  context: zod.object({
+    surahNumber: zod.number(),
+    ayah: zod.number().nullish(),
+  }),
+  stories: zod.array(
+    zod.object({
+      id: zod.number(),
+      slug: zod.string(),
+      title: zod.string(),
+      storyType: zod.enum([
+        "quranic_narrative",
+        "seerah_context",
+        "companion_profile",
+        "moral_lesson",
+      ]),
+      ageGroup: zod.enum(["toddler", "child", "preteen", "teen"]),
+      summary: zod.string(),
+      readingTimeMinutes: zod.number(),
+      featuredCharacter: zod.string(),
+      morals: zod.array(zod.string()),
+      relatedAyahs: zod.array(
+        zod.object({
+          surahNumber: zod.number(),
+          ayahStart: zod.number(),
+          ayahEnd: zod.number(),
+          label: zod.string().optional(),
+        }),
+      ),
+      sources: zod.object({
+        primary: zod.string().optional(),
+        hadith: zod.array(zod.string()).optional(),
+        seerah: zod.array(zod.string()).optional(),
+        notes: zod.string().optional(),
+      }),
+    }),
+  ),
+});
+
+/**
  * @summary List Islamic stories
  */
 export const ListStoriesQueryParams = zod.object({
   ageGroup: zod.enum(["toddler", "child", "preteen", "teen"]).optional(),
-  category: zod.enum(["prophet", "companion", "quran", "moral"]).optional(),
+  storyType: zod
+    .enum([
+      "quranic_narrative",
+      "seerah_context",
+      "companion_profile",
+      "moral_lesson",
+    ])
+    .optional(),
+  surahNumber: zod.coerce.number().optional(),
+  ayah: zod.coerce.number().optional(),
 });
 
 export const ListStoriesResponse = zod.object({
   stories: zod.array(
     zod.object({
       id: zod.number(),
+      slug: zod.string(),
       title: zod.string(),
-      category: zod.enum(["prophet", "companion", "quran", "moral"]),
+      storyType: zod.enum([
+        "quranic_narrative",
+        "seerah_context",
+        "companion_profile",
+        "moral_lesson",
+      ]),
       ageGroup: zod.enum(["toddler", "child", "preteen", "teen"]),
       summary: zod.string(),
       readingTimeMinutes: zod.number(),
       featuredCharacter: zod.string(),
       morals: zod.array(zod.string()),
+      relatedAyahs: zod.array(
+        zod.object({
+          surahNumber: zod.number(),
+          ayahStart: zod.number(),
+          ayahEnd: zod.number(),
+          label: zod.string().optional(),
+        }),
+      ),
+      sources: zod.object({
+        primary: zod.string().optional(),
+        hadith: zod.array(zod.string()).optional(),
+        seerah: zod.array(zod.string()).optional(),
+        notes: zod.string().optional(),
+      }),
     }),
   ),
 });
@@ -1101,24 +1204,43 @@ export const ListStoriesResponse = zod.object({
  * @summary Get a specific story
  */
 export const GetStoryParams = zod.object({
-  storyId: zod.coerce.number(),
+  storyIdOrSlug: zod.coerce.string(),
 });
 
 export const GetStoryResponse = zod
   .object({
     id: zod.number(),
+    slug: zod.string(),
     title: zod.string(),
-    category: zod.enum(["prophet", "companion", "quran", "moral"]),
+    storyType: zod.enum([
+      "quranic_narrative",
+      "seerah_context",
+      "companion_profile",
+      "moral_lesson",
+    ]),
     ageGroup: zod.enum(["toddler", "child", "preteen", "teen"]),
     summary: zod.string(),
     readingTimeMinutes: zod.number(),
     featuredCharacter: zod.string(),
     morals: zod.array(zod.string()),
+    relatedAyahs: zod.array(
+      zod.object({
+        surahNumber: zod.number(),
+        ayahStart: zod.number(),
+        ayahEnd: zod.number(),
+        label: zod.string().optional(),
+      }),
+    ),
+    sources: zod.object({
+      primary: zod.string().optional(),
+      hadith: zod.array(zod.string()).optional(),
+      seerah: zod.array(zod.string()).optional(),
+      notes: zod.string().optional(),
+    }),
   })
   .and(
     zod.object({
       content: zod.string(),
-      relatedSurahs: zod.array(zod.string()),
       discussionQuestions: zod.array(zod.string()),
     }),
   );

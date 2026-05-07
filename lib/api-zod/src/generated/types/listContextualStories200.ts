@@ -5,9 +5,10 @@
  * NoorPath - Muslim Parenting & Quran Learning App API
  * OpenAPI spec version: 0.1.0
  */
+import type { ListContextualStories200Context } from "./listContextualStories200Context";
 import type { Story } from "./story";
 
-export type StoryDetail = Story & {
-  content: string;
-  discussionQuestions: string[];
+export type ListContextualStories200 = {
+  context: ListContextualStories200Context;
+  stories: Story[];
 };

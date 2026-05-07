@@ -6,15 +6,20 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { StoryAgeGroup } from "./storyAgeGroup";
-import type { StoryCategory } from "./storyCategory";
+import type { StoryAyahRef } from "./storyAyahRef";
+import type { StorySources } from "./storySources";
+import type { StoryType } from "./storyType";
 
 export interface Story {
   id: number;
+  slug: string;
   title: string;
-  category: StoryCategory;
+  storyType: StoryType;
   ageGroup: StoryAgeGroup;
   summary: string;
   readingTimeMinutes: number;
   featuredCharacter: string;
   morals: string[];
+  relatedAyahs: StoryAyahRef[];
+  sources: StorySources;
 }

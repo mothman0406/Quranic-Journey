@@ -24,12 +24,14 @@ type ChildSummary = {
   age?: number;
   streakDays: number;
   totalPoints: number;
+  hideStories?: boolean;
 };
 
 type MoreRoute =
   | "/"
   | "/child/[childId]"
   | "/child/[childId]/mushaf"
+  | "/child/[childId]/stories"
   | "/child/[childId]/duas"
   | "/child/[childId]/progress"
   | "/child/[childId]/profile"
@@ -74,6 +76,14 @@ const OPEN_ITEMS: MoreItem[] = [
     route: "/child/[childId]/progress",
   },
   {
+    title: "Stories",
+    detail: "Islamic stories",
+    icon: "library-outline",
+    tone: "#be123c",
+    route: "/child/[childId]/stories",
+    badge: "8",
+  },
+  {
     title: "Du'aas",
     detail: "Practice and learned status",
     icon: "heart-outline",
@@ -97,13 +107,6 @@ const PLANNED_ITEMS: MoreItem[] = [
     detail: "Milestones and goals",
     icon: "map-outline",
     tone: "#ea580c",
-    badge: "2I",
-  },
-  {
-    title: "Stories",
-    detail: "Islamic stories",
-    icon: "library-outline",
-    tone: "#be123c",
     badge: "2I",
   },
 ];
@@ -182,25 +185,27 @@ export default function MoreScreen() {
 
           <SectionLabel>Open now</SectionLabel>
           <CardGroup>
-            {OPEN_ITEMS.map((item) => {
-              const route = item.route;
-              return (
-                <ListRow
-                  key={item.title}
-                  title={item.title}
-                  detail={item.detail}
-                  iconName={item.icon}
-                  iconColor={item.tone}
-                  trailing={item.badge ? (
-                    <View style={styles.openBadgeTrailing}>
-                      <BadgePill label={item.badge} />
-                      <Ionicons name="chevron-forward" size={18} color="#9ca3af" />
-                    </View>
-                  ) : undefined}
-                  onPress={route ? () => openRoute(route) : undefined}
-                />
-              );
-            })}
+            {OPEN_ITEMS
+              .filter((item) => item.title !== "Stories" || !child?.hideStories)
+              .map((item) => {
+                const route = item.route;
+                return (
+                  <ListRow
+                    key={item.title}
+                    title={item.title}
+                    detail={item.detail}
+                    iconName={item.icon}
+                    iconColor={item.tone}
+                    trailing={item.badge ? (
+                      <View style={styles.openBadgeTrailing}>
+                        <BadgePill label={item.badge} />
+                        <Ionicons name="chevron-forward" size={18} color="#9ca3af" />
+                      </View>
+                    ) : undefined}
+                    onPress={route ? () => openRoute(route) : undefined}
+                  />
+                );
+              })}
           </CardGroup>
 
           <SectionLabel>Next</SectionLabel>

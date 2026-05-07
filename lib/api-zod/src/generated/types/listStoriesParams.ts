@@ -6,9 +6,11 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { ListStoriesAgeGroup } from "./listStoriesAgeGroup";
-import type { ListStoriesCategory } from "./listStoriesCategory";
+import type { ListStoriesStoryType } from "./listStoriesStoryType";
 
 export type ListStoriesParams = {
   ageGroup?: ListStoriesAgeGroup;
-  category?: ListStoriesCategory;
+  storyType?: ListStoriesStoryType;
+  surahNumber?: number;
+  ayah?: number;
 };

@@ -35,6 +35,8 @@ import type {
   LearningSession,
   ListChildDuas200,
   ListChildren200,
+  ListContextualStories200,
+  ListContextualStoriesParams,
   ListDuaCategories200,
   ListMemorization200,
   ListReviews200,
@@ -42,6 +44,7 @@ import type {
   ListSessionsParams,
   ListStories200,
   ListStoriesParams,
+  ListStoryCategories200,
   ListSurahs200,
   ListSurahsParams,
   MarkDuaLearnedBody,
@@ -2111,6 +2114,184 @@ export function useGetSurah<
 }
 
 /**
+ * @summary List story type categories
+ */
+export const getListStoryCategoriesUrl = () => {
+  return `/api/stories/categories`;
+};
+
+export const listStoryCategories = async (
+  options?: RequestInit,
+): Promise<ListStoryCategories200> => {
+  return customFetch<ListStoryCategories200>(getListStoryCategoriesUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListStoryCategoriesQueryKey = () => {
+  return [`/api/stories/categories`] as const;
+};
+
+export const getListStoryCategoriesQueryOptions = <
+  TData = Awaited<ReturnType<typeof listStoryCategories>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listStoryCategories>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListStoryCategoriesQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listStoryCategories>>
+  > = ({ signal }) => listStoryCategories({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listStoryCategories>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListStoryCategoriesQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listStoryCategories>>
+>;
+export type ListStoryCategoriesQueryError = ErrorType<unknown>;
+
+/**
+ * @summary List story type categories
+ */
+
+export function useListStoryCategories<
+  TData = Awaited<ReturnType<typeof listStoryCategories>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listStoryCategories>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListStoryCategoriesQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary List stories related to a surah or ayah
+ */
+export const getListContextualStoriesUrl = (
+  params: ListContextualStoriesParams,
+) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/stories/contextual?${stringifiedParams}`
+    : `/api/stories/contextual`;
+};
+
+export const listContextualStories = async (
+  params: ListContextualStoriesParams,
+  options?: RequestInit,
+): Promise<ListContextualStories200> => {
+  return customFetch<ListContextualStories200>(
+    getListContextualStoriesUrl(params),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export const getListContextualStoriesQueryKey = (
+  params?: ListContextualStoriesParams,
+) => {
+  return [`/api/stories/contextual`, ...(params ? [params] : [])] as const;
+};
+
+export const getListContextualStoriesQueryOptions = <
+  TData = Awaited<ReturnType<typeof listContextualStories>>,
+  TError = ErrorType<unknown>,
+>(
+  params: ListContextualStoriesParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listContextualStories>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getListContextualStoriesQueryKey(params);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listContextualStories>>
+  > = ({ signal }) =>
+    listContextualStories(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listContextualStories>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListContextualStoriesQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listContextualStories>>
+>;
+export type ListContextualStoriesQueryError = ErrorType<unknown>;
+
+/**
+ * @summary List stories related to a surah or ayah
+ */
+
+export function useListContextualStories<
+  TData = Awaited<ReturnType<typeof listContextualStories>>,
+  TError = ErrorType<unknown>,
+>(
+  params: ListContextualStoriesParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listContextualStories>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListContextualStoriesQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
  * @summary List Islamic stories
  */
 export const getListStoriesUrl = (params?: ListStoriesParams) => {
@@ -2207,29 +2388,29 @@ export function useListStories<
 /**
  * @summary Get a specific story
  */
-export const getGetStoryUrl = (storyId: number) => {
-  return `/api/stories/${storyId}`;
+export const getGetStoryUrl = (storyIdOrSlug: string) => {
+  return `/api/stories/${storyIdOrSlug}`;
 };
 
 export const getStory = async (
-  storyId: number,
+  storyIdOrSlug: string,
   options?: RequestInit,
 ): Promise<StoryDetail> => {
-  return customFetch<StoryDetail>(getGetStoryUrl(storyId), {
+  return customFetch<StoryDetail>(getGetStoryUrl(storyIdOrSlug), {
     ...options,
     method: "GET",
   });
 };
 
-export const getGetStoryQueryKey = (storyId: number) => {
-  return [`/api/stories/${storyId}`] as const;
+export const getGetStoryQueryKey = (storyIdOrSlug: string) => {
+  return [`/api/stories/${storyIdOrSlug}`] as const;
 };
 
 export const getGetStoryQueryOptions = <
   TData = Awaited<ReturnType<typeof getStory>>,
   TError = ErrorType<unknown>,
 >(
-  storyId: number,
+  storyIdOrSlug: string,
   options?: {
     query?: UseQueryOptions<
       Awaited<ReturnType<typeof getStory>>,
@@ -2241,16 +2422,16 @@ export const getGetStoryQueryOptions = <
 ) => {
   const { query: queryOptions, request: requestOptions } = options ?? {};
 
-  const queryKey = queryOptions?.queryKey ?? getGetStoryQueryKey(storyId);
+  const queryKey = queryOptions?.queryKey ?? getGetStoryQueryKey(storyIdOrSlug);
 
   const queryFn: QueryFunction<Awaited<ReturnType<typeof getStory>>> = ({
     signal,
-  }) => getStory(storyId, { signal, ...requestOptions });
+  }) => getStory(storyIdOrSlug, { signal, ...requestOptions });
 
   return {
     queryKey,
     queryFn,
-    enabled: !!storyId,
+    enabled: !!storyIdOrSlug,
     ...queryOptions,
   } as UseQueryOptions<Awaited<ReturnType<typeof getStory>>, TError, TData> & {
     queryKey: QueryKey;
@@ -2270,7 +2451,7 @@ export function useGetStory<
   TData = Awaited<ReturnType<typeof getStory>>,
   TError = ErrorType<unknown>,
 >(
-  storyId: number,
+  storyIdOrSlug: string,
   options?: {
     query?: UseQueryOptions<
       Awaited<ReturnType<typeof getStory>>,
@@ -2280,7 +2461,7 @@ export function useGetStory<
     request?: SecondParameter<typeof customFetch>;
   },
 ): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
-  const queryOptions = getGetStoryQueryOptions(storyId, options);
+  const queryOptions = getGetStoryQueryOptions(storyIdOrSlug, options);
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;

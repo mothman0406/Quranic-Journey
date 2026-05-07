@@ -548,6 +548,65 @@ paths:
               schema:
                 $ref: "#/components/schemas/SurahDetail"
 
+  /stories/categories:
+    get:
+      operationId: listStoryCategories
+      tags: [stories]
+      summary: List story type categories
+      responses:
+        "200":
+          description: Story type counts
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  totalCount:
+                    type: integer
+                  storyTypes:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/StoryTypeSummary"
+                required: [totalCount, storyTypes]
+
+  /stories/contextual:
+    get:
+      operationId: listContextualStories
+      tags: [stories]
+      summary: List stories related to a surah or ayah
+      parameters:
+        - name: surahNumber
+          in: query
+          required: true
+          schema:
+            type: integer
+        - name: ayah
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Contextual story suggestions
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  context:
+                    type: object
+                    properties:
+                      surahNumber:
+                        type: integer
+                      ayah:
+                        type: integer
+                        nullable: true
+                    required: [surahNumber]
+                  stories:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Story"
+                required: [context, stories]
+
   /stories:
     get:
       operationId: listStories
@@ -559,11 +618,19 @@ paths:
           schema:
             type: string
             enum: [toddler, child, preteen, teen]
-        - name: category
+        - name: storyType
           in: query
           schema:
             type: string
-            enum: [prophet, companion, quran, moral]
+            enum: [quranic_narrative, seerah_context, companion_profile, moral_lesson]
+        - name: surahNumber
+          in: query
+          schema:
+            type: integer
+        - name: ayah
+          in: query
+          schema:
+            type: integer
       responses:
         "200":
           description: List of stories
@@ -578,17 +645,17 @@ paths:
                       $ref: "#/components/schemas/Story"
                 required: [stories]
 
-  /stories/{storyId}:
+  /stories/{storyIdOrSlug}:
     get:
       operationId: getStory
       tags: [stories]
       summary: Get a specific story
       parameters:
-        - name: storyId
+        - name: storyIdOrSlug
           in: path
           required: true
           schema:
-            type: integer
+            type: string
       responses:
         "200":
           description: Story detail
@@ -893,9 +960,15 @@ components:
           properties:
             id:
               type: integer
+            slug:
+              type: string
             title:
               type: string
-          required: [id, title]
+            storyType:
+              $ref: "#/components/schemas/StoryType"
+            summary:
+              type: string
+          required: [id, slug, title, storyType, summary]
           nullable: true
         dua:
           type: object
@@ -1609,16 +1682,61 @@ components:
             required: [type, text]
       required: [number, arabic, transliteration, translation, tajweedHighlights]
 
+    StoryType:
+      type: string
+      enum: [quranic_narrative, seerah_context, companion_profile, moral_lesson]
+
+    StorySources:
+      type: object
+      properties:
+        primary:
+          type: string
+        hadith:
+          type: array
+          items:
+            type: string
+        seerah:
+          type: array
+          items:
+            type: string
+        notes:
+          type: string
+
+    StoryAyahRef:
+      type: object
+      properties:
+        surahNumber:
+          type: integer
+        ayahStart:
+          type: integer
+        ayahEnd:
+          type: integer
+        label:
+          type: string
+      required: [surahNumber, ayahStart, ayahEnd]
+
+    StoryTypeSummary:
+      type: object
+      properties:
+        storyType:
+          $ref: "#/components/schemas/StoryType"
+        label:
+          type: string
+        count:
+          type: integer
+      required: [storyType, label, count]
+
     Story:
       type: object
       properties:
         id:
           type: integer
+        slug:
+          type: string
         title:
           type: string
-        category:
-          type: string
-          enum: [prophet, companion, quran, moral]
+        storyType:
+          $ref: "#/components/schemas/StoryType"
         ageGroup:
           type: string
           enum: [toddler, child, preteen, teen]
@@ -1632,7 +1750,13 @@ components:
           type: array
           items:
             type: string
-      required: [id, title, category, ageGroup, summary, readingTimeMinutes, featuredCharacter, morals]
+        relatedAyahs:
+          type: array
+          items:
+            $ref: "#/components/schemas/StoryAyahRef"
+        sources:
+          $ref: "#/components/schemas/StorySources"
+      required: [id, slug, title, storyType, ageGroup, summary, readingTimeMinutes, featuredCharacter, morals, relatedAyahs, sources]
 
     StoryDetail:
       allOf:
@@ -1641,15 +1765,11 @@ components:
           properties:
             content:
               type: string
-            relatedSurahs:
-              type: array
-              items:
-                type: string
             discussionQuestions:
               type: array
               items:
                 type: string
-          required: [content, relatedSurahs, discussionQuestions]
+          required: [content, discussionQuestions]
 
     DuaCategory:
       type: object

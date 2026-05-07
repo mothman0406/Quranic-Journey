@@ -14,6 +14,8 @@ export default function ChildLayout() {
       <Stack.Screen name="duas/index" />
       <Stack.Screen name="duas/[categorySlug]" />
       <Stack.Screen name="duas/dua/[duaId]" />
+      <Stack.Screen name="stories/index" />
+      <Stack.Screen name="stories/[storyIdOrSlug]" />
       <Stack.Screen name="targets" />
       <Stack.Screen name="profile" />
       <Stack.Screen name="more" />

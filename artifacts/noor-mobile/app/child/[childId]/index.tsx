@@ -66,7 +66,10 @@ type NewMemorization = {
 
 type DashboardStory = {
   id: number;
+  slug: string;
   title: string;
+  storyType: string;
+  summary: string;
 };
 
 type DashboardDua = {
@@ -1229,6 +1232,18 @@ export default function ChildDashboard() {
     } as unknown as Href);
   }
 
+  function openStoryDetail(story: DashboardStory, displayName = name ?? "") {
+    if (!isValidChildId(childId)) return;
+    router.push({
+      pathname: "/child/[childId]/stories/[storyIdOrSlug]",
+      params: {
+        childId,
+        storyIdOrSlug: story.slug || String(story.id),
+        name: displayName,
+      },
+    } as unknown as Href);
+  }
+
   function openChildRoute(
     pathname:
       | "/child/[childId]/memorization"
@@ -1513,7 +1528,7 @@ export default function ChildDashboard() {
                 detail={story.title}
                 iconName="sparkles-outline"
                 color="#2563eb"
-                onPress={() => openChildRoute("/child/[childId]/more", child.name)}
+                onPress={() => openStoryDetail(story, child.name)}
               />
             )}
             {dua && (

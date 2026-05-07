@@ -140,6 +140,15 @@ export interface DashboardWorkItem {
   estimatedMinutes?: number;
 }
 
+export type StoryType = (typeof StoryType)[keyof typeof StoryType];
+
+export const StoryType = {
+  quranic_narrative: "quranic_narrative",
+  seerah_context: "seerah_context",
+  companion_profile: "companion_profile",
+  moral_lesson: "moral_lesson",
+} as const;
+
 export type DailyPlanReviewSessionsItem = {
   surahName: string;
   surahNumber: number;
@@ -148,7 +157,10 @@ export type DailyPlanReviewSessionsItem = {
 
 export type DailyPlanStory = {
   id: number;
+  slug: string;
   title: string;
+  storyType: StoryType;
+  summary: string;
 } | null;
 
 export type DailyPlanDua = {
@@ -687,14 +699,25 @@ export type SurahDetail = Surah & {
   tajweedNotes?: string[];
 };
 
-export type StoryCategory = (typeof StoryCategory)[keyof typeof StoryCategory];
+export interface StorySources {
+  primary?: string;
+  hadith?: string[];
+  seerah?: string[];
+  notes?: string;
+}
 
-export const StoryCategory = {
-  prophet: "prophet",
-  companion: "companion",
-  quran: "quran",
-  moral: "moral",
-} as const;
+export interface StoryAyahRef {
+  surahNumber: number;
+  ayahStart: number;
+  ayahEnd: number;
+  label?: string;
+}
+
+export interface StoryTypeSummary {
+  storyType: StoryType;
+  label: string;
+  count: number;
+}
 
 export type StoryAgeGroup = (typeof StoryAgeGroup)[keyof typeof StoryAgeGroup];
 
@@ -707,18 +730,20 @@ export const StoryAgeGroup = {
 
 export interface Story {
   id: number;
+  slug: string;
   title: string;
-  category: StoryCategory;
+  storyType: StoryType;
   ageGroup: StoryAgeGroup;
   summary: string;
   readingTimeMinutes: number;
   featuredCharacter: string;
   morals: string[];
+  relatedAyahs: StoryAyahRef[];
+  sources: StorySources;
 }
 
 export type StoryDetail = Story & {
   content: string;
-  relatedSurahs: string[];
   discussionQuestions: string[];
 };
 
@@ -861,9 +886,31 @@ export type ListSurahs200 = {
   surahs: Surah[];
 };
 
+export type ListStoryCategories200 = {
+  totalCount: number;
+  storyTypes: StoryTypeSummary[];
+};
+
+export type ListContextualStoriesParams = {
+  surahNumber: number;
+  ayah?: number;
+};
+
+export type ListContextualStories200Context = {
+  surahNumber: number;
+  ayah?: number | null;
+};
+
+export type ListContextualStories200 = {
+  context: ListContextualStories200Context;
+  stories: Story[];
+};
+
 export type ListStoriesParams = {
   ageGroup?: ListStoriesAgeGroup;
-  category?: ListStoriesCategory;
+  storyType?: ListStoriesStoryType;
+  surahNumber?: number;
+  ayah?: number;
 };
 
 export type ListStoriesAgeGroup =
@@ -876,14 +923,14 @@ export const ListStoriesAgeGroup = {
   teen: "teen",
 } as const;
 
-export type ListStoriesCategory =
-  (typeof ListStoriesCategory)[keyof typeof ListStoriesCategory];
+export type ListStoriesStoryType =
+  (typeof ListStoriesStoryType)[keyof typeof ListStoriesStoryType];
 
-export const ListStoriesCategory = {
-  prophet: "prophet",
-  companion: "companion",
-  quran: "quran",
-  moral: "moral",
+export const ListStoriesStoryType = {
+  quranic_narrative: "quranic_narrative",
+  seerah_context: "seerah_context",
+  companion_profile: "companion_profile",
+  moral_lesson: "moral_lesson",
 } as const;
 
 export type ListStories200 = {

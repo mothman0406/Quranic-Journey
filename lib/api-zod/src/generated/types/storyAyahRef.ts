@@ -5,9 +5,10 @@
  * NoorPath - Muslim Parenting & Quran Learning App API
  * OpenAPI spec version: 0.1.0
  */
-import type { Story } from "./story";
 
-export type StoryDetail = Story & {
-  content: string;
-  discussionQuestions: string[];
-};
+export interface StoryAyahRef {
+  surahNumber: number;
+  ayahStart: number;
+  ayahEnd: number;
+  label?: string;
+}

@@ -1,0 +1,79 @@
+import { apiFetch } from "@/src/lib/api";
+
+export type StoryType =
+  | "quranic_narrative"
+  | "seerah_context"
+  | "companion_profile"
+  | "moral_lesson";
+
+export type StoryAgeGroup = "toddler" | "child" | "preteen" | "teen";
+
+export interface StorySources {
+  primary?: string;
+  hadith?: string[];
+  seerah?: string[];
+  notes?: string;
+}
+
+export interface StoryAyahRef {
+  surahNumber: number;
+  ayahStart: number;
+  ayahEnd: number;
+  label?: string;
+}
+
+export interface Story {
+  id: number;
+  slug: string;
+  title: string;
+  storyType: StoryType;
+  ageGroup: StoryAgeGroup;
+  summary: string;
+  readingTimeMinutes: number;
+  featuredCharacter: string;
+  morals: string[];
+  relatedAyahs: StoryAyahRef[];
+  sources: StorySources;
+}
+
+export type StoryDetail = Story & {
+  content: string;
+  discussionQuestions: string[];
+};
+
+export interface StoryTypeSummary {
+  storyType: StoryType;
+  label: string;
+  count: number;
+}
+
+export type ListStoriesParams = {
+  storyType?: StoryType;
+  ageGroup?: StoryAgeGroup;
+  surahNumber?: number;
+  ayah?: number;
+};
+
+function buildQuery(params: ListStoriesParams) {
+  const search = new URLSearchParams();
+  if (params.storyType) search.set("storyType", params.storyType);
+  if (params.ageGroup) search.set("ageGroup", params.ageGroup);
+  if (params.surahNumber !== undefined) search.set("surahNumber", String(params.surahNumber));
+  if (params.ayah !== undefined) search.set("ayah", String(params.ayah));
+  const value = search.toString();
+  return value ? `?${value}` : "";
+}
+
+export async function fetchStoryCategories(): Promise<StoryTypeSummary[]> {
+  const response = await apiFetch<{ storyTypes: StoryTypeSummary[] }>("/api/stories/categories");
+  return response.storyTypes;
+}
+
+export async function fetchStories(params: ListStoriesParams = {}): Promise<Story[]> {
+  const response = await apiFetch<{ stories: Story[] }>(`/api/stories${buildQuery(params)}`);
+  return response.stories;
+}
+
+export async function fetchStory(idOrSlug: string): Promise<StoryDetail> {
+  return apiFetch<StoryDetail>(`/api/stories/${encodeURIComponent(idOrSlug)}`);
+}

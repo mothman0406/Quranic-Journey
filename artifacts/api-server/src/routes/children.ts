@@ -10,7 +10,7 @@ import {
   type NextSurahNumberResolver,
   type ResolveSurahBoundedPageRangeOptions,
 } from "../data/quran-meta.js";
-import { STORIES } from "../data/stories.js";
+import { STORIES, getStoriesForSurahRange, type StoryData } from "../data/stories.js";
 import { getCategoryBySlug, getRandomDua } from "../data/duas.js";
 import { addDaysToLocalDate, getRequestLocalDate } from "../lib/local-date.js";
 import {
@@ -55,6 +55,16 @@ const MEMORIZATION_PAGE_RANGE_OPTIONS: ResolveSurahBoundedPageRangeOptions = {
   direction: "backward",
   getNextSurahNumber: getNextMemorizationSurahNumber,
 };
+
+function formatDashboardStory(story: StoryData) {
+  return {
+    id: story.id,
+    slug: story.slug,
+    title: story.title,
+    storyType: story.storyType,
+    summary: story.summary,
+  };
+}
 
 function getMemorizationRangeSurahNumbers(startSurah: number, endSurah: number): number[] {
   const startIndex = SURAHS_IN_ORDER.findIndex((surah) => surah.number === startSurah);
@@ -683,7 +693,6 @@ router.get("/children/:childId/dashboard", async (req, res) => {
   const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
   const weeklyProgress = dayNames.map(day => ({ day, versesMemorized: 0, minutesPracticed: 0 }));
 
-  const randomStory = child.hideStories ? null : (STORIES.find(s => s.ageGroup === child.ageGroup || s.ageGroup === "child") ?? null);
   const randomDua = child.hideDuas ? null : getRandomDua();
 
   const memorizedCount = memorizedSurahIds.length;
@@ -931,6 +940,41 @@ router.get("/children/:childId/dashboard", async (req, res) => {
   }
 
   const displaySurahDataFinal = displaySurahData;
+  const dashboardStory = child.hideStories ? null : (() => {
+    const ranges =
+      todayProgress.memTargetSurah != null &&
+      todayProgress.memTargetAyahStart != null &&
+      todayProgress.memTargetAyahEnd != null
+        ? getMemorizationRangeSurahNumbers(
+            todayProgress.memTargetSurah,
+            todayProgress.memTargetEndSurah ?? todayProgress.memTargetSurah,
+          ).map((surahNumber) => {
+            const surah = SURAHS.find((candidate) => candidate.number === surahNumber);
+            const isStart = surahNumber === todayProgress.memTargetSurah;
+            const isEnd =
+              surahNumber === (todayProgress.memTargetEndSurah ?? todayProgress.memTargetSurah);
+            return {
+              surahNumber,
+              ayahStart: isStart ? todayProgress.memTargetAyahStart ?? 1 : 1,
+              ayahEnd: isEnd
+                ? todayProgress.memTargetAyahEnd ?? surah?.verseCount ?? 1
+                : surah?.verseCount ?? 1,
+            };
+          })
+        : activeWorkflowItem
+        ? [{
+            surahNumber: activeWorkflowItem.currentWorkSurahNumber,
+            ayahStart: activeWorkflowItem.currentWorkAyahStart,
+            ayahEnd: activeWorkflowItem.currentWorkAyahEnd,
+          }]
+        : [];
+
+    const contextualStory = getStoriesForSurahRange(ranges)[0];
+    return contextualStory ??
+      STORIES.find((story) => story.ageGroup === child.ageGroup) ??
+      STORIES.find((story) => story.ageGroup === "child") ??
+      null;
+  })();
 
   const todaysPlan = {
     date: today,
@@ -1016,7 +1060,7 @@ router.get("/children/:childId/dashboard", async (req, res) => {
         ayahCount: activeChunk.ayahEnd - activeChunk.ayahStart + 1,
       };
     }),
-    story: randomStory ? { id: randomStory.id, title: randomStory.title } : null,
+    story: dashboardStory ? formatDashboardStory(dashboardStory) : null,
     dua: randomDua ? {
       id: randomDua.id,
       arabic: randomDua.arabic,

@@ -20,7 +20,7 @@ import {
   useWindowDimensions,
   View,
 } from "react-native";
-import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
+import { useFocusEffect, useLocalSearchParams, useRouter, type Href } from "expo-router";
 import { usePreventRemove } from "@react-navigation/native";
 import { Audio } from "expo-av";
 import {
@@ -117,6 +117,7 @@ const MUSHAF_WORD_FONT_SIZE = 20;
 const MUSHAF_END_MARKER_FONT_SIZE = 16;
 const MUSHAF_LINE_HEIGHT = 38;
 const MUSHAF_LINE_FIT_INSET = 2;
+const STORY_RELATED_SURAH_NUMBERS = new Set([9, 12, 20, 21, 27, 28, 37, 94, 96, 105]);
 type InternalPhase = "single" | "cumulative";
 type DiscoveryFilter = "all" | "current" | "in_progress" | "not_started" | "memorized" | "needs_review";
 type AyahTone = "white" | "red" | "orange" | "green";
@@ -1383,6 +1384,18 @@ export default function MemorizationScreen() {
       pathname: "/child/[childId]/targets",
       params: { childId, name: params.name ?? "" },
     });
+  }
+
+  function openStoriesForSurah(surahNumber: number) {
+    if (!childId) return;
+    router.push({
+      pathname: "/child/[childId]/stories",
+      params: {
+        childId,
+        name: params.name ?? "",
+        surahNumber: String(surahNumber),
+      },
+    } as unknown as Href);
   }
 
   async function saveMushafViewAsDefault() {
@@ -5393,6 +5406,7 @@ export default function MemorizationScreen() {
         onStartDirect={startConfiguredSession}
         onStartBookmark={startBookmarkedSession}
         onToggleAyah={handleManualAyahToggle}
+        onOpenStories={openStoriesForSurah}
       />
     );
   }
@@ -7476,6 +7490,7 @@ function MemorizationDiscovery({
   onStartDirect,
   onStartBookmark,
   onToggleAyah,
+  onOpenStories,
 }: {
   childId: string | undefined;
   name: string | undefined;
@@ -7494,6 +7509,7 @@ function MemorizationDiscovery({
   onStartDirect: (target: SessionTarget) => void;
   onStartBookmark: (bookmark: MemorizationSessionBookmark) => void;
   onToggleAyah: (request: ManualAyahToggleRequest) => Promise<void>;
+  onOpenStories: (surahNumber: number) => void;
 }) {
   const childName = state.status === "ready" ? state.dashboard.child?.name ?? name : name;
   const [selectedSurahNumber, setSelectedSurahNumber] = useState<number | null>(null);
@@ -7825,6 +7841,8 @@ function MemorizationDiscovery({
                   showResolving={visiblePendingProgressSurahNumber === surah.number}
                   onPress={() => { void startProgress(progress); }}
                   onManage={() => setSelectedSurahNumber(surah.number)}
+                  hasStories={STORY_RELATED_SURAH_NUMBERS.has(surah.number)}
+                  onOpenStories={() => onOpenStories(surah.number)}
                 />
               ))
             )}
@@ -8486,6 +8504,8 @@ function SurahProgressRow({
   showResolving,
   onPress,
   onManage,
+  hasStories,
+  onOpenStories,
 }: {
   surah: SurahSummary;
   progress: MemorizationProgress;
@@ -8495,6 +8515,8 @@ function SurahProgressRow({
   showResolving: boolean;
   onPress: () => void;
   onManage: () => void;
+  hasStories: boolean;
+  onOpenStories: () => void;
 }) {
   const [showTajweedNotes, setShowTajweedNotes] = useState(false);
   const status = getStatusCopy(progress.status);
@@ -8581,21 +8603,41 @@ function SurahProgressRow({
           ) : (
             <View style={styles.surahNextSpacer} />
           )}
-          <Pressable
-            style={[
-              styles.surahManageButton,
-              isResolving && styles.surahManageButtonDisabled,
-            ]}
-            disabled={isResolving}
-            onPress={(event) => {
-              event.stopPropagation();
-              onManage();
-            }}
-            accessibilityRole="button"
-            accessibilityLabel={`Manage ${surah.nameTransliteration} ayahs`}
-          >
-            <Text style={styles.surahActionText}>{actionLabel}</Text>
-          </Pressable>
+          <View style={styles.surahActionButtons}>
+            {hasStories ? (
+              <Pressable
+                style={[
+                  styles.surahStoryButton,
+                  isResolving && styles.surahManageButtonDisabled,
+                ]}
+                disabled={isResolving}
+                onPress={(event) => {
+                  event.stopPropagation();
+                  onOpenStories();
+                }}
+                accessibilityRole="button"
+                accessibilityLabel={`Open stories related to ${surah.nameTransliteration}`}
+              >
+                <Ionicons name="library-outline" size={15} color="#be123c" />
+                <Text style={styles.surahStoryText}>Stories</Text>
+              </Pressable>
+            ) : null}
+            <Pressable
+              style={[
+                styles.surahManageButton,
+                isResolving && styles.surahManageButtonDisabled,
+              ]}
+              disabled={isResolving}
+              onPress={(event) => {
+                event.stopPropagation();
+                onManage();
+              }}
+              accessibilityRole="button"
+              accessibilityLabel={`Manage ${surah.nameTransliteration} ayahs`}
+            >
+              <Text style={styles.surahActionText}>{actionLabel}</Text>
+            </Pressable>
+          </View>
         </View>
       </Pressable>
 
@@ -9649,6 +9691,28 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "900",
     color: "#2563eb",
+  },
+  surahActionButtons: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  surahStoryButton: {
+    minHeight: 34,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 5,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "#fecdd3",
+    backgroundColor: "#fff1f2",
+    paddingHorizontal: 11,
+  },
+  surahStoryText: {
+    fontSize: 13,
+    fontWeight: "900",
+    color: "#be123c",
   },
   surahManageButton: {
     minHeight: 34,
