@@ -60,8 +60,9 @@ import {
 } from "@/src/lib/mushaf";
 import {
   emptyMushafAnnotations,
+  loadStandaloneMushafAnnotations,
   mushafAnnotationRecordFromTarget,
-  normalizeMushafAnnotations,
+  STANDALONE_MUSHAF_ANNOTATIONS_KEY,
   type MushafAnnotations,
   type MushafAyahTarget as PageAyahTarget,
   type MushafHighlightColor as HighlightColor,
@@ -149,7 +150,6 @@ const HIGHLIGHT_COLORS: Record<HighlightColor, { bg: string; dot: string; label:
 const GENERAL_LAST_PAGE_KEY = "mushaf:general:lastPage";
 const GENERAL_BOOKMARKS_KEY = "mushaf:general:bookmarks";
 const GENERAL_RECENT_KEY = "mushaf:general:recent";
-const GENERAL_ANNOTATIONS_KEY = "mushaf:general:annotations";
 const GENERAL_AUDIO_SETTINGS_KEY = "mushaf:general:audioSettings";
 const GENERAL_VIEW_MODE_KEY = "mushaf:general:viewMode";
 
@@ -2129,9 +2129,10 @@ export default function MushafScreen() {
 
     async function loadAnnotations() {
       try {
-        const raw = await AsyncStorage.getItem(GENERAL_ANNOTATIONS_KEY);
         if (cancelled) return;
-        setAnnotations(normalizeMushafAnnotations(raw));
+        const loadedAnnotations = await loadStandaloneMushafAnnotations();
+        if (cancelled) return;
+        setAnnotations(loadedAnnotations);
       } catch {
         if (!cancelled) setAnnotationError("Ayah annotations could not load.");
       }
@@ -2486,7 +2487,7 @@ export default function MushafScreen() {
   }
 
   function persistAnnotations(next: MushafAnnotations) {
-    AsyncStorage.setItem(GENERAL_ANNOTATIONS_KEY, JSON.stringify(next)).catch(() => {
+    AsyncStorage.setItem(STANDALONE_MUSHAF_ANNOTATIONS_KEY, JSON.stringify(next)).catch(() => {
       setAnnotationError("Ayah annotations could not save.");
     });
   }

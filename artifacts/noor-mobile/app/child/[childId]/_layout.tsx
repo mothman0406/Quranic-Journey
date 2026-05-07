@@ -10,6 +10,7 @@ export default function ChildLayout() {
       <Stack.Screen name="memorization" />
       <Stack.Screen name="progress" />
       <Stack.Screen name="plan" />
+      <Stack.Screen name="notes-bookmarks" />
       <Stack.Screen name="targets" />
       <Stack.Screen name="profile" />
       <Stack.Screen name="more" />

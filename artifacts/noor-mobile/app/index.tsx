@@ -16,6 +16,15 @@ import { Redirect, useFocusEffect, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { authClient } from "@/src/lib/auth-client";
 import { apiFetch } from "@/src/lib/api";
+import {
+  NotesBookmarksPanel,
+  type NotesBookmarksEntry,
+} from "@/src/components/notes-bookmarks-panel";
+import {
+  emptyMushafAnnotations,
+  loadStandaloneMushafAnnotations,
+  type MushafAnnotations,
+} from "@/src/lib/mushaf-annotations";
 
 type IconName = ComponentProps<typeof Ionicons>["name"];
 
@@ -151,6 +160,9 @@ export default function HomeScreen() {
   const [activityLoading, setActivityLoading] = useState(false);
   const [parentMenuOpen, setParentMenuOpen] = useState(false);
   const [selectedChild, setSelectedChild] = useState<Child | null>(null);
+  const [standaloneAnnotations, setStandaloneAnnotations] = useState<MushafAnnotations>(() =>
+    emptyMushafAnnotations(),
+  );
 
   const user = session?.user;
   const sortStorageKey = useMemo(() => {
@@ -168,12 +180,21 @@ export default function HomeScreen() {
     }
   }, []);
 
+  const loadStandaloneAnnotations = useCallback(async () => {
+    try {
+      setStandaloneAnnotations(await loadStandaloneMushafAnnotations());
+    } catch {
+      setStandaloneAnnotations(emptyMushafAnnotations());
+    }
+  }, []);
+
   useFocusEffect(
     useCallback(() => {
       if (session?.user) {
         void loadChildren();
+        void loadStandaloneAnnotations();
       }
-    }, [loadChildren, session?.user]),
+    }, [loadChildren, loadStandaloneAnnotations, session?.user]),
   );
 
   useEffect(() => {
@@ -256,6 +277,17 @@ export default function HomeScreen() {
 
   function openGeneralMushaf() {
     router.push("/mushaf");
+  }
+
+  function openStandaloneAnnotation(entry: NotesBookmarksEntry) {
+    router.push({
+      pathname: "/mushaf",
+      params: { page: String(entry.pageNumber) },
+    });
+  }
+
+  function openStandaloneNotesBookmarks() {
+    router.push("/notes-bookmarks");
   }
 
   function openChildRoute(child: Child, pathname: ChildRoute, extras?: Record<string, string>) {
@@ -407,6 +439,11 @@ export default function HomeScreen() {
             <Ionicons name="reader-outline" size={17} color="#0f766e" />
             <Text style={styles.secondaryButtonText}>Read Quran</Text>
           </Pressable>
+          <NotesBookmarksPanel
+            annotations={standaloneAnnotations}
+            onPressEntry={openStandaloneAnnotation}
+            onViewAll={openStandaloneNotesBookmarks}
+          />
         </View>
       ) : (
         <View style={styles.content}>
@@ -426,6 +463,12 @@ export default function HomeScreen() {
               </View>
               <Ionicons name="chevron-forward" size={18} color="#94a3b8" />
             </Pressable>
+
+            <NotesBookmarksPanel
+              annotations={standaloneAnnotations}
+              onPressEntry={openStandaloneAnnotation}
+              onViewAll={openStandaloneNotesBookmarks}
+            />
 
             {recentlyActiveChildren.length > 0 ? (
               <View style={styles.activeStrip}>

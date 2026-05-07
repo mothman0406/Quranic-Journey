@@ -12,7 +12,16 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { ChildBottomNav } from "@/src/components/child-bottom-nav";
+import {
+  NotesBookmarksPanel,
+  type NotesBookmarksEntry,
+} from "@/src/components/notes-bookmarks-panel";
 import { ApiError, apiFetch } from "@/src/lib/api";
+import {
+  emptyMushafAnnotations,
+  loadMushafAnnotations,
+  type MushafAnnotations,
+} from "@/src/lib/mushaf-annotations";
 import { fetchReviewQueue, type ReviewQueueItem, type ReviewQueueResponse } from "@/src/lib/reviews";
 import { getReviewPriorityStyle } from "@/src/lib/review-priority";
 
@@ -943,6 +952,9 @@ export default function ChildDashboard() {
   const [switcherLoading, setSwitcherLoading] = useState(false);
   const [readOnlyNotice, setReadOnlyNotice] = useState<string | null>(null);
   const [goalsPanelTab, setGoalsPanelTab] = useState<GoalsPanelTab>("goals");
+  const [mushafAnnotations, setMushafAnnotations] = useState<MushafAnnotations>(() =>
+    emptyMushafAnnotations(),
+  );
   const navChildId = typeof childId === "string" ? childId : undefined;
   const navName = typeof name === "string" ? name : "";
   const todayDate = getLocalDateValue();
@@ -1071,6 +1083,19 @@ export default function ChildDashboard() {
     }
   }, []);
 
+  const loadReadingAnnotations = useCallback(async () => {
+    if (!isValidChildId(childId)) {
+      setMushafAnnotations(emptyMushafAnnotations());
+      return;
+    }
+
+    try {
+      setMushafAnnotations(await loadMushafAnnotations(childId));
+    } catch {
+      setMushafAnnotations(emptyMushafAnnotations());
+    }
+  }, [childId]);
+
   useEffect(() => {
     setReadOnlyNotice(null);
   }, [selectedDate]);
@@ -1089,6 +1114,12 @@ export default function ChildDashboard() {
     useCallback(() => {
       loadDashboard();
     }, [loadDashboard]),
+  );
+
+  useFocusEffect(
+    useCallback(() => {
+      void loadReadingAnnotations();
+    }, [loadReadingAnnotations]),
   );
 
   function showReadOnlyNotice() {
@@ -1150,6 +1181,22 @@ export default function ChildDashboard() {
 
     router.push({
       pathname: "/child/[childId]/targets",
+      params: { childId, name: name ?? "" },
+    });
+  }
+
+  function openMushafAnnotation(entry: NotesBookmarksEntry) {
+    if (!isValidChildId(childId)) return;
+    router.push({
+      pathname: "/child/[childId]/mushaf",
+      params: { childId, name: name ?? "", page: String(entry.pageNumber) },
+    });
+  }
+
+  function openNotesBookmarksList() {
+    if (!isValidChildId(childId)) return;
+    router.push({
+      pathname: "/child/[childId]/notes-bookmarks",
       params: { childId, name: name ?? "" },
     });
   }
@@ -1477,6 +1524,12 @@ export default function ChildDashboard() {
             </Pressable>
           </>
         )}
+
+        <NotesBookmarksPanel
+          annotations={mushafAnnotations}
+          onPressEntry={openMushafAnnotation}
+          onViewAll={openNotesBookmarksList}
+        />
 
         <GoalsAchievementsCard
           activeTab={goalsPanelTab}

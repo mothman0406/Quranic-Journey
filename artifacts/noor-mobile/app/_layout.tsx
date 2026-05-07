@@ -19,6 +19,7 @@ export default function RootLayout() {
         <Stack.Screen name="sign-in" options={{ headerShown: false }} />
         <Stack.Screen name="account-settings" options={{ headerShown: false }} />
         <Stack.Screen name="mushaf" options={{ headerShown: false }} />
+        <Stack.Screen name="notes-bookmarks" options={{ headerShown: false }} />
         <Stack.Screen name="profile/new" options={{ headerShown: false }} />
         <Stack.Screen name="child/[childId]" options={{ headerShown: false }} />
       </Stack>

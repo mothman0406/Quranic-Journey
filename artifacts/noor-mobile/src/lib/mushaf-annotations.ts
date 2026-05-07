@@ -30,6 +30,11 @@ export type MushafAnnotations = {
   notes: Record<string, MushafAyahNoteRecord>;
 };
 
+export type MushafBookmarkEntry = MushafAyahAnnotationRecord;
+export type MushafNoteEntry = MushafAyahNoteRecord;
+
+export const STANDALONE_MUSHAF_ANNOTATIONS_KEY = "mushaf:general:annotations";
+
 export function mushafAnnotationStorageKey(childId: string | undefined) {
   return `noorpath:mushaf:annotations:${childId ?? "unknown"}`;
 }
@@ -140,11 +145,24 @@ export async function loadMushafAnnotations(
   return normalizeMushafAnnotations(raw);
 }
 
+export async function loadStandaloneMushafAnnotations(): Promise<MushafAnnotations> {
+  const raw = await AsyncStorage.getItem(STANDALONE_MUSHAF_ANNOTATIONS_KEY);
+  return normalizeMushafAnnotations(raw);
+}
+
 export async function saveMushafAnnotations(
   childId: string | undefined,
   annotations: MushafAnnotations,
 ): Promise<void> {
   await AsyncStorage.setItem(mushafAnnotationStorageKey(childId), JSON.stringify(annotations));
+}
+
+export function listMushafBookmarks(annotations: MushafAnnotations): MushafBookmarkEntry[] {
+  return Object.values(annotations.bookmarks).sort((a, b) => b.savedAt - a.savedAt);
+}
+
+export function listMushafNotes(annotations: MushafAnnotations): MushafNoteEntry[] {
+  return Object.values(annotations.notes).sort((a, b) => b.updatedAt - a.updatedAt);
 }
 
 export async function saveMushafAyahBookmark(
