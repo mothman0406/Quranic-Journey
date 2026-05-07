@@ -239,6 +239,120 @@
       }
     },
     {
+      "id": 28,
+      "slug": "ibrahim-debates-the-king",
+      "title": "Ibrahim Debates the King",
+      "previousStoryId": 21,
+      "storyType": "quranic_narrative",
+      "ageGroup": "child",
+      "summary": "Ibrahim debated a proud king about Allah's power, and the king was silenced when Ibrahim pointed to the sunrise.",
+      "readingTimeMinutes": 4,
+      "featuredCharacter": "Prophet Ibrahim",
+      "morals": [
+        "Allah alone gives life and death",
+        "Pride can make a person argue against clear truth",
+        "Simple truth can defeat arrogant confusion",
+        "Guidance belongs to Allah"
+      ],
+      "content": "Allah tells us about the one who argued with Ibrahim about his Lord because Allah had given him kingship. Power made the king proud, and pride made him argue against the truth.\n\nIbrahim said, \"My Lord is the One who gives life and causes death.\" The king answered as if he could do the same. He claimed, \"I give life and cause death.\" His answer did not show true power over life. It was an attempt to twist the meaning and escape Ibrahim's point.\n\nSo Ibrahim moved to a sign the king could not twist. He said that Allah brings the sun from the east, so the king should bring it from the west. The one who disbelieved was stunned. Allah does not guide the wrongdoing people.\n\nThe debate was short, but it showed the difference between real lordship and pretend power. A king may command people for a time, but he cannot command the sun, create life from nothing, or control death. Ibrahim's Lord is the Lord of every king.",
+      "relatedAyahs": [
+        {
+          "surahNumber": 2,
+          "ayahStart": 258,
+          "ayahEnd": 258,
+          "label": "Al-Baqarah 2:258"
+        }
+      ],
+      "discussionQuestions": [
+        "Why did kingship make the ruler proud?",
+        "How did Ibrahim show that Allah's power is unlike human power?",
+        "Why could the king not answer the sunrise argument?",
+        "What does this story teach about using clear words for truth?"
+      ],
+      "sources": {
+        "primary": "Quran, Al-Baqarah 2:258; Arabic Tafsir Ibn Kathir, Wikisource, Tafsir Ibn Kathir/Surah Al-Baqarah",
+        "hadith": [],
+        "seerah": [],
+        "notes": "Post-generation age assessment: child, because the story is a clear debate about Allah's power with no mature themes. The king's name is not included because the Quranic verse does not name him."
+      }
+    },
+    {
+      "id": 26,
+      "slug": "sons-of-adam-qabil-and-habil",
+      "title": "The Sons of Adam: Qabil and Habil",
+      "previousStoryId": 13,
+      "storyType": "quranic_narrative",
+      "ageGroup": "preteen",
+      "summary": "Two sons of Adam offered sacrifices; one was accepted, jealousy led to the first murder, and Allah taught burial through a bird.",
+      "readingTimeMinutes": 6,
+      "featuredCharacter": "The sons of Adam",
+      "morals": [
+        "Allah accepts deeds from those who have taqwa",
+        "Jealousy can lead a person from resentment into grave sin",
+        "Refusing revenge can be an act of fear of Allah",
+        "Allah teaches people even after they make terrible mistakes"
+      ],
+      "content": "Allah tells the Prophet to recite the story of the two sons of Adam in truth. Each son offered a sacrifice. One offering was accepted, and the other was not. The son whose offering was rejected became angry and threatened to kill his brother.\n\nHis brother answered with faith, not revenge. He said that Allah only accepts from people of taqwa. He also said that even if his brother stretched out his hand to kill him, he would not stretch out his own hand to kill his brother. He feared Allah, the Lord of the worlds.\n\nThe warning did not stop the jealous brother. His own soul made the murder of his brother seem acceptable to him, so he killed him and became among the losers. The Quran does not turn the moment into a spectacle. It shows the terrible result of envy when a person refuses Allah's warning.\n\nThen Allah sent a bird scratching in the earth to show him how to hide the body of his brother. The killer realized his weakness and said, in effect, that he had failed even to be like that bird and cover his brother. He became regretful.\n\nThe story is short, but its warning is deep. Worship is not a contest for pride. If Allah gives another person acceptance or blessing, jealousy is not the path to peace. The safe path is taqwa, repentance, and protecting life as something sacred before Allah.",
+      "relatedAyahs": [
+        {
+          "surahNumber": 5,
+          "ayahStart": 27,
+          "ayahEnd": 31,
+          "label": "Al-Ma'idah 5:27-31"
+        }
+      ],
+      "discussionQuestions": [
+        "What did Habil say about the kind of people whose deeds Allah accepts?",
+        "How did jealousy change Qabil's choices?",
+        "Why is refusing revenge sometimes a sign of strength?",
+        "What did Allah teach through the bird?"
+      ],
+      "sources": {
+        "primary": "Quran, Al-Ma'idah 5:27-31; Arabic Tafsir Ibn Kathir, Wikisource, Tafsir Ibn Kathir/Surah Al-Ma'idah",
+        "hadith": [],
+        "seerah": [],
+        "notes": "Post-generation age assessment: preteen, because the story includes murder and burial, described soberly without graphic detail. Names Qabil and Habil are common tafsir identifiers; the Quran itself says the two sons of Adam."
+      }
+    },
+    {
+      "id": 21,
+      "slug": "ibrahim-questions-the-stars",
+      "title": "Ibrahim Questions the Stars",
+      "previousStoryId": null,
+      "storyType": "quranic_narrative",
+      "ageGroup": "child",
+      "summary": "Ibrahim looked at a star, the moon, and the sun, then declared that he turned away from false worship toward the Creator.",
+      "readingTimeMinutes": 5,
+      "featuredCharacter": "Prophet Ibrahim",
+      "morals": [
+        "Created things are signs, not gods",
+        "The truth about Allah is greater than what people inherit from their surroundings",
+        "A believer should turn sincerely to the Creator",
+        "Guidance from Allah leads away from false worship"
+      ],
+      "content": "Ibrahim spoke to his father Azar about worshiping idols. He asked why his father took idols as gods, and he said that he saw his father and his people in clear error. Allah was showing Ibrahim the kingdom of the heavens and the earth so that he would be among those with certainty.\n\nWhen night covered him, Ibrahim saw a star. He said, as part of his argument against his people's worship, \"This is my lord.\" But when it set, he said that he did not love those that disappear. A thing that rises and sets cannot be the Lord who controls all things.\n\nThen he saw the moon rising. Again he said, \"This is my lord.\" But when it set, he said that if his Lord did not guide him, he would surely be among the people gone astray. Then he saw the sun rising and said that this was greater. But when it set, he declared himself free from what they associated with Allah.\n\nIbrahim then announced the truth clearly: he turned his face toward the One who created the heavens and the earth, inclining to truth, and he was not among those who associated partners with Allah.\n\nThe story teaches that the sky itself points beyond itself. Stars, moon, and sun are beautiful creations, but they are not the Creator. Ibrahim's heart turned from created lights to the Lord who made all light.",
+      "relatedAyahs": [
+        {
+          "surahNumber": 6,
+          "ayahStart": 74,
+          "ayahEnd": 79,
+          "label": "Al-An'am 6:74-79"
+        }
+      ],
+      "discussionQuestions": [
+        "Why did Ibrahim reject the star, moon, and sun as things to worship?",
+        "What does it mean that created things point to the Creator?",
+        "How did Ibrahim speak clearly against false worship?",
+        "Why is guidance from Allah important when people around us are confused?"
+      ],
+      "sources": {
+        "primary": "Quran, Al-An'am 6:74-79; Arabic Tafsir Ibn Kathir, Wikisource, Tafsir Ibn Kathir/Surah Al-An'am",
+        "hadith": [],
+        "seerah": [],
+        "notes": "Post-generation age assessment: child, because the story is a clear monotheism lesson with no mature themes. The story frames Ibrahim's statements as argument against his people, following common tafsir, not as actual worship of celestial bodies."
+      }
+    },
+    {
       "id": 16,
       "slug": "hud-and-the-people-of-ad",
       "title": "Hud and the People of Ad",
@@ -286,6 +400,256 @@
         "hadith": [],
         "seerah": [],
         "notes": "Post-generation age assessment: preteen, because the story includes communal destruction and arrogance, described soberly without graphic detail."
+      }
+    },
+    {
+      "id": 24,
+      "slug": "salih-and-the-she-camel",
+      "title": "Salih and the She-Camel",
+      "previousStoryId": null,
+      "storyType": "quranic_narrative",
+      "ageGroup": "preteen",
+      "summary": "Prophet Salih brought the people of Thamud a clear sign from Allah, but they harmed the she-camel and rejected the warning.",
+      "readingTimeMinutes": 6,
+      "featuredCharacter": "Prophet Salih",
+      "morals": [
+        "Clear signs from Allah must be met with humility",
+        "Do not harm what Allah has made sacred",
+        "Following arrogant leaders can lead a whole people into loss",
+        "Warnings are mercy before consequences arrive"
+      ],
+      "content": "Allah sent Salih to the people of Thamud. He called them to worship Allah alone. He reminded them that Allah had produced them from the earth and settled them in it, so they should seek forgiveness and turn back to Him.\n\nThe people asked for a sign. Allah gave them the she-camel as a clear sign. Salih told them to let her eat from Allah's earth and not touch her with harm, or a painful punishment would seize them. In the Quran's telling, she had a right to drink on an appointed day, and the people had their drink on an appointed day.\n\nInstead of honoring the sign, the arrogant people rejected it. They hamstrung the she-camel and disobeyed the command of their Lord. Then they challenged Salih to bring what he had threatened if he was truly a messenger.\n\nSalih told them to enjoy themselves in their homes for three days. This was a promise that would not be false. When Allah's command came, the punishment overtook the wrongdoers, and they were left fallen in their homes.\n\nSalih turned away from them and said that he had delivered the message of his Lord and advised them sincerely, but they did not love sincere advisers. His sorrow shows that prophets did not warn people because they wanted harm for them. They warned because they wanted people to return to Allah before it was too late.\n\nThe she-camel was a test of obedience. The people of Thamud failed because pride made them treat Allah's sign as something they could control.",
+      "relatedAyahs": [
+        {
+          "surahNumber": 7,
+          "ayahStart": 73,
+          "ayahEnd": 79,
+          "label": "Al-A'raf 7:73-79"
+        },
+        {
+          "surahNumber": 11,
+          "ayahStart": 61,
+          "ayahEnd": 68,
+          "label": "Hud 11:61-68"
+        },
+        {
+          "surahNumber": 26,
+          "ayahStart": 141,
+          "ayahEnd": 159,
+          "label": "Ash-Shu'ara 26:141-159"
+        }
+      ],
+      "discussionQuestions": [
+        "Why was the she-camel a test for Thamud?",
+        "What did Salih tell his people before the punishment came?",
+        "How can arrogance make someone reject sincere advice?",
+        "Why are warnings from Allah a mercy?"
+      ],
+      "sources": {
+        "primary": "Quran, Al-A'raf 7:73-79, Hud 11:61-68, Ash-Shu'ara 26:141-159; Arabic Tafsir Ibn Kathir, Wikisource",
+        "hadith": [],
+        "seerah": [],
+        "notes": "Post-generation age assessment: preteen, because the story includes harming the she-camel and communal punishment, described without graphic detail. Extra miracle-origin details not stated in the Quranic ranges are omitted."
+      }
+    },
+    {
+      "id": 23,
+      "slug": "people-of-lut",
+      "title": "Lut and the People of the Towns",
+      "previousStoryId": null,
+      "storyType": "quranic_narrative",
+      "ageGroup": "teen",
+      "summary": "Prophet Lut warned his people against grave immorality, and Allah saved Lut while destroying the towns that rejected him.",
+      "readingTimeMinutes": 7,
+      "featuredCharacter": "Prophet Lut",
+      "morals": [
+        "Allah's messengers warn people before punishment comes",
+        "Public sin becomes more dangerous when people defend it with pride",
+        "Allah protects His believing servants even in a corrupt society",
+        "Family connection does not save someone who rejects Allah's command"
+      ],
+      "content": "Allah sent Lut to his people, and he warned them about a grave sin. He asked whether they approached men with desire instead of women, and he called it an excess and an evil way. His people did not answer with repentance. They spoke of expelling Lut and his family because they wanted to keep themselves pure.\n\nBefore the punishment came, angels visited Ibrahim with good news, then told him they were being sent to the people of Lut. Ibrahim pleaded about the matter, but the angels made clear that Allah's command had come and that Lut would be saved except for his wife.\n\nThe angels then came to Lut in the form of guests. Lut was distressed for them because he knew the corruption of his people. The townspeople came rushing, demanding the male guests. Lut warned them and told them not to disgrace him before his guests. He called them to fear Allah and not shame him.\n\nThe guests then revealed the truth: they were messengers from Allah. They told Lut that the people would not reach him. Lut was commanded to leave with his family during the night and not let anyone look back. His wife was excepted; what struck the people would strike her too.\n\nWhen Allah's command came, the towns were overturned, and stones were rained upon them. The Quran describes this as a marked punishment from the Lord, not far from wrongdoers. Allah saved Lut and his family except his wife, who remained among those destroyed.\n\nThe story is painful and serious. It teaches that Allah's guidance about purity and obedience is not a small matter. Lut did not invent the warning; he delivered the command of his Lord. Those who mocked the warning learned that Allah's promise is true.",
+      "relatedAyahs": [
+        {
+          "surahNumber": 7,
+          "ayahStart": 80,
+          "ayahEnd": 84,
+          "label": "Al-A'raf 7:80-84"
+        },
+        {
+          "surahNumber": 11,
+          "ayahStart": 77,
+          "ayahEnd": 83,
+          "label": "Hud 11:77-83"
+        },
+        {
+          "surahNumber": 26,
+          "ayahStart": 160,
+          "ayahEnd": 175,
+          "label": "Ash-Shu'ara 26:160-175"
+        },
+        {
+          "surahNumber": 27,
+          "ayahStart": 54,
+          "ayahEnd": 58,
+          "label": "An-Naml 27:54-58"
+        }
+      ],
+      "discussionQuestions": [
+        "How did Lut warn his people before punishment came?",
+        "Why did the angels tell Lut to leave at night and not look back?",
+        "What does the story teach about defending public sin?",
+        "Why did family connection not save Lut's wife?"
+      ],
+      "sources": {
+        "primary": "Quran, Al-A'raf 7:80-84, Hud 11:77-83, Ash-Shu'ara 26:160-175, An-Naml 27:54-58; Arabic Tafsir Ibn Kathir, Wikisource",
+        "hadith": [],
+        "seerah": [],
+        "notes": "Post-generation age assessment: teen, because the central plot includes sexual immorality, attempted assault of male guests, family betrayal, and destruction. The story is told directly from Quranic themes without sensational detail or invented dialogue."
+      }
+    },
+    {
+      "id": 25,
+      "slug": "shuaib-and-the-people-of-madyan",
+      "title": "Shuaib and the People of Madyan",
+      "previousStoryId": null,
+      "storyType": "quranic_narrative",
+      "ageGroup": "preteen",
+      "summary": "Prophet Shuaib called Madyan to worship Allah and stop cheating in trade, but they rejected justice and warning.",
+      "readingTimeMinutes": 6,
+      "featuredCharacter": "Prophet Shuaib",
+      "morals": [
+        "Worship and honesty in business belong together",
+        "Cheating people is a spiritual problem, not only a money problem",
+        "A believer repairs what he can and relies on Allah",
+        "Rejecting sincere correction can destroy a community"
+      ],
+      "content": "Allah sent Shuaib to the people of Madyan. He called them to worship Allah alone. He also warned them about a sin that had spread among them: cheating in measure and weight. They were not to reduce people's goods or spread corruption in the land after it had been set right.\n\nShuaib reminded them that what remained from Allah was better for them if they were believers. He was not trying to seize their wealth. He wanted justice, honesty, and repentance. He said that he only wanted reform as much as he was able, and his success was only through Allah. Upon Allah he relied, and to Allah he turned.\n\nHis people answered with mockery and pressure. They asked whether his prayer commanded him to tell them what to do with their wealth. They threatened him and the believers with expulsion unless they returned to the people's way. They treated his call to honesty as if it were an attack on their freedom.\n\nShuaib stood firm. He reminded them not to let hatred of him lead them to the same kind of punishment that had struck the people of Nuh, Hud, Salih, or Lut. He called them to seek forgiveness from their Lord and repent, for his Lord is Merciful and Loving.\n\nThey continued rejecting him. When Allah's command came, the punishment seized those who did wrong, and they lay fallen in their homes. Allah saved Shuaib and those who believed with him by His mercy.\n\nThe story of Madyan teaches that faith is not separated from daily dealings. A person cannot worship Allah truthfully while cheating people in the market and calling it cleverness.",
+      "relatedAyahs": [
+        {
+          "surahNumber": 7,
+          "ayahStart": 85,
+          "ayahEnd": 93,
+          "label": "Al-A'raf 7:85-93"
+        },
+        {
+          "surahNumber": 11,
+          "ayahStart": 84,
+          "ayahEnd": 95,
+          "label": "Hud 11:84-95"
+        },
+        {
+          "surahNumber": 26,
+          "ayahStart": 176,
+          "ayahEnd": 191,
+          "label": "Ash-Shu'ara 26:176-191"
+        }
+      ],
+      "discussionQuestions": [
+        "Why did Shuaib connect worship of Allah with honest trade?",
+        "What did he mean when he said success is only through Allah?",
+        "Why might people resist correction when money is involved?",
+        "How can honesty in small transactions be worship?"
+      ],
+      "sources": {
+        "primary": "Quran, Al-A'raf 7:85-93, Hud 11:84-95, Ash-Shu'ara 26:176-191; Arabic Tafsir Ibn Kathir, Wikisource",
+        "hadith": [],
+        "seerah": [],
+        "notes": "Post-generation age assessment: preteen, because the story involves social corruption, threats, and communal punishment. The account avoids unsourced details about the exact commercial practices beyond Quranic measure and weight."
+      }
+    },
+    {
+      "id": 22,
+      "slug": "nuh-and-the-ark",
+      "title": "Nuh and the Ark",
+      "previousStoryId": null,
+      "storyType": "quranic_narrative",
+      "ageGroup": "preteen",
+      "summary": "Prophet Nuh called his people for many years, built the ark by Allah's command, and Allah saved the believers from the flood.",
+      "readingTimeMinutes": 7,
+      "featuredCharacter": "Prophet Nuh",
+      "morals": [
+        "A caller to Allah must be patient even when people reject him",
+        "Mockery does not make Allah's promise false",
+        "Family ties do not replace faith and obedience",
+        "Allah saves whom He wills by His mercy"
+      ],
+      "content": "Allah sent Nuh to his people to warn them before a painful punishment came. Nuh called them to worship Allah alone. In Surah Nuh, he says that he called his people night and day, openly and privately, asking them to seek forgiveness from their Lord. He reminded them that Allah could send rain, increase them in wealth and children, and provide gardens and rivers.\n\nMost of his people refused. Their leaders said he was only a human like them, and they looked down on the believers who followed him. Nuh answered that he was not asking them for wealth, and he would not drive away the believers. Their worth was with Allah.\n\nAllah revealed to Nuh that no more of his people would believe except those who had already believed. Then Allah commanded him to build the ark under His watch and revelation. As Nuh built it, chiefs from his people passed by and mocked him. Nuh told them that if they mocked now, a time would come when they would know who would be disgraced.\n\nWhen Allah's command came, water gushed forth and the flood rose. Nuh was told to carry in the ark pairs of creatures, his family except those against whom the word had already passed, and the believers. Only a few believed with him.\n\nThe ark moved with them through waves like mountains. Nuh called to his son to come aboard and not be with the disbelievers. His son said he would take refuge on a mountain, but Nuh said there was no protector that day from Allah's command except for whom Allah had mercy. The waves came between them.\n\nThen Allah commanded the earth to swallow its water and the sky to stop. The ark rested, and the wrongdoers were removed. Nuh asked about his son, but Allah taught him that true family is not protected by blood alone when a person rejects faith. Nuh sought refuge from asking without knowledge and asked Allah for forgiveness and mercy.\n\nThe story of Nuh is a story of long patience, stern warning, and Allah's rescue. The ark was not only wood and nails. It was obedience to Allah's command.",
+      "relatedAyahs": [
+        {
+          "surahNumber": 11,
+          "ayahStart": 25,
+          "ayahEnd": 49,
+          "label": "Hud 11:25-49"
+        },
+        {
+          "surahNumber": 71,
+          "ayahStart": 1,
+          "ayahEnd": 28,
+          "label": "Nuh 71:1-28"
+        },
+        {
+          "surahNumber": 7,
+          "ayahStart": 59,
+          "ayahEnd": 64,
+          "label": "Al-A'raf 7:59-64"
+        }
+      ],
+      "discussionQuestions": [
+        "How did Nuh keep calling his people even after they rejected him?",
+        "Why did mockery not change Allah's promise?",
+        "What does the story of Nuh's son teach about faith and family?",
+        "Why was building the ark an act of obedience?"
+      ],
+      "sources": {
+        "primary": "Quran, Hud 11:25-49, Nuh 71:1-28, Al-A'raf 7:59-64; Arabic Tafsir Ibn Kathir, Wikisource",
+        "hadith": [],
+        "seerah": [],
+        "notes": "Post-generation age assessment: preteen, because the story includes mass rejection, flood destruction, and loss within a family, without graphic imagery. Unsupported ark dimensions and extra names are omitted."
+      }
+    },
+    {
+      "id": 30,
+      "slug": "ibrahim-three-angel-guests",
+      "title": "Ibrahim's Honored Guests",
+      "previousStoryId": 2,
+      "storyType": "quranic_narrative",
+      "ageGroup": "preteen",
+      "summary": "Angels came to Ibrahim with peace, news of a son, and word that they were being sent to the people of Lut.",
+      "readingTimeMinutes": 6,
+      "featuredCharacter": "Prophet Ibrahim",
+      "morals": [
+        "Hospitality is a noble character of the prophets",
+        "Allah's promise can come when people think it is impossible",
+        "Angels obey Allah's commands exactly",
+        "A prophet's mercy does not cancel Allah's just decree"
+      ],
+      "content": "The Quran tells of Ibrahim's honored guests. They entered upon him and said, \"Peace.\" Ibrahim answered with peace, though he did not know who they were. He went to his family and brought a roasted calf for the guests.\n\nWhen he placed the food near them, he noticed that their hands did not reach toward it. This made him feel uneasy. The guests told him not to fear. They were angels, and they had come with news from Allah.\n\nThey gave glad tidings of a knowledgeable son. Ibrahim's wife was present, and she was amazed because she was old and Ibrahim was also advanced in age. The angels answered that this was Allah's command. The mercy of Allah and His blessings were upon the household, and Allah is Praiseworthy, Glorious.\n\nWhen Ibrahim's fear left and the good news came to him, he began to plead concerning the people of Lut. Ibrahim was forbearing, tenderhearted, and often turning to Allah. But the angels told him to turn away from that plea, because the command of his Lord had come, and a punishment that could not be turned back was coming to those people.\n\nThe visit held both mercy and warning. There was mercy in the promised child for Ibrahim's household, and there was warning in the angels' mission to the people of Lut. Ibrahim received both with faith: joy at Allah's promise, and concern for people facing Allah's decree.",
+      "relatedAyahs": [
+        {
+          "surahNumber": 11,
+          "ayahStart": 69,
+          "ayahEnd": 76,
+          "label": "Hud 11:69-76"
+        },
+        {
+          "surahNumber": 51,
+          "ayahStart": 24,
+          "ayahEnd": 30,
+          "label": "Adh-Dhariyat 51:24-30"
+        }
+      ],
+      "discussionQuestions": [
+        "How did Ibrahim show hospitality to his guests?",
+        "Why did Ibrahim become uneasy when the guests did not eat?",
+        "What did the angels teach about Allah's promise?",
+        "How did Ibrahim show mercy when he pleaded about the people of Lut?"
+      ],
+      "sources": {
+        "primary": "Quran, Hud 11:69-76 and Adh-Dhariyat 51:24-30; Arabic Tafsir Ibn Kathir, Wikisource",
+        "hadith": [],
+        "seerah": [],
+        "notes": "Post-generation age assessment: preteen, because the story includes news of Lut's people's punishment alongside the glad tidings of a child. The number of angels is not asserted beyond the common title, and unsupported guest identities are omitted."
       }
     },
     {
@@ -362,6 +726,82 @@
         "hadith": [],
         "seerah": [],
         "notes": "Post-generation age assessment: teen, because the central plot involves sexual temptation, attempted seduction, false accusation, and social pressure. The story is told chastely and does not add unsourced sensory details or invented dialogue."
+      }
+    },
+    {
+      "id": 27,
+      "slug": "yusuf-in-prison-and-the-dreams",
+      "title": "Yusuf in Prison and the Dreams",
+      "previousStoryId": 11,
+      "storyType": "quranic_narrative",
+      "ageGroup": "preteen",
+      "summary": "Yusuf used his time in prison to call to Allah, interpret dreams truthfully, and later explain the king's dream with wisdom.",
+      "readingTimeMinutes": 7,
+      "featuredCharacter": "Prophet Yusuf",
+      "morals": [
+        "A believer can call to Allah even in hardship",
+        "Knowledge is a trust from Allah, not a tool for pride",
+        "Truthfulness matters even when freedom is delayed",
+        "Allah can open a door after years of waiting"
+      ],
+      "content": "Yusuf entered prison even though he was innocent. Two young men entered prison with him. One said he saw himself pressing wine, and the other said he saw himself carrying bread on his head while birds ate from it. They asked Yusuf to tell them the meaning, saying they saw him as someone who did good.\n\nBefore answering, Yusuf used the moment to call them to Allah. He said that his knowledge came from what his Lord had taught him. He spoke against worshiping separate lords besides Allah and called them to the One, the Subduer. Even in prison, Yusuf's first concern was truth.\n\nThen Yusuf interpreted the dreams. One prisoner would serve drink to his master. The other would be executed, and birds would eat from his head. Yusuf asked the one he thought would be saved to mention him to his master, but Shaytan caused the man to forget. Yusuf remained in prison for years.\n\nLater, the king saw a troubling dream: seven fat cows eaten by seven lean ones, and seven green ears of grain with others dry. The king's chiefs could not explain it. The saved prisoner finally remembered Yusuf and went to ask him.\n\nYusuf explained that Egypt would plant for seven years as usual, storing most of what was harvested. Then seven hard years would come and consume what had been stored, except a little. After that would come a year when people would receive rain and press crops again.\n\nYusuf did not only name the dream's meaning. He gave a wise plan for survival. Allah had kept Yusuf in prison until the time when his knowledge would benefit many people.",
+      "relatedAyahs": [
+        {
+          "surahNumber": 12,
+          "ayahStart": 36,
+          "ayahEnd": 49,
+          "label": "Yusuf 12:36-49"
+        }
+      ],
+      "discussionQuestions": [
+        "Why did Yusuf call the prisoners to Allah before interpreting their dreams?",
+        "How did Yusuf show that knowledge belongs to Allah?",
+        "What made the king's dream important for many people?",
+        "How can waiting be part of Allah's plan?"
+      ],
+      "sources": {
+        "primary": "Quran, Surah Yusuf 12:36-49; Arabic Tafsir Ibn Kathir, Wikisource, Tafsir Ibn Kathir/Surah Yusuf",
+        "hadith": [],
+        "seerah": [],
+        "notes": "Post-generation age assessment: preteen, because the story includes prison and one prisoner's execution, described briefly and without graphic detail."
+      }
+    },
+    {
+      "id": 29,
+      "slug": "yusuf-meets-his-brothers-again",
+      "title": "Yusuf Meets His Brothers Again",
+      "previousStoryId": 27,
+      "storyType": "quranic_narrative",
+      "ageGroup": "preteen",
+      "summary": "Years after the well, Yusuf's brothers came to Egypt for food, not knowing that Allah had raised Yusuf to authority.",
+      "readingTimeMinutes": 8,
+      "featuredCharacter": "Prophet Yusuf",
+      "morals": [
+        "Allah can raise a person after hidden hardship",
+        "Testing can reveal whether hearts have changed",
+        "Grief should be carried with beautiful patience",
+        "A believer should not despair of relief from Allah"
+      ],
+      "content": "After Yusuf explained the king's dream, years of plenty came, and then the hard years of famine began. People came to Egypt seeking food. Among them were Yusuf's brothers. They entered upon him, and he recognized them, but they did not recognize him.\n\nYusuf gave them their measure of food. He told them to bring their brother from their father next time, and he warned that if they did not bring him, they would receive no measure from him. He also told his servants to place their goods back into their baggage, so they might recognize the favor when they returned to their family.\n\nWhen the brothers returned to Yaqub, they asked to take their younger brother with them. Yaqub remembered what had happened to Yusuf and said he would not entrust the boy to them except with a solemn promise by Allah. They gave that promise, and Yaqub told them to enter Egypt by different gates while still trusting that judgment belongs only to Allah.\n\nWhen they came back to Yusuf with their brother, Yusuf brought his brother close and told him not to be saddened by what the others had done. Then Yusuf arranged a test by placing the king's cup in his brother's baggage. A caller announced that the caravan had stolen. The brothers denied it, but the cup was found in their brother's bag.\n\nYusuf kept his brother according to the rule they had accepted. The brothers pleaded, saying their father was old and grieving, and asking that one of them be taken instead. Yusuf refused to take anyone except the one with whom the item was found.\n\nThe eldest brother would not return to Yaqub after the promise they had made. The others returned and told their father what had happened. Yaqub again chose beautiful patience. He said that perhaps Allah would bring them all back to him, for Allah is the Knowing, the Wise. His grief for Yusuf returned, and his eyes became white from sorrow, but he still told his sons not to despair of relief from Allah.\n\nThe story had not yet reached its reunion, but Allah was bringing hidden things together. The brothers who once threw Yusuf away now stood in need. Yusuf, once alone in a well, now held authority with patience and restraint.",
+      "relatedAyahs": [
+        {
+          "surahNumber": 12,
+          "ayahStart": 58,
+          "ayahEnd": 93,
+          "label": "Yusuf 12:58-93"
+        }
+      ],
+      "discussionQuestions": [
+        "Why did Yusuf recognize his brothers while they did not recognize him?",
+        "How did the test with the cup reveal the brothers' situation?",
+        "What does Yaqub's beautiful patience look like in this part of the story?",
+        "Why should believers not despair of relief from Allah?"
+      ],
+      "sources": {
+        "primary": "Quran, Surah Yusuf 12:58-93; Arabic Tafsir Ibn Kathir, Wikisource, Tafsir Ibn Kathir/Surah Yusuf",
+        "hadith": [],
+        "seerah": [],
+        "notes": "Post-generation age assessment: preteen, because the story includes family grief, a staged accusation/test, and long-term consequences of betrayal, without mature sexual themes or graphic violence. The reunion is reserved for the next Yusuf story."
       }
     },
     {
@@ -481,7 +921,7 @@
       "id": 2,
       "slug": "ibrahim-and-the-fire",
       "title": "Ibrahim and the Fire",
-      "previousStoryId": null,
+      "previousStoryId": 28,
       "storyType": "quranic_narrative",
       "ageGroup": "child",
       "summary": "Prophet Ibrahim refused to worship idols even when thrown into a massive fire. Allah made it cool and safe for him!",
@@ -513,6 +953,50 @@
         "What would you say to someone who asked you to do something wrong?"
       ],
       "sources": {}
+    },
+    {
+      "id": 20,
+      "slug": "ayyub-and-patience",
+      "title": "Ayyub and Patience",
+      "previousStoryId": null,
+      "storyType": "quranic_narrative",
+      "ageGroup": "preteen",
+      "summary": "Prophet Ayyub called on Allah during deep affliction, and Allah answered him with mercy, healing, and restoration.",
+      "readingTimeMinutes": 5,
+      "featuredCharacter": "Prophet Ayyub",
+      "morals": [
+        "A believer may turn to Allah honestly during pain",
+        "Patience does not mean pretending hardship is easy",
+        "Allah's mercy can restore what people thought was lost",
+        "Do not add details to Allah's story that He did not reveal"
+      ],
+      "content": "The Quran tells the story of Ayyub with few words, but those words carry deep mercy. Ayyub called to his Lord and said that harm had touched him, and that Allah is the Most Merciful of the merciful. He did not accuse Allah. He brought his pain to Allah with humility.\n\nAllah responded to him. Allah removed what had afflicted him and gave him his family and the like of them with them, as mercy from Him and as a reminder for worshipers. The story teaches that Allah heard Ayyub's call even when the trial had been heavy.\n\nIn Surah Sad, Allah commands Ayyub to strike with his foot, and there was cool water for washing and drinking. Allah then mentions restoring his family and the like of them with them, as mercy from Allah and a reminder for people of understanding.\n\nThe Quran praises Ayyub as patient. It says Allah found him an excellent servant who kept turning back to his Lord. His patience was not silence without dua. His patience included calling on Allah, waiting for Allah's answer, and remaining a servant who returned to his Lord.\n\nThe story does not name the illness, the exact length of suffering, or every detail of what was lost. That silence teaches us to stay with what Allah revealed. What is clear is enough: Ayyub suffered, called on Allah, remained patient, and Allah answered with mercy.",
+      "relatedAyahs": [
+        {
+          "surahNumber": 21,
+          "ayahStart": 83,
+          "ayahEnd": 84,
+          "label": "Al-Anbiya 21:83-84"
+        },
+        {
+          "surahNumber": 38,
+          "ayahStart": 41,
+          "ayahEnd": 44,
+          "label": "Sad 38:41-44"
+        }
+      ],
+      "discussionQuestions": [
+        "How did Ayyub speak to Allah about his pain?",
+        "Why is dua part of patience?",
+        "What details does the Quran leave unnamed in this story?",
+        "How can this story comfort someone going through hardship?"
+      ],
+      "sources": {
+        "primary": "Quran, Al-Anbiya 21:83-84 and Sad 38:41-44; Arabic Tafsir Ibn Kathir, Wikisource",
+        "hadith": [],
+        "seerah": [],
+        "notes": "Post-generation age assessment: preteen, because the story centers on severe affliction, loss, and restoration, but the Quranic account is brief and non-graphic. Specific illness, duration, and unsourced family details are omitted."
+      }
     },
     {
       "id": 7,
