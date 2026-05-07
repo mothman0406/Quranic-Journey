@@ -97,6 +97,50 @@
       }
     },
     {
+      "id": 50,
+      "slug": "asiyah-pharaohs-believing-wife",
+      "title": "Asiyah, Pharaoh's Believing Wife",
+      "previousStoryId": null,
+      "storyType": "companion_profile",
+      "ageGroup": "preteen",
+      "summary": "In Pharaoh's own house, Asiyah believed in Allah, saved baby Musa, and asked Allah for a home near Him in Paradise.",
+      "readingTimeMinutes": 5,
+      "featuredCharacter": "Asiyah",
+      "morals": [
+        "Faith can stay alive even in a hostile home",
+        "Allah honors believers for what is in their hearts",
+        "Choosing Allah is greater than worldly comfort",
+        "A believer asks Allah for rescue from wrongdoing"
+      ],
+      "content": "Pharaoh was one of the harshest rulers mentioned in the Quran. He oppressed the Children of Israel and claimed greatness for himself. Yet inside his own household was a believing woman whom Islamic tradition knows as Asiyah.\n\nWhen baby Musa was found, Pharaoh's wife spoke words of mercy. She said he could be a comfort of the eye for her and for Pharaoh, and she asked that they not kill him. She hoped he might benefit them or that they might take him as a son. Allah was already protecting Musa and preparing him for the mission ahead.\n\nAsiyah later became an example for all believers. Allah mentions her prayer in the Quran: \"My Lord, build for me near You a house in Paradise and save me from Pharaoh and his deeds and save me from the wrongdoing people.\"\n\nHer dua shows what she wanted most. She did not ask first for a palace on earth. She asked for nearness to Allah and a home in Paradise. She did not accept Pharaoh's wrongdoing just because she lived in his house. She asked Allah to save her from him, from his deeds, and from the wrongdoing people.\n\nAsiyah's story is short in the Quran, but it is powerful. A person can live close to oppression and still belong to Allah. A believer may be surrounded by pressure, but the heart can still turn upward and ask for the home that lasts.",
+      "relatedAyahs": [
+        {
+          "surahNumber": 28,
+          "ayahStart": 9,
+          "ayahEnd": 9,
+          "label": "Al-Qasas 28:9"
+        },
+        {
+          "surahNumber": 66,
+          "ayahStart": 11,
+          "ayahEnd": 11,
+          "label": "At-Tahrim 66:11"
+        }
+      ],
+      "discussionQuestions": [
+        "Why was it brave for Asiyah to believe while living in Pharaoh's house?",
+        "What did Asiyah ask Allah for in her dua?",
+        "Why is nearness to Allah better than worldly comfort?",
+        "How can a person reject wrongdoing even when others around them accept it?"
+      ],
+      "sources": {
+        "primary": "Quran, Al-Qasas 28:9 and At-Tahrim 66:11; Arabic Tafsir Ibn Kathir, Wikisource",
+        "hadith": [],
+        "seerah": [],
+        "notes": "Post-generation age assessment: preteen, because the profile includes oppression, hostile family pressure, and rescue from wrongdoing. The Quran calls her Pharaoh's wife; the name Asiyah is used by Islamic tradition and the campaign title."
+      }
+    },
+    {
       "id": 18,
       "slug": "musab-ibn-umair",
       "title": "Musab ibn Umair, the First Teacher in Madinah",
@@ -174,6 +218,122 @@
         "hadith": [],
         "seerah": [],
         "notes": "Post-generation age assessment: child, because the story is a clear moral example about pride, gratitude, and loss without mature themes. No invented names or details are added."
+      }
+    },
+    {
+      "id": 52,
+      "slug": "qarun-and-his-treasures",
+      "title": "Qarun and His Treasures",
+      "previousStoryId": null,
+      "storyType": "moral_lesson",
+      "ageGroup": "preteen",
+      "summary": "Qarun had immense wealth but became arrogant, until Allah caused the earth to swallow him and his home.",
+      "readingTimeMinutes": 6,
+      "featuredCharacter": "Qarun",
+      "morals": [
+        "Wealth is a test, not proof of superiority",
+        "Use what Allah gives you to seek the Hereafter",
+        "Arrogance can blind a person to the Giver",
+        "Do not envy people because of what they display",
+        "Allah expands and restricts provision with wisdom"
+      ],
+      "content": "Qarun was from the people of Musa, but he acted arrogantly against them. Allah had given him treasures so great that even the keys were heavy for a group of strong people to carry.\n\nHis people advised him. They told him not to exult arrogantly, because Allah does not love those who exult. They told him to seek the home of the Hereafter with what Allah had given him, not to forget his share of this world, to do good as Allah had done good to him, and not to seek corruption in the land.\n\nQarun answered with pride. He said, \"I was only given it because of knowledge I have.\" He acted as if his wealth came from himself, not from Allah.\n\nThen Qarun came out before his people in his adornment. Some who wanted worldly life said they wished they had what Qarun had, calling him a person of great fortune. But those who had been given knowledge answered that Allah's reward is better for whoever believes and does righteousness, and that none are granted this except the patient.\n\nThen Allah caused the earth to swallow Qarun and his home. He had no group to help him against Allah, and he could not defend himself.\n\nThe next morning, the people who had wished to be in his place changed their words. They realized that Allah expands provision for whom He wills and restricts it. If Allah had not been gracious to them, they said, He could have caused the earth to swallow them too.\n\nQarun's story teaches that the glitter of wealth can fool people for a moment. But wealth without gratitude and obedience is not success. Real success is to use Allah's gifts for what pleases Him.",
+      "relatedAyahs": [
+        {
+          "surahNumber": 28,
+          "ayahStart": 76,
+          "ayahEnd": 82,
+          "label": "Al-Qasas 28:76-82"
+        }
+      ],
+      "discussionQuestions": [
+        "What advice did Qarun's people give him about his wealth?",
+        "Why was Qarun's answer arrogant?",
+        "Why did some people envy Qarun at first?",
+        "What changed after Allah punished Qarun?"
+      ],
+      "sources": {
+        "primary": "Quran, Al-Qasas 28:76-82; Arabic Tafsir Ibn Kathir, Wikisource",
+        "hadith": [],
+        "seerah": [],
+        "notes": "Post-generation age assessment: preteen, because the story includes arrogance, public envy, and divine punishment by the earth swallowing Qarun and his house, described soberly without graphic detail."
+      }
+    },
+    {
+      "id": 51,
+      "slug": "luqmans-advice",
+      "title": "Luqman's Advice",
+      "previousStoryId": null,
+      "storyType": "moral_lesson",
+      "ageGroup": "child",
+      "summary": "Allah gave Luqman wisdom, and Luqman taught his son to worship Allah alone, be grateful, pray, be patient, and walk humbly.",
+      "readingTimeMinutes": 6,
+      "featuredCharacter": "Luqman",
+      "morals": [
+        "Worship Allah alone and never associate partners with Him",
+        "Be grateful to Allah and kind to parents",
+        "Allah knows even the smallest hidden deed",
+        "Pray, encourage good, avoid wrong, and be patient",
+        "Humility shows in how we walk, speak, and treat people"
+      ],
+      "content": "Allah gave Luqman wisdom, and the first wisdom mentioned was gratitude: be grateful to Allah. Whoever is grateful benefits their own soul, and Allah is free of need and worthy of praise.\n\nLuqman taught his son with love and seriousness. He said, \"O my son, do not associate anything with Allah. Indeed, association with Him is great injustice.\" Before advice about manners, speech, or work, Luqman began with tawhid: worship Allah alone.\n\nThe Quran then reminds children to be good to their parents. A mother carries her child through weakness upon weakness, and we are commanded to be grateful to Allah and to parents. But if parents command a person to worship others with Allah, that command is not obeyed. Even then, a child should keep good companionship with them in worldly life.\n\nLuqman also taught that nothing is hidden from Allah. If a deed were as tiny as a mustard seed, inside a rock, or in the heavens or earth, Allah would bring it forth. Allah is Subtle and Aware.\n\nThen Luqman gave his son practical advice: establish prayer, enjoin what is right, forbid what is wrong, and be patient over what happens. These are not small matters. They require courage and steadiness.\n\nHe also taught humility. Do not turn your cheek away from people in pride. Do not walk through the earth arrogantly. Allah does not love every self-deluded boaster. Be moderate in your walk and lower your voice.\n\nLuqman's advice is one of the clearest parent-to-child lessons in the Quran. It begins with Allah, continues with gratitude and obedience, and reaches all the way into how a person walks and speaks.",
+      "relatedAyahs": [
+        {
+          "surahNumber": 31,
+          "ayahStart": 12,
+          "ayahEnd": 19,
+          "label": "Luqman 31:12-19"
+        }
+      ],
+      "discussionQuestions": [
+        "Why did Luqman begin by warning his son not to associate partners with Allah?",
+        "What does the mustard seed example teach about Allah's knowledge?",
+        "Which piece of Luqman's advice feels most important for daily life?",
+        "How can humility show in a person's voice and walk?"
+      ],
+      "sources": {
+        "primary": "Quran, Luqman 31:12-19; Arabic Tafsir Ibn Kathir, Wikisource",
+        "hadith": [],
+        "seerah": [],
+        "notes": "Post-generation age assessment: child, because the passage is direct parent-to-child advice with strong theology but no mature themes. The story stays with Quranic advice and does not add biographical speculation about Luqman."
+      }
+    },
+    {
+      "id": 53,
+      "slug": "the-believer-from-pharaohs-family",
+      "title": "The Believer from Pharaoh's Family",
+      "previousStoryId": null,
+      "storyType": "moral_lesson",
+      "ageGroup": "preteen",
+      "summary": "A believing man from Pharaoh's family concealed his faith, then spoke with courage and wisdom to defend Musa and warn his people.",
+      "readingTimeMinutes": 8,
+      "featuredCharacter": "The believing man from Pharaoh's family",
+      "morals": [
+        "Courage can speak with wisdom in dangerous places",
+        "Truth should be defended even when power opposes it",
+        "A caller to Allah reminds people of this life and the Hereafter",
+        "Allah can protect a believer from plots"
+      ],
+      "content": "Pharaoh wanted to kill Musa. He claimed Musa would change the people's religion or spread corruption in the land. In that dangerous court, a believing man from Pharaoh's family had been concealing his faith.\n\nThen he spoke. He asked, \"Would you kill a man because he says, 'My Lord is Allah,' while he has brought you clear proofs from your Lord?\" He reasoned carefully. If Musa was lying, his lie would be upon himself. But if he was truthful, then some of what he warned them about would strike them.\n\nThe believer reminded them that they had power that day in the land, but power would not save them if Allah's punishment came. Pharaoh still insisted on his own view, but the believing man continued to warn.\n\nHe reminded them of earlier peoples and of the Day when people would turn their backs to flee with no protector from Allah. He reminded them that Yusuf had come before with clear proofs, yet people kept doubting until he died.\n\nThen he said, \"O my people, follow me; I will guide you to the way of right conduct.\" He told them that worldly life is only temporary enjoyment, while the Hereafter is the home of settlement. Whoever does evil will only be repaid with the like of it, but whoever does righteousness, male or female, while believing, will enter Paradise and be provided for without account.\n\nHe pointed out the strangeness of their call. They were inviting him to disbelief and to associate with Allah what he had no knowledge of, while he was inviting them to the Mighty, the Forgiving. Their idols had no true call in this world or the next. Return is to Allah, and the wasteful people are companions of the Fire.\n\nAt the end of his warning, he told them they would remember what he said, and he entrusted his affair to Allah. Allah saved him from the evil of their plots, and the worst punishment surrounded Pharaoh's people.\n\nThe believer from Pharaoh's family was not named in the Quran. His courage is remembered because he used reason, warning, and trust in Allah when speaking truth in the court of a tyrant.",
+      "relatedAyahs": [
+        {
+          "surahNumber": 40,
+          "ayahStart": 28,
+          "ayahEnd": 45,
+          "label": "Ghafir 40:28-45"
+        }
+      ],
+      "discussionQuestions": [
+        "Why was it dangerous for the believer to speak in Pharaoh's court?",
+        "How did he defend Musa with careful reasoning?",
+        "What did he teach about worldly life and the Hereafter?",
+        "What does it mean to entrust your affair to Allah?"
+      ],
+      "sources": {
+        "primary": "Quran, Ghafir 40:28-45; Arabic Tafsir Ibn Kathir, Wikisource",
+        "hadith": [],
+        "seerah": [],
+        "notes": "Post-generation age assessment: preteen, because the story includes a death threat, tyrannical power, and serious warnings about the Hereafter, but no graphic detail. The believer is identified only as the Quran identifies him: a believing man from Pharaoh's family."
       }
     },
     {
@@ -482,6 +642,266 @@
         "hadith": [],
         "seerah": [],
         "notes": "Post-generation age assessment: child, because the story teaches resurrection and certainty without mature themes. Details about bird species or exact procedure beyond the verse are omitted."
+      }
+    },
+    {
+      "id": 56,
+      "slug": "maryam-the-righteous",
+      "title": "Maryam the Righteous",
+      "previousStoryId": 54,
+      "storyType": "quranic_narrative",
+      "ageGroup": "child",
+      "summary": "Maryam grew in Allah's care, worshiped with devotion, and received provision from Allah while Zakariya looked after her.",
+      "readingTimeMinutes": 5,
+      "featuredCharacter": "Maryam",
+      "morals": [
+        "Allah honors sincere worship",
+        "Provision comes from Allah in ways people may not expect",
+        "A young believer can be devoted and beloved to Allah",
+        "Good guardianship helps faith grow"
+      ],
+      "content": "Allah accepted Maryam with a beautiful acceptance and caused her to grow in a beautiful way. She had been born after her mother made a sincere vow to Allah, and Allah placed her under the care of Zakariya.\n\nMaryam grew as a worshiper of Allah. The Quran shows her in her place of prayer, cared for by Zakariya but provided for by Allah. Whenever Zakariya entered upon her, he found provision with her.\n\nHe asked, \"O Maryam, from where is this for you?\" Maryam answered, \"It is from Allah. Indeed, Allah provides for whom He wills without account.\"\n\nThis answer showed her certainty. Maryam knew the provision was not from her own power. It was from Allah, the One who gives without limit.\n\nThe Quran also remembers Maryam withdrawing from her family to an eastern place and taking a screen apart from them. Her life was marked by devotion, modesty, and turning to Allah.\n\nMaryam's righteousness was not loud or proud. It appeared in worship, trust, and a heart that recognized Allah's gifts. Before the story of Isa's birth begins, the Quran has already shown Maryam as a servant honored and protected by Allah.",
+      "relatedAyahs": [
+        {
+          "surahNumber": 3,
+          "ayahStart": 35,
+          "ayahEnd": 37,
+          "label": "Ali 'Imran 3:35-37"
+        },
+        {
+          "surahNumber": 19,
+          "ayahStart": 16,
+          "ayahEnd": 17,
+          "label": "Maryam 19:16-17"
+        }
+      ],
+      "discussionQuestions": [
+        "What did Zakariya find when he entered Maryam's place of prayer?",
+        "How did Maryam explain the provision she received?",
+        "What does Maryam's answer teach about trusting Allah?",
+        "Why is quiet devotion valuable even when other people do not see it?"
+      ],
+      "sources": {
+        "primary": "Quran, Ali 'Imran 3:35-37 and Maryam 19:16-22; Arabic Tafsir Ibn Kathir, Wikisource",
+        "hadith": [],
+        "seerah": [],
+        "notes": "Post-generation age assessment: child, because this entry focuses on Maryam's devotion, care under Zakariya, and Allah's provision. The annunciation by Jibril in Maryam 19:17-22 is intentionally reserved for birth-of-isa per batch scope."
+      }
+    },
+    {
+      "id": 54,
+      "slug": "the-wife-of-imran",
+      "title": "The Wife of Imran",
+      "previousStoryId": null,
+      "storyType": "quranic_narrative",
+      "ageGroup": "child",
+      "summary": "The wife of Imran dedicated her unborn child to Allah, and Allah accepted Maryam with a beautiful acceptance.",
+      "readingTimeMinutes": 5,
+      "featuredCharacter": "The wife of Imran",
+      "morals": [
+        "A sincere vow should be made for Allah alone",
+        "Allah knows what a parent hopes and what a child will become",
+        "A daughter can be honored by Allah in a way people do not expect",
+        "Parents should ask Allah to protect their children"
+      ],
+      "content": "The Quran tells of the wife of Imran, known in tafsir as Hannah. While she was expecting a child, she made a vow to Allah. She said, \"My Lord, indeed I have pledged to You what is in my womb, dedicated for Your service, so accept this from me. Indeed, You are the Hearing, the Knowing.\"\n\nShe wanted her child to be devoted to Allah's worship and service. Her hope was sincere, and she placed it before Allah before the child was even born.\n\nWhen she gave birth, she said, \"My Lord, I have delivered a female.\" Allah knew best what she had delivered. The Quran says, \"And the male is not like the female.\" Her words showed the surprise she felt about how her vow would be fulfilled, but Allah already knew the honor He would give this child.\n\nShe named the baby Maryam. Then she made another dua: she sought refuge for Maryam and her offspring in Allah from Satan, the expelled.\n\nAllah accepted Maryam with a beautiful acceptance and caused her to grow in a beautiful way. He placed her under the care of Zakariya. This child, born after a mother's vow, would become one of the most honored women in the Quran.\n\nThe story of the wife of Imran is a prologue to Maryam's story. It teaches that Allah may answer a parent's sincere hope in a way deeper than the parent first imagined.",
+      "relatedAyahs": [
+        {
+          "surahNumber": 3,
+          "ayahStart": 35,
+          "ayahEnd": 37,
+          "label": "Ali 'Imran 3:35-37"
+        }
+      ],
+      "discussionQuestions": [
+        "What did the wife of Imran vow to Allah?",
+        "Why did she ask Allah to protect Maryam and her offspring?",
+        "How did Allah honor Maryam from the beginning?",
+        "What can parents learn from this dua?"
+      ],
+      "sources": {
+        "primary": "Quran, Ali 'Imran 3:35-37; Arabic Tafsir Ibn Kathir, Wikisource",
+        "hadith": [],
+        "seerah": [],
+        "notes": "Post-generation age assessment: child, because the story centers on a parent's vow, birth, dua, and Allah's acceptance with no mature themes. The Quran names her as the wife of Imran; Hannah is used as a tafsir/traditional identification."
+      }
+    },
+    {
+      "id": 55,
+      "slug": "zakariya-prays-for-a-son",
+      "title": "Zakariya Prays for a Son",
+      "previousStoryId": null,
+      "storyType": "quranic_narrative",
+      "ageGroup": "child",
+      "summary": "When Zakariya saw Allah providing for Maryam, he quietly prayed for a righteous child, and Allah gave him news of Yahya.",
+      "readingTimeMinutes": 6,
+      "featuredCharacter": "Prophet Zakariya",
+      "morals": [
+        "A believer can ask Allah even when the request seems impossible",
+        "Seeing Allah's mercy to others should move us to dua",
+        "Allah hears quiet prayers",
+        "A child is a trust to be raised in righteousness"
+      ],
+      "content": "Zakariya was given care of Maryam. Whenever he entered her place of prayer, he found provision with her. He asked, \"O Maryam, from where is this for you?\" She answered, \"It is from Allah. Indeed, Allah provides for whom He wills without account.\"\n\nThere, seeing Allah's generous provision, Zakariya turned to his Lord. He was old, and his wife had not been able to have children. Still, he made a quiet prayer. He said, \"My Lord, grant me from Yourself a good offspring. Indeed, You are the Hearer of supplication.\"\n\nIn Surah Maryam, the Quran shows the tenderness of his dua. Zakariya called upon his Lord privately. He said his bones had weakened, his head had filled with white hair, and he had never been disappointed in calling upon Allah. He worried about who would carry the righteous duty after him, so he asked Allah for a child who would be pleasing.\n\nThen the angels called him while he was standing in prayer. Allah gave him good news of Yahya, confirming a word from Allah, noble, chaste, and a prophet from among the righteous.\n\nZakariya asked how he could have a son when he was old and his wife had not borne children. Allah answered that it was easy for Him. Zakariya asked for a sign, and his sign was that he would not speak to people for three days except by gesture. He was told to remember his Lord much and glorify Him in the evening and morning.\n\nZakariya's story teaches that no dua is too quiet for Allah, and no situation is too difficult for His power. The same Lord who provided for Maryam could provide a child for Zakariya.",
+      "relatedAyahs": [
+        {
+          "surahNumber": 3,
+          "ayahStart": 37,
+          "ayahEnd": 41,
+          "label": "Ali 'Imran 3:37-41"
+        },
+        {
+          "surahNumber": 19,
+          "ayahStart": 2,
+          "ayahEnd": 15,
+          "label": "Maryam 19:2-15"
+        }
+      ],
+      "discussionQuestions": [
+        "What did Zakariya see with Maryam that moved him to pray?",
+        "Why did Zakariya still ask Allah even when having a child seemed impossible?",
+        "What was the sign Allah gave Zakariya?",
+        "How can this story help someone keep making dua?"
+      ],
+      "sources": {
+        "primary": "Quran, Maryam 19:2-15 and Ali 'Imran 3:37-41; Arabic Tafsir Ibn Kathir, Wikisource",
+        "hadith": [],
+        "seerah": [],
+        "notes": "Post-generation age assessment: child, because the story centers on dua, old age, Allah's power, and good news of a righteous child. Maryam's provision is included because Ali 'Imran 3:37 directly connects it to Zakariya's prayer."
+      }
+    },
+    {
+      "id": 57,
+      "slug": "yahya-the-prophet",
+      "title": "Yahya the Prophet",
+      "previousStoryId": 55,
+      "storyType": "quranic_narrative",
+      "ageGroup": "child",
+      "summary": "Allah gave Yahya wisdom as a child and described him as noble, pure, dutiful, and a prophet from among the righteous.",
+      "readingTimeMinutes": 5,
+      "featuredCharacter": "Prophet Yahya",
+      "morals": [
+        "Young people can take Allah's guidance seriously",
+        "Wisdom is a gift from Allah",
+        "Purity, compassion, and dutifulness are signs of honor",
+        "A prophet's greatness comes from obedience to Allah"
+      ],
+      "content": "After Zakariya prayed for a righteous child, Allah gave him good news of Yahya. The angels called to Zakariya while he was standing in prayer and told him that Yahya would confirm a word from Allah, be noble and pure, and be a prophet from among the righteous.\n\nWhen Yahya was still young, Allah commanded him, \"O Yahya, take the Scripture with determination.\" Allah gave him wisdom as a child.\n\nThe Quran describes Yahya with beautiful qualities. Allah gave him tenderness from Himself and purity. Yahya was mindful of Allah. He was dutiful to his parents, and he was not arrogant or disobedient.\n\nAllah mentions peace upon Yahya the day he was born, the day he dies, and the day he is raised alive. This is a high honor from Allah.\n\nYahya's story teaches that childhood is not too early for seriousness with Allah's guidance. A young heart can be wise, gentle, pure, and strong when Allah blesses it.",
+      "relatedAyahs": [
+        {
+          "surahNumber": 3,
+          "ayahStart": 39,
+          "ayahEnd": 39,
+          "label": "Ali 'Imran 3:39"
+        },
+        {
+          "surahNumber": 19,
+          "ayahStart": 12,
+          "ayahEnd": 15,
+          "label": "Maryam 19:12-15"
+        }
+      ],
+      "discussionQuestions": [
+        "What command did Allah give Yahya about the Scripture?",
+        "Which qualities of Yahya does the Quran mention?",
+        "How can a young person take guidance seriously?",
+        "Why is being dutiful to parents part of righteousness?"
+      ],
+      "sources": {
+        "primary": "Quran, Maryam 19:12-15 and Ali 'Imran 3:39; Arabic Tafsir Ibn Kathir, Wikisource",
+        "hadith": [],
+        "seerah": [],
+        "notes": "Post-generation age assessment: child, because the story centers on wisdom, purity, and dutifulness with only the Quranic formula mentioning death and resurrection. Extra-Quranic reports about Yahya's death are intentionally omitted."
+      }
+    },
+    {
+      "id": 58,
+      "slug": "birth-of-isa",
+      "title": "The Birth of Isa",
+      "previousStoryId": 56,
+      "storyType": "quranic_narrative",
+      "ageGroup": "preteen",
+      "summary": "Maryam received the news of Isa, gave birth by Allah's command, and Isa spoke from the cradle as the servant and prophet of Allah.",
+      "readingTimeMinutes": 8,
+      "featuredCharacter": "Maryam and Prophet Isa",
+      "morals": [
+        "Allah creates and commands however He wills",
+        "Maryam's honor is protected by Allah",
+        "Isa's first words in the Quran declare him Allah's servant",
+        "Truth can be defended by Allah in ways people do not expect",
+        "Hard moments can carry mercy from Allah"
+      ],
+      "content": "Allah chose Maryam, purified her, and chose her above the women of the worlds. The angels gave her news of a word from Allah: his name would be the Messiah, Isa, son of Maryam. He would be honored in this world and the Hereafter and among those brought near to Allah.\n\nMaryam asked how she could have a child when no man had touched her. The answer was that Allah creates what He wills. When He decrees a matter, He only says to it, \"Be,\" and it is.\n\nIn Surah Maryam, the Quran tells how Maryam withdrew from her family to an eastern place and took a screen apart from them. Allah sent His Spirit to her, and he appeared to her as a well-formed man. Maryam said, \"Indeed, I seek refuge in the Most Merciful from you, if you should be fearing of Allah.\"\n\nHe answered that he was only the messenger of her Lord, sent to give her a pure boy. Maryam asked how she could have a boy when no man had touched her and she had not been unchaste. He said that it was easy for her Lord, and that Allah would make him a sign for the people and a mercy from Him.\n\nMaryam conceived him and withdrew with him to a remote place. The pains of childbirth drove her to the trunk of a palm tree. In her distress, she wished she had been forgotten. Then she was called from below her not to grieve. Her Lord had placed beneath her a stream, and she was told to shake the trunk of the palm tree so fresh ripe dates would fall. She was told to eat, drink, and be comforted.\n\nMaryam was also told that if she saw any person, she should say she had vowed a fast to the Most Merciful and would not speak that day. Then she came to her people carrying the baby.\n\nThey were shocked and spoke harshly to her. Maryam did not answer with her own words. She pointed to the baby. They asked how they could speak to one who was still in the cradle.\n\nThen Isa spoke. He said, \"Indeed, I am the servant of Allah. He has given me the Scripture and made me a prophet.\" He said Allah had made him blessed wherever he was and had enjoined upon him prayer and zakah as long as he lived. He was made dutiful to his mother, not arrogant or wretched. Peace was upon him the day he was born, the day he would die, and the day he would be raised alive.\n\nThe Quranic birth story makes Isa's identity clear from his first words: he is the servant of Allah, honored by Allah, and made a prophet by Allah. Maryam's honor was protected not by argument, but by a miracle from her Lord.",
+      "relatedAyahs": [
+        {
+          "surahNumber": 3,
+          "ayahStart": 42,
+          "ayahEnd": 49,
+          "label": "Ali 'Imran 3:42-49"
+        },
+        {
+          "surahNumber": 19,
+          "ayahStart": 16,
+          "ayahEnd": 34,
+          "label": "Maryam 19:16-34"
+        }
+      ],
+      "discussionQuestions": [
+        "What did Maryam ask when she received the news of Isa?",
+        "How did Allah comfort Maryam near the palm tree?",
+        "Why did Maryam point to the baby instead of defending herself with speech?",
+        "What do Isa's first words from the cradle teach about his identity?"
+      ],
+      "sources": {
+        "primary": "Quran, Maryam 19:16-34 and Ali 'Imran 3:42-49; Arabic Tafsir Ibn Kathir, Wikisource",
+        "hadith": [],
+        "seerah": [],
+        "notes": "Post-generation age assessment: preteen, because the story includes miraculous conception, public accusation, childbirth distress, and important theology about Isa's identity, handled directly from the Quran without speculation."
+      }
+    },
+    {
+      "id": 59,
+      "slug": "isas-mission",
+      "title": "Isa's Mission",
+      "previousStoryId": 58,
+      "storyType": "quranic_narrative",
+      "ageGroup": "preteen",
+      "summary": "Isa called the Children of Israel to Allah, showed signs by Allah's permission, and Allah raised him to Himself.",
+      "readingTimeMinutes": 8,
+      "featuredCharacter": "Prophet Isa",
+      "morals": [
+        "Every miracle belongs to Allah's permission",
+        "A prophet calls people to worship Allah and obey Him",
+        "True helpers answer Allah's call with faith",
+        "Allah protects His messengers as He wills",
+        "Signs increase responsibility"
+      ],
+      "content": "Isa was sent as a messenger to the Children of Israel. He came with signs from Allah and called people to fear Allah and obey him as Allah's messenger.\n\nThe Quran repeats an important truth about Isa's miracles: they happened by Allah's permission. Isa shaped for them from clay something like the form of a bird, then breathed into it, and it became a bird by Allah's permission. He healed the blind and the leper by Allah's permission. He brought the dead to life by Allah's permission. He told people what they ate and what they stored in their houses. These were signs for people who believed.\n\nIsa confirmed the Torah that came before him, and Allah taught him the Scripture, wisdom, the Torah, and the Gospel. He came to make lawful some of what had been forbidden to them and said, \"Indeed, Allah is my Lord and your Lord, so worship Him. That is the straight path.\"\n\nWhen Isa sensed disbelief from some of them, he asked, \"Who are my supporters for Allah?\" The disciples answered, \"We are supporters for Allah. We have believed in Allah, and testify that we are Muslims.\" They asked Allah to record them among the witnesses.\n\nSurah Al-Ma'idah also tells of the disciples asking Isa whether his Lord could send down to them a table from heaven. Isa told them to fear Allah if they were believers. They said they wanted to eat from it, have their hearts reassured, know that Isa had spoken truthfully to them, and be among its witnesses.\n\nIsa prayed, \"O Allah, our Lord, send down to us a table from the heaven to be for us a festival for the first of us and the last of us and a sign from You. And provide for us, and You are the best of providers.\"\n\nAllah said He would send it down, but He also warned that whoever disbelieved afterward would face a punishment unlike any other. A sign from Allah is a mercy, but it also brings responsibility.\n\nThe Quran also tells that when some people plotted, Allah planned, and Allah is the best of planners. Allah said to Isa that He would take him and raise him to Himself and purify him from those who disbelieved. Allah did not let Isa's enemies overcome him; He raised him to Himself.\n\nIsa's mission is full of signs, but every sign points beyond Isa to Allah. Isa was Allah's servant and messenger, strengthened by Allah, protected by Allah, and sent to call people to the straight path.",
+      "relatedAyahs": [
+        {
+          "surahNumber": 3,
+          "ayahStart": 49,
+          "ayahEnd": 55,
+          "label": "Ali 'Imran 3:49-55"
+        },
+        {
+          "surahNumber": 5,
+          "ayahStart": 110,
+          "ayahEnd": 115,
+          "label": "Al-Ma'idah 5:110-115"
+        }
+      ],
+      "discussionQuestions": [
+        "Why does the Quran repeat that Isa's miracles happened by Allah's permission?",
+        "What did the disciples say when Isa asked for supporters for Allah?",
+        "Why did Isa warn the disciples to fear Allah before asking for the table?",
+        "How does this story show that signs from Allah bring responsibility?"
+      ],
+      "sources": {
+        "primary": "Quran, Ali 'Imran 3:49-55 and Al-Ma'idah 5:110-115; Arabic Tafsir Ibn Kathir, Wikisource",
+        "hadith": [],
+        "seerah": [],
+        "notes": "Post-generation age assessment: preteen, because the story includes major theological material about Isa's miracles, disciples, divine signs, rescue, and accountability. The rescue is phrased close to the Quranic wording without adding details beyond the cited verses and the batch scope."
       }
     },
     {
@@ -1602,12 +2022,12 @@
       ],
       "content": "Allah gave Dawud and Sulayman knowledge, and they said praise belongs to Allah who favored them over many of His believing servants. Sulayman inherited from Dawud and said that he had been taught the speech of birds and given from all things. He knew these were clear favors from Allah.\n\nAllah subjected the wind for Sulayman. It traveled by his command. Allah also caused a spring of molten brass to flow for him. Some of the jinn worked before him by his Lord's permission. They made for him structures, statues, basins like reservoirs, and large fixed cauldrons.\n\nThese gifts did not mean Sulayman was independent. Allah commanded the family of Dawud to work in gratitude, and few of Allah's servants are truly grateful. Sulayman's kingdom was a test of thankfulness as well as a sign of honor.\n\nThe Quran also tells how Sulayman's death became a lesson. When Allah decreed death for him, nothing showed the jinn that he had died except a creature of the earth eating his staff. When he fell, the jinn realized that if they had known the unseen, they would not have remained in humiliating labor.\n\nSulayman's story teaches that Allah may give a servant extraordinary authority, but the unseen still belongs only to Allah. Even a small creature eating a staff can expose the limits of those who claim hidden knowledge.",
       "relatedAyahs": [
-      {
-        "surahNumber": 27,
-        "ayahStart": 15,
-        "ayahEnd": 19,
-        "label": "An-Naml 27:15-19"
-      },
+        {
+          "surahNumber": 27,
+          "ayahStart": 15,
+          "ayahEnd": 19,
+          "label": "An-Naml 27:15-19"
+        },
         {
           "surahNumber": 34,
           "ayahStart": 12,
