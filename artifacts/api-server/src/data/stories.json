@@ -1,6 +1,135 @@
 {
   "stories": [
     {
+      "id": 72,
+      "slug": "hamza-the-lion",
+      "title": "Hamza the Lion",
+      "previousStoryId": null,
+      "storyType": "companion_profile",
+      "ageGroup": "preteen",
+      "summary": "Hamza defended the Prophet when Abu Jahl insulted him, accepted Islam, and later became one of the beloved martyrs of Uhud.",
+      "readingTimeMinutes": 6,
+      "featuredCharacter": "Hamza ibn Abd al-Muttalib",
+      "morals": [
+        "Courage should defend truth, not personal pride",
+        "Allah can turn family loyalty into sincere faith",
+        "Standing with the Prophet may require sacrifice",
+        "Martyrs are honored by Allah"
+      ],
+      "content": "Hamza ibn Abd al-Muttalib was the Prophet Muhammad's uncle. He was known for strength and courage even before Islam.\n\nIn Makkah, Abu Jahl insulted and harmed the Prophet. When Hamza heard what had happened, he became angry that his nephew had been treated with such cruelty. He confronted Abu Jahl and openly defended the Prophet.\n\nThat moment became a turning point. Hamza did not only defend family honor. He accepted Islam and stood with the Messenger of Allah. His strength now served the truth.\n\nLater, at Uhud, Hamza fought for Allah's cause and was martyred. The Prophet loved him deeply and grieved for him. The story should be remembered with honor, not with graphic detail.\n\nThe Quran teaches that those killed in Allah's cause are not truly dead in the way people imagine. They are alive with their Lord, provided for. Hamza's martyrdom belongs to that hope and honor.\n\nHamza is remembered as the Lion of Allah and the Lion of His Messenger. His life teaches that courage becomes beautiful when it protects faith, supports the oppressed, and stays loyal to Allah.",
+      "relatedAyahs": [
+        {
+          "surahNumber": 3,
+          "ayahStart": 169,
+          "ayahEnd": 171,
+          "label": "Ali 'Imran 3:169-171"
+        }
+      ],
+      "discussionQuestions": [
+        "What changed when Hamza accepted Islam?",
+        "How can courage be used for truth instead of pride?",
+        "Why should Hamza's martyrdom be remembered with honor and restraint?",
+        "What hope does the Quran give about martyrs?"
+      ],
+      "sources": {
+        "primary": "Quran, Ali 'Imran 3:169-171; Arabic Tafsir Ibn Kathir, Wikisource",
+        "hadith": [],
+        "seerah": [
+          "Ibn Ishaq/Ibn Hisham seerah reports on Hamza's conversion and martyrdom at Uhud"
+        ],
+        "notes": "Post-generation age assessment: preteen, because the profile includes insult, confrontation, battle, martyrdom, and grief, described without mutilation details. The Quranic ayahs are a general martyrdom anchor, not a direct naming of Hamza."
+      }
+    },
+    {
+      "id": 79,
+      "slug": "umar-the-just-caliph",
+      "title": "Umar the Just Caliph",
+      "previousStoryId": 77,
+      "storyType": "companion_profile",
+      "ageGroup": "preteen",
+      "summary": "After Islam transformed him, Umar became a caliph remembered for justice, humility, night patrols, and fear of Allah's accountability.",
+      "readingTimeMinutes": 7,
+      "featuredCharacter": "Umar ibn al-Khattab",
+      "morals": [
+        "Justice is a trust before Allah",
+        "Leadership means caring for the weakest people",
+        "A ruler should fear accountability more than reputation",
+        "Strength is noble when it protects others",
+        "Hard times require mercy and restraint"
+      ],
+      "content": "After Umar accepted Islam, his strength became a support for the Muslim community. Later, as caliph, he became known for justice and deep fear of Allah's accountability.\n\nThe Quran commands believers to stand firmly for justice, even against themselves, parents, or relatives. Umar tried to carry that command as a ruler. He understood that leadership was not a prize. It was a trust.\n\nReports from the early Muslim historians remember Umar walking at night to check on the people. He did not want hunger, need, or injustice to hide behind palace walls. He wanted to know how ordinary people were living.\n\nDuring the famine year, Umar made decisions with the poor in mind. Reports remember that he ate simply and held himself back from comfort while others were suffering. He did not want to live above the people whose hardship he was responsible to relieve.\n\nUmar's justice was not only strictness. It was mercy joined to accountability. He feared that Allah would ask him about those under his care, even those who could not speak loudly for themselves.\n\nHis story teaches that Islam did not erase Umar's strength. It purified its direction. The man who once walked in anger against Islam became a ruler who feared Allah for every person under his authority.\n\nJustice in Islam is not a slogan. It is food reaching the hungry, leaders checking on the hidden, and hearts remembering that Allah sees every decision.",
+      "relatedAyahs": [
+        {
+          "surahNumber": 4,
+          "ayahStart": 135,
+          "ayahEnd": 135,
+          "label": "An-Nisa 4:135"
+        }
+      ],
+      "discussionQuestions": [
+        "Why is justice a trust before Allah?",
+        "How did Umar's strength change after Islam?",
+        "Why should leaders care especially about people who are hungry or hidden from view?",
+        "What does accountability before Allah teach a person with power?"
+      ],
+      "sources": {
+        "primary": "Quran, An-Nisa 4:135 as a thematic justice anchor; Arabic Tafsir Ibn Kathir, Wikisource",
+        "hadith": [],
+        "seerah": [
+          "Early tarikh and seerah reports on Umar's caliphate, night patrols, famine-year restraint, and public accountability"
+        ],
+        "notes": "Post-generation age assessment: preteen, because the profile includes famine, public responsibility, and moral accountability. The Quranic connection is thematic, not a direct story verse; justice anecdotes are from early historical reports rather than a single Quranic narrative."
+      }
+    },
+    {
+      "id": 70,
+      "slug": "ali-the-young-believer",
+      "title": "Ali the Young Believer",
+      "previousStoryId": null,
+      "storyType": "companion_profile",
+      "ageGroup": "preteen",
+      "summary": "Ali accepted Islam while young, slept in the Prophet's bed during the Hijrah, and later carried courage with knowledge and restraint.",
+      "readingTimeMinutes": 7,
+      "featuredCharacter": "Ali ibn Abi Talib",
+      "morals": [
+        "Young believers can carry great courage",
+        "Trust in Allah can steady a person in danger",
+        "Courage should serve guidance, not pride",
+        "A believer avoids political quarrels and stays loyal to truth"
+      ],
+      "content": "Ali ibn Abi Talib grew up close to the Prophet Muhammad. He was from the Prophet's own family, and he was among the first to accept Islam while still young.\n\nOn the night of the Hijrah, the leaders of Quraysh had planned to kill the Prophet. Allah protected His Messenger and opened the way for him to leave Makkah. In the seerah reports, Ali slept in the Prophet's bed that night so the plotters would think the Prophet was still inside.\n\nThe Quran's Hijrah verse tells how Allah supported His Messenger in the cave with Abu Bakr. Ali's part belongs to the same dangerous night: a young believer trusted Allah while the Messenger escaped by Allah's command.\n\nAli's courage appeared again later. At Khaybar, the Prophet said he would give the banner to a man who loved Allah and His Messenger, and whom Allah and His Messenger loved. The next morning, the banner was given to Ali, and Allah granted victory through him.\n\nAli's story is not only about bravery. The Prophet told him at Khaybar to call the people to Islam and teach them Allah's rights. Guiding even one person was better than precious wealth.\n\nAli became known for courage, knowledge, and closeness to the Prophet. This profile stops before the later political conflicts after the Prophet's death, because the lesson here is clear enough: a young believer can be brave, trusted, and useful for Allah's cause.",
+      "relatedAyahs": [
+        {
+          "surahNumber": 5,
+          "ayahStart": 55,
+          "ayahEnd": 56,
+          "label": "Al-Ma'idah 5:55-56"
+        },
+        {
+          "surahNumber": 9,
+          "ayahStart": 40,
+          "ayahEnd": 40,
+          "label": "At-Tawbah 9:40"
+        }
+      ],
+      "discussionQuestions": [
+        "Why was Ali's role on the night of Hijrah courageous?",
+        "What did the Prophet say about the person who would receive the banner at Khaybar?",
+        "Why is guiding one person better than worldly treasure?",
+        "How can a young person be useful in Allah's cause?"
+      ],
+      "sources": {
+        "primary": "Quran, Al-Ma'idah 5:55-56 and At-Tawbah 9:40; Arabic Tafsir Ibn Kathir, Wikisource; seerah reports on Ali during the Hijrah",
+        "hadith": [
+          "Sahih al-Bukhari 4210"
+        ],
+        "seerah": [
+          "Ibn Ishaq/Ibn Hisham seerah reports on Ali sleeping in the Prophet's bed during the Hijrah"
+        ],
+        "notes": "Post-generation age assessment: preteen, because the profile includes assassination danger and battle courage but avoids graphic detail. At-Tawbah 9:40 anchors the Hijrah context; Ali's specific act is from seerah reports. Later political disputes are intentionally omitted."
+      }
+    },
+    {
       "id": 14,
       "slug": "abu-bakr-as-siddiq",
       "title": "Abu Bakr as-Siddiq",
@@ -53,6 +182,169 @@
       }
     },
     {
+      "id": 71,
+      "slug": "asma-bint-abi-bakr-of-the-two-belts",
+      "title": "Asma bint Abi Bakr of the Two Belts",
+      "previousStoryId": 4,
+      "storyType": "companion_profile",
+      "ageGroup": "child",
+      "summary": "Asma helped the Prophet and Abu Bakr during the Hijrah by preparing their food and tearing her belt in two to tie it securely.",
+      "readingTimeMinutes": 5,
+      "featuredCharacter": "Asma bint Abi Bakr",
+      "morals": [
+        "Small acts of service can support great missions",
+        "Courage includes helping quietly when danger is near",
+        "Resourcefulness is a gift when used for Allah",
+        "Women were essential supporters of the early Muslim community"
+      ],
+      "content": "During the Hijrah, the Prophet Muhammad and Abu Bakr left Makkah secretly and hid in the Cave of Thawr. Allah protected them, and their journey to Madinah became one of the great turning points in Islamic history.\n\nAbu Bakr's daughter Asma helped with that journey. She prepared food for the Prophet and her father when they were leaving for Madinah.\n\nThen she needed something to tie the food bundle. She did not find anything except her own waist belt. Abu Bakr told her to split it in two. Asma tore it lengthwise and used it to tie the food securely.\n\nBecause of that, she became known as Dhat an-Nitaqayn, the possessor of the two belts. The name remembered a simple act done at a dangerous time.\n\nAsma's courage was not loud. She did not lead an army or give a speech in public. She used what she had, moved with trust, and supported the Prophet's Hijrah when secrecy mattered.\n\nHer story teaches that Allah records sincere service. Sometimes a torn belt, a food bundle, and a brave heart become part of the road by which Allah opens a new chapter for the believers.",
+      "relatedAyahs": [
+        {
+          "surahNumber": 9,
+          "ayahStart": 40,
+          "ayahEnd": 40,
+          "label": "At-Tawbah 9:40"
+        }
+      ],
+      "discussionQuestions": [
+        "What did Asma do to help during the Hijrah?",
+        "Why was her act brave even though it looked simple?",
+        "What does her title, the possessor of the two belts, remember?",
+        "How can small acts of service matter to Allah?"
+      ],
+      "sources": {
+        "primary": "Quran, At-Tawbah 9:40; Arabic Tafsir Ibn Kathir, Wikisource",
+        "hadith": [
+          "Sahih al-Bukhari 3907"
+        ],
+        "seerah": [],
+        "notes": "Post-generation age assessment: child, because the story involves danger during the Hijrah but centers on practical courage and service. At-Tawbah 9:40 anchors the Cave of Thawr context; Asma's two-belts detail is from Sahih al-Bukhari."
+      }
+    },
+    {
+      "id": 78,
+      "slug": "uthman-of-the-two-lights",
+      "title": "Uthman of the Two Lights",
+      "previousStoryId": null,
+      "storyType": "companion_profile",
+      "ageGroup": "child",
+      "summary": "Uthman was known for modesty, generosity, marrying two of the Prophet's daughters, buying the well of Rumah, and funding the army of hardship.",
+      "readingTimeMinutes": 6,
+      "featuredCharacter": "Uthman ibn Affan",
+      "morals": [
+        "Generosity can become lasting charity",
+        "Modesty is a noble strength",
+        "Wealth is best when spent for Allah",
+        "Quiet service can support the whole community"
+      ],
+      "content": "Uthman ibn Affan was one of the earliest Muslims and one of the closest companions of the Prophet Muhammad. He was known for modesty, gentleness, and generous spending for Allah's cause.\n\nHe is remembered as Dhun-Nurayn, the possessor of two lights, because he married two of the Prophet's daughters, one after the other. This title became a sign of his special family connection to the Messenger.\n\nWhen the Muslims in Madinah needed water, Uthman bought the well of Rumah and made it available for the Muslims. A well can keep giving long after the first act of charity, and Uthman's gift benefited the community again and again.\n\nWhen the expedition of Tabuk came during a time of hardship, Uthman gave heavily to equip the army. An authentic report records Uthman reminding people that the Prophet had promised Paradise for the one who dug the well of Rumah and for the one who equipped the army of hardship.\n\nSurah At-Tawbah mentions Allah turning in mercy to the Prophet, the Muhajirun, and the Ansar who followed him in the hour of difficulty. Uthman's generosity belongs to that Tabuk moment of hardship and sacrifice.\n\nUthman's profile teaches that modesty is not weakness and wealth is not shameful when it becomes service. A quiet believer can use what Allah gave him to make worship, water, and protection easier for others.",
+      "relatedAyahs": [
+        {
+          "surahNumber": 9,
+          "ayahStart": 117,
+          "ayahEnd": 117,
+          "label": "At-Tawbah 9:117"
+        }
+      ],
+      "discussionQuestions": [
+        "Why was Uthman called the possessor of two lights?",
+        "How did buying the well of Rumah help the Muslims?",
+        "What does Uthman's support for Tabuk teach about generosity?",
+        "How can modesty and generosity work together?"
+      ],
+      "sources": {
+        "primary": "Quran, At-Tawbah 9:117; Arabic Tafsir Ibn Kathir, Wikisource",
+        "hadith": [
+          "Sahih al-Bukhari 2778"
+        ],
+        "seerah": [
+          "Seerah reports on Uthman's marriages to Ruqayyah and Umm Kulthum, daughters of the Prophet"
+        ],
+        "notes": "Post-generation age assessment: child, because the profile centers on modesty, marriage title, charity, and supporting Tabuk without mature conflict. At-Tawbah 9:117 anchors the Tabuk hardship context."
+      }
+    },
+    {
+      "id": 75,
+      "slug": "sumayya-and-yasir-the-first-martyrs",
+      "title": "Sumayya and Yasir, the First Martyrs",
+      "previousStoryId": null,
+      "storyType": "companion_profile",
+      "ageGroup": "teen",
+      "summary": "Yasir, Sumayya, and Ammar were tortured for faith in early Makkah; Sumayya was killed by Abu Jahl and remembered as the first martyr of Islam.",
+      "readingTimeMinutes": 7,
+      "featuredCharacter": "Sumayya, Yasir, and Ammar",
+      "morals": [
+        "Faith can remain firm under unbearable pressure",
+        "Allah knows the heart of a believer forced by persecution",
+        "Martyrdom is honored by Allah, not forgotten",
+        "Oppression cannot erase sincere belief",
+        "Some stories belong to older readers because truth should not be softened"
+      ],
+      "content": "In the earliest days of Islam, Yasir, his wife Sumayya, and their son Ammar were among the believers who had little protection in Makkah. Powerful enemies tried to force them away from Islam.\n\nThey were tortured for their faith. The Prophet Muhammad passed by the family of Yasir during their suffering and encouraged them with the famous words, \"Patience, family of Yasir; your meeting place is Paradise.\" His words gave them hope, even though the harm did not stop immediately.\n\nSumayya refused to leave her faith. Abu Jahl killed her with a spear, and she is remembered as the first martyr of this ummah. Yasir also died under persecution. Their story is painful, and it should be told soberly, without turning their suffering into spectacle.\n\nTheir son Ammar was also tortured. Under extreme pressure, he was forced to say words he did not believe. He came to the Prophet distressed. The Quranic principle in Surah An-Nahl teaches that a person forced into words of disbelief while the heart is secure in faith is not like one who willingly opens the heart to disbelief.\n\nThis distinction matters. Sumayya and Yasir showed firmness until death. Ammar's heart remained firm even when his tormentors forced words from his tongue. Allah knows both forms of suffering.\n\nThe family of Yasir teaches that early Islam was carried by people who paid dearly for the truth. Their honor is not measured by worldly safety. It is measured by Allah's knowledge of their faith, patience, and sacrifice.",
+      "relatedAyahs": [
+        {
+          "surahNumber": 16,
+          "ayahStart": 106,
+          "ayahEnd": 106,
+          "label": "An-Nahl 16:106"
+        }
+      ],
+      "discussionQuestions": [
+        "Why is this story better suited for older readers?",
+        "What does 16:106 teach about someone forced while the heart remains firm in faith?",
+        "How did Sumayya and Yasir show patience?",
+        "Why does Allah's knowledge of the heart matter in this story?"
+      ],
+      "sources": {
+        "primary": "Quran, An-Nahl 16:106; Arabic Tafsir Ibn Kathir, Wikisource",
+        "hadith": [],
+        "seerah": [
+          "Ibn Ishaq/Ibn Hisham and Ibn Sa'd reports on the family of Yasir, Sumayya's martyrdom, and the Prophet's encouragement"
+        ],
+        "notes": "Post-generation age assessment: teen, because the profile includes torture, forced speech under compulsion, and Sumayya being killed by Abu Jahl with a spear. The famous encouragement to the family of Yasir is reported in seerah and virtues literature; 16:106 anchors the Quranic principle about compulsion and a heart secure in faith."
+      }
+    },
+    {
+      "id": 77,
+      "slug": "umar-becomes-muslim",
+      "title": "Umar Becomes Muslim",
+      "previousStoryId": null,
+      "storyType": "companion_profile",
+      "ageGroup": "teen",
+      "summary": "Umar set out in anger against the Prophet, but hearing the opening of Surah Ta-Ha changed his heart and led him to Islam.",
+      "readingTimeMinutes": 7,
+      "featuredCharacter": "Umar ibn al-Khattab",
+      "morals": [
+        "Allah can transform even a heart full of anger",
+        "The Quran can reach a person at the turning point of life",
+        "Truth should be followed once it becomes clear",
+        "A strong personality becomes a blessing when guided by faith"
+      ],
+      "content": "Before Islam entered his heart, Umar ibn al-Khattab was a strong opponent of the Muslims. Seerah reports tell that he once set out in anger intending to kill the Prophet Muhammad.\n\nOn the way, he learned that his own sister Fatimah and her husband Sa'id had accepted Islam. He went to their house and heard Quran being recited. The scene became tense, and Umar struck them. When he saw the firmness of their faith, his anger began to break.\n\nHe asked to read what they had been reciting. The words were from the opening of Surah Ta-Ha: \"Ta-Ha. We have not sent down to you the Quran that you be distressed, but only as a reminder for those who fear Allah.\"\n\nThe verses spoke of revelation from the One who created the earth and the high heavens, the Most Merciful above the Throne, the One to whom belongs what is in the heavens and earth and what is between them.\n\nUmar was moved by what he heard. The Quran that he had opposed now entered his heart. He asked to be taken to the Prophet.\n\nWhen Umar accepted Islam, the Muslims gained a companion whose strength would now serve the truth. His story shows that guidance is from Allah. A person can begin the day as an enemy and end it walking toward the Messenger with faith.",
+      "relatedAyahs": [
+        {
+          "surahNumber": 20,
+          "ayahStart": 1,
+          "ayahEnd": 8,
+          "label": "Ta-Ha 20:1-8"
+        }
+      ],
+      "discussionQuestions": [
+        "How did Umar's anger begin to change?",
+        "What do the opening verses of Surah Ta-Ha teach about Allah and revelation?",
+        "Why is it powerful that Umar followed the truth after opposing it?",
+        "How can the Quran change a person's direction?"
+      ],
+      "sources": {
+        "primary": "Quran, Ta-Ha 20:1-8; Arabic Tafsir Ibn Kathir, Wikisource",
+        "hadith": [],
+        "seerah": [
+          "Ibn Ishaq/Ibn Hisham seerah reports on Umar's conversion"
+        ],
+        "notes": "Post-generation age assessment: teen, because the story includes a murder intention and a domestic strike, handled soberly without sensational detail. The conversion scene is from seerah reports; the Quranic anchor is the recited opening of Surah Ta-Ha."
+      }
+    },
+    {
       "id": 42,
       "slug": "harun-the-helper",
       "title": "Harun the Helper",
@@ -94,6 +386,47 @@
         "hadith": [],
         "seerah": [],
         "notes": "Post-generation age assessment: child, because the profile focuses on brotherly support, leadership, and warning against idolatry without mature themes. Story type is companion_profile by campaign convention for a person-centered role profile."
+      }
+    },
+    {
+      "id": 74,
+      "slug": "salman-al-farsi",
+      "title": "Salman al-Farsi",
+      "previousStoryId": null,
+      "storyType": "companion_profile",
+      "ageGroup": "preteen",
+      "summary": "Salman traveled far seeking the truth, recognized the Prophet in Madinah, and later suggested the trench that helped protect the city.",
+      "readingTimeMinutes": 8,
+      "featuredCharacter": "Salman al-Farsi",
+      "morals": [
+        "Seeking truth may require patience and sacrifice",
+        "Allah can guide a person across lands and languages",
+        "Knowledge from sincere teachers can prepare the heart",
+        "A new Muslim can become beloved and useful to the community",
+        "Good ideas can come from people with different backgrounds"
+      ],
+      "content": "Salman al-Farsi came from Persia. He grew up far from Makkah and Madinah, but his heart searched for the truth.\n\nSeerah reports tell that Salman left the religion of his people and followed teachers who worshiped Allah. He traveled from one teacher to another, learning what they knew and waiting for signs of the final Prophet. His journey was long and difficult, and at one point he was enslaved and brought to the area of Madinah.\n\nWhen the Prophet Muhammad arrived in Madinah, Salman looked for the signs his teachers had described. He tested what he had been told: the Prophet would accept a gift but not charity, and there would be a seal of prophethood. Salman recognized the truth and accepted Islam.\n\nSalman became part of the Muslim community, not as an outsider kept at the edge, but as a brother. A famous report remembers the Prophet's honor for him: Salman is from us, the people of the household.\n\nDuring the Battle of the Trench, Salman suggested digging a trench to protect the exposed side of Madinah. This idea came from experience outside Arabia, and the Prophet accepted it. Allah then protected the believers from the confederate armies.\n\nThe Quran promises that Allah will establish sincere believers and replace fear with security when they worship Him and do not associate partners with Him. Salman's life shows one path into that promise: a seeker from far away became a helper in the heart of the Muslim community.",
+      "relatedAyahs": [
+        {
+          "surahNumber": 24,
+          "ayahStart": 55,
+          "ayahEnd": 55,
+          "label": "An-Nur 24:55"
+        }
+      ],
+      "discussionQuestions": [
+        "What does Salman's journey teach about seeking truth?",
+        "Why was it important that the Muslim community welcomed Salman?",
+        "How did Salman's background help at the Battle of the Trench?",
+        "How can a person use past experience to serve Allah?"
+      ],
+      "sources": {
+        "primary": "Quran, An-Nur 24:55 as a thematic anchor; Arabic Tafsir Ibn Kathir, Wikisource",
+        "hadith": [],
+        "seerah": [
+          "Seerah and virtues reports on Salman's search for truth and trench suggestion"
+        ],
+        "notes": "Post-generation age assessment: preteen, because the profile includes religious searching, separation, enslavement, and siege context. The Quranic verse is thematic, not a direct reference to Salman. The report 'Salman is from us, the people of the household' is included as a famous virtues report rather than a Quranic anchor."
       }
     },
     {
@@ -180,6 +513,49 @@
           "Ibn Ishaq/Ibn Hisham seerah reports on Musab teaching in Yathrib before the Hijrah"
         ],
         "notes": "Post-generation age assessment: preteen, because the story includes sacrifice, persecution pressure, and martyrdom at Uhud without graphic detail. Al-Ahzab 33:23 is a general virtue reference and does not name Musab directly."
+      }
+    },
+    {
+      "id": 73,
+      "slug": "khalid-ibn-al-walid-the-sword",
+      "title": "Khalid ibn al-Walid, the Sword",
+      "previousStoryId": null,
+      "storyType": "companion_profile",
+      "ageGroup": "preteen",
+      "summary": "Khalid was once a commander against the Muslims, then accepted Islam and became known as a sword among the swords of Allah.",
+      "readingTimeMinutes": 7,
+      "featuredCharacter": "Khalid ibn al-Walid",
+      "morals": [
+        "Allah can transform a person's gifts toward the truth",
+        "Past opposition does not block sincere repentance",
+        "Skill should be used in obedience to Allah",
+        "Courage needs guidance to become service"
+      ],
+      "content": "Khalid ibn al-Walid was known for military skill before he became Muslim. At Uhud, while he was still on the side of Quraysh, his tactical move helped turn the battle against the Muslims after the archers left their position.\n\nBut Allah guides whom He wills. After Hudaybiyyah and before the conquest of Makkah, Khalid accepted Islam. The ability he once used against the Muslims became a gift used in Allah's cause.\n\nAt the battle of Mu'tah, the Muslim commanders were martyred one after another. The Prophet, in Madinah, informed the people of what had happened before news arrived. Then he said that the flag was taken by a sword among the swords of Allah, and Allah granted victory through him.\n\nThat sword was Khalid. Another authentic report records Khalid saying that on the day of Mu'tah, many swords broke in his hand and only one remained. The report shows the intensity of the battle without needing to describe it graphically.\n\nAfter Islam, Khalid became famous for repeated victories and for not being defeated as a commander. The lesson is not that battle is glory by itself. The lesson is that Allah can redirect a person's strongest abilities. When guidance enters the heart, even a former enemy can become a servant of the truth.",
+      "relatedAyahs": [
+        {
+          "surahNumber": 48,
+          "ayahStart": 29,
+          "ayahEnd": 29,
+          "label": "Al-Fath 48:29"
+        }
+      ],
+      "discussionQuestions": [
+        "How did Khalid's life change after he accepted Islam?",
+        "Why is it powerful that a former opponent became a defender of Islam?",
+        "What does it mean to use a skill in obedience to Allah?",
+        "How can repentance redirect a person's strengths?"
+      ],
+      "sources": {
+        "primary": "Quran, Al-Fath 48:29 as a general companion-character anchor; Arabic Tafsir Ibn Kathir, Wikisource",
+        "hadith": [
+          "Sahih al-Bukhari 4262",
+          "Sahih al-Bukhari 4265"
+        ],
+        "seerah": [
+          "Ibn Ishaq/Ibn Hisham seerah reports on Khalid's role at Uhud and acceptance of Islam"
+        ],
+        "notes": "Post-generation age assessment: preteen, because the profile includes warfare and martyrdom context, described soberly. The Quranic ayah is thematic; Khalid's title at Mu'tah is anchored in Sahih al-Bukhari."
       }
     },
     {
@@ -2770,6 +3146,50 @@
           "Ibn Ishaq/Ibn Hisham seerah reports on Hudaybiyyah"
         ],
         "notes": "Post-generation age assessment: preteen, because the story includes tense negotiations, disappointment, and trust in a hard political decision. The narration avoids unsupported treaty detail and keeps the lesson anchored in Al-Fath."
+      }
+    },
+    {
+      "id": 76,
+      "slug": "the-ansar-share-with-the-muhajirun",
+      "title": "The Ansar Share with the Muhajirun",
+      "previousStoryId": 67,
+      "storyType": "seerah_context",
+      "ageGroup": "preteen",
+      "summary": "The Ansar welcomed the Muhajirun to Madinah, shared generously, and preferred their brothers and sisters even when they themselves had need.",
+      "readingTimeMinutes": 7,
+      "featuredCharacter": "The Ansar of Madinah",
+      "morals": [
+        "Faith makes believers generous with one another",
+        "Brotherhood is more than words",
+        "A believer can prefer another person while still acting with dignity and halal boundaries",
+        "Allah praises those who resist selfishness",
+        "Community is built by sacrifice and gratitude"
+      ],
+      "content": "When the Muhajirun migrated from Makkah to Madinah, many had left behind homes, wealth, and protection. The Ansar, the Helpers of Madinah, opened their city and hearts to them.\n\nThe Quran praises the Ansar in Surah Al-Hashr. They loved those who emigrated to them and found no need in their hearts for what the migrants were given. They preferred others over themselves, even though they had need.\n\nThe Prophet established bonds of brotherhood between Muhajirun and Ansar. These bonds were not empty titles. The Ansar offered homes, wealth, work, and support.\n\nOne famous report tells how Sa'd ibn ar-Rabi' offered to share his wealth generously with Abd ar-Rahman ibn Awf. He even offered a family arrangement that Abd ar-Rahman declined with dignity, asking instead to be shown the marketplace. The story is remembered not to make marriage sound casual, but to show the depth of Ansari generosity and the Muhajir's honorable independence.\n\nOther reports tell that the Ansar offered to share their date-palm trees. The Prophet guided the arrangement so the Muhajirun could work with them and share in the produce.\n\nThe Ansar teach that Islamic brotherhood is practical. It feeds people, houses people, helps people work, and honors them. Allah says whoever is protected from the greed of his own soul is successful.",
+      "relatedAyahs": [
+        {
+          "surahNumber": 59,
+          "ayahStart": 9,
+          "ayahEnd": 9,
+          "label": "Al-Hashr 59:9"
+        }
+      ],
+      "discussionQuestions": [
+        "How did the Ansar show love for the Muhajirun?",
+        "What does it mean to prefer others even when you have need?",
+        "Why was Abd ar-Rahman's response dignified?",
+        "How can a community share practically today?"
+      ],
+      "sources": {
+        "primary": "Quran, Al-Hashr 59:9; Arabic Tafsir Ibn Kathir, Wikisource",
+        "hadith": [
+          "Sahih al-Bukhari 3780",
+          "Sahih al-Bukhari 3782"
+        ],
+        "seerah": [
+          "Seerah reports on the Prophet establishing Mu'akhah between Muhajirun and Ansar"
+        ],
+        "notes": "Post-generation age assessment: preteen, because the story includes migration hardship and the delicate offer involving marriage; it is handled carefully as generosity within halal boundaries, and the offer is explicitly declined."
       }
     },
     {
