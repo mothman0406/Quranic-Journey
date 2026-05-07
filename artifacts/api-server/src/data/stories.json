@@ -239,6 +239,56 @@
       }
     },
     {
+      "id": 36,
+      "slug": "ibrahim-builds-the-kabah",
+      "title": "Ibrahim Builds the Ka'bah",
+      "previousStoryId": 34,
+      "storyType": "quranic_narrative",
+      "ageGroup": "child",
+      "summary": "Ibrahim and Ismail raised the foundations of the Ka'bah and prayed for Allah to accept their worship.",
+      "readingTimeMinutes": 6,
+      "featuredCharacter": "Prophet Ibrahim",
+      "morals": [
+        "Great worship should be done with humility",
+        "Ask Allah to accept your deeds even after doing good",
+        "The Sacred House was built for worshiping Allah alone",
+        "Parents should pray for generations after them"
+      ],
+      "content": "Allah commanded Ibrahim to purify His House for those who would circle it, stand, bow, and prostrate. The Ka'bah was not built for pride, tribe, or display. It was built for worshiping Allah alone.\n\nIbrahim and Ismail raised the foundations of the House together. As they worked, they did not boast about what their hands were building. They prayed, \"Our Lord, accept from us. Indeed, You are the Hearing, the Knowing.\"\n\nThey asked Allah to make them submissive to Him and to make from their descendants a community submissive to Him. They asked Allah to show them their rites and accept their repentance. Their work was physical, but their hearts were full of dua.\n\nIbrahim also prayed for safety and provision in that land. He asked Allah to keep him and his children away from worshiping idols, and he prayed that prayer would be established among his descendants.\n\nThe Ka'bah became a place toward which believers turn, a place of Hajj, tawaf, prayer, and remembrance. Ibrahim's story teaches that the most honored building on earth was raised with humility, obedience, and prayer for acceptance.",
+      "relatedAyahs": [
+        {
+          "surahNumber": 2,
+          "ayahStart": 125,
+          "ayahEnd": 129,
+          "label": "Al-Baqarah 2:125-129"
+        },
+        {
+          "surahNumber": 14,
+          "ayahStart": 35,
+          "ayahEnd": 41,
+          "label": "Ibrahim 14:35-41"
+        },
+        {
+          "surahNumber": 22,
+          "ayahStart": 26,
+          "ayahEnd": 29,
+          "label": "Al-Hajj 22:26-29"
+        }
+      ],
+      "discussionQuestions": [
+        "What did Ibrahim and Ismail ask Allah while raising the foundations?",
+        "Why is asking Allah to accept our deeds important?",
+        "What was the Sacred House built for?",
+        "Which duas of Ibrahim can families learn from today?"
+      ],
+      "sources": {
+        "primary": "Quran, Al-Baqarah 2:125-129, Ibrahim 14:35-41, Al-Hajj 22:26-29; Arabic Tafsir Ibn Kathir, Wikisource",
+        "hadith": [],
+        "seerah": [],
+        "notes": "Post-generation age assessment: child, because the story centers on worship, building, and dua with no mature themes. Extra architectural details and unsupported construction descriptions are omitted."
+      }
+    },
+    {
       "id": 28,
       "slug": "ibrahim-debates-the-king",
       "title": "Ibrahim Debates the King",
@@ -274,6 +324,44 @@
         "hadith": [],
         "seerah": [],
         "notes": "Post-generation age assessment: child, because the story is a clear debate about Allah's power with no mature themes. The king's name is not included because the Quranic verse does not name him."
+      }
+    },
+    {
+      "id": 38,
+      "slug": "ibrahim-and-the-birds",
+      "title": "Ibrahim and the Birds",
+      "previousStoryId": 36,
+      "storyType": "quranic_narrative",
+      "ageGroup": "child",
+      "summary": "Ibrahim asked Allah to show him how He gives life to the dead, and Allah showed him a sign through four birds.",
+      "readingTimeMinutes": 4,
+      "featuredCharacter": "Prophet Ibrahim",
+      "morals": [
+        "Faith can ask Allah for deeper certainty with respect",
+        "Allah gives life and raises the dead",
+        "Allah is Mighty and Wise",
+        "A believer's heart finds peace in Allah's signs"
+      ],
+      "content": "Ibrahim asked his Lord, \"My Lord, show me how You give life to the dead.\" Allah asked, \"Do you not believe?\" Ibrahim answered that he did believe, but he wanted his heart to be reassured.\n\nAllah told Ibrahim to take four birds, draw them close, then place parts of them on different hills. Then Ibrahim was to call them, and they would come to him quickly. Allah ended the sign by reminding Ibrahim that Allah is Mighty and Wise.\n\nThis story does not show doubt in Allah's promise. Ibrahim believed. He was asking for a sign that would bring even more certainty and calm to his heart. Allah answered him with a sign of resurrection.\n\nThe One who created life the first time can bring it back after death. Nothing is scattered beyond Allah's power. The birds came by Allah's command, and Ibrahim's heart was reassured.",
+      "relatedAyahs": [
+        {
+          "surahNumber": 2,
+          "ayahStart": 260,
+          "ayahEnd": 260,
+          "label": "Al-Baqarah 2:260"
+        }
+      ],
+      "discussionQuestions": [
+        "Why did Ibrahim ask to see how Allah gives life to the dead?",
+        "What does this story teach about resurrection?",
+        "How can a believer ask questions respectfully?",
+        "Why does Allah end the verse by mentioning that He is Mighty and Wise?"
+      ],
+      "sources": {
+        "primary": "Quran, Al-Baqarah 2:260; Arabic Tafsir Ibn Kathir, Wikisource, Tafsir Ibn Kathir/Surah Al-Baqarah",
+        "hadith": [],
+        "seerah": [],
+        "notes": "Post-generation age assessment: child, because the story teaches resurrection and certainty without mature themes. Details about bird species or exact procedure beyond the verse are omitted."
       }
     },
     {
@@ -559,6 +647,44 @@
       }
     },
     {
+      "id": 39,
+      "slug": "musa-plagues-of-egypt",
+      "title": "Musa and the Signs in Egypt",
+      "previousStoryId": 37,
+      "storyType": "quranic_narrative",
+      "ageGroup": "preteen",
+      "summary": "Allah sent repeated signs against Pharaoh's people, but they broke their promises and remained arrogant.",
+      "readingTimeMinutes": 6,
+      "featuredCharacter": "Prophet Musa",
+      "morals": [
+        "Hardship should lead people back to Allah, not deeper arrogance",
+        "Breaking promises after relief is a serious sin",
+        "Allah's signs come with warning and mercy",
+        "Tyranny cannot defeat Allah's plan"
+      ],
+      "content": "Pharaoh and his chiefs continued rejecting Musa. Allah tested them with years of hardship and shortage of fruits so that they might remember. But when good came to them, they claimed it was theirs. When bad struck them, they blamed Musa and those with him. Allah taught that their fortune was with Him, though most of them did not know.\n\nThey said that no matter what sign Musa brought, they would not believe. So Allah sent clear signs: the flood, locusts, lice, frogs, and blood. These signs came separately, yet the people remained arrogant and criminal.\n\nWhenever the punishment fell upon them, they begged Musa to call upon his Lord by the covenant He had with him. They promised that if the punishment was removed, they would believe and send the Children of Israel with him.\n\nBut when Allah removed the punishment for a time, they broke their word. Their relief did not become repentance. Their promises disappeared as soon as the pressure lifted.\n\nAt last, Allah took retribution from them. He drowned them in the sea because they denied His signs and were heedless of them. Allah caused the oppressed people to inherit the eastern and western parts of the land He had blessed, and His good word was fulfilled for the Children of Israel because they had been patient.\n\nThe signs in Egypt teach that warnings should soften the heart. If a person only calls on Allah during hardship and then returns to arrogance after relief, the warning has not been understood.",
+      "relatedAyahs": [
+        {
+          "surahNumber": 7,
+          "ayahStart": 130,
+          "ayahEnd": 137,
+          "label": "Al-A'raf 7:130-137"
+        }
+      ],
+      "discussionQuestions": [
+        "How did Pharaoh's people respond when hardship came?",
+        "Why is breaking a promise after relief dangerous?",
+        "What signs did Allah send to warn them?",
+        "How did patience matter for the Children of Israel?"
+      ],
+      "sources": {
+        "primary": "Quran, Al-A'raf 7:130-137; Arabic Tafsir Ibn Kathir, Wikisource, Tafsir Ibn Kathir/Surah Al-A'raf",
+        "hadith": [],
+        "seerah": [],
+        "notes": "Post-generation age assessment: preteen, because the story includes repeated punishment, tyranny, and eventual drowning, described soberly without graphic detail."
+      }
+    },
+    {
       "id": 22,
       "slug": "nuh-and-the-ark",
       "title": "Nuh and the Ark",
@@ -805,6 +931,82 @@
       }
     },
     {
+      "id": 33,
+      "slug": "yusuf-reunion-with-yaqub",
+      "title": "Yusuf Reunites with Yaqub",
+      "previousStoryId": 29,
+      "storyType": "quranic_narrative",
+      "ageGroup": "child",
+      "summary": "Yusuf forgave his brothers, Yaqub's sight returned, and Yusuf's childhood dream came true by Allah's mercy.",
+      "readingTimeMinutes": 6,
+      "featuredCharacter": "Prophet Yusuf",
+      "morals": [
+        "Forgiveness can heal what jealousy broke",
+        "Allah can bring relief after years of grief",
+        "A truthful dream from Allah comes true at the time Allah chooses",
+        "Success should end in gratitude and dua"
+      ],
+      "content": "When Yusuf's brothers finally stood before him in need, Yusuf revealed the truth. He said, \"I am Yusuf, and this is my brother.\" Allah had been gracious to them. The brothers admitted that Allah had preferred Yusuf over them and that they had been wrong.\n\nYusuf did not answer with revenge. He said there was no blame upon them that day, and he asked Allah to forgive them. He told them that Allah is the Most Merciful of those who show mercy.\n\nThen Yusuf gave them his shirt and told them to place it over his father's face. Yaqub had suffered years of grief, but when the caravan left Egypt, he said he could smell Yusuf. When the bearer of good news arrived and placed the shirt over Yaqub's face, his sight returned by Allah's permission.\n\nThe family came to Yusuf in Egypt. Yusuf raised his parents upon the throne, and they fell in prostration before him according to the custom Allah allowed at that time. Yusuf said that this was the interpretation of his old dream: the eleven stars, the sun, and the moon had bowed to him.\n\nYusuf remembered Allah's kindness. Allah had brought him out of prison and brought his family from the desert after Shaytan had stirred trouble between him and his brothers. Yusuf ended not with boasting, but with dua. He asked Allah to let him die as a Muslim and join him with the righteous.\n\nThe best ending of Yusuf's story is not only that his family was together again. It is that Yusuf saw Allah's mercy in every turn of the story and returned the praise to Him.",
+      "relatedAyahs": [
+        {
+          "surahNumber": 12,
+          "ayahStart": 93,
+          "ayahEnd": 101,
+          "label": "Yusuf 12:93-101"
+        }
+      ],
+      "discussionQuestions": [
+        "How did Yusuf respond when his brothers admitted they were wrong?",
+        "What happened when Yusuf's shirt was placed on Yaqub's face?",
+        "How did Yusuf's childhood dream come true?",
+        "Why did Yusuf end the story with dua instead of boasting?"
+      ],
+      "sources": {
+        "primary": "Quran, Surah Yusuf 12:93-101; Arabic Tafsir Ibn Kathir, Wikisource, Tafsir Ibn Kathir/Surah Yusuf",
+        "hadith": [],
+        "seerah": [],
+        "notes": "Post-generation age assessment: child, because the story centers on forgiveness, reunion, and gratitude with no mature themes. The prostration is explained as a past permitted custom, not Islamic worship practice."
+      }
+    },
+    {
+      "id": 31,
+      "slug": "ibrahim-leaves-hajar-and-ismail",
+      "title": "Ibrahim Leaves Hajar and Ismail",
+      "previousStoryId": 30,
+      "storyType": "quranic_narrative",
+      "ageGroup": "preteen",
+      "summary": "Ibrahim settled part of his family near Allah's Sacred House and prayed that hearts would turn toward them.",
+      "readingTimeMinutes": 5,
+      "featuredCharacter": "Prophet Ibrahim",
+      "morals": [
+        "Obedience to Allah can require deep trust",
+        "Parents should pray for their children's faith and provision",
+        "Allah can bring life and guidance to an empty place",
+        "Prayer is a way to place our hopes with Allah"
+      ],
+      "content": "Ibrahim made a prayer that lets us see the faith behind a difficult moment. He said, \"Our Lord, I have settled some of my descendants in an uncultivated valley near Your Sacred House.\" The place was not described as a garden or a city. It was a valley where crops did not grow.\n\nIbrahim did not leave his family there without turning to Allah. He said the purpose was that they would establish prayer. Then he asked Allah to make hearts among the people incline toward them and to provide them with fruits so they might be grateful.\n\nThis prayer shows Ibrahim's trust. He could not make the valley fertile by himself. He could not command people's hearts by himself. He could not guarantee the future by himself. But he knew the Lord of the House, the Lord who provides and guides.\n\nAllah honored that place. The Sacred House would become a direction of worship, and people from many lands would turn their hearts toward it. Ibrahim's prayer teaches that when believers obey Allah, they do not rely on the emptiness or fullness of a place. They rely on Allah, who can provide from where people do not expect.\n\nThe story is brief in the Quran, but its meaning is wide: faith builds families with prayer, trust, and gratitude.",
+      "relatedAyahs": [
+        {
+          "surahNumber": 14,
+          "ayahStart": 37,
+          "ayahEnd": 37,
+          "label": "Ibrahim 14:37"
+        }
+      ],
+      "discussionQuestions": [
+        "What did Ibrahim ask Allah for when he settled his family in the valley?",
+        "Why is prayer central in Ibrahim's dua?",
+        "How can someone trust Allah while still feeling the weight of a hard choice?",
+        "What blessings came from Allah turning hearts toward the Sacred House?"
+      ],
+      "sources": {
+        "primary": "Quran, Ibrahim 14:37; Arabic Tafsir Ibn Kathir, Wikisource, Tafsir Ibn Kathir/Surah Ibrahim",
+        "hadith": [],
+        "seerah": [],
+        "notes": "Post-generation age assessment: preteen, because the story involves a parent settling family in an empty valley and requires emotional/theological maturity. Details beyond the Quranic dua are kept minimal here; fuller Zamzam/Safa-Marwah reports are reserved for a Hajj-specific story if authored later."
+      }
+    },
+    {
       "id": 10,
       "slug": "people-of-the-cave",
       "title": "The Young Believers in the Cave",
@@ -881,6 +1083,50 @@
       }
     },
     {
+      "id": 35,
+      "slug": "musa-burning-bush",
+      "title": "Musa at the Burning Bush",
+      "previousStoryId": 32,
+      "storyType": "quranic_narrative",
+      "ageGroup": "child",
+      "summary": "On the way with his family, Musa saw a fire and was called by Allah, who gave him signs and sent him to Pharaoh.",
+      "readingTimeMinutes": 7,
+      "featuredCharacter": "Prophet Musa",
+      "morals": [
+        "Allah can call a servant from an unexpected place",
+        "Prophethood is a trust carried with humility",
+        "A believer may ask Allah for help with a difficult mission",
+        "Allah's signs are greater than human fear"
+      ],
+      "content": "After completing his term in Madyan, Musa traveled with his family. He saw a fire from the side of the mountain and told his family to wait. Perhaps he could bring them news or a burning brand from the fire so they could warm themselves.\n\nWhen Musa came to it, he was called from the blessed side of the valley. Allah told him that He was his Lord and commanded him to remove his sandals in the sacred valley. Allah chose him and told him to listen to what was revealed: Allah alone is God, so Musa should worship Him and establish prayer for His remembrance.\n\nAllah asked Musa what was in his right hand. Musa said it was his staff; he leaned on it, brought down leaves for his sheep with it, and used it for other needs. Allah commanded him to throw it down. When Musa threw it, it became a moving serpent. Musa turned in fear, but Allah told him to take it and not be afraid; it would return to its first state.\n\nAllah also gave Musa another sign: placing his hand within his garment, it would come out white without harm. These were signs from Allah for Pharaoh and his chiefs.\n\nMusa knew the mission was heavy. He asked Allah to expand his chest, ease his task, loosen the knot from his tongue so people would understand his speech, and appoint his brother Harun as a helper. Allah granted his request.\n\nThe man who once fled Egypt in fear was now being sent back by Allah with signs and support. Musa did not carry the mission alone. He carried it with the help of the Lord who called him.",
+      "relatedAyahs": [
+        {
+          "surahNumber": 20,
+          "ayahStart": 9,
+          "ayahEnd": 36,
+          "label": "Ta-Ha 20:9-36"
+        },
+        {
+          "surahNumber": 28,
+          "ayahStart": 29,
+          "ayahEnd": 35,
+          "label": "Al-Qasas 28:29-35"
+        }
+      ],
+      "discussionQuestions": [
+        "Why did Musa go toward the fire?",
+        "What signs did Allah give Musa?",
+        "What help did Musa ask Allah for before facing Pharaoh?",
+        "How does this story show that fear can be met with Allah's support?"
+      ],
+      "sources": {
+        "primary": "Quran, Ta-Ha 20:9-36 and Al-Qasas 28:29-35; Arabic Tafsir Ibn Kathir, Wikisource",
+        "hadith": [],
+        "seerah": [],
+        "notes": "Post-generation age assessment: child, because the story includes awe, fear, and a miraculous sign but no mature themes. The staff and hand signs are kept close to Quranic wording."
+      }
+    },
+    {
       "id": 3,
       "slug": "musa-and-the-baby-basket",
       "title": "Musa and the Baby Basket",
@@ -916,6 +1162,50 @@
         "Can you think of a time when something scary turned out okay?"
       ],
       "sources": {}
+    },
+    {
+      "id": 37,
+      "slug": "musa-confronts-pharaoh",
+      "title": "Musa Confronts Pharaoh",
+      "previousStoryId": 35,
+      "storyType": "quranic_narrative",
+      "ageGroup": "preteen",
+      "summary": "Musa and Harun called Pharaoh to Allah, and the magicians recognized the truth when Allah's sign defeated their tricks.",
+      "readingTimeMinutes": 8,
+      "featuredCharacter": "Prophet Musa",
+      "morals": [
+        "Speak truth with courage and wisdom",
+        "Allah's signs are not the same as human tricks",
+        "A sincere heart can accept truth even after being wrong",
+        "Threats cannot erase faith once Allah opens the heart"
+      ],
+      "content": "Allah sent Musa and Harun to Pharaoh and told them to speak to him with gentle speech, so that perhaps he might remember or fear Allah. Pharaoh had become arrogant and claimed high status over the people, but Allah still sent him a clear call before punishment.\n\nMusa and Harun came to Pharaoh and said they were messengers of the Lord of the worlds. They asked him to send the Children of Israel with them and not torment them. Pharaoh mocked Musa's past and questioned the Lord of the worlds.\n\nMusa answered by pointing to Allah as the Lord of the heavens and the earth, the Lord of Pharaoh and his forefathers, the Lord of the east and the west and what is between them. Pharaoh threatened prison, so Musa showed the signs Allah had given him. His staff became a serpent, and his hand appeared white to the watchers.\n\nPharaoh accused Musa of magic and gathered skilled magicians for a public challenge. The magicians threw their ropes and staffs, and their magic made it appear to the people that things were moving. Musa felt some fear inside, but Allah told him not to fear. Musa threw his staff, and it swallowed what they had produced.\n\nThe magicians knew the difference between their tricks and Allah's sign. They fell in prostration and said they believed in the Lord of Musa and Harun. Pharaoh became furious and threatened them with severe punishment. But their hearts had changed. They said they would not prefer Pharaoh over the clear proofs that had come to them.\n\nThis confrontation showed that Pharaoh's power was loud but fragile. Allah's truth was clear enough that even the magicians who came to oppose Musa became believers.",
+      "relatedAyahs": [
+        {
+          "surahNumber": 20,
+          "ayahStart": 42,
+          "ayahEnd": 71,
+          "label": "Ta-Ha 20:42-71"
+        },
+        {
+          "surahNumber": 26,
+          "ayahStart": 10,
+          "ayahEnd": 51,
+          "label": "Ash-Shu'ara 26:10-51"
+        }
+      ],
+      "discussionQuestions": [
+        "Why did Allah command Musa and Harun to speak gently to Pharaoh?",
+        "How did the magicians know Musa's sign was not magic?",
+        "What changed in the magicians after they saw the truth?",
+        "How can someone stay firm when threatened for believing?"
+      ],
+      "sources": {
+        "primary": "Quran, Ta-Ha 20:42-71 and Ash-Shu'ara 26:10-51; Arabic Tafsir Ibn Kathir, Wikisource",
+        "hadith": [],
+        "seerah": [],
+        "notes": "Post-generation age assessment: preteen, because the story includes tyranny, public confrontation, and threats of severe punishment, described without graphic detail."
+      }
     },
     {
       "id": 2,
@@ -999,6 +1289,50 @@
       }
     },
     {
+      "id": 40,
+      "slug": "musa-splitting-the-sea",
+      "title": "Musa and the Splitting Sea",
+      "previousStoryId": 39,
+      "storyType": "quranic_narrative",
+      "ageGroup": "child",
+      "summary": "When Pharaoh chased the believers to the sea, Allah commanded Musa to strike it, opened a path, and saved them.",
+      "readingTimeMinutes": 6,
+      "featuredCharacter": "Prophet Musa",
+      "morals": [
+        "Allah can make a way where people see no way",
+        "A believer should trust Allah when trapped by fear",
+        "Tyranny may chase the truth, but it cannot outrun Allah's command",
+        "Rescue belongs to Allah"
+      ],
+      "content": "Allah revealed to Musa to travel by night with His servants. Pharaoh then sent gatherers through the cities, calling the Children of Israel a small group and stirring his people to chase them.\n\nWhen the two groups saw each other, Musa's companions said, \"We are surely overtaken.\" The sea was in front of them, and Pharaoh's army was behind them. But Musa answered with certainty: \"No. Indeed, with me is my Lord; He will guide me.\"\n\nAllah revealed to Musa to strike the sea with his staff. The sea split, and each part became like a great mountain. Allah brought the others near, and He saved Musa and those with him all together.\n\nPharaoh and his soldiers followed into the path, but the sea closed over them. Allah saved the believers and drowned those who had denied His signs. This was a sign, but most of Pharaoh's people had not believed.\n\nThe story of the sea teaches that believers are never trapped when Allah has promised guidance. The way forward may not appear until Allah commands it to open. Musa did not split the sea by his own power. Allah rescued His servants by His command.",
+      "relatedAyahs": [
+        {
+          "surahNumber": 26,
+          "ayahStart": 52,
+          "ayahEnd": 68,
+          "label": "Ash-Shu'ara 26:52-68"
+        },
+        {
+          "surahNumber": 20,
+          "ayahStart": 77,
+          "ayahEnd": 79,
+          "label": "Ta-Ha 20:77-79"
+        }
+      ],
+      "discussionQuestions": [
+        "What did Musa say when his people feared they would be caught?",
+        "How did Allah open a path through the sea?",
+        "Why could Pharaoh's army not escape Allah's command?",
+        "How can this story help someone who feels trapped?"
+      ],
+      "sources": {
+        "primary": "Quran, Ash-Shu'ara 26:52-68 and Ta-Ha 20:77-79; Arabic Tafsir Ibn Kathir, Wikisource",
+        "hadith": [],
+        "seerah": [],
+        "notes": "Post-generation age assessment: child, because the story has pursuit and drowning but is told as a clear rescue narrative without graphic detail."
+      }
+    },
+    {
       "id": 7,
       "slug": "the-ant-and-prophet-sulayman",
       "title": "The Ant and Prophet Sulayman",
@@ -1028,6 +1362,82 @@
         "How can we show kindness to animals?"
       ],
       "sources": {}
+    },
+    {
+      "id": 32,
+      "slug": "musa-flees-egypt",
+      "title": "Musa Flees Egypt",
+      "previousStoryId": 3,
+      "storyType": "quranic_narrative",
+      "ageGroup": "preteen",
+      "summary": "Musa accidentally killed a man while trying to help, repented to Allah, fled Egypt, and found refuge in Madyan.",
+      "readingTimeMinutes": 7,
+      "featuredCharacter": "Prophet Musa",
+      "morals": [
+        "A believer should turn to Allah immediately after wrongdoing",
+        "Strength must be guided by justice and restraint",
+        "Allah can guide a person through fear into safety",
+        "Helping others sincerely is never wasted with Allah"
+      ],
+      "content": "When Musa reached maturity, Allah gave him judgment and knowledge. One day he entered the city at a time when its people were unaware. He found two men fighting: one from his own people and one from his enemy. The man from his people called Musa for help.\n\nMusa struck the other man, and the man died. Musa did not treat this as a small mistake. He said it was from Shaytan's work, and he asked his Lord for forgiveness. Allah forgave him, and Musa promised not to be a helper to criminals.\n\nThe next day Musa was afraid and watchful in the city. The same man who had asked for help the day before called to him again. Musa saw that the man was clearly quarrelsome. As Musa moved toward the one who was an enemy to both of them, the man cried out as if Musa intended to kill him. The news spread.\n\nA man came from the farthest part of the city, running. He warned Musa that the chiefs were planning to kill him and advised him to leave. Musa left Egypt afraid and watchful, praying, \"My Lord, save me from the wrongdoing people.\"\n\nMusa set out toward Madyan, asking Allah to guide him to the right way. When he reached the water of Madyan, he found people watering their flocks and two women holding theirs back. They said they could not water until the shepherds took their animals away, and their father was an old man.\n\nMusa watered for them, then withdrew to the shade and made a humble dua: \"My Lord, indeed I am in need of whatever good You send down to me.\" Soon one of the two women came walking modestly and told him her father was inviting him to reward him for watering for them.\n\nMusa told the old man his story, and the man reassured him that he had escaped from the wrongdoing people. Musa was offered work and marriage in Madyan for a fixed term. The frightened man who left Egypt found safety by Allah's guidance.",
+      "relatedAyahs": [
+        {
+          "surahNumber": 28,
+          "ayahStart": 14,
+          "ayahEnd": 28,
+          "label": "Al-Qasas 28:14-28"
+        }
+      ],
+      "discussionQuestions": [
+        "How did Musa respond after the man died?",
+        "Why did Musa leave Egypt?",
+        "What does Musa's dua in the shade teach about asking Allah?",
+        "How did Allah open a path to safety for Musa?"
+      ],
+      "sources": {
+        "primary": "Quran, Al-Qasas 28:14-28; Arabic Tafsir Ibn Kathir, Wikisource, Tafsir Ibn Kathir/Surah Al-Qasas",
+        "hadith": [],
+        "seerah": [],
+        "notes": "Post-generation age assessment: preteen, because the story includes accidental killing, fear, flight, and marriage/work arrangements, described without graphic detail."
+      }
+    },
+    {
+      "id": 34,
+      "slug": "ibrahim-and-the-sacrifice",
+      "title": "Ibrahim and the Sacrifice",
+      "previousStoryId": 31,
+      "storyType": "quranic_narrative",
+      "ageGroup": "preteen",
+      "summary": "Ibrahim saw in a dream that he must sacrifice his son; father and son submitted, and Allah ransomed him with a great sacrifice.",
+      "readingTimeMinutes": 6,
+      "featuredCharacter": "Prophet Ibrahim",
+      "morals": [
+        "Submission to Allah means trusting Him above what we can understand",
+        "Righteous children can help parents obey Allah",
+        "Allah tests His servants and then opens mercy",
+        "Great acts of worship should end in gratitude, not self-praise"
+      ],
+      "content": "Ibrahim prayed for a righteous child, and Allah gave him glad tidings of a forbearing son. When the boy grew old enough to work alongside him, Ibrahim told him about a serious dream. He said, \"My son, I see in a dream that I am sacrificing you, so see what you think.\"\n\nThe son answered with submission. He said, \"My father, do what you are commanded. You will find me, if Allah wills, among the patient.\" The Quran shows both father and son turning toward Allah's command.\n\nWhen they had both submitted and Ibrahim laid him down, Allah called to him: \"O Ibrahim, you have fulfilled the vision.\" Allah said that this was the clear trial. Then Allah ransomed the son with a great sacrifice and left praise for Ibrahim among later generations.\n\nAllah did not want Ibrahim to boast over the test. Allah showed that the command, the patience, the rescue, and the reward all belonged to Him. Ibrahim's family became an example of submission, and the memory of that submission remains connected to sacrifice and gratitude.\n\nThe story is not about loving harm. It is about Allah testing a prophet and his son, then revealing mercy and honor. Both trusted Allah, and Allah made a way out that only He could give.",
+      "relatedAyahs": [
+        {
+          "surahNumber": 37,
+          "ayahStart": 99,
+          "ayahEnd": 113,
+          "label": "As-Saffat 37:99-113"
+        }
+      ],
+      "discussionQuestions": [
+        "How did Ibrahim's son respond to the dream?",
+        "What does it mean that both father and son submitted?",
+        "How did Allah show mercy in the middle of the test?",
+        "Why should hard acts of obedience lead to gratitude?"
+      ],
+      "sources": {
+        "primary": "Quran, As-Saffat 37:99-113; Arabic Tafsir Ibn Kathir, Wikisource, Tafsir Ibn Kathir/Surah As-Saffat",
+        "hadith": [],
+        "seerah": [],
+        "notes": "Post-generation age assessment: preteen, because the story centers on a commanded sacrifice of a child, though the Quranic account is told soberly and ends with ransom and mercy. The son is not named in the Quranic verses, so the story avoids asserting the name in the prose."
+      }
     },
     {
       "id": 1,
