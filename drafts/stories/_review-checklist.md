@@ -8,6 +8,8 @@ Use this checklist before changing a draft to `reviewStatus: "approved"` or `rev
 - [ ] Story matches the `StoryData` shape in `artifacts/api-server/src/data/stories.ts`.
 - [ ] `storyType` is one of the four locked enum values.
 - [ ] `ageGroup` is one of `toddler`, `child`, `preteen`, or `teen`.
+- [ ] `prophets` uses only locked lowercase prophet IDs, ordered by prominence, or `[]` for stories without a Quran-named prophet centerpiece.
+- [ ] `themes` uses 1-3 locked lowercase theme IDs.
 - [ ] `relatedAyahs` is populated with correct surah and ayah ranges.
 - [ ] `sources.primary` is set.
 
@@ -46,4 +48,3 @@ This is the most important theological accuracy check.
 - [ ] Use `approved` only for a new slug.
 - [ ] Use `approved-replace` only when intentionally replacing an existing story with the same slug.
 - [ ] For replacements, confirm preserving the existing ID is desired.
-

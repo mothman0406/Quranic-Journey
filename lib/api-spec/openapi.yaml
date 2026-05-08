@@ -623,6 +623,22 @@ paths:
           schema:
             type: string
             enum: [quranic_narrative, seerah_context, companion_profile, moral_lesson]
+        - name: prophet
+          in: query
+          style: form
+          explode: true
+          schema:
+            type: array
+            items:
+              $ref: "#/components/schemas/StoryProphetId"
+        - name: theme
+          in: query
+          style: form
+          explode: true
+          schema:
+            type: array
+            items:
+              $ref: "#/components/schemas/StoryThemeId"
         - name: surahNumber
           in: query
           schema:
@@ -1726,6 +1742,64 @@ components:
           type: integer
       required: [storyType, label, count]
 
+    StoryProphetId:
+      type: string
+      enum:
+        - adam
+        - idris
+        - nuh
+        - hud
+        - salih
+        - ibrahim
+        - lut
+        - ismail
+        - ishaq
+        - yaqub
+        - yusuf
+        - ayyub
+        - shuaib
+        - musa
+        - harun
+        - dhul-kifl
+        - dawud
+        - sulayman
+        - ilyas
+        - al-yasa
+        - yunus
+        - zakariya
+        - yahya
+        - isa
+        - muhammad
+
+    StoryThemeId:
+      type: string
+      enum:
+        - worship-allah-alone
+        - trust-in-allah
+        - patience
+        - repentance
+        - gratitude
+        - truthfulness
+        - humility
+        - courage
+        - justice
+        - mercy
+        - forgiveness
+        - family
+        - friendship
+        - generosity
+        - prayer-and-dua
+        - obedience
+        - resisting-pressure
+        - sacrifice
+        - accountability
+        - seeking-knowledge
+        - guidance-and-revelation
+        - blessing-as-trust
+        - unseen-and-faith
+        - community
+        - allahs-power
+
     Story:
       type: object
       properties:
@@ -1753,13 +1827,21 @@ components:
           type: array
           items:
             type: string
+        prophets:
+          type: array
+          items:
+            $ref: "#/components/schemas/StoryProphetId"
+        themes:
+          type: array
+          items:
+            $ref: "#/components/schemas/StoryThemeId"
         relatedAyahs:
           type: array
           items:
             $ref: "#/components/schemas/StoryAyahRef"
         sources:
           $ref: "#/components/schemas/StorySources"
-      required: [id, slug, title, previousStoryId, storyType, ageGroup, summary, readingTimeMinutes, featuredCharacter, morals, relatedAyahs, sources]
+      required: [id, slug, title, previousStoryId, storyType, ageGroup, summary, readingTimeMinutes, featuredCharacter, morals, prophets, themes, relatedAyahs, sources]
 
     PreviousStorySummary:
       type: object

@@ -23,6 +23,8 @@ Return a JSON object matching the NoorPath `StoryData` schema plus draft metadat
 - `readingTimeMinutes`
 - `featuredCharacter`
 - `morals`: 3-5 concrete morals.
+- `prophets`: lowercase canonical prophet IDs from the locked vocabulary, or `[]` when no Quran-named prophet is structurally central.
+- `themes`: 1-3 lowercase theme IDs from the locked vocabulary.
 - `content`: clear story prose with paragraph breaks.
 - `relatedAyahs`: array of `{ "surahNumber": number, "ayahStart": number, "ayahEnd": number, "label": string }`.
 - `discussionQuestions`: 3-5 open-ended questions.

@@ -14,6 +14,60 @@ const storyTypes = new Set([
   "moral_lesson",
 ]);
 const ageGroups = new Set(["toddler", "child", "preteen", "teen"]);
+const prophetIds = new Set([
+  "adam",
+  "idris",
+  "nuh",
+  "hud",
+  "salih",
+  "ibrahim",
+  "lut",
+  "ismail",
+  "ishaq",
+  "yaqub",
+  "yusuf",
+  "ayyub",
+  "shuaib",
+  "musa",
+  "harun",
+  "dhul-kifl",
+  "dawud",
+  "sulayman",
+  "ilyas",
+  "al-yasa",
+  "yunus",
+  "zakariya",
+  "yahya",
+  "isa",
+  "muhammad",
+]);
+const themeIds = new Set([
+  "worship-allah-alone",
+  "trust-in-allah",
+  "patience",
+  "repentance",
+  "gratitude",
+  "truthfulness",
+  "humility",
+  "courage",
+  "justice",
+  "mercy",
+  "forgiveness",
+  "family",
+  "friendship",
+  "generosity",
+  "prayer-and-dua",
+  "obedience",
+  "resisting-pressure",
+  "sacrifice",
+  "accountability",
+  "seeking-knowledge",
+  "guidance-and-revelation",
+  "blessing-as-trust",
+  "unseen-and-faith",
+  "community",
+  "allahs-power",
+]);
 const storyFields = [
   "id",
   "slug",
@@ -25,6 +79,8 @@ const storyFields = [
   "readingTimeMinutes",
   "featuredCharacter",
   "morals",
+  "prophets",
+  "themes",
   "content",
   "relatedAyahs",
   "discussionQuestions",
@@ -64,6 +120,13 @@ function assertStringArray(value, label, minLength = 0) {
   if (!Array.isArray(value)) fail(`${label} must be an array`);
   if (value.length < minLength) fail(`${label} must contain at least ${minLength} item(s)`);
   value.forEach((item, index) => assertString(item, `${label}[${index}]`));
+}
+
+function validateControlledStringArray(value, label, vocabulary) {
+  assertStringArray(value, label);
+  value.forEach((item, index) => {
+    if (!vocabulary.has(item)) fail(`${label}[${index}] is not in the controlled vocabulary`);
+  });
 }
 
 function validateSources(value, label) {
@@ -107,6 +170,8 @@ function validateStory(story, label, { allowZeroId = false } = {}) {
   assertPositiveInteger(story.readingTimeMinutes, `${label}.readingTimeMinutes`);
   assertString(story.featuredCharacter, `${label}.featuredCharacter`);
   assertStringArray(story.morals, `${label}.morals`, 3);
+  validateControlledStringArray(story.prophets, `${label}.prophets`, prophetIds);
+  validateControlledStringArray(story.themes, `${label}.themes`, themeIds);
   assertString(story.content, `${label}.content`);
   validateAyahRefs(story.relatedAyahs, `${label}.relatedAyahs`);
   assertStringArray(story.discussionQuestions, `${label}.discussionQuestions`, 3);

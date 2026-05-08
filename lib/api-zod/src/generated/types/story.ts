@@ -7,7 +7,9 @@
  */
 import type { StoryAgeGroup } from "./storyAgeGroup";
 import type { StoryAyahRef } from "./storyAyahRef";
+import type { StoryProphetId } from "./storyProphetId";
 import type { StorySources } from "./storySources";
+import type { StoryThemeId } from "./storyThemeId";
 import type { StoryType } from "./storyType";
 
 export interface Story {
@@ -21,6 +23,8 @@ export interface Story {
   readingTimeMinutes: number;
   featuredCharacter: string;
   morals: string[];
+  prophets: StoryProphetId[];
+  themes: StoryThemeId[];
   relatedAyahs: StoryAyahRef[];
   sources: StorySources;
 }

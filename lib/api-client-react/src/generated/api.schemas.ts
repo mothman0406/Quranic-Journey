@@ -719,6 +719,67 @@ export interface StoryTypeSummary {
   count: number;
 }
 
+export type StoryProphetId =
+  (typeof StoryProphetId)[keyof typeof StoryProphetId];
+
+export const StoryProphetId = {
+  adam: "adam",
+  idris: "idris",
+  nuh: "nuh",
+  hud: "hud",
+  salih: "salih",
+  ibrahim: "ibrahim",
+  lut: "lut",
+  ismail: "ismail",
+  ishaq: "ishaq",
+  yaqub: "yaqub",
+  yusuf: "yusuf",
+  ayyub: "ayyub",
+  shuaib: "shuaib",
+  musa: "musa",
+  harun: "harun",
+  "dhul-kifl": "dhul-kifl",
+  dawud: "dawud",
+  sulayman: "sulayman",
+  ilyas: "ilyas",
+  "al-yasa": "al-yasa",
+  yunus: "yunus",
+  zakariya: "zakariya",
+  yahya: "yahya",
+  isa: "isa",
+  muhammad: "muhammad",
+} as const;
+
+export type StoryThemeId = (typeof StoryThemeId)[keyof typeof StoryThemeId];
+
+export const StoryThemeId = {
+  "worship-allah-alone": "worship-allah-alone",
+  "trust-in-allah": "trust-in-allah",
+  patience: "patience",
+  repentance: "repentance",
+  gratitude: "gratitude",
+  truthfulness: "truthfulness",
+  humility: "humility",
+  courage: "courage",
+  justice: "justice",
+  mercy: "mercy",
+  forgiveness: "forgiveness",
+  family: "family",
+  friendship: "friendship",
+  generosity: "generosity",
+  "prayer-and-dua": "prayer-and-dua",
+  obedience: "obedience",
+  "resisting-pressure": "resisting-pressure",
+  sacrifice: "sacrifice",
+  accountability: "accountability",
+  "seeking-knowledge": "seeking-knowledge",
+  "guidance-and-revelation": "guidance-and-revelation",
+  "blessing-as-trust": "blessing-as-trust",
+  "unseen-and-faith": "unseen-and-faith",
+  community: "community",
+  "allahs-power": "allahs-power",
+} as const;
+
 export type StoryAgeGroup = (typeof StoryAgeGroup)[keyof typeof StoryAgeGroup];
 
 export const StoryAgeGroup = {
@@ -739,6 +800,8 @@ export interface Story {
   readingTimeMinutes: number;
   featuredCharacter: string;
   morals: string[];
+  prophets: StoryProphetId[];
+  themes: StoryThemeId[];
   relatedAyahs: StoryAyahRef[];
   sources: StorySources;
 }
@@ -918,6 +981,8 @@ export type ListContextualStories200 = {
 export type ListStoriesParams = {
   ageGroup?: ListStoriesAgeGroup;
   storyType?: ListStoriesStoryType;
+  prophet?: StoryProphetId[];
+  theme?: StoryThemeId[];
   surahNumber?: number;
   ayah?: number;
 };

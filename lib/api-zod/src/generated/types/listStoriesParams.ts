@@ -7,10 +7,14 @@
  */
 import type { ListStoriesAgeGroup } from "./listStoriesAgeGroup";
 import type { ListStoriesStoryType } from "./listStoriesStoryType";
+import type { StoryProphetId } from "./storyProphetId";
+import type { StoryThemeId } from "./storyThemeId";
 
 export type ListStoriesParams = {
   ageGroup?: ListStoriesAgeGroup;
   storyType?: ListStoriesStoryType;
+  prophet?: StoryProphetId[];
+  theme?: StoryThemeId[];
   surahNumber?: number;
   ayah?: number;
 };

@@ -8,6 +8,66 @@ export type StoryType =
 
 export type StoryAgeGroup = "toddler" | "child" | "preteen" | "teen";
 
+export const STORY_PROPHETS = [
+  "adam",
+  "idris",
+  "nuh",
+  "hud",
+  "salih",
+  "ibrahim",
+  "lut",
+  "ismail",
+  "ishaq",
+  "yaqub",
+  "yusuf",
+  "ayyub",
+  "shuaib",
+  "musa",
+  "harun",
+  "dhul-kifl",
+  "dawud",
+  "sulayman",
+  "ilyas",
+  "al-yasa",
+  "yunus",
+  "zakariya",
+  "yahya",
+  "isa",
+  "muhammad",
+] as const;
+
+export type StoryProphetId = (typeof STORY_PROPHETS)[number];
+
+export const STORY_THEMES = [
+  "worship-allah-alone",
+  "trust-in-allah",
+  "patience",
+  "repentance",
+  "gratitude",
+  "truthfulness",
+  "humility",
+  "courage",
+  "justice",
+  "mercy",
+  "forgiveness",
+  "family",
+  "friendship",
+  "generosity",
+  "prayer-and-dua",
+  "obedience",
+  "resisting-pressure",
+  "sacrifice",
+  "accountability",
+  "seeking-knowledge",
+  "guidance-and-revelation",
+  "blessing-as-trust",
+  "unseen-and-faith",
+  "community",
+  "allahs-power",
+] as const;
+
+export type StoryThemeId = (typeof STORY_THEMES)[number];
+
 export interface StorySources {
   primary?: string;
   hadith?: string[];
@@ -33,6 +93,8 @@ export interface StoryData {
   readingTimeMinutes: number;
   featuredCharacter: string;
   morals: string[];
+  prophets: StoryProphetId[];
+  themes: StoryThemeId[];
   content: string;
   relatedAyahs: StoryAyahRef[];
   discussionQuestions: string[];
