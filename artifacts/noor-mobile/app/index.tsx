@@ -20,6 +20,7 @@ import {
   NotesBookmarksPanel,
   type NotesBookmarksEntry,
 } from "@/src/components/notes-bookmarks-panel";
+import { Avatar } from "@/src/components/avatar";
 import {
   emptyMushafAnnotations,
   loadStandaloneMushafAnnotations,
@@ -138,11 +139,6 @@ function childCreatedTime(child: Child) {
 
 function compareByName(a: Child, b: Child) {
   return a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
-}
-
-function getParentInitial(user: { name?: string | null; email?: string | null } | undefined) {
-  const source = user?.name?.trim() || user?.email?.trim() || "P";
-  return source.charAt(0).toUpperCase();
 }
 
 export default function HomeScreen() {
@@ -405,10 +401,15 @@ export default function HomeScreen() {
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Open parent menu"
-          style={styles.parentAvatarButton}
+          style={styles.parentAvatarTapTarget}
           onPress={() => setParentMenuOpen(true)}
         >
-          <Text style={styles.parentAvatarText}>{getParentInitial(user)}</Text>
+          <Avatar
+            imageUrl={user?.image ?? null}
+            name={user?.name ?? ""}
+            email={user?.email ?? undefined}
+            size="md"
+          />
         </Pressable>
       </View>
 
@@ -811,20 +812,12 @@ const styles = StyleSheet.create({
     fontWeight: "900",
     color: "#111827",
   },
-  parentAvatarButton: {
+  parentAvatarTapTarget: {
     width: 38,
     height: 38,
     borderRadius: 19,
-    backgroundColor: "#0f766e",
-    borderWidth: 1,
-    borderColor: "#0f766e",
     alignItems: "center",
     justifyContent: "center",
-  },
-  parentAvatarText: {
-    color: "#ffffff",
-    fontSize: 15,
-    fontWeight: "900",
   },
   content: {
     flex: 1,
