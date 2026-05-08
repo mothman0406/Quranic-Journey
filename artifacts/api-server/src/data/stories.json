@@ -1,6 +1,48 @@
 {
   "stories": [
     {
+      "id": 91,
+      "slug": "umm-sulaim-and-her-test",
+      "title": "Umm Sulaim and Her Test",
+      "previousStoryId": null,
+      "storyType": "companion_profile",
+      "ageGroup": "teen",
+      "summary": "When Umm Sulaim's child died while Abu Talhah was away, she met the test with patience, wisdom, and trust in Allah's decree.",
+      "readingTimeMinutes": 7,
+      "featuredCharacter": "Umm Sulaim",
+      "morals": [
+        "Patience can be quiet, wise, and deeply strong",
+        "Children are a trust from Allah",
+        "Grief should be held with faith, not denial",
+        "A believer can speak hard truth with gentleness",
+        "Allah can place blessing after a painful test"
+      ],
+      "content": "Umm Sulaim was one of the believing women of Madinah. One of the most moving reports about her tells of a night when her young child died while her husband, Abu Talhah, was away.\n\nShe told the family not to inform Abu Talhah before she did. When he returned, he asked about the child. She answered gently that the child was more at rest than before. She served him dinner and allowed the evening to pass before telling him the full news.\n\nAfter they had been together as husband and wife, she spoke with a parable. She asked Abu Talhah: if some people lend something to a family and then ask for it back, should the family refuse? Abu Talhah said no. Then she told him that their son had died.\n\nAbu Talhah was upset by the timing and went to the Prophet Muhammad to tell him what had happened. The Prophet made dua for blessing in that night.\n\nLater, Allah blessed them with another child. The report tells that the child was brought to the Prophet, who performed tahnik with dates and named him Abdullah.\n\nThis story is not easy. It includes the death of a child and a marriage moment that older readers can understand with respect. Umm Sulaim's patience was not coldness. She knew the child belonged to Allah, and she chose words that would help Abu Talhah understand the loss through faith.\n\nHer story teaches that sabr can be strong and tender at the same time.",
+      "relatedAyahs": [
+        {
+          "surahNumber": 2,
+          "ayahStart": 155,
+          "ayahEnd": 157,
+          "label": "Al-Baqarah 2:155-157"
+        }
+      ],
+      "discussionQuestions": [
+        "Why did Umm Sulaim use the parable of a borrowed trust?",
+        "How can patience and grief exist together?",
+        "Why is this story better suited for older readers?",
+        "What blessing came after the Prophet's dua?"
+      ],
+      "sources": {
+        "primary": "Quran, Al-Baqarah 2:155-157 as a thematic patience anchor; Arabic Tafsir Ibn Kathir, Wikisource",
+        "hadith": [
+          "Sahih al-Bukhari 5470",
+          "Sahih Muslim 2144d"
+        ],
+        "seerah": [],
+        "notes": "Post-generation age assessment: teen, because the story includes the death of a child and marital intimacy before the news is disclosed. The Quranic anchor is thematic; the incident is from sahih hadith."
+      }
+    },
+    {
       "id": 72,
       "slug": "hamza-the-lion",
       "title": "Hamza the Lion",
@@ -636,6 +678,44 @@
       }
     },
     {
+      "id": 89,
+      "slug": "the-spider-and-allahs-similitude",
+      "title": "The Spider and Allah's Similitude",
+      "previousStoryId": null,
+      "storyType": "moral_lesson",
+      "ageGroup": "child",
+      "summary": "The Quran compares relying on protectors other than Allah to a spider building a fragile house.",
+      "readingTimeMinutes": 3,
+      "featuredCharacter": "The spider parable",
+      "morals": [
+        "Trust placed away from Allah is fragile",
+        "The strongest safety is with Allah",
+        "A vivid parable can expose a hidden weakness",
+        "False protectors cannot carry the heart"
+      ],
+      "content": "Allah gives a powerful parable in Surah Al-'Ankabut. Those who take protectors besides Allah are compared to a spider that builds a house.\n\nA spider's web may look carefully made, but it is fragile. It cannot protect like a strong shelter. Allah says the weakest of houses is the house of the spider, if only they knew.\n\nThe lesson is not that spiders are bad. The lesson is about misplaced trust. When people rely on anything as if it can protect them instead of Allah, they are leaning on something weaker than they understand.\n\nA person may trust wealth, popularity, idols, status, or power. But none of those can save the heart when Allah is forgotten.\n\nThe spider parable teaches us to build our trust in the right place. The strongest home for the heart is reliance on Allah.",
+      "relatedAyahs": [
+        {
+          "surahNumber": 29,
+          "ayahStart": 41,
+          "ayahEnd": 41,
+          "label": "Al-'Ankabut 29:41"
+        }
+      ],
+      "discussionQuestions": [
+        "Why does Allah compare false protectors to a spider's house?",
+        "What are some things people wrongly trust instead of Allah?",
+        "How can a parable help us understand a hidden truth?",
+        "What does it mean to rely on Allah?"
+      ],
+      "sources": {
+        "primary": "Quran, Al-'Ankabut 29:41; Arabic Tafsir Ibn Kathir, Wikisource",
+        "hadith": [],
+        "seerah": [],
+        "notes": "Post-generation age assessment: child, because the parable is concrete and theological with no mature themes."
+      }
+    },
+    {
       "id": 51,
       "slug": "luqmans-advice",
       "title": "Luqman's Advice",
@@ -675,6 +755,45 @@
       }
     },
     {
+      "id": 86,
+      "slug": "the-mountains-and-trust",
+      "title": "The Mountains and the Trust",
+      "previousStoryId": null,
+      "storyType": "moral_lesson",
+      "ageGroup": "preteen",
+      "summary": "Allah offered the Trust to the heavens, the earth, and the mountains; they feared it, but the human being bore it.",
+      "readingTimeMinutes": 4,
+      "featuredCharacter": "The human being and the Trust",
+      "morals": [
+        "Human responsibility before Allah is weighty",
+        "Worship and obedience are not small matters",
+        "Fear of failing Allah's trust can be a form of wisdom",
+        "Being human is an honor and a responsibility",
+        "A believer should carry the Trust with humility"
+      ],
+      "content": "Surah Al-Ahzab gives an awe-filled image. Allah says He offered the Trust to the heavens, the earth, and the mountains. They refused to bear it and feared it. But the human being bore it.\n\nThe verse is short, but it is heavy. The mountains seem strong to us. The heavens and earth seem vast beyond imagination. Yet they feared the Trust.\n\nHuman beings accepted responsibility before Allah: faith, obedience, moral choice, worship, and accountability. This is an honor, but it is not light.\n\nThe verse ends by saying the human being is ever unjust and ignorant. That warning keeps us humble. We should not boast that we carried what the mountains feared. We should ask Allah to help us carry it correctly.\n\nThe parable of the mountains and the Trust teaches that being human is serious. Every prayer, every choice, every act of honesty, and every repentance is part of carrying what Allah entrusted to us.",
+      "relatedAyahs": [
+        {
+          "surahNumber": 33,
+          "ayahStart": 72,
+          "ayahEnd": 72,
+          "label": "Al-Ahzab 33:72"
+        }
+      ],
+      "discussionQuestions": [
+        "Why is it powerful that the mountains feared the Trust?",
+        "What kinds of responsibility do humans carry before Allah?",
+        "Why should this verse make a person humble?",
+        "How can we ask Allah for help in carrying the Trust?"
+      ],
+      "sources": {
+        "primary": "Quran, Al-Ahzab 33:72; Arabic Tafsir Ibn Kathir, Wikisource",
+        "hadith": [],
+        "seerah": [],
+        "notes": "Post-generation age assessment: preteen, because the story is theologically weighty and abstract, though not mature in a graphic sense."
+      }
+    },
+    {
       "id": 53,
       "slug": "the-believer-from-pharaohs-family",
       "title": "The Believer from Pharaoh's Family",
@@ -710,6 +829,129 @@
         "hadith": [],
         "seerah": [],
         "notes": "Post-generation age assessment: preteen, because the story includes a death threat, tyrannical power, and serious warnings about the Hereafter, but no graphic detail. The believer is identified only as the Quran identifies him: a believing man from Pharaoh's family."
+      }
+    },
+    {
+      "id": 90,
+      "slug": "the-wives-of-nuh-and-lut",
+      "title": "The Wives of Nuh and Lut",
+      "previousStoryId": null,
+      "storyType": "moral_lesson",
+      "ageGroup": "preteen",
+      "summary": "The Quran gives the wives of Nuh and Lut as a parable: family closeness to prophets did not save them when they rejected faith.",
+      "readingTimeMinutes": 4,
+      "featuredCharacter": "The wives of Nuh and Lut",
+      "morals": [
+        "Family connection alone does not save a person",
+        "Each soul is responsible before Allah",
+        "Faith must be real, not borrowed from someone nearby",
+        "Allah's examples teach without needing speculation",
+        "A righteous home is a mercy, but each person must choose truth"
+      ],
+      "content": "Surah At-Tahrim gives a serious parable: the wife of Nuh and the wife of Lut were under two righteous servants from Allah's servants. Both husbands were prophets.\n\nBut the two women betrayed them. The Quran does not need us to add speculative meanings. The lesson is about betrayal in faith and loyalty to Allah's message, not about guessing details Allah did not state.\n\nTheir closeness to prophets did not save them. The verse says those righteous husbands did not avail them against Allah at all, and they were told to enter the Fire with those who enter.\n\nThis parable teaches that faith cannot be inherited like a family name. A prophet's wife, child, parent, or neighbor still has to believe and obey Allah.\n\nThe same passage then gives the opposite example: Pharaoh's wife, who believed while living in the house of a tyrant. Together, the examples teach balance. A bad environment does not force disbelief, and a righteous family connection does not guarantee salvation.\n\nEvery soul stands before Allah with its own faith and deeds.",
+      "relatedAyahs": [
+        {
+          "surahNumber": 66,
+          "ayahStart": 10,
+          "ayahEnd": 10,
+          "label": "At-Tahrim 66:10"
+        },
+        {
+          "surahNumber": 66,
+          "ayahStart": 11,
+          "ayahEnd": 11,
+          "label": "At-Tahrim 66:11"
+        }
+      ],
+      "discussionQuestions": [
+        "Why did family closeness to prophets not save these two women?",
+        "What does this parable teach about personal responsibility?",
+        "How does Asiyah's example in the next verse create a contrast?",
+        "How can a person make faith real rather than only inherited?"
+      ],
+      "sources": {
+        "primary": "Quran, At-Tahrim 66:10-11; Arabic Tafsir Ibn Kathir, Wikisource",
+        "hadith": [],
+        "seerah": [],
+        "notes": "Post-generation age assessment: preteen, because the parable includes punishment and betrayal of faith, but no graphic detail. Speculative interpretations of the betrayal are omitted."
+      }
+    },
+    {
+      "id": 84,
+      "slug": "owners-of-the-garden",
+      "title": "The Owners of the Garden",
+      "previousStoryId": null,
+      "storyType": "moral_lesson",
+      "ageGroup": "child",
+      "summary": "The owners of a garden planned to harvest secretly before the poor could come, but Allah destroyed the garden overnight.",
+      "readingTimeMinutes": 6,
+      "featuredCharacter": "The owners of the garden",
+      "morals": [
+        "Hidden intentions matter to Allah",
+        "Wealth should not make people forget the poor",
+        "Allah can remove a blessing when people become selfish",
+        "Repentance begins by admitting wrong",
+        "Saying insha'Allah reminds us that we depend on Allah"
+      ],
+      "content": "The Quran tells the parable of owners of a garden. They had fruit and blessing, but they made a selfish plan.\n\nThey swore to one another that they would harvest the garden early in the morning, before the poor could come. They did not make an exception by saying that everything depends on Allah's will. Their plan was not only about fruit. It was about keeping the poor away from what they used to receive.\n\nWhile they slept, a visitor from their Lord came upon the garden. By morning, it was as if the garden had been harvested or ruined. The blessing they planned to keep from others was taken from them.\n\nAt dawn, they called one another to go early if they wanted to gather the fruit. They walked quietly, saying no poor person should enter upon them that day.\n\nBut when they saw the garden, they were shocked. At first they thought they had lost their way. Then they realized what had happened. The best among them reminded them that he had told them to glorify Allah.\n\nThey admitted their wrong and said, \"Exalted is our Lord! Indeed, we were wrongdoers.\" Then they blamed one another and confessed that they had transgressed. They hoped Allah might replace their garden with something better.\n\nThe owners of the garden teach that selfish plans are never hidden from Allah. A blessing is safest when it is used with gratitude, mercy, and care for those in need.",
+      "relatedAyahs": [
+        {
+          "surahNumber": 68,
+          "ayahStart": 17,
+          "ayahEnd": 33,
+          "label": "Al-Qalam 68:17-33"
+        }
+      ],
+      "discussionQuestions": [
+        "Why did the garden owners want to harvest early?",
+        "What did their plan show about their hearts?",
+        "How did they respond when they realized what had happened?",
+        "How can wealth be used with gratitude instead of selfishness?"
+      ],
+      "sources": {
+        "primary": "Quran, Al-Qalam 68:17-33; Arabic Tafsir Ibn Kathir, Wikisource",
+        "hadith": [],
+        "seerah": [],
+        "notes": "Post-generation age assessment: child, because the story has loss of property and moral correction but no mature content."
+      }
+    },
+    {
+      "id": 88,
+      "slug": "the-people-of-the-ditch",
+      "title": "The People of the Ditch",
+      "previousStoryId": null,
+      "storyType": "moral_lesson",
+      "ageGroup": "teen",
+      "summary": "The Quran condemns the people of the ditch who tortured believers because they believed in Allah, the Mighty and Praiseworthy.",
+      "readingTimeMinutes": 5,
+      "featuredCharacter": "The believers of the ditch",
+      "morals": [
+        "Faith may be tested by severe persecution",
+        "Allah sees the oppressor and the oppressed",
+        "The Quran honors believers who stand firm",
+        "We should not turn suffering into spectacle",
+        "True power belongs to Allah, the Mighty and Praiseworthy"
+      ],
+      "content": "Surah Al-Buruj speaks of the people of the ditch. Allah curses those who made trenches of fire and sat by them, watching what they did to the believers.\n\nThe Quran tells us why the believers were harmed: they believed in Allah, the Mighty, the Praiseworthy. Their only crime in the eyes of the oppressors was faith.\n\nThis is a severe story. The Quran does not invite us to stare at pain. It teaches us to understand the moral weight of persecution and the honor of believers who remained firm.\n\nAllah describes Himself in the passage as the One to whom belongs the dominion of the heavens and the earth, and Allah is Witness over all things. No tyrant acts outside Allah's sight. No believer suffers outside Allah's knowledge.\n\nThe Quran does not require us to identify every historical detail of the people of the ditch. It gives the frame we need: oppressors are condemned, believers are honored, and Allah witnesses everything.\n\nThe story is frightening, but it also gives strength. When faith is attacked, a believer remembers that Allah's sight is nearer than the fire of any oppressor, and Allah's judgment is final.",
+      "relatedAyahs": [
+        {
+          "surahNumber": 85,
+          "ayahStart": 4,
+          "ayahEnd": 9,
+          "label": "Al-Buruj 85:4-9"
+        }
+      ],
+      "discussionQuestions": [
+        "Why were the believers harmed according to these verses?",
+        "How does knowing Allah is Witness change how we understand oppression?",
+        "Why should this story be told soberly rather than graphically?",
+        "How can believers stand firm under pressure?"
+      ],
+      "sources": {
+        "primary": "Quran, Al-Buruj 85:4-9; Arabic Tafsir Ibn Kathir, Wikisource",
+        "hadith": [],
+        "seerah": [],
+        "notes": "Post-generation age assessment: teen, because the passage refers to believers being tortured in trenches of fire. Historical identifications and extra narrative details are omitted so the focus remains on the Quranic frame."
       }
     },
     {
@@ -1563,6 +1805,51 @@
       }
     },
     {
+      "id": 85,
+      "slug": "pharaohs-magicians-believe",
+      "title": "Pharaoh's Magicians Believe",
+      "previousStoryId": null,
+      "storyType": "quranic_narrative",
+      "ageGroup": "teen",
+      "summary": "Pharaoh's magicians came seeking reward, but when they saw Musa's sign, they immediately believed in the Lord of Musa and Harun.",
+      "readingTimeMinutes": 7,
+      "featuredCharacter": "Pharaoh's magicians",
+      "morals": [
+        "Truth should be accepted as soon as it becomes clear",
+        "A person can change from serving falsehood to serving Allah",
+        "Faith can become stronger than fear of punishment",
+        "Allah can open hearts in a single moment",
+        "Patience is needed after choosing truth"
+      ],
+      "content": "Pharaoh gathered skilled magicians to face Musa. They came expecting reward and a place near Pharaoh if they won. Their first concern was worldly gain and royal favor.\n\nThe magicians threw their ropes and staffs and produced a display that frightened the people. Then Musa threw his staff by Allah's command, and it swallowed what they had made.\n\nThe magicians knew their own craft. They understood the difference between trickery and a sign from Allah. In that moment, they fell in prostration and said they believed in the Lord of the worlds, the Lord of Musa and Harun.\n\nPharaoh was furious. He accused them of plotting with Musa and threatened them with a terrible punishment: cutting off their hands and feet on opposite sides and crucifying them.\n\nBut the magicians had changed. Moments earlier, they wanted Pharaoh's reward. Now they answered with certainty that they were returning to their Lord. They asked Allah to pour patience upon them and let them die as Muslims.\n\nThis story overlaps with Musa's confrontation with Pharaoh, but the lens here is the magicians' hearts. They recognized the truth because they knew falsehood from the inside. When truth became clear, they did not ask for time to protect their status.\n\nPharaoh could threaten their bodies, but he could not take away the faith Allah had placed in their hearts.",
+      "relatedAyahs": [
+        {
+          "surahNumber": 7,
+          "ayahStart": 113,
+          "ayahEnd": 126,
+          "label": "Al-A'raf 7:113-126"
+        },
+        {
+          "surahNumber": 26,
+          "ayahStart": 38,
+          "ayahEnd": 51,
+          "label": "Ash-Shu'ara 26:38-51"
+        }
+      ],
+      "discussionQuestions": [
+        "Why did the magicians first come to Pharaoh?",
+        "How did they recognize that Musa's sign was not magic?",
+        "What changed in their hearts after they believed?",
+        "Why did Pharaoh's threats not make them leave the truth?"
+      ],
+      "sources": {
+        "primary": "Quran, Al-A'raf 7:113-126 and Ash-Shu'ara 26:38-51; Arabic Tafsir Ibn Kathir, Wikisource",
+        "hadith": [],
+        "seerah": [],
+        "notes": "Post-generation age assessment: teen, because Pharaoh threatens mutilation and crucifixion, though the story is told without graphic detail. This entry is intentionally magician-centered, distinct from the Musa-centered confrontation story."
+      }
+    },
+    {
       "id": 39,
       "slug": "musa-plagues-of-egypt",
       "title": "Musa and the Signs in Egypt",
@@ -2081,6 +2368,50 @@
       }
     },
     {
+      "id": 82,
+      "slug": "idris-and-his-rank",
+      "title": "Idris and His Rank",
+      "previousStoryId": null,
+      "storyType": "quranic_narrative",
+      "ageGroup": "child",
+      "summary": "The Quran remembers Idris as truthful, a prophet, patient, righteous, and raised by Allah to a high place.",
+      "readingTimeMinutes": 3,
+      "featuredCharacter": "Prophet Idris",
+      "morals": [
+        "Allah honors truthfulness",
+        "Some servants are remembered by Allah even when we know only a little of their lives",
+        "Patience and righteousness are high ranks",
+        "A short Quranic mention can carry a deep lesson"
+      ],
+      "content": "The Quran tells us only a little about Prophet Idris, and that is enough for us to honor him without guessing beyond Allah's words.\n\nAllah says, \"Mention in the Book Idris. Indeed, he was a man of truth and a prophet.\" Truthfulness is the first quality named for him. Before we learn many details, we learn that Idris was truthful with Allah and with people.\n\nAllah also says that He raised Idris to a high place. The Quran does not explain every detail of that rank, so we stop where the Quran stops. We know Allah honored him, and Allah's honor is greater than any story people might add.\n\nIn another passage, Idris is mentioned with Isma'il and Dhul-Kifl among the patient, and Allah says He admitted them into His mercy because they were among the righteous.\n\nIdris teaches us that a life does not need many recorded details to be beloved to Allah. Truthfulness, prophethood, patience, righteousness, and Allah's mercy are already a beautiful legacy.",
+      "relatedAyahs": [
+        {
+          "surahNumber": 19,
+          "ayahStart": 56,
+          "ayahEnd": 57,
+          "label": "Maryam 19:56-57"
+        },
+        {
+          "surahNumber": 21,
+          "ayahStart": 85,
+          "ayahEnd": 86,
+          "label": "Al-Anbiya 21:85-86"
+        }
+      ],
+      "discussionQuestions": [
+        "What quality does the Quran name first about Idris?",
+        "Why should we avoid guessing details Allah did not tell us?",
+        "How can truthfulness raise a person's rank with Allah?",
+        "What can a short Quranic mention still teach us?"
+      ],
+      "sources": {
+        "primary": "Quran, Maryam 19:56-57 and Al-Anbiya 21:85-86; Arabic Tafsir Ibn Kathir, Wikisource",
+        "hadith": [],
+        "seerah": [],
+        "notes": "Post-generation age assessment: child, because the story is brief, reverent, and centered on truthfulness and rank. Historical identifications such as Enoch are omitted because they are not stated in the Quranic passages."
+      }
+    },
+    {
       "id": 35,
       "slug": "musa-burning-bush",
       "title": "Musa at the Burning Bush",
@@ -2284,6 +2615,50 @@
         "hadith": [],
         "seerah": [],
         "notes": "Post-generation age assessment: preteen, because the story centers on severe affliction, loss, and restoration, but the Quranic account is brief and non-graphic. Specific illness, duration, and unsourced family details are omitted."
+      }
+    },
+    {
+      "id": 80,
+      "slug": "dhul-kifl-and-al-yasa",
+      "title": "Dhul-Kifl and Al-Yasa",
+      "previousStoryId": null,
+      "storyType": "quranic_narrative",
+      "ageGroup": "child",
+      "summary": "The Quran mentions Dhul-Kifl and Al-Yasa briefly, honoring them among the patient, righteous, and chosen.",
+      "readingTimeMinutes": 3,
+      "featuredCharacter": "Dhul-Kifl and Al-Yasa",
+      "morals": [
+        "Allah remembers His servants even when people know little about them",
+        "Patience is a rank Allah praises",
+        "Being chosen by Allah is greater than being famous among people",
+        "We should not invent details where revelation is brief"
+      ],
+      "content": "Some people are honored in the Quran with long stories. Others are honored with only a few words. Dhul-Kifl and Al-Yasa are remembered in this second way.\n\nIn Surah Al-Anbiya, Allah mentions Isma'il, Idris, and Dhul-Kifl together and says that all were among the patient. Allah admitted them into His mercy because they were among the righteous.\n\nIn Surah Sad, Allah commands the Prophet to remember Isma'il, Al-Yasa, and Dhul-Kifl. Allah says each was among the chosen and the excellent.\n\nThe Quran does not give us a detailed story here. That is itself a lesson. Allah's knowledge is complete even when our knowledge is small. A person may be little known on earth but fully known to Allah.\n\nDhul-Kifl and Al-Yasa teach us to value the words Allah chose: patience, righteousness, being chosen, and excellence. Those words are enough to make a believer love them and ask Allah for similar qualities.",
+      "relatedAyahs": [
+        {
+          "surahNumber": 21,
+          "ayahStart": 85,
+          "ayahEnd": 86,
+          "label": "Al-Anbiya 21:85-86"
+        },
+        {
+          "surahNumber": 38,
+          "ayahStart": 48,
+          "ayahEnd": 48,
+          "label": "Sad 38:48"
+        }
+      ],
+      "discussionQuestions": [
+        "Which qualities does Allah mention with Dhul-Kifl and Al-Yasa?",
+        "Why can a brief Quranic mention still be a great honor?",
+        "What does this story teach about fame and Allah's knowledge?",
+        "How can we practice patience and righteousness?"
+      ],
+      "sources": {
+        "primary": "Quran, Al-Anbiya 21:85-86 and Sad 38:48; Arabic Tafsir Ibn Kathir, Wikisource",
+        "hadith": [],
+        "seerah": [],
+        "notes": "Post-generation age assessment: child, because the story is brief and reflective with no mature themes. Dhul-Kifl and Al-Yasa are combined because the Quranic material here is too brief for separate narrative entries without speculation."
       }
     },
     {
@@ -2576,6 +2951,44 @@
       }
     },
     {
+      "id": 83,
+      "slug": "ilyas-against-baal",
+      "title": "Ilyas Against Baal",
+      "previousStoryId": null,
+      "storyType": "quranic_narrative",
+      "ageGroup": "child",
+      "summary": "Prophet Ilyas called his people away from worshiping Baal and back to Allah, the best of creators.",
+      "readingTimeMinutes": 4,
+      "featuredCharacter": "Prophet Ilyas",
+      "morals": [
+        "Worship belongs to Allah alone",
+        "A prophet calls people with clear truth",
+        "False gods cannot compare to the Creator",
+        "Allah remembers His believing servants"
+      ],
+      "content": "Prophet Ilyas was one of the messengers. He called his people to fear Allah and leave false worship.\n\nHe asked them a sharp question: would they call upon Ba'l and leave the best of creators? Allah is their Lord and the Lord of their forefathers. The problem was not that they lacked a religious name or a custom. The problem was that worship was being given to other than Allah.\n\nMany of them denied him. The Quran says they would be brought to account, except Allah's chosen servants.\n\nThen Allah leaves peace and praise upon Ilyas. Allah says, \"Peace upon Ilyas. Indeed, We thus reward the doers of good. Indeed, he was of Our believing servants.\"\n\nThe Quran does not tell us every historical detail about Ilyas's people, their land, or what happened later. It tells us the message clearly: do not leave the Creator for a false object of worship. Ilyas stood for tawhid, and Allah remembered him among His believing servants.",
+      "relatedAyahs": [
+        {
+          "surahNumber": 37,
+          "ayahStart": 123,
+          "ayahEnd": 132,
+          "label": "As-Saffat 37:123-132"
+        }
+      ],
+      "discussionQuestions": [
+        "What false worship did Ilyas warn his people against?",
+        "Why did Ilyas remind them that Allah is their Lord and their forefathers' Lord?",
+        "What does Allah say about Ilyas at the end of the passage?",
+        "How can a person keep worship only for Allah?"
+      ],
+      "sources": {
+        "primary": "Quran, As-Saffat 37:123-132; Arabic Tafsir Ibn Kathir, Wikisource",
+        "hadith": [],
+        "seerah": [],
+        "notes": "Post-generation age assessment: child, because the story is a direct tawhid warning without mature detail. Later traditions about Ilyas's location or fate are omitted."
+      }
+    },
+    {
       "id": 46,
       "slug": "dawud-the-two-disputants",
       "title": "Dawud and the Two Disputants",
@@ -2611,6 +3024,44 @@
         "hadith": [],
         "seerah": [],
         "notes": "Post-generation age assessment: preteen, because the story involves judicial responsibility, repentance, and avoiding desire. Later speculative accounts about Dawud's test are omitted; the narrative stays with the Quranic wording."
+      }
+    },
+    {
+      "id": 87,
+      "slug": "the-night-of-power",
+      "title": "The Night of Power",
+      "previousStoryId": null,
+      "storyType": "quranic_narrative",
+      "ageGroup": "child",
+      "summary": "Surah Al-Qadr teaches that Allah sent down the Quran on the Night of Power, a night better than a thousand months.",
+      "readingTimeMinutes": 4,
+      "featuredCharacter": "The Night of Power",
+      "morals": [
+        "The Quran is a mercy sent by Allah",
+        "Allah can make one night greater than a lifetime of ordinary months",
+        "Worship is most precious when it is done sincerely",
+        "Peace is one of Allah's gifts"
+      ],
+      "content": "Surah Al-Qadr tells us about a night unlike any ordinary night. Allah says, \"Indeed, We sent it down during the Night of Power.\"\n\nThis is the night connected to the sending down of the Quran. The same revelation that began guidance for the Prophet Muhammad and the ummah is tied to a night of greatness.\n\nAllah asks, \"And what can make you know what is the Night of Power?\" Then He tells us: the Night of Power is better than a thousand months.\n\nOn that night, the angels and the Spirit descend by permission of their Lord for every matter. It is peace until the rising of dawn.\n\nMuslims seek this night especially in the last ten nights of Ramadan, hoping for Allah's mercy and reward. But the Quran's lesson is more than a calendar note. It teaches us that Allah can place enormous blessing in a time people might otherwise pass by.\n\nThe Night of Power reminds us to love the Quran, honor Ramadan, and ask Allah for worship that is full of sincerity and peace.",
+      "relatedAyahs": [
+        {
+          "surahNumber": 97,
+          "ayahStart": 1,
+          "ayahEnd": 5,
+          "label": "Al-Qadr 97:1-5"
+        }
+      ],
+      "discussionQuestions": [
+        "What does Surah Al-Qadr say was sent down on this night?",
+        "Why is better than a thousand months such a powerful description?",
+        "What does peace until dawn make you think about?",
+        "How can a person honor the Quran during Ramadan?"
+      ],
+      "sources": {
+        "primary": "Quran, Al-Qadr 97:1-5; Arabic Tafsir Ibn Kathir, Wikisource",
+        "hadith": [],
+        "seerah": [],
+        "notes": "Post-generation age assessment: child, because the passage is devotional and awe-filled with no mature themes. The last-ten-nights mention is practical context, kept brief."
       }
     },
     {
@@ -2729,6 +3180,48 @@
           "Ibn Ishaq/Ibn Hisham seerah reports on Uhud and the archers' position"
         ],
         "notes": "Post-generation age assessment: preteen, because the story includes battle, injury, and communal failure, described without casualty counts or graphic detail."
+      }
+    },
+    {
+      "id": 81,
+      "slug": "farewell-pilgrimage",
+      "title": "The Farewell Pilgrimage",
+      "previousStoryId": null,
+      "storyType": "seerah_context",
+      "ageGroup": "preteen",
+      "summary": "During the Prophet's final Hajj, Allah revealed that the religion was perfected and the Prophet reminded the believers of sacred rights.",
+      "readingTimeMinutes": 8,
+      "featuredCharacter": "Prophet Muhammad",
+      "morals": [
+        "Islam protects life, wealth, honor, and family rights",
+        "Victory should end in worship and guidance",
+        "The Prophet delivered the message with clarity",
+        "The completion of Allah's favor is a mercy",
+        "Final reminders should be carried carefully"
+      ],
+      "content": "Near the end of his life, the Prophet Muhammad performed his final Hajj. Many Muslims gathered with him, learning the rites and hearing his reminders.\n\nAt Arafat, he addressed the people. In the authentic report of Jabir, he reminded them that their blood and property were sacred. He abolished the practices of revenge and riba from the days of ignorance. He told the believers to fear Allah concerning women and reminded them that family rights are a trust from Allah.\n\nThe farewell words were not only legal points. They were a closing reminder that Islam protects worship, life, wealth, dignity, and family responsibility. The Prophet had carried the message through hardship, migration, battle, treaty, conquest, and teaching. Now he was reminding the believers how to live after him.\n\nDuring the Hajj, the verse was revealed: \"Today I have perfected for you your religion and completed My favor upon you and have approved for you Islam as religion.\" Umar later said that the Muslims knew the day and place it was revealed: the Prophet was standing at Arafat on a Friday.\n\nThe verse did not mean Muslims no longer needed to learn or obey. It meant Allah had completed the religion and perfected His favor. The path was clear.\n\nThe Farewell Pilgrimage feels like a closing door and an opening road at the same time. The Prophet would not remain with the believers forever, but the Quran and the completed religion would remain as guidance.",
+      "relatedAyahs": [
+        {
+          "surahNumber": 5,
+          "ayahStart": 3,
+          "ayahEnd": 3,
+          "label": "Al-Ma'idah 5:3"
+        }
+      ],
+      "discussionQuestions": [
+        "What rights did the Prophet remind the believers about at Arafat?",
+        "Why is the verse about perfecting the religion so important?",
+        "How can final reminders help a community after a leader is gone?",
+        "What does it mean that Allah completed His favor?"
+      ],
+      "sources": {
+        "primary": "Quran, Al-Ma'idah 5:3; Arabic Tafsir Ibn Kathir, Wikisource",
+        "hadith": [
+          "Sahih al-Bukhari 45",
+          "Sahih Muslim 1218a"
+        ],
+        "seerah": [],
+        "notes": "Post-generation age assessment: preteen, because the story carries theological depth, finality, public rights, women/family rights, and the end-of-mission atmosphere. The sermon details are drawn from Sahih Muslim's report of the Prophet's Hajj; the revelation timing for 5:3 is from Sahih al-Bukhari."
       }
     },
     {
