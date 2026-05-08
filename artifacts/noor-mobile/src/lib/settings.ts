@@ -15,7 +15,7 @@ export type ProfileSettings = {
 export const DEFAULT_PROFILE_SETTINGS: ProfileSettings = {
   themeKey: "madinah_day",
   reciterId: "husary",
-  viewMode: "ayah",
+  viewMode: "test-mushaf",
   mushafViewMode: "swipe",
 };
 
@@ -37,7 +37,7 @@ function normalizeProfileSettings(
         : DEFAULT_PROFILE_SETTINGS.reciterId,
     viewMode:
       settings.viewMode === "page"
-        ? "page"
+        ? "test-mushaf"
         : settings.viewMode === "test-mushaf"
           ? "test-mushaf"
           : DEFAULT_PROFILE_SETTINGS.viewMode,

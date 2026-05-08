@@ -612,6 +612,18 @@ function PageView({
       suppressedLongPressKeyRef.current = null;
       return;
     }
+    console.log("[recite-debug] reading mushaf ayah press path decision", {
+      pageNumber,
+      verseKey: rect.verseKey,
+      ayahKey: `${rect.surahNumber}:${rect.ayahNumber}`,
+      toolMode,
+      blindMode,
+      decision: blindMode
+        ? "toggle-blind-reveal"
+        : toolMode === "recite"
+          ? "start-reading-recite"
+          : "open-ayah-actions",
+    });
     if (blindMode) {
       onToggleBlindAyah(rect.verseKey);
       return;
@@ -2052,6 +2064,40 @@ export default function MushafScreen() {
   const [mushafViewMode, setMushafViewMode] = useState<MushafViewMode>(
     DEFAULT_PROFILE_SETTINGS.mushafViewMode,
   );
+  useEffect(() => {
+    if (params.fromMemorization !== "1") return;
+    console.log("[recite-debug] reading mushaf return route received", {
+      childId,
+      routeParams: {
+        page: params.page,
+        fromMemorization: params.fromMemorization,
+        mushafViewMode: params.mushafViewMode,
+        surahNumber: params.surahNumber,
+        ayahNumber: params.ayahNumber,
+      },
+      parsed: {
+        requestedInitialPage,
+        requestedViewMode,
+      },
+      currentState: {
+        currentPage,
+        toolMode,
+        mushafViewMode,
+      },
+    });
+  }, [
+    childId,
+    currentPage,
+    mushafViewMode,
+    params.ayahNumber,
+    params.fromMemorization,
+    params.mushafViewMode,
+    params.page,
+    params.surahNumber,
+    requestedInitialPage,
+    requestedViewMode,
+    toolMode,
+  ]);
 
   const listRef = useRef<FlatList<number>>(null);
   const programmaticPageChangeRef = useRef(true);
@@ -2160,9 +2206,16 @@ export default function MushafScreen() {
 
         setCurrentPage(startPage);
         setInitialPage(startPage);
-      } catch {
+      } catch (error) {
         if (cancelled) return;
         const fallbackPage = requestedInitialPage ?? 1;
+        console.log("[recite-debug] caught error:", error, {
+          source: "reading-mushaf-load-initial-page",
+          fallbackPage,
+          requestedInitialPage,
+          fromMemorization: params.fromMemorization,
+          requestedViewMode,
+        });
         setCurrentPage(fallbackPage);
         setInitialPage(fallbackPage);
       }
@@ -2375,8 +2428,15 @@ export default function MushafScreen() {
         if (cancelled) return;
         setPageVerses(verses);
       })
-      .catch(() => {
+      .catch((error) => {
         if (cancelled) return;
+        console.log("[recite-debug] caught error:", error, {
+          source: "reading-mushaf-fetch-page-verses",
+          currentPage,
+          toolMode,
+          requestedInitialPage,
+          requestedViewMode,
+        });
         setPageVerses([]);
       });
 
@@ -2424,13 +2484,37 @@ export default function MushafScreen() {
     setSaveStatus("idle");
     try {
       listRef.current?.scrollToIndex({ index: targetIndex, animated: false });
-    } catch {
+    } catch (error) {
+      if (params.fromMemorization === "1" || toolMode === "recite") {
+        console.log("[recite-debug] caught error:", error, {
+          source: "reading-mushaf-go-to-page-index",
+          requestedPage: page,
+          target,
+          targetIndex,
+          itemLength,
+          fromMemorization: params.fromMemorization,
+          toolMode,
+          mushafViewMode,
+        });
+      }
       try {
         listRef.current?.scrollToOffset({
           offset: Math.max(0, targetIndex * itemLength),
           animated: false,
         });
-      } catch {
+      } catch (fallbackError) {
+        if (params.fromMemorization === "1" || toolMode === "recite") {
+          console.log("[recite-debug] caught error:", fallbackError, {
+            source: "reading-mushaf-go-to-page-offset",
+            requestedPage: page,
+            target,
+            targetIndex,
+            itemLength,
+            fromMemorization: params.fromMemorization,
+            toolMode,
+            mushafViewMode,
+          });
+        }
         // The current list orientation may be remounting.
       }
     }
@@ -2828,6 +2912,19 @@ export default function MushafScreen() {
   function toggleToolMode(mode: ToolMode) {
     setToolMode((current) => {
       const next = current === mode ? "none" : mode;
+      console.log("[recite-debug] reading mushaf tool mode toggle", {
+        requestedMode: mode,
+        previousMode: current,
+        nextMode: next,
+        currentPage,
+        currentSurah: currentSurah.number,
+        modeFlags: {
+          reciteToolActive: next === "recite",
+          blindToolActive: next === "blind",
+          mushafViewMode,
+          audioStatus: audioPlayerRef.current?.status ?? null,
+        },
+      });
       if (next !== "blind") setBlindRevealedAyahKeys(new Set());
       return next;
     });
@@ -2864,6 +2961,31 @@ export default function MushafScreen() {
   function openMemorizationFromAyah(target: PageAyahTarget, options?: { recite?: boolean }) {
     setSelectedAyah(null);
     void stopMushafAudio();
+    console.log("[recite-debug] nav to memorization with route params", {
+      source: options?.recite ? "reading-recite" : "reading-memorization",
+      tappedAyahKey: target.verseKey,
+      startAyah: target.ayahNumber,
+      page: target.pageNumber,
+      currentPage,
+      toolMode,
+      mushafViewMode,
+      routeParams: {
+        childId,
+        name: name ?? "",
+        surahNumber: String(target.surahNumber),
+        ayahStart: String(target.ayahNumber),
+        ayahEnd: String(target.ayahNumber),
+        pageStart: String(target.pageNumber),
+        pageEnd: String(target.pageNumber),
+        session: "1",
+        recite: options?.recite ? "1" : undefined,
+        reciteFromReading: options?.recite ? "1" : undefined,
+        startAyah: options?.recite ? String(target.ayahNumber) : undefined,
+        returnPage: options?.recite ? String(currentPage) : undefined,
+        returnMushafViewMode: options?.recite ? mushafViewMode : undefined,
+        mushafViewMode: options?.recite ? "test" : undefined,
+      },
+    });
     router.push({
       pathname: "/child/[childId]/memorization",
       params: {
@@ -2886,6 +3008,15 @@ export default function MushafScreen() {
   }
 
   function reciteFromAyah(target: PageAyahTarget) {
+    console.log("[recite-debug] recite icon tapped on reading mushaf", {
+      startAyah: target.ayahNumber,
+      page: target.pageNumber,
+      ayahKey: target.verseKey,
+      currentPage,
+      toolMode,
+      mushafViewMode,
+      selectedAyahOpen: selectedAyah?.verseKey ?? null,
+    });
     openMemorizationFromAyah(target, { recite: true });
   }
 

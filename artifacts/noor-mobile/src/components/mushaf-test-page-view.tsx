@@ -372,6 +372,38 @@ function MushafTestPage({
         ),
       }));
   }, [maskOverlayRects, reciteActive, reciteCurrentWord, reciteRange, verseMarkerKeys]);
+  useEffect(() => {
+    if (!reciteActive) return;
+    const stateCounts = reciteClassifiedRects.reduce<Record<WordReciteState, number>>(
+      (counts, item) => {
+        counts[item.state] += 1;
+        return counts;
+      },
+      { past: 0, current: 0, future: 0, "out-of-range": 0 },
+    );
+    console.log("[recite-debug] test mushaf recite overlay state", {
+      pageNumber,
+      reciteCurrentWord,
+      reciteCurrentWordRevealed,
+      reciteRange,
+      sessionFocusRange,
+      overlayRectCount: overlayRects.length,
+      stateCounts,
+      missingData: {
+        currentWord: reciteCurrentWord === null || reciteCurrentWord === undefined,
+        range: reciteRange === null || reciteRange === undefined,
+      },
+    });
+  }, [
+    overlayRects.length,
+    pageNumber,
+    reciteActive,
+    reciteClassifiedRects,
+    reciteCurrentWord,
+    reciteCurrentWordRevealed,
+    reciteRange,
+    sessionFocusRange,
+  ]);
   // Green highlight uses a different color than the amber tap-flash (Phase 1b)
   // to make audio-following distinct from user-initiated feedback.
   const audioHighlightOpacity = useRef(new Animated.Value(0)).current;
@@ -809,6 +841,19 @@ export function MushafTestPageView({
   const lastReciteAutoPagedRef = useRef<number | null>(null);
   useEffect(() => {
     if (!reciteAutoPage || !reciteActive || !reciteCurrentWord) {
+      if (reciteActive) {
+        console.log("[recite-debug] test mushaf recite auto-page decision", {
+          decision: "not-auto-paging",
+          reciteAutoPage,
+          reciteActive,
+          reciteCurrentWord,
+          reciteRange,
+          safeCurrentPage,
+          missingData: {
+            reciteCurrentWord: !reciteCurrentWord,
+          },
+        });
+      }
       lastReciteAutoPagedRef.current = null;
       return;
     }
@@ -817,16 +862,48 @@ export function MushafTestPageView({
       reciteCurrentWord.ayah,
       reciteCurrentWord.position,
     );
-    if (recitePage === null) return;
+    if (recitePage === null) {
+      console.log("[recite-debug] missing data for recite auto-page", {
+        missing: "mushaf-page-for-current-word",
+        reciteCurrentWord,
+        reciteRange,
+        safeCurrentPage,
+        reciteAutoPage,
+      });
+      return;
+    }
     if (recitePage === safeCurrentPage) {
+      console.log("[recite-debug] test mushaf recite auto-page decision", {
+        decision: "already-on-current-page",
+        recitePage,
+        safeCurrentPage,
+        reciteCurrentWord,
+        reciteRange,
+      });
       lastReciteAutoPagedRef.current = null;
       return;
     }
-    if (recitePage === lastReciteAutoPagedRef.current) return;
+    if (recitePage === lastReciteAutoPagedRef.current) {
+      console.log("[recite-debug] test mushaf recite auto-page decision", {
+        decision: "duplicate-target-suppressed",
+        recitePage,
+        safeCurrentPage,
+        reciteCurrentWord,
+        reciteRange,
+      });
+      return;
+    }
+    console.log("[recite-debug] test mushaf recite auto-page decision", {
+      decision: "auto-page",
+      fromPage: safeCurrentPage,
+      toPage: recitePage,
+      reciteCurrentWord,
+      reciteRange,
+    });
     lastReciteAutoPagedRef.current = recitePage;
     programmaticPageChangeRef.current = true;
     onPageChangeRef.current(recitePage);
-  }, [reciteActive, reciteAutoPage, reciteCurrentWord, safeCurrentPage]);
+  }, [reciteActive, reciteAutoPage, reciteCurrentWord, reciteRange, safeCurrentPage]);
 
   const getItemLayout = useCallback(
     (_data: ArrayLike<number> | null | undefined, index: number) => ({
@@ -874,7 +951,15 @@ export function MushafTestPageView({
         preloadedPagesRef.current = new Set(
           [...preloadedPagesRef.current].filter((page) => pagesToKeep.has(page)),
         );
-      } catch {
+      } catch (error) {
+        console.log("[recite-debug] caught error:", error, {
+          source: "test-mushaf-preload-images",
+          safeCurrentPage,
+          newPagesToPreload,
+          reciteActive,
+          reciteCurrentWord,
+          reciteRange,
+        });
         // Preloading is only a page-turn performance optimization.
       }
     }
@@ -898,13 +983,32 @@ export function MushafTestPageView({
     const timeout = setTimeout(() => {
       try {
         listRef.current?.scrollToIndex({ index, animated });
-      } catch {
+      } catch (error) {
+        console.log("[recite-debug] caught error:", error, {
+          source: "test-mushaf-programmatic-scroll-to-index",
+          index,
+          safeCurrentPage,
+          mushafViewMode,
+          reciteActive,
+          reciteCurrentWord,
+          reciteRange,
+        });
         try {
           listRef.current?.scrollToOffset({
             offset: Math.max(0, index * itemLength),
             animated,
           });
-        } catch {
+        } catch (fallbackError) {
+          console.log("[recite-debug] caught error:", fallbackError, {
+            source: "test-mushaf-programmatic-scroll-to-offset",
+            index,
+            itemLength,
+            safeCurrentPage,
+            mushafViewMode,
+            reciteActive,
+            reciteCurrentWord,
+            reciteRange,
+          });
           // The list may not be measured yet; onScrollToIndexFailed will retry.
         }
       }
@@ -1001,8 +1105,16 @@ export function MushafTestPageView({
           if (wordTranslationRequestRef.current !== requestId) return;
           setWordTranslationText(translation);
         })
-        .catch(() => {
+        .catch((error) => {
           if (wordTranslationRequestRef.current !== requestId) return;
+          console.log("[recite-debug] caught error:", error, {
+            source: "test-mushaf-word-translation",
+            pageNumber,
+            word: target,
+            reciteActive,
+            reciteCurrentWord,
+            reciteRange,
+          });
           setWordTranslationText(null);
         })
         .finally(() => {
@@ -1123,7 +1235,15 @@ export function MushafTestPageView({
             setTimeout(() => {
               try {
                 listRef.current?.scrollToIndex({ index: info.index, animated: false });
-              } catch {
+              } catch (error) {
+                console.log("[recite-debug] caught error:", error, {
+                  source: "test-mushaf-scroll-failed-retry-index",
+                  index: info.index,
+                  mushafViewMode: "scroll",
+                  reciteActive,
+                  reciteCurrentWord,
+                  reciteRange,
+                });
                 listRef.current?.scrollToOffset({
                   offset: Math.max(0, info.index * scrollPageItemHeight),
                   animated: false,
@@ -1160,7 +1280,15 @@ export function MushafTestPageView({
             setTimeout(() => {
               try {
                 listRef.current?.scrollToIndex({ index: info.index, animated: false });
-              } catch {
+              } catch (error) {
+                console.log("[recite-debug] caught error:", error, {
+                  source: "test-mushaf-swipe-failed-retry-index",
+                  index: info.index,
+                  mushafViewMode: "swipe",
+                  reciteActive,
+                  reciteCurrentWord,
+                  reciteRange,
+                });
                 listRef.current?.scrollToOffset({
                   offset: Math.max(0, info.index * pageWidth),
                   animated: false,

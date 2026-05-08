@@ -195,7 +195,7 @@ const TARGET_PRESETS: TargetPreset[] = [
 const PRACTICE_PRESETS = [10, 15, 20, 30, 45, 60];
 const VIEW_MODE_OPTIONS: Array<{ value: ProfileSettings["viewMode"]; label: string }> = [
   { value: "ayah", label: "Ayah view" },
-  { value: "page", label: "Full Mushaf" },
+  { value: "test-mushaf", label: "Full Mushaf" },
 ];
 const MUSHAF_VIEW_MODE_OPTIONS: Array<{
   value: ProfileSettings["mushafViewMode"];
@@ -299,7 +299,10 @@ function normalizeProfileDefaults(settings: ProfileSettings): ProfileSettings {
   return {
     themeKey,
     reciterId,
-    viewMode: settings.viewMode === "page" ? "page" : "ayah",
+    viewMode:
+      settings.viewMode === "page" || settings.viewMode === "test-mushaf"
+        ? "test-mushaf"
+        : "ayah",
     mushafViewMode: settings.mushafViewMode === "scroll" ? "scroll" : "swipe",
   };
 }

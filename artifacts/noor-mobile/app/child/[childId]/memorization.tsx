@@ -81,6 +81,7 @@ import {
 import { findMemorizationReciter, MEMORIZATION_RECITERS } from "@/src/lib/reciters";
 import {
   clearMemorizationSessionBookmark,
+  DEFAULT_PROFILE_SETTINGS,
   DEFAULT_SESSION_SETTINGS,
   loadMemorizationSessionBookmark,
   loadDefaultSessionSettings,
@@ -904,11 +905,11 @@ export default function MemorizationScreen() {
   const routeIsReadingRecite = params.reciteFromReading === "1";
   const routeForcesTestMushaf = params.mushafViewMode === "test";
   const routeParamViewMode =
-    params.viewMode === "page" ||
-    params.viewMode === "ayah" ||
-    params.viewMode === "test-mushaf"
-      ? params.viewMode
-      : null;
+    params.viewMode === "page" || params.viewMode === "test-mushaf"
+      ? "test-mushaf"
+      : params.viewMode === "ayah"
+        ? "ayah"
+        : null;
   const routeViewMode = routeForcesTestMushaf ? "test-mushaf" : routeParamViewMode;
   const routeSurahNumber = parseRouteInt(params.surahNumber);
   const routeStartAyah = parseRouteInt(params.startAyah) ?? parseRouteInt(params.ayahStart);
@@ -1011,8 +1012,12 @@ export default function MemorizationScreen() {
   const [autoplayThroughRange, setAutoplayThroughRange] = useState<boolean>(DEFAULT_SESSION_SETTINGS.autoplayThroughRange);
   const [blindMode, setBlindMode] = useState<boolean>(DEFAULT_SESSION_SETTINGS.blindMode);
   const [blurMode, setBlurMode] = useState<boolean>(DEFAULT_SESSION_SETTINGS.blurMode);
-  const [viewMode, setViewMode] = useState<MemorizationViewMode>(routeViewMode ?? "ayah");
-  const [profileViewMode, setProfileViewMode] = useState<MemorizationViewMode>("ayah");
+  const [viewMode, setViewMode] = useState<MemorizationViewMode>(
+    routeViewMode ?? DEFAULT_PROFILE_SETTINGS.viewMode,
+  );
+  const [profileViewMode, setProfileViewMode] = useState<MemorizationViewMode>(
+    DEFAULT_PROFILE_SETTINGS.viewMode,
+  );
   const [profileMushafViewMode, setProfileMushafViewMode] =
     useState<MushafViewMode>("swipe");
   const [mushafViewMode, setMushafViewMode] = useState<MushafViewMode>("swipe");
@@ -1023,7 +1028,7 @@ export default function MemorizationScreen() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [revealedVerses, setRevealedVerses] = useState<Set<string>>(new Set());
   const [tajweedEnabled, setTajweedEnabled] = useState<boolean>(false);
-  const [showSessionTranslation, setShowSessionTranslation] = useState(false);
+  const [showSessionTranslation, setShowSessionTranslation] = useState(true);
   const [ayahTranslations, setAyahTranslations] = useState<Record<string, AyahTranslationState>>({});
   const [translationPopup, setTranslationPopup] = useState<{
     arabic: string;
@@ -1138,6 +1143,7 @@ export default function MemorizationScreen() {
   const displayWordsMapRef = useRef<Map<number, ApiWord[]>>(new Map());
   const surahNumberRef = useRef<number | null>(null);
   const matchedWordCountRef = useRef(0);
+  const matchedHeardTokensRef = useRef<string[]>([]);
   const lastMatchedWordRef = useRef("");
   const lastMatchTimeRef = useRef(0);
 
@@ -1179,6 +1185,64 @@ export default function MemorizationScreen() {
   useEffect(() => { autoplayThroughRangeRef.current = autoplayThroughRange; }, [autoplayThroughRange]);
   useEffect(() => { playbackRateRef.current = playbackRate; }, [playbackRate]);
   useEffect(() => { readyToReciteSheetOpenRef.current = readyToReciteSheetOpen; }, [readyToReciteSheetOpen]);
+  useEffect(() => {
+    console.log("[recite-debug] memorization route params parsed", {
+      childId,
+      routeIsReadingRecite,
+      routeForcesTestMushaf,
+      routeViewMode,
+      routeSurahNumber,
+      routeStartAyah,
+      routePageStart,
+      routePageEnd,
+      readingReciteReturnPage,
+      readingReciteReturnMushafViewMode,
+      hasReadingReciteInitialTarget:
+        routeIsReadingRecite && routeSurahNumber !== null && routeStartAyah !== null,
+      missingReadingReciteData:
+        routeIsReadingRecite && (routeSurahNumber === null || routeStartAyah === null)
+          ? {
+              surahNumber: routeSurahNumber,
+              startAyah: routeStartAyah,
+              pageStart: routePageStart,
+              pageEnd: routePageEnd,
+            }
+          : null,
+      rawParams: {
+        recite: params.recite,
+        reciteFromReading: params.reciteFromReading,
+        surahNumber: params.surahNumber,
+        ayahStart: params.ayahStart,
+        ayahEnd: params.ayahEnd,
+        startAyah: params.startAyah,
+        returnPage: params.returnPage,
+        returnMushafViewMode: params.returnMushafViewMode,
+        mushafViewMode: params.mushafViewMode,
+        session: params.session,
+      },
+    });
+  }, [
+    childId,
+    params.ayahEnd,
+    params.ayahStart,
+    params.mushafViewMode,
+    params.recite,
+    params.reciteFromReading,
+    params.returnMushafViewMode,
+    params.returnPage,
+    params.session,
+    params.startAyah,
+    params.surahNumber,
+    readingReciteReturnMushafViewMode,
+    readingReciteReturnPage,
+    routeForcesTestMushaf,
+    routeIsReadingRecite,
+    routePageEnd,
+    routePageStart,
+    routeStartAyah,
+    routeSurahNumber,
+    routeViewMode,
+  ]);
   useEffect(() => { completionSheetOpenRef.current = completionSheetOpen; }, [completionSheetOpen]);
 
   function setCurrentVerseImmediate(next: number | ((current: number) => number)) {
@@ -1200,7 +1264,16 @@ export default function MemorizationScreen() {
   // Apply playback rate changes to the currently-playing sound
   useEffect(() => {
     if (soundRef.current && isPlayingRef.current) {
-      soundRef.current.setRateAsync(playbackRate, true).catch(() => {
+      soundRef.current.setRateAsync(playbackRate, true).catch((error) => {
+        console.log("[recite-debug] caught error:", error, {
+          source: "playback-rate-change",
+          playbackRate,
+          reciteMode: reciteModeRef.current,
+          currentAyahKey:
+            surahNumberRef.current !== null
+              ? `${surahNumberRef.current}:${playingVerseNumberRef.current}`
+              : null,
+        });
         // best-effort
       });
     }
@@ -1217,8 +1290,9 @@ export default function MemorizationScreen() {
       memorizationReciterChangedRef.current = false;
       setThemeKey(p.themeKey);
       setReciterId(findMemorizationReciter(p.reciterId).id);
-      setProfileViewMode(p.viewMode);
-      setViewMode(routeViewMode ?? p.viewMode);
+      const profileSessionViewMode = p.viewMode === "page" ? "test-mushaf" : p.viewMode;
+      setProfileViewMode(profileSessionViewMode);
+      setViewMode(routeViewMode ?? profileSessionViewMode);
       setProfileMushafViewMode(p.mushafViewMode);
       setMushafViewMode(p.mushafViewMode);
       setSettingsLoaded(true);
@@ -1272,7 +1346,12 @@ export default function MemorizationScreen() {
       playsInSilentModeIOS: true,
       staysActiveInBackground: false,
       shouldDuckAndroid: true,
-    }).catch(() => {
+    }).catch((error) => {
+      console.log("[recite-debug] caught error:", error, {
+        source: "audio-mode-setup",
+        reciteMode: reciteModeRef.current,
+        readingReciteSession,
+      });
       // setAudioModeAsync can fail on simulator; non-fatal in production
     });
   }, []);
@@ -1319,7 +1398,14 @@ export default function MemorizationScreen() {
         for (const ch of chapters) map.set(ch.id, ch);
         setChaptersMap(map);
       })
-      .catch(() => {});
+      .catch((error) => {
+        console.log("[recite-debug] caught error:", error, {
+          source: "fetch-chapters-for-recitation",
+          childId,
+          routeIsReadingRecite,
+          readingReciteSession,
+        });
+      });
   }, []);
 
   const loadDiscovery = useCallback(
@@ -1421,6 +1507,17 @@ export default function MemorizationScreen() {
   }
 
   function startConfiguredSession(target: SessionTarget) {
+    console.log("[recite-debug] configured session start requested", {
+      source: target.fromReadingRecite ? "reading-recite-range" : "memorization-setup",
+      target,
+      willAutoEngageRecite: Boolean(target.startInReciteMode),
+      currentModeFlags: {
+        reciteMode: reciteModeRef.current,
+        readingReciteSession,
+        viewMode,
+        mushafViewMode,
+      },
+    });
     setPendingSessionTarget(null);
     setReadingRecitePendingTarget(null);
     beginSession(target);
@@ -1439,6 +1536,20 @@ export default function MemorizationScreen() {
     const nextEnd = Math.max(nextStart, target.ayahEnd);
     const nextCurrent = clampNumber(target.currentAyah ?? nextStart, nextStart, nextEnd);
     const nextReadingReciteSession = Boolean(target.fromReadingRecite);
+    console.log("[recite-debug] begin recite-capable session", {
+      source: nextReadingReciteSession ? "reading-recite" : "memorization",
+      surahNumber: target.surahNumber,
+      activeRange: { ayahStart: nextStart, ayahEnd: nextEnd },
+      currentExpectedAyahKey: `${target.surahNumber}:${nextCurrent}`,
+      pageRange: { pageStart: target.pageStart ?? null, pageEnd: target.pageEnd ?? null },
+      willAutoEngageRecite: Boolean(target.startInReciteMode),
+      resultingModeFlags: {
+        sessionRequested: true,
+        readingReciteSession: nextReadingReciteSession,
+        viewMode: nextReadingReciteSession ? "test-mushaf" : viewMode,
+        mushafViewMode: profileMushafViewMode,
+      },
+    });
     setSessionRequested(true);
     setSessionLoadId((value) => value + 1);
     if (nextReadingReciteSession) setViewMode("test-mushaf");
@@ -1462,7 +1573,7 @@ export default function MemorizationScreen() {
     setHighlightedPage(null);
     setInternalPhase("single");
     internalPhaseRef.current = "single";
-    setShowSessionTranslation(false);
+    setShowSessionTranslation(true);
     setAyahTranslations({});
     setSessionReviewOnly(Boolean(target.isReviewOnly));
     setStartInRecitationCheck(Boolean(target.isReviewOnly && target.startInRecitationCheck));
@@ -1569,10 +1680,30 @@ export default function MemorizationScreen() {
     if (!startInReciteMode) return;
     if (!sessionRequested || loading || error) return;
     if (ayahStart === null) {
+      console.log("[recite-debug] missing data for auto-engage recite", {
+        missing: "ayahStart",
+        sessionRequested,
+        loading,
+        error,
+        surahNumber,
+        ayahStart,
+        ayahEnd,
+        currentVerse: currentVerseRef.current,
+      });
       setStartInReciteMode(false);
       return;
     }
 
+    console.log("[recite-debug] auto-engage recite after range confirm", {
+      currentExpectedAyahKey:
+        surahNumber !== null ? `${surahNumber}:${currentVerseRef.current || ayahStart}` : null,
+      activeRange: { surahNumber, ayahStart, ayahEnd },
+      routeFromReading: readingReciteSession,
+      viewMode,
+      mushafViewMode,
+      loading,
+      error,
+    });
     setStartInReciteMode(false);
     void enterReciteMode(currentVerseRef.current || ayahStart);
   }, [
@@ -1580,7 +1711,12 @@ export default function MemorizationScreen() {
     sessionRequested,
     loading,
     error,
+    surahNumber,
     ayahStart,
+    ayahEnd,
+    readingReciteSession,
+    viewMode,
+    mushafViewMode,
   ]);
 
   // Step 1: if no params, fetch dashboard to get today's memorization target
@@ -1689,7 +1825,17 @@ export default function MemorizationScreen() {
           pagesToFetch.forEach((p, i) => next.set(p, results[i]!));
           return next;
         });
-      } catch {
+      } catch (error) {
+        if (reciteModeRef.current || readingReciteSession) {
+          console.log("[recite-debug] caught error:", error, {
+            source: "fetch-mushaf-page-data",
+            viewMode,
+            pageStart,
+            pageEnd,
+            reciteMode: reciteModeRef.current,
+            readingReciteSession,
+          });
+        }
         // fail silently; page card shows loading indicator
       }
     })();
@@ -1747,7 +1893,23 @@ export default function MemorizationScreen() {
         viewPosition: 0.3,
       });
       return;
-    } catch {
+    } catch (error) {
+      if (reciteModeRef.current) {
+        console.log("[recite-debug] caught error:", error, {
+          source: "scroll-ayah-list-to-verse-index",
+          verseNumber,
+          attempt,
+          currentAyahKey:
+            surahNumberRef.current !== null
+              ? `${surahNumberRef.current}:${currentVerseRef.current}`
+              : null,
+          activeRange: {
+            surahNumber: surahNumberRef.current,
+            ayahStart: ayahStartRef.current,
+            ayahEnd: ayahEndRef.current,
+          },
+        });
+      }
       ayahListRef.current?.scrollToOffset({
         offset: Math.max(0, index * AYAH_ROW_ESTIMATED_HEIGHT),
         animated: true,
@@ -1844,7 +2006,23 @@ export default function MemorizationScreen() {
       if (y !== undefined) {
         try {
           mushafStackScrollRef.current?.scrollTo({ y: Math.max(0, y - 8), animated });
-        } catch {
+        } catch (error) {
+          if (reciteModeRef.current) {
+            console.log("[recite-debug] caught error:", error, {
+              source: "scroll-mushaf-page-stack",
+              pageNum,
+              targetPage,
+              currentAyahKey:
+                surahNumberRef.current !== null
+                  ? `${surahNumberRef.current}:${currentVerseRef.current}`
+                  : null,
+              activeRange: {
+                surahNumber: surahNumberRef.current,
+                ayahStart: ayahStartRef.current,
+                ayahEnd: ayahEndRef.current,
+              },
+            });
+          }
           // Layout timing varies while the stacked pages mount.
         }
       }
@@ -1853,13 +2031,48 @@ export default function MemorizationScreen() {
 
     try {
       mushafListRef.current?.scrollToIndex({ index: targetIndex, animated });
-    } catch {
+    } catch (error) {
+      if (reciteModeRef.current) {
+        console.log("[recite-debug] caught error:", error, {
+          source: "scroll-mushaf-page-index",
+          pageNum,
+          targetPage,
+          targetIndex,
+          currentAyahKey:
+            surahNumberRef.current !== null
+              ? `${surahNumberRef.current}:${currentVerseRef.current}`
+              : null,
+          activeRange: {
+            surahNumber: surahNumberRef.current,
+            ayahStart: ayahStartRef.current,
+            ayahEnd: ayahEndRef.current,
+          },
+        });
+      }
       try {
         mushafListRef.current?.scrollToOffset({
           offset: Math.max(0, targetIndex * mushafPageWidth),
           animated,
         });
-      } catch {
+      } catch (fallbackError) {
+        if (reciteModeRef.current) {
+          console.log("[recite-debug] caught error:", fallbackError, {
+            source: "scroll-mushaf-page-offset",
+            pageNum,
+            targetPage,
+            targetIndex,
+            mushafPageWidth,
+            currentAyahKey:
+              surahNumberRef.current !== null
+                ? `${surahNumberRef.current}:${currentVerseRef.current}`
+                : null,
+            activeRange: {
+              surahNumber: surahNumberRef.current,
+              ayahStart: ayahStartRef.current,
+              ayahEnd: ayahEndRef.current,
+            },
+          });
+        }
         // Measurement timing varies while FlatList is mounting.
       }
     }
@@ -1869,6 +2082,24 @@ export default function MemorizationScreen() {
     if (viewMode !== "page" || pageStart === null || pageEnd === null || surahNumber === null) return;
 
     const target = resolveMushafScrollTarget(verseNumber);
+    if (target === null && reciteModeRef.current) {
+      console.log("[recite-debug] missing data for recite mushaf scroll target", {
+        missing: "scrollTarget",
+        verseNumber,
+        currentAyahKey:
+          surahNumberRef.current !== null
+            ? `${surahNumberRef.current}:${currentVerseRef.current}`
+            : null,
+        activeRange: {
+          surahNumber: surahNumberRef.current,
+          ayahStart: ayahStartRef.current,
+          ayahEnd: ayahEndRef.current,
+        },
+        pageRange: { pageStart, pageEnd },
+        pageWordsMapSize: pageWordsMap.size,
+        versePageMapSize: versePageMap.size,
+      });
+    }
     if (target !== null) {
       if (displayedMushafPageRef.current !== target.pageNum) {
         scrollMushafPageIntoView(target.pageNum);
@@ -1898,7 +2129,24 @@ export default function MemorizationScreen() {
             y: Math.max(0, targetY - 96),
             animated: true,
           });
-        } catch {
+        } catch (error) {
+          if (reciteModeRef.current) {
+            console.log("[recite-debug] caught error:", error, {
+              source: "scroll-reciting-verse-stack",
+              verseNumber,
+              target,
+              targetY,
+              currentAyahKey:
+                surahNumberRef.current !== null
+                  ? `${surahNumberRef.current}:${currentVerseRef.current}`
+                  : null,
+              activeRange: {
+                surahNumber: surahNumberRef.current,
+                ayahStart: ayahStartRef.current,
+                ayahEnd: ayahEndRef.current,
+              },
+            });
+          }
           // Layout can disappear briefly while pages remount.
         }
         return;
@@ -1914,7 +2162,25 @@ export default function MemorizationScreen() {
           y: Math.max(0, targetY - preferredTopOffset),
           animated: true,
         });
-      } catch {
+      } catch (error) {
+        if (reciteModeRef.current) {
+          console.log("[recite-debug] caught error:", error, {
+            source: "scroll-reciting-verse-page",
+            verseNumber,
+            target,
+            targetY,
+            preferredTopOffset,
+            currentAyahKey:
+              surahNumberRef.current !== null
+                ? `${surahNumberRef.current}:${currentVerseRef.current}`
+                : null,
+            activeRange: {
+              surahNumber: surahNumberRef.current,
+              ayahStart: ayahStartRef.current,
+              ayahEnd: ayahEndRef.current,
+            },
+          });
+        }
         // Layout can disappear briefly while FlatList virtualizes pages.
       }
       return;
@@ -1986,7 +2252,6 @@ export default function MemorizationScreen() {
 
     reciteExpectedIdxRef.current = resetReciteIdx;
     setReciteExpectedIdx(resetReciteIdx);
-    matchedWordCountRef.current = 0;
     lastMatchedWordRef.current = "";
     positionRef.current = 0;
     durationRef.current = 0;
@@ -2088,7 +2353,20 @@ export default function MemorizationScreen() {
     if (sessionSound) {
       try {
         await sessionSound.unloadAsync();
-      } catch {
+      } catch (error) {
+        console.log("[recite-debug] caught error:", error, {
+          source: "stop-audio-session-sound",
+          reciteMode: reciteModeRef.current,
+          currentAyahKey:
+            surahNumberRef.current !== null
+              ? `${surahNumberRef.current}:${currentVerseRef.current}`
+              : null,
+          activeRange: {
+            surahNumber: surahNumberRef.current,
+            ayahStart: ayahStartRef.current,
+            ayahEnd: ayahEndRef.current,
+          },
+        });
         // ignore — already unloaded or in bad state
       }
       if (soundRef.current === sessionSound) soundRef.current = null;
@@ -2097,7 +2375,16 @@ export default function MemorizationScreen() {
     if (wordSound) {
       try {
         await wordSound.unloadAsync();
-      } catch {
+      } catch (error) {
+        console.log("[recite-debug] caught error:", error, {
+          source: "stop-audio-word-sound",
+          reciteMode: reciteModeRef.current,
+          wordAudioLoadingKey,
+          currentAyahKey:
+            surahNumberRef.current !== null
+              ? `${surahNumberRef.current}:${currentVerseRef.current}`
+              : null,
+        });
         // ignore — word audio is best-effort
       }
       if (wordAudioSoundRef.current === wordSound) wordAudioSoundRef.current = null;
@@ -2237,8 +2524,42 @@ export default function MemorizationScreen() {
   }
 
   async function playVerse(verseNum: number) {
-    if (reciteModeRef.current) return;
-    if (!surahNumber) return;
+    if (reciteModeRef.current) {
+      console.log("[recite-debug] audio play blocked during recite", {
+        requestedAyahKey:
+          surahNumberRef.current !== null ? `${surahNumberRef.current}:${verseNum}` : null,
+        currentAyahKey:
+          surahNumberRef.current !== null
+            ? `${surahNumberRef.current}:${currentVerseRef.current}`
+            : null,
+        activeRange: {
+          surahNumber: surahNumberRef.current,
+          ayahStart: ayahStartRef.current,
+          ayahEnd: ayahEndRef.current,
+        },
+        modeFlags: {
+          reciteMode: reciteModeRef.current,
+          reciteListening,
+          isPlaying: isPlayingRef.current,
+          readingReciteSession,
+          viewMode: viewModeRef.current,
+        },
+      });
+      return;
+    }
+    if (!surahNumber) {
+      console.log("[recite-debug] missing data for audio play", {
+        missing: "surahNumber",
+        requestedVerse: verseNum,
+        activeRange: {
+          surahNumber,
+          ayahStart: ayahStartRef.current,
+          ayahEnd: ayahEndRef.current,
+        },
+        reciteMode: reciteModeRef.current,
+      });
+      return;
+    }
     testMushafPlaybackRef.current = null;
     const requestId = playbackRequestIdRef.current + 1;
     playbackRequestIdRef.current = requestId;
@@ -2265,7 +2586,10 @@ export default function MemorizationScreen() {
       let finishHandledForPass = false;
       const { sound } = await Audio.Sound.createAsync(
         { uri: source.uri },
-        { shouldPlay: false, progressUpdateIntervalMillis: 80 },
+        {
+          shouldPlay: false,
+          progressUpdateIntervalMillis: 80,
+        },
         (status) => {
           if (!status.isLoaded) return;
           positionRef.current = Math.max(0, status.positionMillis - source.startMillis);
@@ -2283,9 +2607,22 @@ export default function MemorizationScreen() {
               requestId !== playbackRequestIdRef.current ||
               soundRef.current !== finishedSound
             ) {
-              void finishedSound?.unloadAsync().catch(() => {});
+              void finishedSound?.unloadAsync().catch((error) => {
+                console.log("[recite-debug] caught error:", error, {
+                  source: "play-verse-finished-stale-unload",
+                  requestId,
+                  currentRequestId: playbackRequestIdRef.current,
+                  verseNum,
+                  currentAyahKey:
+                    surahNumberRef.current !== null
+                      ? `${surahNumberRef.current}:${currentVerseRef.current}`
+                      : null,
+                  reciteMode: reciteModeRef.current,
+                });
+              });
               return;
             }
+            // During cumulative phase each verse plays once (no per-verse repeats).
             const effectiveRepeatCount =
               internalPhaseRef.current === "cumulative" ? 1 : repeatCountRef.current;
             if (currentRepeatRef.current < effectiveRepeatCount) {
@@ -2303,9 +2640,19 @@ export default function MemorizationScreen() {
                   }
                   return undefined;
                 })
-                .catch(() => {});
+                .catch((error) => {
+                  console.log("[recite-debug] caught error:", error, {
+                    source: "play-verse-repeat-restart",
+                    requestId,
+                    verseNum,
+                    currentRepeat: currentRepeatRef.current,
+                    repeatCount: repeatCountRef.current,
+                    reciteMode: reciteModeRef.current,
+                  });
+                });
               return;
             }
+            // All repeats done for this verse
             setCurrentRepeat(1);
             cancelAnimationFrame(rafIdRef.current);
             isPlayingRef.current = false;
@@ -2313,11 +2660,22 @@ export default function MemorizationScreen() {
             setHighlightedWord(-1);
             setHighlightedPage(null);
 
+            // Unload the just-finished sound so the next playVerse creates a fresh instance.
             void (async () => {
               if (soundRef.current === finishedSound) {
                 try {
                   await finishedSound?.unloadAsync();
-                } catch {
+                } catch (error) {
+                  console.log("[recite-debug] caught error:", error, {
+                    source: "play-verse-finished-unload",
+                    requestId,
+                    verseNum,
+                    currentAyahKey:
+                      surahNumberRef.current !== null
+                        ? `${surahNumberRef.current}:${currentVerseRef.current}`
+                        : null,
+                    reciteMode: reciteModeRef.current,
+                  });
                   // already gone
                 }
                 soundRef.current = null;
@@ -2339,7 +2697,18 @@ export default function MemorizationScreen() {
         const isCurrentRequest = requestId === playbackRequestIdRef.current;
         try {
           await sound.unloadAsync();
-        } catch {
+        } catch (error) {
+          console.log("[recite-debug] caught error:", error, {
+            source: "play-verse-stale-unload",
+            requestId,
+            verseNum,
+            currentRequestId: playbackRequestIdRef.current,
+            currentAyahKey:
+              surahNumberRef.current !== null
+                ? `${surahNumberRef.current}:${currentVerseRef.current}`
+                : null,
+            reciteMode: reciteModeRef.current,
+          });
           // ignore stale audio loads superseded by a newer verse request
         }
         if (soundRef.current === sound) soundRef.current = null;
@@ -2350,14 +2719,30 @@ export default function MemorizationScreen() {
         return;
       }
       soundRef.current = sound;
+      // Ensure max volume — different everyayah recordings have very different
+      // mastered loudness levels (Afasy is significantly quieter than Husary).
       try {
         await sound.setVolumeAsync(1.0);
-      } catch {
+      } catch (error) {
+        console.log("[recite-debug] caught error:", error, {
+          source: "play-verse-set-volume",
+          requestId,
+          verseNum,
+          reciteMode: reciteModeRef.current,
+        });
         // best-effort; sound may already be playing
       }
       try {
         await sound.setRateAsync(playbackRateRef.current, true);
-      } catch {
+        // shouldCorrectPitch=true keeps recitation pitch natural
+      } catch (error) {
+        console.log("[recite-debug] caught error:", error, {
+          source: "play-verse-set-rate",
+          requestId,
+          verseNum,
+          playbackRate: playbackRateRef.current,
+          reciteMode: reciteModeRef.current,
+        });
         // best-effort; some sound states may reject setRateAsync
       }
       if (
@@ -2367,7 +2752,18 @@ export default function MemorizationScreen() {
         const isCurrentRequest = requestId === playbackRequestIdRef.current;
         try {
           await sound.unloadAsync();
-        } catch {
+        } catch (error) {
+          console.log("[recite-debug] caught error:", error, {
+            source: "play-verse-setup-stale-unload",
+            requestId,
+            verseNum,
+            currentRequestId: playbackRequestIdRef.current,
+            currentAyahKey:
+              surahNumberRef.current !== null
+                ? `${surahNumberRef.current}:${currentVerseRef.current}`
+                : null,
+            reciteMode: reciteModeRef.current,
+          });
           // ignore stale audio loads superseded during setup
         }
         if (soundRef.current === sound) soundRef.current = null;
@@ -2381,8 +2777,20 @@ export default function MemorizationScreen() {
       isPlayingRef.current = true;
       setIsPlaying(true);
       startRAF();
-    } catch {
+    } catch (error) {
       if (requestId !== playbackRequestIdRef.current) return;
+      console.log("[recite-debug] caught error:", error, {
+        source: "play-verse-audio-load",
+        requestId,
+        verseNum,
+        reciterId: reciterRef.current.id,
+        currentAyahKey:
+          surahNumberRef.current !== null
+            ? `${surahNumberRef.current}:${currentVerseRef.current}`
+            : null,
+        reciteMode: reciteModeRef.current,
+        readingReciteSession,
+      });
       try {
         await soundRef.current?.unloadAsync();
       } catch {
@@ -2406,13 +2814,48 @@ export default function MemorizationScreen() {
 
   async function seekToWordPosition(position: number) {
     const seg = segsRef.current.find((s) => s[0] === position);
-    if (!seg) return;
+    if (!seg) {
+      console.log("[recite-debug] missing data for audio seek", {
+        missing: "segment",
+        requestedPosition: position,
+        currentAyahKey:
+          surahNumberRef.current !== null
+            ? `${surahNumberRef.current}:${playingVerseNumberRef.current}`
+            : null,
+        segmentCount: segsRef.current.length,
+        reciteMode: reciteModeRef.current,
+        activeRange: {
+          surahNumber: surahNumberRef.current,
+          ayahStart: ayahStartRef.current,
+          ayahEnd: ayahEndRef.current,
+        },
+      });
+      return;
+    }
     const dur = durationRef.current;
     if (soundRef.current && dur > 0) {
-      await soundRef.current.setPositionAsync(
-        playbackStartMillisRef.current + Math.floor(seg[1] * dur),
-      );
+      const targetMillis = playbackStartMillisRef.current + Math.floor(seg[1] * dur);
+      console.log("[recite-debug] audio seek requested", {
+        requestedPosition: position,
+        targetMillis,
+        durationMillis: dur,
+        currentAyahKey:
+          surahNumberRef.current !== null
+            ? `${surahNumberRef.current}:${playingVerseNumberRef.current}`
+            : null,
+        reciteMode: reciteModeRef.current,
+        wasPlaying: isPlayingRef.current,
+      });
+      await soundRef.current.setPositionAsync(targetMillis);
       if (!isPlayingRef.current) {
+        console.log("[recite-debug] audio play after seek", {
+          requestedPosition: position,
+          currentAyahKey:
+            surahNumberRef.current !== null
+              ? `${surahNumberRef.current}:${playingVerseNumberRef.current}`
+              : null,
+          reciteMode: reciteModeRef.current,
+        });
         await soundRef.current.playAsync();
         isPlayingRef.current = true;
         setIsPlaying(true);
@@ -2423,28 +2866,88 @@ export default function MemorizationScreen() {
 
   async function handlePlayPause() {
     if (reciteMode) {
+      console.log("[recite-debug] audio play/pause blocked during recite", {
+        currentAyahKey:
+          surahNumberRef.current !== null
+            ? `${surahNumberRef.current}:${currentVerseRef.current}`
+            : null,
+        activeRange: {
+          surahNumber: surahNumberRef.current,
+          ayahStart: ayahStartRef.current,
+          ayahEnd: ayahEndRef.current,
+        },
+        modeFlags: {
+          reciteMode,
+          reciteListening,
+          isPlaying: isPlayingRef.current,
+          isLoading: isLoadingRef.current,
+          readingReciteSession,
+          viewMode,
+        },
+      });
       Alert.alert("Recite mode is on", "Turn off Recite mode to play audio.");
       return;
     }
+    // Block re-entry while audio is loading. Without this, rapid taps during
+    // the createAsync window all fall through to playVerse or to the resume
+    // branch and spawn concurrent playback.
     if (isLoadingRef.current) return;
 
     if (isPlayingRef.current) {
+      console.log("[recite-debug] audio pause requested", {
+        currentAyahKey:
+          surahNumberRef.current !== null
+            ? `${surahNumberRef.current}:${playingVerseNumberRef.current}`
+            : null,
+        reciteMode: reciteModeRef.current,
+        readingReciteSession,
+        viewMode,
+      });
       cancelAnimationFrame(rafIdRef.current);
       try {
         await soundRef.current?.pauseAsync();
-      } catch {
-        // best-effort; the sound may already be invalid
+      } catch (error) {
+        console.log("[recite-debug] caught error:", error, {
+          source: "audio-pause",
+          currentAyahKey:
+            surahNumberRef.current !== null
+              ? `${surahNumberRef.current}:${playingVerseNumberRef.current}`
+              : null,
+          reciteMode: reciteModeRef.current,
+          readingReciteSession,
+          viewMode,
+        });
       }
       isPlayingRef.current = false;
       setIsPlaying(false);
     } else if (soundRef.current) {
-      if (isPlayingRef.current) return;
+      // Resume an existing-but-paused sound. Check ref first to avoid race.
+      if (isPlayingRef.current) return; // double-check after await boundary
+      console.log("[recite-debug] audio resume requested", {
+        currentAyahKey:
+          surahNumberRef.current !== null
+            ? `${surahNumberRef.current}:${playingVerseNumberRef.current}`
+            : null,
+        reciteMode: reciteModeRef.current,
+        readingReciteSession,
+        viewMode,
+      });
       isPlayingRef.current = true;
       setIsPlaying(true);
       try {
         await soundRef.current.playAsync();
         if (!testMushafPlaybackRef.current) startRAF();
-      } catch {
+      } catch (error) {
+        console.log("[recite-debug] caught error:", error, {
+          source: "audio-resume",
+          currentAyahKey:
+            surahNumberRef.current !== null
+              ? `${surahNumberRef.current}:${playingVerseNumberRef.current}`
+              : null,
+          reciteMode: reciteModeRef.current,
+          readingReciteSession,
+          viewMode,
+        });
         const brokenSound = soundRef.current;
         soundRef.current = null;
         await brokenSound?.unloadAsync().catch(() => {});
@@ -2455,6 +2958,15 @@ export default function MemorizationScreen() {
         await playVerse(playingVerseNumberRef.current);
       }
     } else {
+      console.log("[recite-debug] audio play requested", {
+        currentAyahKey:
+          surahNumberRef.current !== null
+            ? `${surahNumberRef.current}:${playingVerseNumberRef.current}`
+            : null,
+        reciteMode: reciteModeRef.current,
+        readingReciteSession,
+        viewMode,
+      });
       setCurrentRepeat(1);
       await playVerse(playingVerseNumberRef.current);
     }
@@ -2499,7 +3011,30 @@ export default function MemorizationScreen() {
     ayah: number;
     position: number;
   }) {
-    if (reciteModeRef.current || isLoadingRef.current) return;
+    if (reciteModeRef.current || isLoadingRef.current) {
+      console.log("[recite-debug] test mushaf word seek decision", {
+        decision: reciteModeRef.current ? "blocked-recite-active" : "blocked-audio-loading",
+        requestedWord: word,
+        requestedAyahKey: `${word.surah}:${word.ayah}`,
+        currentAyahKey:
+          surahNumberRef.current !== null
+            ? `${surahNumberRef.current}:${currentVerseRef.current}`
+            : null,
+        activeRange: {
+          surahNumber: surahNumberRef.current,
+          ayahStart: ayahStartRef.current,
+          ayahEnd: ayahEndRef.current,
+        },
+        modeFlags: {
+          reciteMode: reciteModeRef.current,
+          isLoading: isLoadingRef.current,
+          isPlaying: isPlayingRef.current,
+          readingReciteSession,
+          viewMode: viewModeRef.current,
+        },
+      });
+      return;
+    }
     if (testMushafPlaybackRef.current) {
       await stopAudioCompletely();
     }
@@ -2585,7 +3120,17 @@ export default function MemorizationScreen() {
     ) {
       try {
         await finishedSound?.unloadAsync();
-      } catch {
+      } catch (error) {
+        console.log("[recite-debug] caught error:", error, {
+          source: "test-mushaf-finish-stale-unload",
+          token,
+          currentToken: playbackRequestIdRef.current,
+          reciteMode: reciteModeRef.current,
+          currentAyahKey:
+            surahNumberRef.current !== null
+              ? `${surahNumberRef.current}:${currentVerseRef.current}`
+              : null,
+        });
         // ignore stale sheet audio
       }
       return;
@@ -2594,7 +3139,16 @@ export default function MemorizationScreen() {
     soundRef.current = null;
     try {
       await finishedSound?.unloadAsync();
-    } catch {
+    } catch (error) {
+      console.log("[recite-debug] caught error:", error, {
+        source: "test-mushaf-finish-unload",
+        token,
+        reciteMode: reciteModeRef.current,
+        currentAyahKey:
+          surahNumberRef.current !== null
+            ? `${surahNumberRef.current}:${currentVerseRef.current}`
+            : null,
+      });
       // ignore stale sheet audio
     }
 
@@ -2700,20 +3254,47 @@ export default function MemorizationScreen() {
         token !== playbackRequestIdRef.current ||
         testMushafPlaybackRef.current?.token !== token
       ) {
-        await sound.unloadAsync().catch(() => {});
+        await sound.unloadAsync().catch((error) => {
+          console.log("[recite-debug] caught error:", error, {
+            source: "test-mushaf-stale-sound-unload",
+            token,
+            currentToken: playbackRequestIdRef.current,
+            target,
+            reciteMode: reciteModeRef.current,
+            readingReciteSession,
+          });
+        });
         return;
       }
 
       soundRef.current = sound;
       try {
         await sound.setVolumeAsync(1.0);
-      } catch {
+      } catch (error) {
+        console.log("[recite-debug] caught error:", error, {
+          source: "test-mushaf-set-volume",
+          token,
+          target,
+          reciteMode: reciteModeRef.current,
+        });
         // best-effort
       }
       await sound.playAsync();
       isPlayingRef.current = true;
       setIsPlaying(true);
-    } catch {
+    } catch (error) {
+      console.log("[recite-debug] caught error:", error, {
+        source: "test-mushaf-audio-queue",
+        token,
+        target,
+        activeRange: {
+          surahNumber: surahNumberRef.current,
+          ayahStart: ayahStartRef.current,
+          ayahEnd: ayahEndRef.current,
+        },
+        reciteMode: reciteModeRef.current,
+        readingReciteSession,
+      });
       if (token !== playbackRequestIdRef.current) return;
       testMushafPlaybackRef.current = null;
       isPlayingRef.current = false;
@@ -2731,8 +3312,42 @@ export default function MemorizationScreen() {
   }
 
   async function playTestMushafAudioTargets(queue: TestMushafPlaybackTarget[]) {
-    if (reciteModeRef.current) return;
+    if (reciteModeRef.current) {
+      console.log("[recite-debug] test mushaf audio play blocked during recite", {
+        queueLength: queue.length,
+        firstTarget: queue[0] ?? null,
+        currentAyahKey:
+          surahNumberRef.current !== null
+            ? `${surahNumberRef.current}:${currentVerseRef.current}`
+            : null,
+        activeRange: {
+          surahNumber: surahNumberRef.current,
+          ayahStart: ayahStartRef.current,
+          ayahEnd: ayahEndRef.current,
+        },
+        modeFlags: {
+          reciteMode: reciteModeRef.current,
+          reciteListening,
+          readingReciteSession,
+          viewMode: viewModeRef.current,
+        },
+      });
+      return;
+    }
     if (queue.length === 0) {
+      console.log("[recite-debug] missing data for test mushaf audio play", {
+        missing: "queue",
+        currentAyahKey:
+          surahNumberRef.current !== null
+            ? `${surahNumberRef.current}:${currentVerseRef.current}`
+            : null,
+        activeRange: {
+          surahNumber: surahNumberRef.current,
+          ayahStart: ayahStartRef.current,
+          ayahEnd: ayahEndRef.current,
+        },
+        reciteMode: reciteModeRef.current,
+      });
       Alert.alert("Audio unavailable", "This ayah could not be prepared for playback.");
       return;
     }
@@ -2747,7 +3362,18 @@ export default function MemorizationScreen() {
     ayah: number;
   }) {
     const playbackTarget = buildTestMushafPlaybackTarget(target.surah, target.ayah);
-    if (!playbackTarget) return;
+    if (!playbackTarget) {
+      console.log("[recite-debug] missing data for single test mushaf playback target", {
+        missing: "playbackTarget",
+        requestedTarget: target,
+        currentAyahKey:
+          surahNumberRef.current !== null
+            ? `${surahNumberRef.current}:${currentVerseRef.current}`
+            : null,
+        reciteMode: reciteModeRef.current,
+      });
+      return;
+    }
     await playTestMushafAudioTargets([playbackTarget]);
   }
 
@@ -2756,7 +3382,18 @@ export default function MemorizationScreen() {
     ayah: number;
   }) {
     const playbackTarget = buildTestMushafPlaybackTarget(target.surah, target.ayah);
-    if (!playbackTarget) return;
+    if (!playbackTarget) {
+      console.log("[recite-debug] missing data for test mushaf playback from here", {
+        missing: "playbackTarget",
+        requestedTarget: target,
+        currentAyahKey:
+          surahNumberRef.current !== null
+            ? `${surahNumberRef.current}:${currentVerseRef.current}`
+            : null,
+        reciteMode: reciteModeRef.current,
+      });
+      return;
+    }
     await playTestMushafAudioTargets(buildTestMushafSurahPlaybackQueue(playbackTarget));
   }
 
@@ -2779,10 +3416,30 @@ export default function MemorizationScreen() {
         setIsPlaying(true);
         startRAF();
         return;
-      } catch {
+      } catch (error) {
+        console.log("[recite-debug] caught error:", error, {
+          source: "replay-audio-from-start",
+          verseNum,
+          currentAyahKey:
+            surahNumberRef.current !== null
+              ? `${surahNumberRef.current}:${currentVerseRef.current}`
+              : null,
+          reciteMode: reciteModeRef.current,
+          readingReciteSession,
+        });
         try {
           await soundRef.current.unloadAsync();
-        } catch {
+        } catch (unloadError) {
+          console.log("[recite-debug] caught error:", unloadError, {
+            source: "replay-audio-broken-unload",
+            verseNum,
+            currentAyahKey:
+              surahNumberRef.current !== null
+                ? `${surahNumberRef.current}:${currentVerseRef.current}`
+                : null,
+            reciteMode: reciteModeRef.current,
+            readingReciteSession,
+          });
           // ignore broken sound instance; playVerse will create a fresh one
         }
         soundRef.current = null;
@@ -3119,6 +3776,27 @@ export default function MemorizationScreen() {
     const completedEnd = sessionReviewOnly
       ? ayahEnd
       : clampCompletedAyahEnd(completedToAyah);
+    console.log("[recite-debug] rating UI shown", {
+      source,
+      requestedCompletedToAyah: completedToAyah,
+      completedEnd,
+      score: score ?? null,
+      activeRange: {
+        surahNumber: surahNumberRef.current,
+        ayahStart,
+        ayahEnd,
+      },
+      finalState: {
+        currentAyahKey:
+          surahNumberRef.current !== null
+            ? `${surahNumberRef.current}:${currentVerseRef.current}`
+            : null,
+        reciteAttempts: reciteAttemptsRef.current,
+        revealedWords: revealedReciteWordsRef.current.size,
+        calculatedScore: source === "noorpath" ? score ?? null : null,
+        readingReciteSession,
+      },
+    });
 
     setPauseCompletedAyahEnd(completedEnd);
     setRatingAyahEnd(completedEnd);
@@ -3142,6 +3820,7 @@ export default function MemorizationScreen() {
       setReciteExpectedIdx(0);
       resetReciteAssistState();
       matchedWordCountRef.current = 0;
+      matchedHeardTokensRef.current = [];
       lastMatchedWordRef.current = "";
       ExpoSpeechRecognitionModule.stop();
     }
@@ -3199,6 +3878,31 @@ export default function MemorizationScreen() {
     const targetPage = clampMushafPage(
       readingReciteReturnPage ?? pageStart ?? activeMushafPage ?? 1,
     );
+    console.log("[recite-debug] nav back to reading mushaf", {
+      returnTo: {
+        page: targetPage,
+        mushafViewMode: readingReciteReturnMushafViewMode,
+      },
+      inputs: {
+        readingReciteReturnPage,
+        pageStart,
+        activeMushafPage,
+      },
+      finalState: {
+        currentAyahKey:
+          surahNumberRef.current !== null
+            ? `${surahNumberRef.current}:${currentVerseRef.current}`
+            : null,
+        completedThrough: getReadingReciteCompletedThroughAyah(),
+        activeRange: {
+          surahNumber: surahNumberRef.current,
+          ayahStart: ayahStartRef.current,
+          ayahEnd: ayahEndRef.current,
+        },
+        reciteMode: reciteModeRef.current,
+        readingReciteSession,
+      },
+    });
     setTimeout(() => {
       router.replace({
         pathname: "/child/[childId]/mushaf",
@@ -3214,6 +3918,25 @@ export default function MemorizationScreen() {
   }
 
   function openReadingReciteSavePrompt() {
+    console.log("[recite-debug] save prompt shown", {
+      source: "reading-recite-exit",
+      completedThrough: getReadingReciteCompletedThroughAyah(),
+      currentAyahKey:
+        surahNumberRef.current !== null
+          ? `${surahNumberRef.current}:${currentVerseRef.current}`
+          : null,
+      activeRange: {
+        surahNumber: surahNumberRef.current,
+        ayahStart: ayahStartRef.current,
+        ayahEnd: ayahEndRef.current,
+      },
+      modeFlags: {
+        reciteMode: reciteModeRef.current,
+        reciteListening,
+        readingReciteSession,
+        viewMode: viewModeRef.current,
+      },
+    });
     setSettingsOpen(false);
     setSaveError(null);
     setReadingReciteExitOpen(true);
@@ -3221,6 +3944,24 @@ export default function MemorizationScreen() {
 
   function saveReadingReciteAndReturn() {
     const completedThrough = getReadingReciteCompletedThroughAyah();
+    console.log("[recite-debug] reading recite save chosen", {
+      completedThrough,
+      currentAyahKey:
+        surahNumberRef.current !== null
+          ? `${surahNumberRef.current}:${currentVerseRef.current}`
+          : null,
+      activeRange: {
+        surahNumber: surahNumberRef.current,
+        ayahStart: ayahStartRef.current,
+        ayahEnd: ayahEndRef.current,
+      },
+      canSave: completedThrough !== null,
+      modeFlags: {
+        reciteMode: reciteModeRef.current,
+        readingReciteSession,
+        submitting,
+      },
+    });
     if (completedThrough === null) {
       setSaveError("No full ayah has been completed yet.");
       return;
@@ -3234,6 +3975,23 @@ export default function MemorizationScreen() {
   }
 
   async function discardReadingReciteAndReturn() {
+    console.log("[recite-debug] reading recite discard chosen", {
+      completedThrough: getReadingReciteCompletedThroughAyah(),
+      currentAyahKey:
+        surahNumberRef.current !== null
+          ? `${surahNumberRef.current}:${currentVerseRef.current}`
+          : null,
+      activeRange: {
+        surahNumber: surahNumberRef.current,
+        ayahStart: ayahStartRef.current,
+        ayahEnd: ayahEndRef.current,
+      },
+      modeFlags: {
+        reciteMode: reciteModeRef.current,
+        readingReciteSession,
+        submitting,
+      },
+    });
     setReadingReciteExitOpen(false);
     await handleLeaveWithoutSaving();
     returnToReadingMushaf();
@@ -3256,7 +4014,21 @@ export default function MemorizationScreen() {
     if (soundRef.current && isPlayingRef.current) {
       try {
         await soundRef.current.pauseAsync();
-      } catch {
+      } catch (error) {
+        console.log("[recite-debug] caught error:", error, {
+          source: "pause-before-mushaf-navigation",
+          currentAyahKey:
+            surahNumberRef.current !== null
+              ? `${surahNumberRef.current}:${currentVerseRef.current}`
+              : null,
+          activeRange: {
+            surahNumber: surahNumberRef.current,
+            ayahStart: ayahStartRef.current,
+            ayahEnd: ayahEndRef.current,
+          },
+          reciteMode: reciteModeRef.current,
+          readingReciteSession,
+        });
         // best-effort pause before opening the reader
       }
     }
@@ -3357,6 +4129,7 @@ export default function MemorizationScreen() {
     autoPlayRef.current = false;
     pendingSeekPositionRef.current = null;
     matchedWordCountRef.current = 0;
+    matchedHeardTokensRef.current = [];
     lastMatchedWordRef.current = "";
     reciteModeRef.current = false;
     setReciteMode(false);
@@ -3408,6 +4181,23 @@ export default function MemorizationScreen() {
 
   function handleReciteToTeacher() {
     if (ayahStart === null || ayahEnd === null) return;
+    console.log("[recite-debug] recite path decision", {
+      decision: "recite-to-teacher",
+      currentAyahKey:
+        surahNumberRef.current !== null
+          ? `${surahNumberRef.current}:${currentVerseRef.current}`
+          : null,
+      activeRange: {
+        surahNumber: surahNumberRef.current,
+        ayahStart,
+        ayahEnd,
+      },
+      modeFlags: {
+        reciteMode: reciteModeRef.current,
+        readingReciteSession,
+        viewMode: viewModeRef.current,
+      },
+    });
     openRecitationCheck({
       completedToAyah: ayahEnd,
       source: "teacher",
@@ -3423,10 +4213,55 @@ export default function MemorizationScreen() {
   }
 
   async function enterReciteMode(startVerse: number) {
-    if (ayahStart === null || ayahEnd === null || surahNumberRef.current === null) return;
+    if (ayahStart === null || ayahEnd === null || surahNumberRef.current === null) {
+      console.log("[recite-debug] missing data for recite session start", {
+        missing: {
+          ayahStart: ayahStart === null,
+          ayahEnd: ayahEnd === null,
+          surahNumber: surahNumberRef.current === null,
+        },
+        requestedStartVerse: startVerse,
+        activeRange: {
+          surahNumber: surahNumberRef.current,
+          ayahStart,
+          ayahEnd,
+        },
+        modeFlags: {
+          reciteMode: reciteModeRef.current,
+          readingReciteSession,
+          viewMode: viewModeRef.current,
+          loading,
+          error,
+        },
+      });
+      return;
+    }
     const boundedStart = Math.max(ayahStart, Math.min(startVerse, ayahEnd));
     const initialWords = displayWordsMapRef.current.get(boundedStart) ?? [];
     const initialExpectedIdx = getNextReciteWordIndex(initialWords, 0) ?? 0;
+    const initialWord = initialWords[initialExpectedIdx];
+    console.log("[recite-debug] recite session start", {
+      requestedStartVerse: startVerse,
+      boundedStart,
+      activeRange: {
+        surahNumber: surahNumberRef.current,
+        ayahStart,
+        ayahEnd,
+      },
+      currentExpectedAyahKey: `${surahNumberRef.current}:${boundedStart}`,
+      currentExpectedWord: {
+        index: initialExpectedIdx,
+        position: initialWord?.position ?? initialExpectedIdx + 1,
+        text: initialWord?.text_uthmani ?? null,
+      },
+      wordCount: initialWords.length,
+      modeFlags: {
+        previousReciteMode: reciteModeRef.current,
+        readingReciteSession,
+        viewMode: viewModeRef.current,
+        mushafViewMode,
+      },
+    });
 
     setTappedAyah(null);
     await stopAudioCompletely();
@@ -3438,6 +4273,7 @@ export default function MemorizationScreen() {
     setCurrentVerse(boundedStart);
     currentVerseRef.current = boundedStart;
     matchedWordCountRef.current = 0;
+    matchedHeardTokensRef.current = [];
     lastMatchedWordRef.current = "";
     resetReciteAssistState();
     setReciteError(null);
@@ -3453,25 +4289,98 @@ export default function MemorizationScreen() {
   async function handleToggleReciteMode() {
     if (reciteModeRef.current) {
       if (readingReciteSession) {
+        console.log("[recite-debug] recite toggle off mid-range", {
+          currentAyahKey:
+            surahNumberRef.current !== null
+              ? `${surahNumberRef.current}:${currentVerseRef.current}`
+              : null,
+          completedThrough: getReadingReciteCompletedThroughAyah(),
+          activeRange: {
+            surahNumber: surahNumberRef.current,
+            ayahStart: ayahStartRef.current,
+            ayahEnd: ayahEndRef.current,
+          },
+          resultingModeFlags: {
+            reciteMode: reciteModeRef.current,
+            readingReciteSession,
+            savePromptWillOpen: true,
+            reciteListening,
+            viewMode: viewModeRef.current,
+          },
+        });
         openReadingReciteSavePrompt();
         return;
       }
+      console.log("[recite-debug] recite mode toggle", {
+        action: "off",
+        currentAyahKey:
+          surahNumberRef.current !== null
+            ? `${surahNumberRef.current}:${currentVerseRef.current}`
+            : null,
+        activeRange: {
+          surahNumber: surahNumberRef.current,
+          ayahStart: ayahStartRef.current,
+          ayahEnd: ayahEndRef.current,
+        },
+        resultingModeFlags: {
+          reciteMode: false,
+          reciteListening: false,
+          reciteError: null,
+          readingReciteSession,
+          viewMode: viewModeRef.current,
+        },
+      });
       reciteModeRef.current = false;
       setReciteMode(false);
       setReciteListening(false);
       setReciteError(null);
       setReciteExpectedIdx(0);
       matchedWordCountRef.current = 0;
+      matchedHeardTokensRef.current = [];
       lastMatchedWordRef.current = "";
       resetReciteAssistState();
       ExpoSpeechRecognitionModule.stop();
       return;
     }
+    console.log("[recite-debug] recite mode toggle", {
+      action: "on",
+      currentAyahKey:
+        surahNumberRef.current !== null
+          ? `${surahNumberRef.current}:${currentVerseRef.current}`
+          : null,
+      activeRange: {
+        surahNumber: surahNumberRef.current,
+        ayahStart: ayahStartRef.current,
+        ayahEnd: ayahEndRef.current,
+      },
+      resultingModeFlags: {
+        reciteMode: true,
+        readingReciteSession,
+        viewMode: viewModeRef.current,
+      },
+    });
     await enterReciteMode(currentVerseRef.current);
   }
 
   async function handleReciteToNoorPath() {
     if (ayahStart === null) return;
+    console.log("[recite-debug] recite path decision", {
+      decision: "recite-to-noorpath",
+      currentAyahKey:
+        surahNumberRef.current !== null
+          ? `${surahNumberRef.current}:${currentVerseRef.current}`
+          : null,
+      activeRange: {
+        surahNumber: surahNumberRef.current,
+        ayahStart,
+        ayahEnd,
+      },
+      modeFlags: {
+        reciteMode: reciteModeRef.current,
+        readingReciteSession,
+        viewMode: viewModeRef.current,
+      },
+    });
     updateReadyToReciteSheet(false);
     setReadyToReciteDeferred(false);
     setSaveError(null);
@@ -3584,6 +4493,17 @@ export default function MemorizationScreen() {
       try {
         await refreshDiscoverySnapshot();
       } catch (refreshError) {
+        console.log("[recite-debug] caught error:", refreshError, {
+          source: "refresh-after-recitation-save",
+          completedThroughAyah,
+          qualityRating,
+          shouldReturnToReading,
+          activeRange: {
+            surahNumber,
+            ayahStart,
+            ayahEnd,
+          },
+        });
         setDiscoveryState({
           status: "error",
           message:
@@ -3615,6 +4535,21 @@ export default function MemorizationScreen() {
         Alert.alert("Progress saved.", "The rating was saved for the selected ayah range.");
       }
     } catch (e) {
+      console.log("[recite-debug] caught error:", e, {
+        source: "save-recitation-completion",
+        qualityRating,
+        completedThroughAyah,
+        shouldReturnToReading,
+        activeRange: {
+          surahNumber,
+          ayahStart,
+          ayahEnd,
+        },
+        modeFlags: {
+          reciteMode: reciteModeRef.current,
+          readingReciteSession,
+        },
+      });
       const message = e instanceof Error ? e.message : "Failed to save.";
       setSaveError(message);
       Alert.alert("Error", message);
@@ -3696,17 +4631,59 @@ export default function MemorizationScreen() {
     return Math.max(0, 100 - penalty);
   }
 
-  function advancePastCurrentReciteVerse(scoreAttempts = reciteAttemptsRef.current) {
+  function advancePastCurrentReciteVerse(
+    scoreAttempts = reciteAttemptsRef.current,
+    triggerSource = "unknown",
+  ) {
+    const fromAyah = currentVerseRef.current;
     const nextVerse = currentVerseRef.current + 1;
     if (ayahEndRef.current !== null && currentVerseRef.current < ayahEndRef.current) {
       const nextWords = displayWordsMapRef.current.get(nextVerse) ?? [];
       const nextExpectedIdx = getNextReciteWordIndex(nextWords, 0) ?? 0;
+      const nextWord = nextWords[nextExpectedIdx];
+      console.log("[recite-debug] current expected ayah advance", {
+        triggerSource,
+        fromAyahKey:
+          surahNumberRef.current !== null ? `${surahNumberRef.current}:${fromAyah}` : null,
+        toAyahKey:
+          surahNumberRef.current !== null ? `${surahNumberRef.current}:${nextVerse}` : null,
+        activeRange: {
+          surahNumber: surahNumberRef.current,
+          ayahStart: ayahStartRef.current,
+          ayahEnd: ayahEndRef.current,
+        },
+        nextExpectedWord: {
+          index: nextExpectedIdx,
+          position: nextWord?.position ?? nextExpectedIdx + 1,
+          text: nextWord?.text_uthmani ?? null,
+        },
+        scoreAttempts,
+      });
       currentVerseRef.current = nextVerse;
       setCurrentVerse(nextVerse);
       setReciteCursor(nextVerse, nextExpectedIdx);
       return;
     }
 
+    console.log("[recite-debug] end-of-range detection", {
+      triggerSource,
+      currentAyahKey:
+        surahNumberRef.current !== null
+          ? `${surahNumberRef.current}:${currentVerseRef.current}`
+          : null,
+      activeRange: {
+        surahNumber: surahNumberRef.current,
+        ayahStart: ayahStartRef.current,
+        ayahEnd: ayahEndRef.current,
+      },
+      scoreAttempts,
+      calculatedScore: calculateReciteScore(scoreAttempts),
+      modeFlags: {
+        reciteMode: reciteModeRef.current,
+        reciteListening,
+        readingReciteSession,
+      },
+    });
     setReciteListening(false);
     ExpoSpeechRecognitionModule.stop();
     openRecitationCheck({
@@ -3717,22 +4694,72 @@ export default function MemorizationScreen() {
   }
 
   function handleShowReciteWord() {
-    if (!reciteModeRef.current) return;
+    if (!reciteModeRef.current) {
+      console.log("[recite-debug] show word ignored", {
+        reason: "recite-mode-inactive",
+        currentAyahKey:
+          surahNumberRef.current !== null
+            ? `${surahNumberRef.current}:${currentVerseRef.current}`
+            : null,
+      });
+      return;
+    }
     const verseNumber = currentVerseRef.current;
     const verseWords = displayWordsMapRef.current.get(verseNumber) ?? [];
     const currentExpectedIdx = getNextReciteWordIndex(
       verseWords,
       reciteExpectedIdxRef.current,
     );
-    if (currentExpectedIdx === null) return;
+    if (currentExpectedIdx === null) {
+      console.log("[recite-debug] show word missing current word", {
+        missing: "currentExpectedIdx",
+        currentAyahKey:
+          surahNumberRef.current !== null ? `${surahNumberRef.current}:${verseNumber}` : null,
+        activeRange: {
+          surahNumber: surahNumberRef.current,
+          ayahStart: ayahStartRef.current,
+          ayahEnd: ayahEndRef.current,
+        },
+        wordCount: verseWords.length,
+        reciteExpectedIdx: reciteExpectedIdxRef.current,
+      });
+      return;
+    }
 
+    const currentWord = verseWords[currentExpectedIdx];
+    console.log("[recite-debug] show word pressed", {
+      currentAyahKey:
+        surahNumberRef.current !== null ? `${surahNumberRef.current}:${verseNumber}` : null,
+      currentWord: {
+        index: currentExpectedIdx,
+        position: currentWord?.position ?? currentExpectedIdx + 1,
+        text: currentWord?.text_uthmani ?? null,
+      },
+      revealedKey: makeReciteWordKey(verseNumber, currentExpectedIdx),
+      attemptsBefore: reciteAttemptsRef.current,
+      attemptsAfter: reciteAttemptsRef.current + 3,
+      activeRange: {
+        surahNumber: surahNumberRef.current,
+        ayahStart: ayahStartRef.current,
+        ayahEnd: ayahEndRef.current,
+      },
+    });
     setReciteCursor(verseNumber, currentExpectedIdx);
     revealReciteWord(verseNumber, currentExpectedIdx);
     addReciteAttempts(3);
   }
 
   function handleSkipReciteWord() {
-    if (!reciteModeRef.current) return;
+    if (!reciteModeRef.current) {
+      console.log("[recite-debug] skip word ignored", {
+        reason: "recite-mode-inactive",
+        currentAyahKey:
+          surahNumberRef.current !== null
+            ? `${surahNumberRef.current}:${currentVerseRef.current}`
+            : null,
+      });
+      return;
+    }
     const verseNumber = currentVerseRef.current;
     const verseWords = displayWordsMapRef.current.get(verseNumber) ?? [];
     const currentExpectedIdx = getNextReciteWordIndex(
@@ -3741,27 +4768,84 @@ export default function MemorizationScreen() {
     );
 
     if (currentExpectedIdx === null) {
-      advancePastCurrentReciteVerse();
+      console.log("[recite-debug] skip word pressed", {
+        currentAyahKey:
+          surahNumberRef.current !== null ? `${surahNumberRef.current}:${verseNumber}` : null,
+        currentWord: null,
+        advanceBehavior: "advance-ayah-no-current-word",
+        activeRange: {
+          surahNumber: surahNumberRef.current,
+          ayahStart: ayahStartRef.current,
+          ayahEnd: ayahEndRef.current,
+        },
+        wordCount: verseWords.length,
+        reciteExpectedIdx: reciteExpectedIdxRef.current,
+      });
+      advancePastCurrentReciteVerse(undefined, "skip-word-no-current-word");
       return;
     }
 
+    const currentWord = verseWords[currentExpectedIdx];
     revealReciteWord(verseNumber, currentExpectedIdx);
     const nextAttempts = addReciteAttempts(5);
     matchedWordCountRef.current = 0;
+    matchedHeardTokensRef.current = [];
     lastMatchedWordRef.current = "";
 
     const nextExpectedIdx = getNextReciteWordIndex(verseWords, currentExpectedIdx + 1);
+    console.log("[recite-debug] skip word pressed", {
+      currentAyahKey:
+        surahNumberRef.current !== null ? `${surahNumberRef.current}:${verseNumber}` : null,
+      currentWord: {
+        index: currentExpectedIdx,
+        position: currentWord?.position ?? currentExpectedIdx + 1,
+        text: currentWord?.text_uthmani ?? null,
+      },
+      revealedKey: makeReciteWordKey(verseNumber, currentExpectedIdx),
+      advanceBehavior: nextExpectedIdx !== null ? "advance-next-word" : "advance-next-ayah",
+      nextExpectedWord:
+        nextExpectedIdx !== null
+          ? {
+              index: nextExpectedIdx,
+              position: verseWords[nextExpectedIdx]?.position ?? nextExpectedIdx + 1,
+              text: verseWords[nextExpectedIdx]?.text_uthmani ?? null,
+            }
+          : null,
+      attemptsBefore: reciteAttemptsRef.current - 5,
+      attemptsAfter: nextAttempts,
+      activeRange: {
+        surahNumber: surahNumberRef.current,
+        ayahStart: ayahStartRef.current,
+        ayahEnd: ayahEndRef.current,
+      },
+    });
     if (nextExpectedIdx !== null) {
       setReciteCursor(verseNumber, nextExpectedIdx);
       return;
     }
 
-    advancePastCurrentReciteVerse(nextAttempts);
+    advancePastCurrentReciteVerse(nextAttempts, "skip-word-end-of-ayah");
   }
 
   async function startRecognition() {
     const { granted } = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
     if (!granted) {
+      console.log("[recite-debug] recite recognition permission denied", {
+        currentAyahKey:
+          surahNumberRef.current !== null
+            ? `${surahNumberRef.current}:${currentVerseRef.current}`
+            : null,
+        activeRange: {
+          surahNumber: surahNumberRef.current,
+          ayahStart: ayahStartRef.current,
+          ayahEnd: ayahEndRef.current,
+        },
+        modeFlags: {
+          reciteMode: reciteModeRef.current,
+          readingReciteSession,
+          viewMode: viewModeRef.current,
+        },
+      });
       setReciteError("Microphone or speech recognition permission denied.");
       setReciteMode(false);
       Alert.alert(
@@ -3771,9 +4855,38 @@ export default function MemorizationScreen() {
       return;
     }
     if (!reciteModeRef.current) {
+      console.log("[recite-debug] recite recognition start skipped", {
+        reason: "recite-mode-ref-inactive-after-permission",
+        currentAyahKey:
+          surahNumberRef.current !== null
+            ? `${surahNumberRef.current}:${currentVerseRef.current}`
+            : null,
+        activeRange: {
+          surahNumber: surahNumberRef.current,
+          ayahStart: ayahStartRef.current,
+          ayahEnd: ayahEndRef.current,
+        },
+      });
       return;
     }
 
+    console.log("[recite-debug] recite recognition start", {
+      currentAyahKey:
+        surahNumberRef.current !== null
+          ? `${surahNumberRef.current}:${currentVerseRef.current}`
+          : null,
+      currentExpectedIdx: reciteExpectedIdxRef.current,
+      activeRange: {
+        surahNumber: surahNumberRef.current,
+        ayahStart: ayahStartRef.current,
+        ayahEnd: ayahEndRef.current,
+      },
+      modeFlags: {
+        reciteMode: reciteModeRef.current,
+        readingReciteSession,
+        viewMode: viewModeRef.current,
+      },
+    });
     ExpoSpeechRecognitionModule.start({
       lang: "ar-SA",
       interimResults: true,
@@ -3794,18 +4907,90 @@ export default function MemorizationScreen() {
     const isFinal = !!event.isFinal;
     if (!transcript) return;
 
+    const heardNormFull = stripTashkeel(transcript);
+    const heardTokens = tokenize(heardNormFull);
+    const debugVerseWords = displayWordsMapRef.current.get(currentVerseRef.current) ?? [];
+    const debugExpectedIdx = getNextReciteWordIndex(
+      debugVerseWords,
+      reciteExpectedIdxRef.current,
+    );
+    const debugExpectedWord =
+      debugExpectedIdx !== null ? debugVerseWords[debugExpectedIdx] : undefined;
+    const debugExpectedWordText = debugExpectedWord?.text_uthmani ?? "";
+    const debugExpectedWordNorm = stripTashkeel(debugExpectedWordText);
+    const debugExpectedWordTry = stripAlPrefix(debugExpectedWordNorm);
+    const debugExpectedWordNormalized =
+      debugExpectedWordTry.length >= 2 ? debugExpectedWordTry : debugExpectedWordNorm;
+    if (!isFinal) {
+      console.log("[recite-debug] raw interim transcript", {
+        rawTranscript: transcript,
+        normalizedHeardTokens: heardTokens,
+        expectedWordText: debugExpectedWordText,
+        expectedWordNormalized: debugExpectedWordNormalized,
+        currentAyahKey:
+          surahNumberRef.current !== null
+            ? `${surahNumberRef.current}:${currentVerseRef.current}`
+            : null,
+        currentPosition:
+          debugExpectedWord && Number.isFinite(debugExpectedWord.position)
+            ? debugExpectedWord.position
+            : debugExpectedIdx !== null
+              ? debugExpectedIdx + 1
+              : null,
+      });
+    }
+
     // Debounce only interim events. Final events are authoritative for an utterance
     // and must always run so iOS can commit the last word of an ayah.
     if (!isFinal && Date.now() - lastMatchTimeRef.current < 150) return;
 
-    const heardNormFull = stripTashkeel(transcript);
-    const heardTokens = tokenize(heardNormFull);
-
     const verseWords = displayWordsMapRef.current.get(currentVerseRef.current);
-    if (!verseWords) return;
+    if (!verseWords) {
+      console.log("[recite-debug] missing data for speech result", {
+        missing: "verseWords",
+        currentAyahKey:
+          surahNumberRef.current !== null
+            ? `${surahNumberRef.current}:${currentVerseRef.current}`
+            : null,
+        activeRange: {
+          surahNumber: surahNumberRef.current,
+          ayahStart: ayahStartRef.current,
+          ayahEnd: ayahEndRef.current,
+        },
+        transcript,
+        isFinal,
+        displayWordsMapSize: displayWordsMapRef.current.size,
+      });
+      return;
+    }
 
     let expectedIdx = reciteExpectedIdxRef.current;
     let advanced = false;
+    const prevWatermark = matchedWordCountRef.current;
+    let anchorIdx = 0;
+    let anchorToken: string | null = null;
+    let anchorFallbackDepth = -1;
+    const matchedHeardTokens = matchedHeardTokensRef.current;
+    anchorSearch:
+    for (let depth = 0; depth < matchedHeardTokens.length; depth++) {
+      const candidate = matchedHeardTokens[matchedHeardTokens.length - 1 - depth];
+      if (!candidate) continue;
+      for (let j = heardTokens.length - 1; j >= 0; j--) {
+        if (heardTokens[j] === candidate) {
+          anchorIdx = j + 1;
+          anchorToken = candidate;
+          anchorFallbackDepth = depth;
+          break anchorSearch;
+        }
+      }
+    }
+    matchedWordCountRef.current = anchorIdx;
+    console.log("[recite-debug] heard buffer reanchor", {
+      prevWatermark,
+      newWatermark: anchorIdx,
+      anchorToken,
+      anchorFallbackDepth,
+    });
     let searchFrom = matchedWordCountRef.current;
 
     // Walk forward through expected words, advancing as long as we keep finding
@@ -3856,7 +5041,9 @@ export default function MemorizationScreen() {
       const matchedRaw = heardTokens[foundAt];
       if (!matchedRaw) break;
       const matchedTry = stripAlPrefix(matchedRaw);
-      lastMatchedWordRef.current = matchedTry.length >= 2 ? matchedTry : matchedRaw;
+      const matchedNormalized = matchedTry.length >= 2 ? matchedTry : matchedRaw;
+      lastMatchedWordRef.current = matchedNormalized;
+      matchedHeardTokensRef.current.push(matchedNormalized);
       matchedWordCountRef.current = foundAt + 1;
       searchFrom = foundAt + 1;
 
@@ -3864,40 +5051,154 @@ export default function MemorizationScreen() {
     }
 
     if (advanced) {
+      console.log("[recite-debug] recite speech match advanced", {
+        currentAyahKey:
+          surahNumberRef.current !== null
+            ? `${surahNumberRef.current}:${currentVerseRef.current}`
+            : null,
+        fromExpectedIdx: reciteExpectedIdxRef.current,
+        toExpectedIdx: expectedIdx,
+        triggerSource: isFinal ? "speech-final" : "speech-interim",
+        transcript,
+        heardTokens,
+        matchedWordCount: matchedWordCountRef.current,
+        activeRange: {
+          surahNumber: surahNumberRef.current,
+          ayahStart: ayahStartRef.current,
+          ayahEnd: ayahEndRef.current,
+        },
+      });
       setReciteAttemptCount(0);
       if (expectedIdx >= verseWords.length) {
-        advancePastCurrentReciteVerse(0);
+        advancePastCurrentReciteVerse(0, isFinal ? "speech-final" : "speech-interim");
       } else {
         setReciteCursor(currentVerseRef.current, expectedIdx);
       }
     } else if (isFinal) {
+      console.log("[recite-debug] recite speech final no match", {
+        currentAyahKey:
+          surahNumberRef.current !== null
+            ? `${surahNumberRef.current}:${currentVerseRef.current}`
+            : null,
+        expectedIdx: reciteExpectedIdxRef.current,
+        expectedWord: {
+          position:
+            verseWords[reciteExpectedIdxRef.current]?.position ??
+            reciteExpectedIdxRef.current + 1,
+          text: verseWords[reciteExpectedIdxRef.current]?.text_uthmani ?? null,
+        },
+        transcript,
+        heardTokens,
+        attemptsBefore: reciteAttemptsRef.current,
+        attemptsAfter: reciteAttemptsRef.current + 1,
+      });
       addReciteAttempts(1);
     }
 
-    // Final result closes this utterance — reset search position so the
-    // next utterance starts fresh from token 0.
-    if (isFinal) {
-      matchedWordCountRef.current = 0;
-    }
   });
 
   useSpeechRecognitionEvent("error", (event) => {
     if (!reciteModeRef.current) return;
     const errorCode = getRecognitionErrorCode(event.error);
-    if (errorCode && SILENT_RECITE_ERROR_CODES.has(errorCode)) return;
+    if (errorCode && SILENT_RECITE_ERROR_CODES.has(errorCode)) {
+      console.log("[recite-debug] recite recognition silent error branch", {
+        error: event.error,
+        errorCode,
+        currentAyahKey:
+          surahNumberRef.current !== null
+            ? `${surahNumberRef.current}:${currentVerseRef.current}`
+            : null,
+        activeRange: {
+          surahNumber: surahNumberRef.current,
+          ayahStart: ayahStartRef.current,
+          ayahEnd: ayahEndRef.current,
+        },
+        modeFlags: {
+          reciteMode: reciteModeRef.current,
+          reciteListening,
+          readingReciteSession,
+        },
+      });
+      return;
+    }
 
+    console.log("[recite-debug] recite recognition error", {
+      error: event.error,
+      errorCode,
+      currentAyahKey:
+        surahNumberRef.current !== null
+          ? `${surahNumberRef.current}:${currentVerseRef.current}`
+          : null,
+      activeRange: {
+        surahNumber: surahNumberRef.current,
+        ayahStart: ayahStartRef.current,
+        ayahEnd: ayahEndRef.current,
+      },
+    });
     setReciteError(event.error ?? "Recognition error");
     setReciteListening(false);
   });
 
   useSpeechRecognitionEvent("end", () => {
+    console.log("[recite-debug] recite recognition ended", {
+      currentAyahKey:
+        surahNumberRef.current !== null
+          ? `${surahNumberRef.current}:${currentVerseRef.current}`
+          : null,
+      activeRange: {
+        surahNumber: surahNumberRef.current,
+        ayahStart: ayahStartRef.current,
+        ayahEnd: ayahEndRef.current,
+      },
+      modeFlags: {
+        reciteMode: reciteModeRef.current,
+        reciteListening,
+        readingReciteSession,
+      },
+    });
     setReciteListening(false);
   });
 
   useEffect(() => {
     if (reciteMode) {
+      console.log("[recite-debug] recite recognition decision", {
+        decision: "start-recognition",
+        currentAyahKey:
+          surahNumberRef.current !== null
+            ? `${surahNumberRef.current}:${currentVerseRef.current}`
+            : null,
+        activeRange: {
+          surahNumber: surahNumberRef.current,
+          ayahStart: ayahStartRef.current,
+          ayahEnd: ayahEndRef.current,
+        },
+        modeFlags: {
+          reciteMode,
+          reciteListening,
+          readingReciteSession,
+          viewMode: viewModeRef.current,
+        },
+      });
       void startRecognition();
     } else {
+      console.log("[recite-debug] recite recognition decision", {
+        decision: "stop-recognition",
+        currentAyahKey:
+          surahNumberRef.current !== null
+            ? `${surahNumberRef.current}:${currentVerseRef.current}`
+            : null,
+        activeRange: {
+          surahNumber: surahNumberRef.current,
+          ayahStart: ayahStartRef.current,
+          ayahEnd: ayahEndRef.current,
+        },
+        modeFlags: {
+          reciteMode,
+          reciteListening,
+          readingReciteSession,
+          viewMode: viewModeRef.current,
+        },
+      });
       ExpoSpeechRecognitionModule.stop();
       setReciteListening(false);
     }
@@ -3967,7 +5268,13 @@ export default function MemorizationScreen() {
       if (wordAudioSoundRef.current) {
         try {
           await wordAudioSoundRef.current.unloadAsync();
-        } catch {
+        } catch (error) {
+          console.log("[recite-debug] caught error:", error, {
+            source: "word-audio-stale-unload",
+            target,
+            reciteMode: reciteModeRef.current,
+            readingReciteSession,
+          });
           // ignore stale word audio
         }
         wordAudioSoundRef.current = null;
@@ -3986,7 +5293,13 @@ export default function MemorizationScreen() {
             }
             try {
               await finishedSound?.unloadAsync();
-            } catch {
+            } catch (error) {
+              console.log("[recite-debug] caught error:", error, {
+                source: "word-audio-finished-unload",
+                target,
+                reciteMode: reciteModeRef.current,
+                readingReciteSession,
+              });
               // ignore — the short word clip may already be gone
             }
           })();
@@ -3996,10 +5309,22 @@ export default function MemorizationScreen() {
       wordAudioSoundRef.current = result.sound;
       try {
         await result.sound.setVolumeAsync(1.0);
-      } catch {
+      } catch (error) {
+        console.log("[recite-debug] caught error:", error, {
+          source: "word-audio-set-volume",
+          target,
+          reciteMode: reciteModeRef.current,
+          readingReciteSession,
+        });
         // best-effort
       }
-    } catch {
+    } catch (error) {
+      console.log("[recite-debug] caught error:", error, {
+        source: "word-audio-play",
+        target,
+        reciteMode: reciteModeRef.current,
+        readingReciteSession,
+      });
       Alert.alert("Word audio unavailable", "Try playing this word again in a moment.");
     } finally {
       setWordAudioLoadingKey((key) => (key === target.key ? null : key));
@@ -4080,7 +5405,13 @@ export default function MemorizationScreen() {
     try {
       const verse = await fetchAyahWithWords(target.verseKey);
       return { ...target, textUthmani: verse.text_uthmani };
-    } catch {
+    } catch (error) {
+      console.log("[recite-debug] caught error:", error, {
+        source: "ensure-ayah-action-text",
+        target,
+        reciteMode: reciteModeRef.current,
+        readingReciteSession,
+      });
       return target;
     }
   }
@@ -4166,7 +5497,13 @@ export default function MemorizationScreen() {
       if (soundRef.current) {
         try {
           await soundRef.current.unloadAsync();
-        } catch {
+        } catch (error) {
+          console.log("[recite-debug] caught error:", error, {
+            source: "listen-to-ayah-stale-session-unload",
+            target,
+            reciteMode: reciteModeRef.current,
+            readingReciteSession,
+          });
           // ignore stale session audio
         }
         soundRef.current = null;
@@ -4215,7 +5552,13 @@ export default function MemorizationScreen() {
             }
             try {
               await finishedSound?.unloadAsync();
-            } catch {
+            } catch (error) {
+              console.log("[recite-debug] caught error:", error, {
+                source: "listen-to-ayah-finished-unload",
+                target,
+                reciteMode: reciteModeRef.current,
+                readingReciteSession,
+              });
               // single-ayah preview may already be unloaded
             }
           })();
@@ -4226,7 +5569,14 @@ export default function MemorizationScreen() {
       try {
         await sound.setVolumeAsync(1.0);
         await sound.setRateAsync(playbackRateRef.current, true);
-      } catch {
+      } catch (error) {
+        console.log("[recite-debug] caught error:", error, {
+          source: "listen-to-ayah-volume-or-rate",
+          target,
+          playbackRate: playbackRateRef.current,
+          reciteMode: reciteModeRef.current,
+          readingReciteSession,
+        });
         // best-effort
       }
       if (source.startMillis > 0) {
@@ -4235,7 +5585,13 @@ export default function MemorizationScreen() {
       await sound.playAsync();
       isPlayingRef.current = true;
       setIsPlaying(true);
-    } catch {
+    } catch (error) {
+      console.log("[recite-debug] caught error:", error, {
+        source: "listen-to-ayah-play",
+        target,
+        reciteMode: reciteModeRef.current,
+        readingReciteSession,
+      });
       Alert.alert("Audio unavailable", "Try listening to this ayah again in a moment.");
     } finally {
       isLoadingRef.current = false;
@@ -4263,7 +5619,13 @@ export default function MemorizationScreen() {
             }
           : current,
       );
-    } catch {
+    } catch (error) {
+      console.log("[recite-debug] caught error:", error, {
+        source: "open-ayah-translation",
+        target,
+        reciteMode: reciteModeRef.current,
+        readingReciteSession,
+      });
       setTranslationPopup((current) =>
         current?.verseKey === target.verseKey
           ? {
@@ -4282,7 +5644,13 @@ export default function MemorizationScreen() {
       await saveMushafAyahBookmark(childId, getMushafBookmarkTarget(target));
       setTappedAyah(null);
       Alert.alert("Bookmarked", `Bookmarked ${getAyahActionTitle(target).replace(" — Verse", " verse")}.`);
-    } catch {
+    } catch (error) {
+      console.log("[recite-debug] caught error:", error, {
+        source: "bookmark-ayah",
+        target,
+        reciteMode: reciteModeRef.current,
+        readingReciteSession,
+      });
       Alert.alert("Bookmark unavailable", "Try bookmarking this ayah again in a moment.");
     }
   }
@@ -4309,7 +5677,22 @@ export default function MemorizationScreen() {
     action: (target: AyahSheetTarget) => void | Promise<void>,
   ) {
     const target = testMushafSheetTarget;
-    if (!target) return;
+    if (!target) {
+      console.log("[recite-debug] missing data for test mushaf action target", {
+        missing: "testMushafSheetTarget",
+        currentAyahKey:
+          surahNumberRef.current !== null
+            ? `${surahNumberRef.current}:${currentVerseRef.current}`
+            : null,
+        activeRange: {
+          surahNumber: surahNumberRef.current,
+          ayahStart: ayahStartRef.current,
+          ayahEnd: ayahEndRef.current,
+        },
+        reciteMode: reciteModeRef.current,
+      });
+      return;
+    }
     setTestMushafSheetTarget(null);
     const resolvedTarget = await ensureAyahActionText(target);
     await action(resolvedTarget);
@@ -5147,6 +6530,91 @@ export default function MemorizationScreen() {
   const readingReciteCompletedThroughAyah = readingReciteSession
     ? getReadingReciteCompletedThroughAyah()
     : null;
+  useEffect(() => {
+    console.log("[recite-debug] reset button state changed", {
+      enabled: canUseRepeatReset,
+      canSkipRepeat,
+      canRestartAfterDeferredPrompt,
+      currentAyahKey:
+        surahNumber !== null ? `${surahNumber}:${currentVerse}` : null,
+      activeRange: { surahNumber, ayahStart, ayahEnd },
+      modeFlags: {
+        reciteMode,
+        readingReciteSession,
+        internalPhase,
+        readyToReciteDeferred,
+        submitting,
+      },
+    });
+  }, [
+    ayahEnd,
+    ayahStart,
+    canRestartAfterDeferredPrompt,
+    canSkipRepeat,
+    canUseRepeatReset,
+    currentVerse,
+    internalPhase,
+    readingReciteSession,
+    readyToReciteDeferred,
+    reciteMode,
+    submitting,
+    surahNumber,
+  ]);
+  useEffect(() => {
+    if (!readingReciteExitOpen) return;
+    console.log("[recite-debug] save prompt shown", {
+      source: "reading-recite-exit-modal-visible",
+      completedThrough: readingReciteCompletedThroughAyah,
+      currentAyahKey:
+        surahNumber !== null ? `${surahNumber}:${currentVerse}` : null,
+      activeRange: { surahNumber, ayahStart, ayahEnd },
+      modeFlags: {
+        reciteMode,
+        reciteListening,
+        readingReciteSession,
+        viewMode,
+        submitting,
+      },
+    });
+  }, [
+    ayahEnd,
+    ayahStart,
+    currentVerse,
+    readingReciteCompletedThroughAyah,
+    readingReciteExitOpen,
+    readingReciteSession,
+    reciteListening,
+    reciteMode,
+    submitting,
+    surahNumber,
+    viewMode,
+  ]);
+  useEffect(() => {
+    console.log("[recite-debug] return-to-current-ayah visibility changed", {
+      shown: showReadingReciteReturnButton,
+      currentReciteWordPage,
+      displayedRecitePage,
+      currentAyahKey:
+        surahNumber !== null ? `${surahNumber}:${playingVerseNumber}` : null,
+      activeRange: { surahNumber, ayahStart, ayahEnd },
+      modeFlags: {
+        reciteMode,
+        readingReciteSession,
+        viewMode,
+      },
+    });
+  }, [
+    ayahEnd,
+    ayahStart,
+    currentReciteWordPage,
+    displayedRecitePage,
+    playingVerseNumber,
+    readingReciteSession,
+    reciteMode,
+    showReadingReciteReturnButton,
+    surahNumber,
+    viewMode,
+  ]);
   const getMushafItemLayout = useCallback(
     (_data: ArrayLike<number> | null | undefined, index: number) => ({
       length: mushafPageWidth,
@@ -5161,7 +6629,24 @@ export default function MemorizationScreen() {
       setTimeout(() => {
         try {
           mushafListRef.current?.scrollToOffset({ offset, animated: true });
-        } catch {
+        } catch (error) {
+          if (reciteModeRef.current) {
+            console.log("[recite-debug] caught error:", error, {
+              source: "session-mushaf-scroll-to-index-failed-retry",
+              index: info.index,
+              offset,
+              currentAyahKey:
+                surahNumberRef.current !== null
+                  ? `${surahNumberRef.current}:${currentVerseRef.current}`
+                  : null,
+              activeRange: {
+                surahNumber: surahNumberRef.current,
+                ayahStart: ayahStartRef.current,
+                ayahEnd: ayahEndRef.current,
+              },
+              readingReciteSession,
+            });
+          }
           // FlatList may still be measuring its first page.
         }
       }, 80);
@@ -5751,7 +7236,21 @@ export default function MemorizationScreen() {
       {showReadingReciteReturnButton && currentReciteWordPage !== null ? (
         <Pressable
           style={styles.readingReciteReturnButton}
-          onPress={() => updateDisplayedMushafPage(currentReciteWordPage)}
+          onPress={() => {
+            console.log("[recite-debug] return-to-current-ayah tapped", {
+              targetPage: currentReciteWordPage,
+              displayedRecitePage,
+              currentAyahKey:
+                surahNumber !== null ? `${surahNumber}:${playingVerseNumber}` : null,
+              activeRange: { surahNumber, ayahStart, ayahEnd },
+              modeFlags: {
+                reciteMode,
+                readingReciteSession,
+                viewMode,
+              },
+            });
+            updateDisplayedMushafPage(currentReciteWordPage);
+          }}
           accessibilityRole="button"
           accessibilityLabel={`Return to current recite ayah on page ${currentReciteWordPage}`}
         >
@@ -5835,6 +7334,21 @@ export default function MemorizationScreen() {
               !canUseRepeatReset && styles.playbackIconButtonDisabled,
             ]}
             onPress={() => {
+              console.log("[recite-debug] reset button pressed", {
+                enabled: canUseRepeatReset,
+                action: canRestartAfterDeferredPrompt
+                  ? "restart-completed-session"
+                  : "skip-repeat",
+                currentAyahKey:
+                  surahNumber !== null ? `${surahNumber}:${currentVerse}` : null,
+                activeRange: { surahNumber, ayahStart, ayahEnd },
+                modeFlags: {
+                  reciteMode,
+                  readingReciteSession,
+                  internalPhase,
+                  readyToReciteDeferred,
+                },
+              });
               void (
                 canRestartAfterDeferredPrompt
                   ? handleRestartCompletedSession()
@@ -6495,24 +8009,6 @@ export default function MemorizationScreen() {
                 <Pressable
                   style={[
                     styles.settingsSegmentPill,
-                    viewMode === "page" && styles.settingsSegmentPillSelected,
-                  ]}
-                  onPress={() => setViewMode("page")}
-                  accessibilityRole="button"
-                  accessibilityState={{ selected: viewMode === "page" }}
-                >
-                  <Text
-                    style={[
-                      styles.settingsSegmentText,
-                      viewMode === "page" && styles.settingsSegmentTextSelected,
-                    ]}
-                  >
-                    Full Mushaf
-                  </Text>
-                </Pressable>
-                <Pressable
-                  style={[
-                    styles.settingsSegmentPill,
                     viewMode === "test-mushaf" && styles.settingsSegmentPillSelected,
                   ]}
                   onPress={() => setViewMode("test-mushaf")}
@@ -6525,7 +8021,7 @@ export default function MemorizationScreen() {
                       viewMode === "test-mushaf" && styles.settingsSegmentTextSelected,
                     ]}
                   >
-                    Test Mushaf
+                    Full Mushaf
                   </Text>
                 </Pressable>
               </View>
@@ -7452,6 +8948,31 @@ function ReadingReciteRangeSetup({
   useEffect(() => {
     setToInput(String(toAyah));
   }, [toAyah]);
+  useEffect(() => {
+    console.log("[recite-debug] range picker shown", {
+      source: "reading-recite",
+      childId,
+      surahNumber: target.surahNumber,
+      startAyahPrefill: fromAyah,
+      endAyahOptions: { min: fromAyah, max: maxAyah },
+      selectedEndAyah: toAyah,
+      pageRange: estimatePageRange(target.surahNumber, fromAyah, toAyah),
+      missingData: surah === undefined ? "surah-metadata" : null,
+      modeFlags: {
+        fromReadingRecite: target.fromReadingRecite,
+        startInReciteMode: target.startInReciteMode,
+      },
+    });
+  }, [
+    childId,
+    fromAyah,
+    maxAyah,
+    surah,
+    target.fromReadingRecite,
+    target.startInReciteMode,
+    target.surahNumber,
+    toAyah,
+  ]);
 
   function commitToInput() {
     const parsed = Number.parseInt(toInput, 10);
@@ -7486,13 +9007,31 @@ function ReadingReciteRangeSetup({
   return (
     <View style={styles.setupContainer}>
       <View style={styles.discoveryHeader}>
-        <Pressable onPress={onCancel} style={styles.discoveryBackButton}>
+        <Pressable
+          onPress={() => {
+            console.log("[recite-debug] range picker cancelled", {
+              source: "reading-recite",
+              childId,
+              surahNumber: target.surahNumber,
+              startAyahPrefill: fromAyah,
+              selectedEndAyah: toAyah,
+              activeRange: { ayahStart: fromAyah, ayahEnd: toAyah },
+              pageRange: estimatePageRange(target.surahNumber, fromAyah, toAyah),
+              modeFlags: {
+                fromReadingRecite: target.fromReadingRecite,
+                startInReciteMode: target.startInReciteMode,
+              },
+            });
+            onCancel();
+          }}
+          style={styles.discoveryBackButton}
+        >
           <Text style={styles.back}>← Back</Text>
         </Pressable>
         <View style={styles.discoveryHeaderText}>
           <Text style={styles.discoveryTitle}>Recite from Reading</Text>
           <Text style={styles.discoverySubtitle}>
-            {name ? `${name}'s Test Mushaf recitation` : "Test Mushaf recitation"}
+            {name ? `${name}'s Full Mushaf recitation` : "Full Mushaf recitation"}
           </Text>
         </View>
         <View style={styles.discoveryHeaderActionPlaceholder} />
@@ -7564,11 +9103,35 @@ function ReadingReciteRangeSetup({
             </View>
           </View>
           <Text style={styles.setupCardDetail}>
-            {totalAyahs} ayah{totalAyahs === 1 ? "" : "s"} selected for Test Mushaf recitation.
+            {totalAyahs} ayah{totalAyahs === 1 ? "" : "s"} selected for Full Mushaf recitation.
           </Text>
         </View>
 
-        <Pressable style={styles.setupPrimaryButton} onPress={() => onStart(buildTarget())}>
+        <Pressable
+          style={styles.setupPrimaryButton}
+          onPress={() => {
+            const nextTarget = buildTarget();
+            console.log("[recite-debug] range picker confirmed", {
+              source: "reading-recite",
+              childId,
+              selectedRange: {
+                surahNumber: nextTarget.surahNumber,
+                ayahStart: nextTarget.ayahStart,
+                ayahEnd: nextTarget.ayahEnd,
+              },
+              pageRange: {
+                pageStart: nextTarget.pageStart,
+                pageEnd: nextTarget.pageEnd,
+              },
+              willAutoEngageRecite: Boolean(nextTarget.startInReciteMode),
+              modeFlags: {
+                fromReadingRecite: nextTarget.fromReadingRecite,
+                startInReciteMode: nextTarget.startInReciteMode,
+              },
+            });
+            onStart(nextTarget);
+          }}
+        >
           <Text style={styles.setupPrimaryButtonText}>
             Start Reciting · Ayah {fromAyah}
             {fromAyah === toAyah ? "" : `-${toAyah}`}

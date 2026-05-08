@@ -1,50 +1,83 @@
-# Welcome to your Expo app 👋
+# NoorPath Mobile
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+Expo/React Native mobile app for NoorPath. This app uses Expo Router and EAS.
 
-## Get started
+## Local Development
 
-1. Install dependencies
-
-   ```bash
-   npm install
-   ```
-
-2. Start the app
-
-   ```bash
-   npx expo start
-   ```
-
-In the output, you'll find options to open the app in a
-
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
-
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
+From this folder:
 
 ```bash
-npm run reset-project
+cd /Users/mothmanaurascape.ai/Desktop/Quranic-Journey/artifacts/noor-mobile
+npx expo start --dev-client -c
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+Scan the Metro QR code with the installed development build. If the phone is really connected to Metro, the terminal will show bundling/downloading and runtime logs.
 
-## Learn more
+If the QR opens the app but Metro shows no bundling/log activity, the phone is probably opening the TestFlight build or another stale installed build.
 
-To learn more about developing your project with Expo, look at the following resources:
+## Development Build
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+Install a dev-capable iOS build with:
 
-## Join the community
+```bash
+cd /Users/mothmanaurascape.ai/Desktop/Quranic-Journey/artifacts/noor-mobile
+npx eas-cli@latest build --profile development --platform ios
+```
 
-Join our community of developers creating universal apps.
+Then open the Expo build link on the iPhone and install the app. After that, use `npx expo start --dev-client -c` for normal JS/UI development.
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+You do not need a new EAS development build for ordinary JS/React changes. Rebuild only for native/config changes such as native packages, permissions, bundle id, plugins, icons/splash, Expo SDK, or React Native upgrades.
+
+## TestFlight
+
+Current iOS/TestFlight config:
+
+- Expo project: `@mothman123/noor-mobile`
+- EAS project ID: `a9b0cbd2-b32a-4b97-9be1-23d7ebc7afdd`
+- iOS bundle identifier: `com.mothman.noorpath`
+- App Store Connect App ID: `6767622472`
+- Apple Team ID: `M7KJJDN537`
+- TestFlight internal group: `Team (Expo)`
+- Build profiles live in `eas.json`
+- iOS app config lives in `app.json`
+
+Publish the current local code to TestFlight with:
+
+```bash
+cd /Users/mothmanaurascape.ai/Desktop/Quranic-Journey/artifacts/noor-mobile
+npx testflight
+```
+
+After upload, wait for Apple processing, then check App Store Connect:
+
+```text
+https://appstoreconnect.apple.com/apps/6767622472/testflight/ios
+```
+
+If a build shows `Ready to Submit`, open the build, fill **What to Test**, make sure it is attached to `Team (Expo)`, and notify testers.
+
+## Dev/TestFlight Bundle ID Collision
+
+The development build and TestFlight build currently share the same iOS bundle id:
+
+```text
+com.mothman.noorpath
+```
+
+iOS can only keep one installed app per bundle id. Installing TestFlight can replace the dev build, and installing the dev build can replace TestFlight. When this happens, Metro will not show logs because the phone is running the frozen TestFlight binary instead of the local dev bundle.
+
+Long-term fix: give the dev build its own bundle id, for example:
+
+```text
+com.mothman.noorpath.dev
+```
+
+That would allow both apps to stay installed at the same time.
+
+## Verification
+
+Typecheck the mobile app with:
+
+```bash
+/Users/mothmanaurascape.ai/Library/pnpm/pnpm --filter @workspace/noor-mobile exec tsc --noEmit
+```
