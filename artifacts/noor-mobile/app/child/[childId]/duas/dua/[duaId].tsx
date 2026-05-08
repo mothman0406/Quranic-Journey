@@ -25,6 +25,7 @@ import {
   type ChildDuaProgressEntry,
   type Dua,
 } from "@/src/lib/duas";
+import { useAppTheme, type AppThemeColors } from "@/src/lib/app-theme";
 
 type DuaDetailState =
   | { status: "loading" }
@@ -73,6 +74,8 @@ function ExpandableSection({
   title: string;
   value: string | null;
 }) {
+  const { colors } = useAppTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const [expanded, setExpanded] = useState(false);
   if (!value) return null;
 
@@ -88,7 +91,7 @@ function ExpandableSection({
         <Ionicons
           name={expanded ? "chevron-up" : "chevron-down"}
           size={18}
-          color="#64748b"
+          color={colors.textMuted}
         />
       </Pressable>
       {expanded ? <Text style={styles.expandableText}>{value}</Text> : null}
@@ -103,6 +106,8 @@ export default function DuaDetailScreen() {
     name?: string;
   }>();
   const router = useRouter();
+  const { colors } = useAppTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const [state, setState] = useState<DuaDetailState>({ status: "loading" });
   const [saving, setSaving] = useState(false);
 
@@ -205,19 +210,19 @@ export default function DuaDetailScreen() {
             <View style={styles.metaWrap}>
               {state.dua.reference ? (
                 <View style={styles.metaPill}>
-                  <Ionicons name="library-outline" size={14} color="#475569" />
+                  <Ionicons name="library-outline" size={14} color={colors.textMuted} />
                   <Text style={styles.metaText}>{state.dua.reference}</Text>
                 </View>
               ) : null}
               {state.dua.repetitions !== null ? (
                 <View style={styles.metaPill}>
-                  <Ionicons name="repeat-outline" size={14} color="#0f766e" />
+                  <Ionicons name="repeat-outline" size={14} color={colors.success} />
                   <Text style={styles.metaText}>{formatRepetitions(state.dua.repetitions)}</Text>
                 </View>
               ) : null}
               {state.progress.practicedCount > 0 ? (
                 <View style={styles.metaPill}>
-                  <Ionicons name="stats-chart-outline" size={14} color="#7c3aed" />
+                  <Ionicons name="stats-chart-outline" size={14} color={colors.primary} />
                   <Text style={styles.metaText}>
                     {formatPracticeCount(state.progress.practicedCount)}
                   </Text>
@@ -244,13 +249,13 @@ export default function DuaDetailScreen() {
               {saving ? (
                 <ActivityIndicator
                   size="small"
-                  color={state.progress.learned ? "#ffffff" : "#0f766e"}
+                  color={state.progress.learned ? colors.textInverse : colors.success}
                 />
               ) : (
                 <Ionicons
                   name={state.progress.learned ? "checkmark-circle" : "ellipse-outline"}
                   size={20}
-                  color={state.progress.learned ? "#ffffff" : "#0f766e"}
+                  color={state.progress.learned ? colors.textInverse : colors.success}
                 />
               )}
               <Text
@@ -271,7 +276,8 @@ export default function DuaDetailScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(colors: AppThemeColors) {
+  return StyleSheet.create({
   content: {
     paddingBottom: 24,
   },
@@ -279,27 +285,27 @@ const styles = StyleSheet.create({
     gap: 5,
   },
   categoryLabel: {
-    color: "#0891b2",
+    color: colors.success,
     fontSize: 12,
     fontWeight: "900",
     textTransform: "uppercase",
   },
   title: {
-    color: "#111827",
+    color: colors.text,
     fontSize: 22,
     lineHeight: 28,
     fontWeight: "900",
   },
   arabicCard: {
-    backgroundColor: "#ffffff",
+    backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: "#e2e8f0",
+    borderColor: colors.border,
     borderRadius: 12,
     paddingVertical: 20,
     paddingHorizontal: 18,
   },
   arabicText: {
-    color: "#111827",
+    color: colors.text,
     fontFamily: "AmiriQuran",
     fontSize: 30,
     lineHeight: 56,
@@ -307,27 +313,27 @@ const styles = StyleSheet.create({
     writingDirection: "rtl",
   },
   textCard: {
-    backgroundColor: "#ffffff",
+    backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: "#e5e7eb",
+    borderColor: colors.border,
     borderRadius: 12,
     padding: 14,
     gap: 7,
   },
   sectionKicker: {
-    color: "#64748b",
+    color: colors.textMuted,
     fontSize: 11,
     fontWeight: "900",
     textTransform: "uppercase",
   },
   transliteration: {
-    color: "#334155",
+    color: colors.textMuted,
     fontSize: 15,
     lineHeight: 22,
     fontStyle: "italic",
   },
   translation: {
-    color: "#334155",
+    color: colors.textMuted,
     fontSize: 15,
     lineHeight: 22,
     fontWeight: "600",
@@ -342,22 +348,22 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 6,
     borderWidth: 1,
-    borderColor: "#e2e8f0",
-    backgroundColor: "#ffffff",
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
     borderRadius: 999,
     paddingVertical: 7,
     paddingHorizontal: 10,
   },
   metaText: {
-    color: "#475569",
+    color: colors.textMuted,
     fontSize: 12,
     lineHeight: 16,
     fontWeight: "800",
   },
   expandableCard: {
-    backgroundColor: "#ffffff",
+    backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: "#e5e7eb",
+    borderColor: colors.border,
     borderRadius: 12,
     overflow: "hidden",
   },
@@ -371,12 +377,12 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   expandableTitle: {
-    color: "#111827",
+    color: colors.text,
     fontSize: 14,
     fontWeight: "900",
   },
   expandableText: {
-    color: "#475569",
+    color: colors.textMuted,
     fontSize: 14,
     lineHeight: 21,
     fontWeight: "600",
@@ -385,8 +391,8 @@ const styles = StyleSheet.create({
   },
   actionWrap: {
     borderTopWidth: 1,
-    borderTopColor: "#e2e8f0",
-    backgroundColor: "#ffffff",
+    borderTopColor: colors.border,
+    backgroundColor: colors.surface,
     paddingTop: 10,
     paddingHorizontal: 16,
     paddingBottom: 10,
@@ -394,8 +400,8 @@ const styles = StyleSheet.create({
   learnedButton: {
     minHeight: 48,
     borderWidth: 1,
-    borderColor: "#99f6e4",
-    backgroundColor: "#f0fdfa",
+    borderColor: colors.successBorder,
+    backgroundColor: colors.successSoft,
     borderRadius: 12,
     flexDirection: "row",
     alignItems: "center",
@@ -403,18 +409,19 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   learnedButtonActive: {
-    borderColor: "#059669",
-    backgroundColor: "#059669",
+    borderColor: colors.success,
+    backgroundColor: colors.success,
   },
   learnedButtonDisabled: {
     opacity: 0.7,
   },
   learnedButtonText: {
-    color: "#0f766e",
+    color: colors.success,
     fontSize: 15,
     fontWeight: "900",
   },
   learnedButtonTextActive: {
-    color: "#ffffff",
+    color: colors.textInverse,
   },
-});
+  });
+}

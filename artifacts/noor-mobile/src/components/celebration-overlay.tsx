@@ -9,6 +9,7 @@ import {
   useWindowDimensions,
   View,
 } from "react-native";
+import { useAppTheme, type AppThemeColors } from "@/src/lib/app-theme";
 
 type CelebrationOverlayProps = {
   show: boolean;
@@ -62,6 +63,8 @@ export function CelebrationOverlay({
   subMessage,
   onDone,
 }: CelebrationOverlayProps) {
+  const { colors } = useAppTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const { height, width } = useWindowDimensions();
   const confetti = useMemo(makeConfetti, []);
   const animations = useRef(confetti.map(() => new Animated.Value(0))).current;
@@ -155,12 +158,13 @@ export function CelebrationOverlay({
   );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(colors: AppThemeColors) {
+  return StyleSheet.create({
   backdrop: {
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(0,0,0,0.52)",
+    backgroundColor: colors.overlay,
     padding: 24,
   },
   confettiPiece: {
@@ -171,11 +175,11 @@ const styles = StyleSheet.create({
     width: "100%",
     maxWidth: 360,
     borderRadius: 20,
-    backgroundColor: "#ffffff",
+    backgroundColor: colors.surface,
     paddingHorizontal: 28,
     paddingVertical: 32,
     alignItems: "center",
-    shadowColor: "#000000",
+    shadowColor: colors.shadow,
     shadowOpacity: 0.22,
     shadowRadius: 22,
     shadowOffset: { width: 0, height: 14 },
@@ -183,20 +187,20 @@ const styles = StyleSheet.create({
   },
   arabic: {
     marginBottom: 12,
-    color: "#047857",
+    color: colors.success,
     fontSize: 34,
     lineHeight: 52,
     textAlign: "center",
   },
   title: {
-    color: "#111827",
+    color: colors.text,
     fontSize: 21,
     fontWeight: "900",
     textAlign: "center",
   },
   subtitle: {
     marginTop: 10,
-    color: "#6b7280",
+    color: colors.textMuted,
     fontSize: 14,
     lineHeight: 21,
     textAlign: "center",
@@ -208,11 +212,12 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#059669",
+    backgroundColor: colors.success,
   },
   buttonText: {
-    color: "#ffffff",
+    color: colors.textInverse,
     fontSize: 16,
     fontWeight: "900",
   },
-});
+  });
+}

@@ -12,6 +12,7 @@ import {
   type LayoutChangeEvent,
 } from "react-native";
 import { Image } from "expo-image";
+import { useAppTheme, type AppThemeColors } from "@/src/lib/app-theme";
 import {
   QURAN_COM_1405_NATIVE_HEIGHT,
   QURAN_COM_1405_NATIVE_WIDTH,
@@ -306,6 +307,8 @@ function MushafTestPage({
   onDismissWordTranslation: () => void;
   onActionSheetBackdropPress?: () => void;
 }) {
+  const { colors } = useAppTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const [containerLayout, setContainerLayout] = useState<PageLayout>({ width: 0, height: 0 });
   const suppressedLongPressKeyRef = useRef<string | null>(null);
   const imageSource = getQuranCom1405PageImage(pageNumber);
@@ -752,6 +755,8 @@ export function MushafTestPageView({
   actionSheetVisible = false,
   onActionSheetBackdropPress,
 }: MushafTestPageViewProps) {
+  const { colors } = useAppTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const { width: screenWidth } = useWindowDimensions();
   const pageWidth = Math.max(1, Math.round(screenWidth));
   const scrollPageItemHeight = useMemo(
@@ -1318,20 +1323,21 @@ export function MushafTestPageView({
   );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(colors: AppThemeColors) {
+  return StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#f8fafc",
+    backgroundColor: colors.background,
   },
   pageList: {
     flex: 1,
-    backgroundColor: "#f8fafc",
+    backgroundColor: colors.background,
   },
   pageWrap: {
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#f8fafc",
+    backgroundColor: colors.background,
   },
   pageImageShell: {
     backgroundColor: "#ffffff",
@@ -1378,8 +1384,8 @@ const styles = StyleSheet.create({
   reciteMaskCurrent: {
     // Current target: blue outline on top of the mask while text stays hidden.
     borderWidth: 2,
-    borderColor: "#3b82f6",
-    backgroundColor: "#eff6ff",
+    borderColor: colors.primary,
+    backgroundColor: colors.primarySoft,
     zIndex: 5,
   },
   reciteMaskCurrentRevealed: {
@@ -1444,18 +1450,19 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#fef2f2",
+    backgroundColor: colors.dangerSoft,
     padding: 24,
   },
   errorTitle: {
-    color: "#dc2626",
+    color: colors.danger,
     fontSize: 14,
     fontWeight: "700",
     marginBottom: 4,
   },
   errorBody: {
-    color: "#dc2626",
+    color: colors.danger,
     fontSize: 11,
     textAlign: "center",
   },
-});
+  });
+}

@@ -1,4 +1,4 @@
-import type { ComponentProps, ReactNode } from "react";
+import { useMemo, type ComponentProps, type ReactNode } from "react";
 import {
   ActivityIndicator,
   Pressable,
@@ -12,10 +12,12 @@ import {
   type ViewStyle,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { hexToRgba, useAppTheme, type AppThemeColors } from "@/src/lib/app-theme";
 
 type IconName = ComponentProps<typeof Ionicons>["name"];
 
 export function ScreenContainer({ children }: { children: ReactNode }) {
+  const styles = usePrimitiveStyles();
   return <View style={styles.container}>{children}</View>;
 }
 
@@ -32,6 +34,7 @@ export function ScreenHeader({
   backLabel?: string;
   sideWidth?: number;
 }) {
+  const styles = usePrimitiveStyles();
   return (
     <View style={styles.header}>
       <Pressable onPress={onBack} style={[styles.headerSide, { width: sideWidth }]}>
@@ -52,6 +55,7 @@ export function ScreenScrollView({
   contentContainerStyle?: StyleProp<ViewStyle>;
   refreshControl?: ScrollViewProps["refreshControl"];
 }) {
+  const styles = usePrimitiveStyles();
   return (
     <ScrollView
       style={styles.scroll}
@@ -64,13 +68,16 @@ export function ScreenScrollView({
 }
 
 export function ScreenCenter({ children }: { children: ReactNode }) {
+  const styles = usePrimitiveStyles();
   return <View style={styles.center}>{children}</View>;
 }
 
 export function LoadingState({ label }: { label?: string }) {
+  const styles = usePrimitiveStyles();
+  const { colors } = useAppTheme();
   return (
     <ScreenCenter>
-      <ActivityIndicator size="large" color="#2563eb" />
+      <ActivityIndicator size="large" color={colors.primary} />
       {label ? <Text style={styles.loadingLabel}>{label}</Text> : null}
     </ScreenCenter>
   );
@@ -83,10 +90,12 @@ export function EmptyState({
   title: string;
   detail?: string;
 }) {
+  const styles = usePrimitiveStyles();
+  const { colors } = useAppTheme();
   return (
     <View style={styles.empty}>
       <View style={styles.stateIcon}>
-        <Ionicons name="leaf-outline" size={22} color="#0f766e" />
+        <Ionicons name="leaf-outline" size={22} color={colors.success} />
       </View>
       <Text style={styles.emptyTitle}>{title}</Text>
       {detail ? <Text style={styles.emptyDetail}>{detail}</Text> : null}
@@ -101,11 +110,13 @@ export function ErrorState({
   message: string;
   onRetry?: () => void;
 }) {
+  const styles = usePrimitiveStyles();
+  const { colors } = useAppTheme();
   return (
     <ScreenCenter>
       <View style={styles.errorCard}>
         <View style={styles.errorIcon}>
-          <Ionicons name="alert-circle-outline" size={22} color="#dc2626" />
+          <Ionicons name="alert-circle-outline" size={22} color={colors.danger} />
         </View>
         <Text style={styles.errorText}>{message}</Text>
       </View>
@@ -125,9 +136,11 @@ export function InlineError({
   message: string;
   onRetry?: () => void;
 }) {
+  const styles = usePrimitiveStyles();
+  const { colors } = useAppTheme();
   return (
     <View style={styles.inlineError}>
-      <Ionicons name="alert-circle-outline" size={17} color="#dc2626" />
+      <Ionicons name="alert-circle-outline" size={17} color={colors.danger} />
       <Text style={styles.inlineErrorText}>{message}</Text>
       {onRetry ? (
         <Pressable style={styles.inlineErrorButton} onPress={onRetry}>
@@ -139,18 +152,20 @@ export function InlineError({
 }
 
 export function SectionLabel({ children }: { children: ReactNode }) {
+  const styles = usePrimitiveStyles();
   return <Text style={styles.sectionLabel}>{children}</Text>;
 }
 
 export function CardGroup({ children }: { children: ReactNode }) {
+  const styles = usePrimitiveStyles();
   return <View style={styles.cardGroup}>{children}</View>;
 }
 
 export function BadgePill({
   label,
-  color = "#666666",
-  backgroundColor = "#f9fafb",
-  borderColor = "#e5e7eb",
+  color,
+  backgroundColor,
+  borderColor,
   dotColor,
 }: {
   label: string;
@@ -159,10 +174,20 @@ export function BadgePill({
   borderColor?: string;
   dotColor?: string;
 }) {
+  const styles = usePrimitiveStyles();
+  const { colors } = useAppTheme();
   return (
-    <View style={[styles.pill, { backgroundColor, borderColor }]}>
+    <View
+      style={[
+        styles.pill,
+        {
+          backgroundColor: backgroundColor ?? colors.surfaceSubtle,
+          borderColor: borderColor ?? colors.border,
+        },
+      ]}
+    >
       {dotColor ? <View style={[styles.pillDot, { backgroundColor: dotColor }]} /> : null}
-      <Text style={[styles.pillText, { color }]}>{label}</Text>
+      <Text style={[styles.pillText, { color: color ?? colors.textMuted }]}>{label}</Text>
     </View>
   );
 }
@@ -190,13 +215,15 @@ export function ListRow({
   detailNumberOfLines?: number;
   detailTextStyle?: StyleProp<TextStyle>;
 }) {
+  const styles = usePrimitiveStyles();
+  const { colors } = useAppTheme();
   return (
     <Pressable
       style={[styles.row, disabled && styles.rowDisabled]}
       disabled={disabled || !onPress}
       onPress={onPress}
     >
-      <View style={[styles.rowIcon, { backgroundColor: `${iconColor}14` }]}>
+      <View style={[styles.rowIcon, { backgroundColor: hexToRgba(iconColor, 0.08) }]}>
         <Ionicons name={iconName} size={21} color={iconColor} />
       </View>
       <View style={styles.rowText}>
@@ -210,15 +237,21 @@ export function ListRow({
           </Text>
         ) : null}
       </View>
-      {trailing ?? (showChevron ? <Ionicons name="chevron-forward" size={18} color="#9ca3af" /> : null)}
+      {trailing ?? (showChevron ? <Ionicons name="chevron-forward" size={18} color={colors.textSubtle} /> : null)}
     </Pressable>
   );
 }
 
-const styles = StyleSheet.create({
+function usePrimitiveStyles() {
+  const { colors } = useAppTheme();
+  return useMemo(() => makePrimitiveStyles(colors), [colors]);
+}
+
+function makePrimitiveStyles(colors: AppThemeColors) {
+  return StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#f8fafc",
+    backgroundColor: colors.background,
   },
   header: {
     flexDirection: "row",
@@ -227,8 +260,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingBottom: 12,
     borderBottomWidth: 1,
-    borderBottomColor: "#e2e8f0",
-    backgroundColor: "#ffffff",
+    borderBottomColor: colors.border,
+    backgroundColor: colors.surface,
   },
   headerSide: {
     alignItems: "flex-start",
@@ -242,7 +275,7 @@ const styles = StyleSheet.create({
   },
   backText: {
     fontSize: 15,
-    color: "#2563eb",
+    color: colors.primary,
     fontWeight: "800",
   },
   headerTitle: {
@@ -250,7 +283,7 @@ const styles = StyleSheet.create({
     textAlign: "center",
     fontSize: 18,
     fontWeight: "800",
-    color: "#111827",
+    color: colors.text,
   },
   scroll: {
     flex: 1,
@@ -269,7 +302,7 @@ const styles = StyleSheet.create({
   },
   loadingLabel: {
     fontSize: 13,
-    color: "#64748b",
+    color: colors.textMuted,
     fontWeight: "600",
   },
   empty: {
@@ -278,9 +311,9 @@ const styles = StyleSheet.create({
     paddingVertical: 36,
     paddingHorizontal: 22,
     borderWidth: 1,
-    borderColor: "#e2e8f0",
+    borderColor: colors.border,
     borderRadius: 12,
-    backgroundColor: "#ffffff",
+    backgroundColor: colors.surface,
   },
   stateIcon: {
     width: 44,
@@ -288,20 +321,20 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#ecfdf5",
+    backgroundColor: colors.successSoft,
     borderWidth: 1,
-    borderColor: "#a7f3d0",
+    borderColor: colors.successBorder,
     marginBottom: 12,
   },
   emptyTitle: {
     fontSize: 17,
-    color: "#111827",
+    color: colors.text,
     fontWeight: "800",
     textAlign: "center",
   },
   emptyDetail: {
     fontSize: 14,
-    color: "#64748b",
+    color: colors.textMuted,
     textAlign: "center",
     lineHeight: 20,
     marginTop: 6,
@@ -311,9 +344,9 @@ const styles = StyleSheet.create({
     maxWidth: 360,
     alignItems: "center",
     borderWidth: 1,
-    borderColor: "#fecaca",
+    borderColor: colors.dangerBorder,
     borderRadius: 12,
-    backgroundColor: "#fff7f7",
+    backgroundColor: colors.dangerSoft,
     padding: 18,
     gap: 10,
   },
@@ -321,32 +354,32 @@ const styles = StyleSheet.create({
     width: 42,
     height: 42,
     borderRadius: 12,
-    backgroundColor: "#fee2e2",
+    backgroundColor: colors.dangerSoft,
     alignItems: "center",
     justifyContent: "center",
   },
   errorText: {
     fontSize: 15,
-    color: "#dc2626",
+    color: colors.danger,
     textAlign: "center",
     lineHeight: 20,
     fontWeight: "700",
   },
   primaryButton: {
-    backgroundColor: "#2563eb",
+    backgroundColor: colors.primary,
     paddingVertical: 10,
     paddingHorizontal: 24,
     borderRadius: 8,
   },
   primaryButtonText: {
-    color: "#ffffff",
+    color: colors.textInverse,
     fontSize: 15,
     fontWeight: "600",
   },
   inlineError: {
-    backgroundColor: "#fef2f2",
+    backgroundColor: colors.dangerSoft,
     borderWidth: 1,
-    borderColor: "#fecaca",
+    borderColor: colors.dangerBorder,
     borderRadius: 12,
     padding: 12,
     flexDirection: "row",
@@ -355,34 +388,34 @@ const styles = StyleSheet.create({
   },
   inlineErrorText: {
     flex: 1,
-    color: "#dc2626",
+    color: colors.danger,
     fontSize: 13,
     fontWeight: "600",
     lineHeight: 18,
   },
   inlineErrorButton: {
     alignSelf: "center",
-    backgroundColor: "#dc2626",
+    backgroundColor: colors.danger,
     borderRadius: 8,
     paddingVertical: 8,
     paddingHorizontal: 14,
   },
   inlineErrorButtonText: {
-    color: "#ffffff",
+    color: colors.textInverse,
     fontSize: 13,
     fontWeight: "800",
   },
   sectionLabel: {
-    color: "#64748b",
+    color: colors.textMuted,
     fontSize: 12,
     fontWeight: "800",
     textTransform: "uppercase",
     marginTop: 4,
   },
   cardGroup: {
-    backgroundColor: "#ffffff",
+    backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: "#e2e8f0",
+    borderColor: colors.border,
     borderRadius: 12,
     overflow: "hidden",
   },
@@ -394,7 +427,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     paddingHorizontal: 14,
     borderBottomWidth: 1,
-    borderBottomColor: "#f1f5f9",
+    borderBottomColor: colors.separator,
   },
   rowDisabled: {
     opacity: 0.62,
@@ -413,11 +446,11 @@ const styles = StyleSheet.create({
   rowTitle: {
     fontSize: 15,
     fontWeight: "800",
-    color: "#111827",
+    color: colors.text,
   },
   rowDetail: {
     fontSize: 13,
-    color: "#64748b",
+    color: colors.textMuted,
     marginTop: 2,
     lineHeight: 18,
   },
@@ -439,4 +472,5 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: "800",
   },
-});
+  });
+}

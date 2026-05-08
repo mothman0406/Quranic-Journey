@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { ChildProfileForm, type ChildProfileValues } from "@/src/components/child-profile-form";
@@ -9,6 +9,7 @@ import {
   ScreenHeader,
 } from "@/src/components/screen-primitives";
 import { apiFetch } from "@/src/lib/api";
+import { useAppTheme, type AppThemeColors } from "@/src/lib/app-theme";
 
 type ChildProfile = {
   id: number;
@@ -31,6 +32,8 @@ function isValidChildId(childId: string | undefined) {
 export default function ChildProfileScreen() {
   const { childId, intent } = useLocalSearchParams<{ childId: string; intent?: string }>();
   const router = useRouter();
+  const { colors } = useAppTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const [child, setChild] = useState<ChildProfile | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
@@ -154,18 +157,19 @@ export default function ChildProfileScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(colors: AppThemeColors) {
+  return StyleSheet.create({
   errorBanner: {
     margin: 16,
     marginBottom: 0,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#fecaca",
-    backgroundColor: "#fef2f2",
+    borderColor: colors.dangerBorder,
+    backgroundColor: colors.dangerSoft,
     padding: 12,
   },
   errorBannerText: {
-    color: "#dc2626",
+    color: colors.danger,
     fontSize: 13,
     fontWeight: "700",
     lineHeight: 18,
@@ -173,8 +177,8 @@ const styles = StyleSheet.create({
   deleteButton: {
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#fecaca",
-    backgroundColor: "#fef2f2",
+    borderColor: colors.dangerBorder,
+    backgroundColor: colors.dangerSoft,
     paddingVertical: 13,
     alignItems: "center",
   },
@@ -182,8 +186,9 @@ const styles = StyleSheet.create({
     opacity: 0.6,
   },
   deleteButtonText: {
-    color: "#dc2626",
+    color: colors.danger,
     fontSize: 15,
     fontWeight: "800",
   },
-});
+  });
+}

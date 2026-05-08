@@ -1,7 +1,8 @@
-import type { ComponentProps } from "react";
+import { useMemo, type ComponentProps } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
+import { useAppTheme, type AppThemeColors } from "@/src/lib/app-theme";
 
 export type ChildNavKey = "dashboard" | "memorization" | "review" | "more";
 
@@ -61,6 +62,8 @@ export function ChildBottomNav({
   reviewCount?: number;
 }) {
   const router = useRouter();
+  const { colors } = useAppTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const canNavigate = validChildId(childId);
 
   return (
@@ -87,7 +90,7 @@ export function ChildBottomNav({
               <Ionicons
                 name={isActive ? item.icon.replace("-outline", "") as IconName : item.icon}
                 size={21}
-                color={isActive ? "#2563eb" : "#666666"}
+                color={isActive ? colors.primary : colors.textMuted}
               />
               {badgeCount > 0 && (
                 <View style={styles.badge}>
@@ -103,17 +106,18 @@ export function ChildBottomNav({
   );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(colors: AppThemeColors) {
+  return StyleSheet.create({
   wrap: {
     flexDirection: "row",
     alignItems: "center",
     borderTopWidth: 1,
-    borderTopColor: "#e2e8f0",
-    backgroundColor: "#ffffff",
+    borderTopColor: colors.border,
+    backgroundColor: colors.surface,
     paddingTop: 9,
     paddingHorizontal: 10,
     paddingBottom: 22,
-    shadowColor: "#0f172a",
+    shadowColor: colors.shadow,
     shadowOpacity: 0.08,
     shadowRadius: 14,
     shadowOffset: { width: 0, height: -4 },
@@ -130,8 +134,8 @@ const styles = StyleSheet.create({
     borderColor: "transparent",
   },
   itemActive: {
-    backgroundColor: "#eff6ff",
-    borderColor: "#dbeafe",
+    backgroundColor: colors.primarySoft,
+    borderColor: colors.primaryBorder,
   },
   iconWrap: {
     minWidth: 28,
@@ -141,11 +145,11 @@ const styles = StyleSheet.create({
   },
   label: {
     fontSize: 11,
-    color: "#64748b",
+    color: colors.textMuted,
     fontWeight: "800",
   },
   labelActive: {
-    color: "#2563eb",
+    color: colors.primary,
   },
   badge: {
     position: "absolute",
@@ -159,11 +163,12 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     paddingHorizontal: 4,
     borderWidth: 1,
-    borderColor: "#ffffff",
+    borderColor: colors.surface,
   },
   badgeText: {
     color: "#ffffff",
     fontSize: 9,
     fontWeight: "900",
   },
-});
+  });
+}

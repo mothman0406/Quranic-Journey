@@ -8,6 +8,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { Image } from "expo-image";
+import { useAppTheme, type AppThemeColors } from "@/src/lib/app-theme";
 
 import {
   QURAN_COM_1405_NATIVE_HEIGHT,
@@ -181,6 +182,8 @@ export function ReviewMushafPage({
   onLongPressAyah?: (target: ReviewMushafPageAyahTarget) => void;
   onPressEndMarker?: (target: ReviewMushafPageAyahTarget) => void;
 }) {
+  const { colors } = useAppTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const imageSource = getQuranCom1405PageImage(pageNumber);
   const suppressedLongPressKeyRef = useRef<string | null>(null);
   const imageLayout = useMemo(
@@ -236,7 +239,7 @@ export function ReviewMushafPage({
           <Image source={imageSource} style={styles.pageImage} contentFit="contain" />
         ) : (
           <View style={styles.errorOverlay}>
-            <Ionicons name="cloud-offline-outline" size={24} color="#b91c1c" />
+            <Ionicons name="cloud-offline-outline" size={24} color={colors.danger} />
             <Text style={styles.errorTitle}>Page image missing</Text>
             <Text style={styles.errorBody}>Page {pageNumber} could not be found.</Text>
           </View>
@@ -324,11 +327,11 @@ export function ReviewMushafPage({
 
         {loading ? (
           <View pointerEvents="none" style={styles.pageDataBadge}>
-            <ActivityIndicator size="small" color="#2563eb" />
+            <ActivityIndicator size="small" color={colors.primary} />
           </View>
         ) : error ? (
           <View pointerEvents="none" style={styles.pageDataBadge}>
-            <Ionicons name="cloud-offline-outline" size={14} color="#dc2626" />
+            <Ionicons name="cloud-offline-outline" size={14} color={colors.danger} />
           </View>
         ) : null}
       </View>
@@ -336,7 +339,8 @@ export function ReviewMushafPage({
   );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(colors: AppThemeColors) {
+  return StyleSheet.create({
   shell: {
     alignItems: "center",
     justifyContent: "center",
@@ -400,20 +404,21 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#fef2f2",
+    backgroundColor: colors.dangerSoft,
     paddingHorizontal: 20,
     gap: 6,
   },
   errorTitle: {
-    color: "#991b1b",
+    color: colors.danger,
     fontSize: 14,
     fontWeight: "900",
     textAlign: "center",
   },
   errorBody: {
-    color: "#b91c1c",
+    color: colors.danger,
     fontSize: 12,
     fontWeight: "700",
     textAlign: "center",
   },
-});
+  });
+}

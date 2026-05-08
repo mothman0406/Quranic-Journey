@@ -10,6 +10,7 @@ import {
   View,
   type StyleProp,
   type TextStyle,
+  type ColorValue,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useLocalSearchParams, useRouter, type Href } from "expo-router";
@@ -26,6 +27,7 @@ import {
 } from "@/src/lib/mushaf-annotations";
 import { fetchReviewQueue, type ReviewQueueItem, type ReviewQueueResponse } from "@/src/lib/reviews";
 import { getReviewPriorityStyle } from "@/src/lib/review-priority";
+import { APP_ADAPTIVE_COLORS as appColors } from "@/src/lib/app-theme";
 
 type WorkStatus = "not_started" | "in_progress" | "completed";
 type IconName = ComponentProps<typeof Ionicons>["name"];
@@ -197,9 +199,9 @@ type DashboardState =
 
 type CardTone = {
   accent: string;
-  bg: string;
-  border: string;
-  soft: string;
+  bg: ColorValue;
+  border: ColorValue;
+  soft: ColorValue;
 };
 
 type GoalsPanelTab = "goals" | "achievements";
@@ -207,42 +209,42 @@ type GoalsPanelTab = "goals" | "achievements";
 const CARD_TONES: Record<"memorization" | "review" | "reading", CardTone> = {
   memorization: {
     accent: "#2563eb",
-    bg: "#f8fbff",
-    border: "#bfdbfe",
-    soft: "#dbeafe",
+    bg: appColors.primarySoft,
+    border: appColors.primaryBorder,
+    soft: appColors.primarySoft,
   },
   review: {
     accent: "#ea580c",
-    bg: "#fffaf5",
-    border: "#fed7aa",
-    soft: "#ffedd5",
+    bg: appColors.warningSoft,
+    border: appColors.warningBorder,
+    soft: appColors.warningSoft,
   },
   reading: {
     accent: "#0f766e",
-    bg: "#f5fffc",
-    border: "#99f6e4",
-    soft: "#ccfbf1",
+    bg: appColors.successSoft,
+    border: appColors.successBorder,
+    soft: appColors.successSoft,
   },
 };
 
-const STATUS_COPY: Record<WorkStatus, { label: string; color: string; bg: string; border: string }> = {
+const STATUS_COPY: Record<WorkStatus, { label: string; color: string; bg: ColorValue; border: ColorValue }> = {
   not_started: {
     label: "Ready",
     color: "#2563eb",
-    bg: "#eff6ff",
-    border: "#bfdbfe",
+    bg: appColors.primarySoft,
+    border: appColors.primaryBorder,
   },
   in_progress: {
     label: "In progress",
     color: "#b45309",
-    bg: "#fffbeb",
-    border: "#fde68a",
+    bg: appColors.warningSoft,
+    border: appColors.warningBorder,
   },
   completed: {
     label: "Complete",
     color: "#047857",
-    bg: "#ecfdf5",
-    border: "#a7f3d0",
+    bg: appColors.successSoft,
+    border: appColors.successBorder,
   },
 };
 
@@ -506,7 +508,7 @@ function WorkCard({
             </Text>
           </View>
         )}
-        <Text style={[styles.cardAction, { color: readOnly ? "#94a3b8" : tone.accent }]}>
+        <Text style={[styles.cardAction, { color: readOnly ? appColors.textSubtle : tone.accent }]}>
           {cta}
         </Text>
       </View>
@@ -610,7 +612,7 @@ function CompactSuggestionCard({
 }) {
   return (
     <Pressable
-      style={[styles.compactSuggestionCard, { borderColor: `${color}33`, backgroundColor: `${color}0d` }]}
+      style={[styles.compactSuggestionCard, { borderColor: appColors.border, backgroundColor: appColors.surface }]}
       onPress={onPress}
     >
       <View style={[styles.compactSuggestionIcon, { backgroundColor: `${color}18` }]}>
@@ -781,6 +783,24 @@ function QuickAction({
 
 function ReviewPreviewItem({ item }: { item: ReviewQueueItem }) {
   const priorityStyle = getReviewPriorityStyle(item.reviewPriority);
+  const priorityTone =
+    item.reviewPriority === "red"
+      ? {
+          bg: appColors.dangerSoft,
+          border: appColors.dangerBorder,
+          text: appColors.danger,
+        }
+      : item.reviewPriority === "orange"
+        ? {
+            bg: appColors.warningSoft,
+            border: appColors.warningBorder,
+            text: appColors.warning,
+          }
+        : {
+            bg: appColors.successSoft,
+            border: appColors.successBorder,
+            text: appColors.success,
+          };
   const rangeLabel = formatAyahRange(item.ayahStart, item.ayahEnd);
 
   return (
@@ -788,19 +808,19 @@ function ReviewPreviewItem({ item }: { item: ReviewQueueItem }) {
       style={[
         styles.reviewPreview,
         {
-          backgroundColor: priorityStyle.cardBg,
-          borderColor: priorityStyle.border,
+          backgroundColor: priorityTone.bg,
+          borderColor: priorityTone.border,
         },
       ]}
     >
-      <View style={[styles.reviewDot, { backgroundColor: priorityStyle.text }]} />
+      <View style={[styles.reviewDot, { backgroundColor: priorityTone.text }]} />
       <View style={styles.reviewPreviewText}>
-        <Text style={styles.reviewSurah} numberOfLines={1}>
+        <Text style={[styles.reviewSurah, { color: appColors.text }]} numberOfLines={1}>
           {item.surahName ?? `Surah ${item.surahNumber}`}
         </Text>
         <Text style={styles.reviewRange}>{rangeLabel}</Text>
       </View>
-      <Text style={[styles.reviewPriority, { color: priorityStyle.text }]}>
+      <Text style={[styles.reviewPriority, { color: priorityTone.text }]}>
         {priorityStyle.label}
       </Text>
     </View>
@@ -812,12 +832,12 @@ function PlannedReviewPreviewItem({ item }: { item: DashboardReviewSession }) {
     <View
       style={[
         styles.reviewPreview,
-        { backgroundColor: "#fffaf5", borderColor: "#fed7aa" },
+        { backgroundColor: appColors.warningSoft, borderColor: appColors.warningBorder },
       ]}
     >
       <View style={[styles.reviewDot, { backgroundColor: "#ea580c" }]} />
       <View style={styles.reviewPreviewText}>
-        <Text style={styles.reviewSurah} numberOfLines={1}>
+        <Text style={[styles.reviewSurah, { color: appColors.text }]} numberOfLines={1}>
           {item.surahName}
         </Text>
         <Text style={styles.reviewRange}>
@@ -1627,7 +1647,7 @@ export default function ChildDashboard() {
           style={styles.headerIconButton}
           onPress={() => router.back()}
         >
-          <Ionicons name="chevron-back" size={22} color="#111827" />
+          <Ionicons name="chevron-back" size={22} color={appColors.text as string} />
         </Pressable>
 
         <Pressable
@@ -1640,7 +1660,7 @@ export default function ChildDashboard() {
           <Text style={styles.headerChildName} numberOfLines={1}>
             {headerChild.name}
           </Text>
-          <Ionicons name="chevron-down" size={15} color="#64748b" />
+          <Ionicons name="chevron-down" size={15} color={appColors.textMuted as string} />
         </Pressable>
 
         <Pressable
@@ -1650,7 +1670,7 @@ export default function ChildDashboard() {
           style={styles.headerIconButton}
           onPress={handleTargetsPress}
         >
-          <Ionicons name="settings-outline" size={21} color="#111827" />
+          <Ionicons name="settings-outline" size={21} color={appColors.text as string} />
         </Pressable>
       </View>
 
@@ -1663,7 +1683,7 @@ export default function ChildDashboard() {
             style={styles.dateArrow}
             onPress={() => shiftSelectedDate(-1)}
           >
-            <Ionicons name="chevron-back" size={18} color="#111827" />
+            <Ionicons name="chevron-back" size={18} color={appColors.text as string} />
           </Pressable>
         </View>
 
@@ -1689,7 +1709,7 @@ export default function ChildDashboard() {
             style={styles.dateArrow}
             onPress={() => shiftSelectedDate(1)}
           >
-            <Ionicons name="chevron-forward" size={18} color="#111827" />
+            <Ionicons name="chevron-forward" size={18} color={appColors.text as string} />
           </Pressable>
         </View>
       </View>
@@ -1720,7 +1740,7 @@ export default function ChildDashboard() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#f8fafc",
+    backgroundColor: appColors.background,
   },
   header: {
     flexDirection: "row",
@@ -1729,8 +1749,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingBottom: 12,
     borderBottomWidth: 1,
-    borderBottomColor: "#e2e8f0",
-    backgroundColor: "#ffffff",
+    borderBottomColor: appColors.border,
+    backgroundColor: appColors.surface,
   },
   headerIconButton: {
     width: 40,
@@ -1752,9 +1772,9 @@ const styles = StyleSheet.create({
     width: 30,
     height: 30,
     borderRadius: 15,
-    backgroundColor: "#f8fafc",
+    backgroundColor: appColors.surfaceSubtle,
     borderWidth: 1,
-    borderColor: "#e5e7eb",
+    borderColor: appColors.border,
     overflow: "hidden",
     textAlign: "center",
     lineHeight: 30,
@@ -1762,16 +1782,16 @@ const styles = StyleSheet.create({
   },
   headerChildName: {
     maxWidth: 160,
-    color: "#111827",
+    color: appColors.text,
     fontSize: 17,
     fontWeight: "900",
   },
   dateBar: {
     minHeight: 44,
     paddingHorizontal: 16,
-    backgroundColor: "#ffffff",
+    backgroundColor: appColors.surface,
     borderBottomWidth: 1,
-    borderBottomColor: "#e5e7eb",
+    borderBottomColor: appColors.border,
     flexDirection: "row",
     alignItems: "center",
   },
@@ -1787,9 +1807,9 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: "#f8fafc",
+    backgroundColor: appColors.surfaceSubtle,
     borderWidth: 1,
-    borderColor: "#e5e7eb",
+    borderColor: appColors.border,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -1802,16 +1822,16 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   dateLabel: {
-    color: "#111827",
+    color: appColors.text,
     fontSize: 14,
     fontWeight: "900",
   },
   todayResetButton: {
     minHeight: 28,
     borderRadius: 999,
-    backgroundColor: "#f8fafc",
+    backgroundColor: appColors.surfaceSubtle,
     borderWidth: 1,
-    borderColor: "#e5e7eb",
+    borderColor: appColors.border,
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: 10,
@@ -1832,7 +1852,7 @@ const styles = StyleSheet.create({
     textAlign: "center",
     fontSize: 18,
     fontWeight: "900",
-    color: "#111827",
+    color: appColors.text,
   },
   headerRight: {
     width: 70,
@@ -1928,9 +1948,9 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   warningBanner: {
-    backgroundColor: "#fffbeb",
+    backgroundColor: appColors.warningSoft,
     borderWidth: 1,
-    borderColor: "#fde68a",
+    borderColor: appColors.warningBorder,
     borderRadius: 10,
     paddingVertical: 10,
     paddingHorizontal: 12,
@@ -1942,9 +1962,9 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   readOnlyBanner: {
-    backgroundColor: "#f8fafc",
+    backgroundColor: appColors.surfaceSubtle,
     borderWidth: 1,
-    borderColor: "#e5e7eb",
+    borderColor: appColors.border,
     borderRadius: 10,
     paddingVertical: 10,
     paddingHorizontal: 12,
@@ -1954,7 +1974,7 @@ const styles = StyleSheet.create({
   },
   readOnlyBannerText: {
     flex: 1,
-    color: "#475569",
+    color: appColors.textMuted,
     fontSize: 13,
     lineHeight: 18,
     fontWeight: "700",
@@ -1989,7 +2009,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   sectionTitle: {
-    color: "#111827",
+    color: appColors.text,
     fontSize: 15,
     fontWeight: "900",
   },
@@ -2002,19 +2022,19 @@ const styles = StyleSheet.create({
     marginTop: 6,
   },
   primarySectionTitle: {
-    color: "#111827",
+    color: appColors.text,
     fontSize: 26,
     lineHeight: 31,
     fontWeight: "900",
   },
   card: {
-    backgroundColor: "#ffffff",
+    backgroundColor: appColors.surface,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#e2e8f0",
+    borderColor: appColors.border,
     padding: 16,
     gap: 10,
-    shadowColor: "#0f172a",
+    shadowColor: appColors.shadow,
     shadowOpacity: 0.035,
     shadowRadius: 10,
     shadowOffset: { width: 0, height: 3 },
@@ -2046,14 +2066,14 @@ const styles = StyleSheet.create({
   },
   cardEyebrow: {
     fontSize: 12,
-    color: "#666666",
+    color: appColors.textMuted,
     fontWeight: "700",
     textTransform: "uppercase",
   },
   cardLabel: {
     fontSize: 17,
     fontWeight: "900",
-    color: "#111827",
+    color: appColors.text,
     marginTop: 1,
   },
   cardAction: {
@@ -2072,7 +2092,7 @@ const styles = StyleSheet.create({
   },
   cardDetail: {
     fontSize: 14,
-    color: "#475569",
+    color: appColors.textMuted,
     lineHeight: 20,
   },
   reviewPreviewList: {
@@ -2100,11 +2120,11 @@ const styles = StyleSheet.create({
   reviewSurah: {
     fontSize: 14,
     fontWeight: "900",
-    color: "#111827",
+    color: appColors.text,
   },
   reviewRange: {
     fontSize: 12,
-    color: "#666666",
+    color: appColors.textMuted,
     marginTop: 1,
   },
   reviewPriority: {
@@ -2113,13 +2133,13 @@ const styles = StyleSheet.create({
   },
   moreText: {
     fontSize: 12,
-    color: "#666666",
+    color: appColors.textMuted,
     fontWeight: "600",
   },
   nextCard: {
-    backgroundColor: "#f8fbff",
+    backgroundColor: appColors.surface,
     borderWidth: 1,
-    borderColor: "#bfdbfe",
+    borderColor: appColors.primaryBorder,
     borderRadius: 12,
     padding: 14,
     flexDirection: "row",
@@ -2133,7 +2153,7 @@ const styles = StyleSheet.create({
     width: 42,
     height: 42,
     borderRadius: 12,
-    backgroundColor: "#dbeafe",
+    backgroundColor: appColors.primarySoft,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -2147,12 +2167,12 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   nextTitle: {
-    color: "#111827",
+    color: appColors.text,
     fontSize: 15,
     fontWeight: "900",
   },
   nextDetail: {
-    color: "#555555",
+    color: appColors.textMuted,
     fontSize: 13,
     lineHeight: 18,
     marginTop: 2,
@@ -2165,7 +2185,7 @@ const styles = StyleSheet.create({
   progressTrack: {
     width: "100%",
     height: 6,
-    backgroundColor: "#e5e7eb",
+    backgroundColor: appColors.border,
     borderRadius: 999,
     overflow: "hidden",
   },
@@ -2179,7 +2199,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 12,
     borderBottomWidth: 1,
-    borderBottomColor: "#f3f4f6",
+    borderBottomColor: appColors.separator,
   },
   achievementIcon: {
     width: 38,
@@ -2187,7 +2207,7 @@ const styles = StyleSheet.create({
     borderRadius: 19,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#f3f4f6",
+    backgroundColor: appColors.surfaceSubtle,
   },
   achievementIconEarned: {
     backgroundColor: "#fef3c7",
@@ -2208,12 +2228,12 @@ const styles = StyleSheet.create({
   },
   achievementTitle: {
     flex: 1,
-    color: "#111827",
+    color: appColors.text,
     fontSize: 14,
     fontWeight: "800",
   },
   achievementDetail: {
-    color: "#666666",
+    color: appColors.textMuted,
     fontSize: 12,
     lineHeight: 17,
   },
@@ -2223,7 +2243,7 @@ const styles = StyleSheet.create({
     fontWeight: "800",
   },
   achievementProgressText: {
-    color: "#666666",
+    color: appColors.textMuted,
     fontSize: 11,
     fontWeight: "800",
   },
@@ -2254,12 +2274,12 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   compactSuggestionTitle: {
-    color: "#111827",
+    color: appColors.text,
     fontSize: 13,
     fontWeight: "900",
   },
   compactSuggestionCaption: {
-    color: "#64748b",
+    color: appColors.textMuted,
     fontSize: 10,
     lineHeight: 13,
     fontWeight: "900",
@@ -2267,13 +2287,13 @@ const styles = StyleSheet.create({
     marginTop: 1,
   },
   compactSuggestionDetail: {
-    color: "#475569",
+    color: appColors.textMuted,
     fontSize: 12,
     lineHeight: 16,
     marginTop: 2,
   },
   compactSuggestionArabic: {
-    color: "#111827",
+    color: appColors.text,
     fontFamily: "AmiriQuran",
     fontSize: 17,
     lineHeight: 25,
@@ -2281,16 +2301,16 @@ const styles = StyleSheet.create({
     writingDirection: "rtl",
   },
   compactSuggestionTranslation: {
-    color: "#475569",
+    color: appColors.textMuted,
     fontSize: 11,
     lineHeight: 15,
     marginTop: 1,
     fontWeight: "600",
   },
   combinedCard: {
-    backgroundColor: "#ffffff",
+    backgroundColor: appColors.surface,
     borderWidth: 1,
-    borderColor: "#e5e7eb",
+    borderColor: appColors.border,
     borderRadius: 12,
     overflow: "hidden",
   },
@@ -2298,9 +2318,9 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 6,
     padding: 6,
-    backgroundColor: "#f8fafc",
+    backgroundColor: appColors.surfaceSubtle,
     borderBottomWidth: 1,
-    borderBottomColor: "#e5e7eb",
+    borderBottomColor: appColors.border,
   },
   combinedTab: {
     flex: 1,
@@ -2310,17 +2330,17 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   combinedTabActive: {
-    backgroundColor: "#ffffff",
+    backgroundColor: appColors.surface,
     borderWidth: 1,
-    borderColor: "#e5e7eb",
+    borderColor: appColors.border,
   },
   combinedTabText: {
-    color: "#64748b",
+    color: appColors.textMuted,
     fontSize: 13,
     fontWeight: "900",
   },
   combinedTabTextActive: {
-    color: "#111827",
+    color: appColors.text,
   },
   combinedBody: {
     padding: 14,
@@ -2337,26 +2357,26 @@ const styles = StyleSheet.create({
   goalFocusTitle: {
     flex: 1,
     minWidth: 0,
-    color: "#111827",
+    color: appColors.text,
     fontSize: 15,
     lineHeight: 19,
     fontWeight: "900",
   },
   daysBadge: {
     borderRadius: 999,
-    backgroundColor: "#eff6ff",
+    backgroundColor: appColors.primarySoft,
     borderWidth: 1,
-    borderColor: "#bfdbfe",
+    borderColor: appColors.primaryBorder,
     paddingHorizontal: 9,
     paddingVertical: 4,
   },
   daysBadgeText: {
-    color: "#2563eb",
+    color: appColors.primary,
     fontSize: 11,
     fontWeight: "900",
   },
   goalFocusDetail: {
-    color: "#475569",
+    color: appColors.textMuted,
     fontSize: 12,
     lineHeight: 17,
     fontWeight: "600",
@@ -2367,7 +2387,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   goalFocusMeta: {
-    color: "#475569",
+    color: appColors.textMuted,
     fontSize: 12,
     fontWeight: "800",
   },
@@ -2382,7 +2402,7 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   goalFocusDateText: {
-    color: "#64748b",
+    color: appColors.textMuted,
     fontSize: 12,
     fontWeight: "700",
   },
@@ -2404,7 +2424,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   combinedEmptyText: {
-    color: "#64748b",
+    color: appColors.textMuted,
     fontSize: 13,
     fontWeight: "700",
   },
@@ -2416,9 +2436,9 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: 0,
     minHeight: 74,
-    backgroundColor: "#ffffff",
+    backgroundColor: appColors.surface,
     borderWidth: 1,
-    borderColor: "#e2e8f0",
+    borderColor: appColors.border,
     borderRadius: 12,
     padding: 10,
     alignItems: "center",
@@ -2437,13 +2457,13 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   quickTitle: {
-    color: "#111827",
+    color: appColors.text,
     fontSize: 13,
     fontWeight: "800",
     textAlign: "center",
   },
   quickDetail: {
-    color: "#666666",
+    color: appColors.textMuted,
     fontSize: 11,
     fontWeight: "600",
     marginTop: 2,
@@ -2455,14 +2475,14 @@ const styles = StyleSheet.create({
     justifyContent: "flex-end",
   },
   switcherSheet: {
-    backgroundColor: "#ffffff",
+    backgroundColor: appColors.surface,
     borderTopLeftRadius: 18,
     borderTopRightRadius: 18,
     paddingTop: 10,
     paddingHorizontal: 16,
     paddingBottom: 28,
     borderWidth: 1,
-    borderColor: "#e5e7eb",
+    borderColor: appColors.border,
     maxHeight: "78%",
   },
   sheetHandle: {
@@ -2470,7 +2490,7 @@ const styles = StyleSheet.create({
     width: 38,
     height: 4,
     borderRadius: 999,
-    backgroundColor: "#cbd5e1",
+    backgroundColor: appColors.borderStrong,
     marginBottom: 14,
   },
   switcherHeader: {
@@ -2481,12 +2501,12 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   sheetTitle: {
-    color: "#111827",
+    color: appColors.text,
     fontSize: 18,
     fontWeight: "900",
   },
   sheetSubtitle: {
-    color: "#64748b",
+    color: appColors.textMuted,
     fontSize: 13,
     fontWeight: "700",
     marginTop: 2,
@@ -2495,9 +2515,9 @@ const styles = StyleSheet.create({
     width: 34,
     height: 34,
     borderRadius: 17,
-    backgroundColor: "#f8fafc",
+    backgroundColor: appColors.surfaceSubtle,
     borderWidth: 1,
-    borderColor: "#e5e7eb",
+    borderColor: appColors.border,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -2508,7 +2528,7 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   switcherStateText: {
-    color: "#64748b",
+    color: appColors.textMuted,
     fontSize: 13,
     fontWeight: "700",
   },
@@ -2537,9 +2557,9 @@ const styles = StyleSheet.create({
     paddingBottom: 4,
   },
   switcherInlineWarning: {
-    backgroundColor: "#fffbeb",
+    backgroundColor: appColors.warningSoft,
     borderWidth: 1,
-    borderColor: "#fde68a",
+    borderColor: appColors.warningBorder,
     borderRadius: 10,
     padding: 10,
   },
@@ -2551,25 +2571,25 @@ const styles = StyleSheet.create({
   switcherRow: {
     minHeight: 64,
     borderWidth: 1,
-    borderColor: "#e5e7eb",
+    borderColor: appColors.border,
     borderRadius: 12,
-    backgroundColor: "#ffffff",
+    backgroundColor: appColors.surface,
     padding: 11,
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
   },
   switcherRowSelected: {
-    backgroundColor: "#f8fafc",
-    borderColor: "#bfdbfe",
+    backgroundColor: appColors.primarySoft,
+    borderColor: appColors.primaryBorder,
   },
   switcherAvatar: {
     width: 42,
     height: 42,
     borderRadius: 14,
-    backgroundColor: "#f8fafc",
+    backgroundColor: appColors.surfaceSubtle,
     borderWidth: 1,
-    borderColor: "#e5e7eb",
+    borderColor: appColors.border,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -2581,12 +2601,12 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   switcherName: {
-    color: "#111827",
+    color: appColors.text,
     fontSize: 15,
     fontWeight: "900",
   },
   switcherMeta: {
-    color: "#64748b",
+    color: appColors.textMuted,
     fontSize: 12,
     fontWeight: "700",
     marginTop: 3,
@@ -2607,7 +2627,7 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   switcherActionText: {
-    color: "#64748b",
+    color: appColors.textMuted,
     fontSize: 12,
     fontWeight: "800",
   },
@@ -2617,8 +2637,8 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
     borderStyle: "dashed",
-    borderColor: "#bfdbfe",
-    backgroundColor: "#f8fbff",
+    borderColor: appColors.primaryBorder,
+    backgroundColor: appColors.primarySoft,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
@@ -2628,7 +2648,7 @@ const styles = StyleSheet.create({
     width: 28,
     height: 28,
     borderRadius: 14,
-    backgroundColor: "#eff6ff",
+    backgroundColor: appColors.primarySoft,
     alignItems: "center",
     justifyContent: "center",
   },

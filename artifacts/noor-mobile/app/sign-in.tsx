@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Pressable,
@@ -9,9 +9,12 @@ import {
 } from "react-native";
 import { useRouter } from "expo-router";
 import { authClient } from "@/src/lib/auth-client";
+import { useAppTheme, type AppThemeColors } from "@/src/lib/app-theme";
 
 export default function SignInScreen() {
   const router = useRouter();
+  const { colors } = useAppTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -27,7 +30,7 @@ export default function SignInScreen() {
       } else {
         router.replace("/");
       }
-    } catch (e) {
+    } catch {
       setError("Unexpected error. Please try again.");
     } finally {
       setLoading(false);
@@ -41,7 +44,7 @@ export default function SignInScreen() {
         <TextInput
           style={styles.input}
           placeholder="Email"
-          placeholderTextColor="#94a3b8"
+          placeholderTextColor={colors.textSubtle}
           autoCapitalize="none"
           keyboardType="email-address"
           value={email}
@@ -50,7 +53,7 @@ export default function SignInScreen() {
         <TextInput
           style={styles.input}
           placeholder="Password"
-          placeholderTextColor="#94a3b8"
+          placeholderTextColor={colors.textSubtle}
           secureTextEntry
           value={password}
           onChangeText={setPassword}
@@ -62,7 +65,7 @@ export default function SignInScreen() {
           disabled={loading}
         >
           {loading ? (
-            <ActivityIndicator color="#fff" />
+            <ActivityIndicator color={colors.textInverse} />
           ) : (
             <Text style={styles.buttonText}>Sign in</Text>
           )}
@@ -72,12 +75,13 @@ export default function SignInScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(colors: AppThemeColors) {
+  return StyleSheet.create({
   container: {
     flex: 1,
     justifyContent: "center",
     padding: 24,
-    backgroundColor: "#f8fafc",
+    backgroundColor: colors.background,
   },
   card: {
     width: "100%",
@@ -85,11 +89,11 @@ const styles = StyleSheet.create({
     alignSelf: "center",
     gap: 12,
     borderWidth: 1,
-    borderColor: "#e2e8f0",
+    borderColor: colors.border,
     borderRadius: 12,
-    backgroundColor: "#ffffff",
+    backgroundColor: colors.surface,
     padding: 20,
-    shadowColor: "#0f172a",
+    shadowColor: colors.shadow,
     shadowOpacity: 0.05,
     shadowRadius: 14,
     shadowOffset: { width: 0, height: 6 },
@@ -100,26 +104,26 @@ const styles = StyleSheet.create({
     fontWeight: "900",
     textAlign: "center",
     marginBottom: 16,
-    color: "#111827",
+    color: colors.text,
   },
   input: {
     borderWidth: 1,
-    borderColor: "#d1d5db",
+    borderColor: colors.inputBorder,
     borderRadius: 10,
     padding: 12,
     fontSize: 16,
-    color: "#111827",
-    backgroundColor: "#ffffff",
+    color: colors.text,
+    backgroundColor: colors.input,
     fontWeight: "600",
   },
   error: {
-    color: "#dc2626",
+    color: colors.danger,
     fontSize: 14,
     lineHeight: 19,
     fontWeight: "700",
   },
   button: {
-    backgroundColor: "#2563eb",
+    backgroundColor: colors.primary,
     borderRadius: 10,
     padding: 14,
     alignItems: "center",
@@ -129,8 +133,9 @@ const styles = StyleSheet.create({
     opacity: 0.6,
   },
   buttonText: {
-    color: "#ffffff",
+    color: colors.textInverse,
     fontSize: 16,
     fontWeight: "800",
   },
-});
+  });
+}

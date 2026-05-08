@@ -15,6 +15,7 @@ import {
 } from "react-native";
 import { InlineError, SectionLabel } from "@/src/components/screen-primitives";
 import { apiFetch } from "@/src/lib/api";
+import { useAppTheme, type AppThemeColors } from "@/src/lib/app-theme";
 
 export type InitialSurahLevel = "very_strong" | "solid" | "learning" | "just_started";
 
@@ -201,6 +202,8 @@ export function ChildProfileForm({
   onSubmit: (values: ChildProfileValues) => Promise<void>;
   footer?: ReactNode;
 }) {
+  const { colors } = useAppTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const [values, setValues] = useState<ChildProfileValues>(() => defaultsToValues(defaults));
   const [ageText, setAgeText] = useState(String(defaults?.age ?? 7));
   const [practiceText, setPracticeText] = useState(String(defaults?.practiceMinutesPerDay ?? 20));
@@ -387,7 +390,7 @@ export function ChildProfileForm({
           value={values.name}
           onChangeText={(name) => patch({ name })}
           placeholder="Child name"
-          placeholderTextColor="#9ca3af"
+          placeholderTextColor={colors.textSubtle}
           style={styles.input}
           autoCapitalize="words"
           returnKeyType="done"
@@ -563,20 +566,20 @@ export function ChildProfileForm({
           <Switch
             value={!values.hideStories}
             onValueChange={(enabled) => patch({ hideStories: !enabled })}
-            trackColor={{ false: "#e5e7eb", true: "#bfdbfe" }}
-            thumbColor={!values.hideStories ? "#2563eb" : "#f9fafb"}
+            trackColor={{ false: colors.disabled, true: colors.primaryBorder }}
+            thumbColor={!values.hideStories ? colors.primary : colors.surfaceSubtle}
           />
         </View>
         <View style={styles.toggleRow}>
           <View style={styles.rowText}>
-            <Text style={styles.cardTitle}>Du'aas</Text>
-            <Text style={styles.cardDetail}>Show du'aa suggestions and practice links.</Text>
+            <Text style={styles.cardTitle}>Du&apos;aas</Text>
+            <Text style={styles.cardDetail}>Show du&apos;aa suggestions and practice links.</Text>
           </View>
           <Switch
             value={!values.hideDuas}
             onValueChange={(enabled) => patch({ hideDuas: !enabled })}
-            trackColor={{ false: "#e5e7eb", true: "#99f6e4" }}
-            thumbColor={!values.hideDuas ? "#0f766e" : "#f9fafb"}
+            trackColor={{ false: colors.disabled, true: colors.successBorder }}
+            thumbColor={!values.hideDuas ? colors.success : colors.surfaceSubtle}
           />
         </View>
       </View>
@@ -597,7 +600,7 @@ export function ChildProfileForm({
 
             {loadingSurahs ? (
               <View style={styles.loadingRow}>
-                <ActivityIndicator color="#2563eb" />
+                <ActivityIndicator color={colors.primary} />
                 <Text style={styles.cardDetail}>Loading surahs</Text>
               </View>
             ) : loadError ? (
@@ -828,10 +831,11 @@ export function ChildProfileForm({
   );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(colors: AppThemeColors) {
+  return StyleSheet.create({
   formShell: {
     flex: 1,
-    backgroundColor: "#f8fafc",
+    backgroundColor: colors.background,
   },
   content: {
     padding: 16,
@@ -839,13 +843,13 @@ const styles = StyleSheet.create({
     paddingBottom: 126,
   },
   card: {
-    backgroundColor: "#ffffff",
+    backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: "#e2e8f0",
+    borderColor: colors.border,
     borderRadius: 12,
     padding: 16,
     gap: 12,
-    shadowColor: "#0f172a",
+    shadowColor: colors.shadow,
     shadowOpacity: 0.035,
     shadowRadius: 10,
     shadowOffset: { width: 0, height: 3 },
@@ -853,31 +857,31 @@ const styles = StyleSheet.create({
   },
   label: {
     fontSize: 13,
-    color: "#475569",
+    color: colors.textMuted,
     fontWeight: "800",
   },
   input: {
-    backgroundColor: "#f8fafc",
+    backgroundColor: colors.input,
     borderWidth: 1,
-    borderColor: "#d1d5db",
+    borderColor: colors.inputBorder,
     borderRadius: 10,
     paddingHorizontal: 12,
     paddingVertical: 11,
     fontSize: 16,
-    color: "#111827",
+    color: colors.text,
     fontWeight: "600",
   },
   minutesInput: {
-    backgroundColor: "#f8fafc",
+    backgroundColor: colors.input,
     borderWidth: 1,
-    borderColor: "#d1d5db",
+    borderColor: colors.inputBorder,
     borderRadius: 10,
     paddingHorizontal: 12,
     paddingVertical: 8,
     minWidth: 72,
     textAlign: "center",
     fontSize: 16,
-    color: "#111827",
+    color: colors.text,
     fontWeight: "800",
   },
   twoColumn: {
@@ -898,14 +902,14 @@ const styles = StyleSheet.create({
     height: 44,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#e2e8f0",
-    backgroundColor: "#ffffff",
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
     alignItems: "center",
     justifyContent: "center",
   },
   avatarButtonActive: {
-    borderColor: "#2563eb",
-    backgroundColor: "#eff6ff",
+    borderColor: colors.primary,
+    backgroundColor: colors.primarySoft,
   },
   avatarText: {
     fontSize: 24,
@@ -917,23 +921,23 @@ const styles = StyleSheet.create({
   segment: {
     flex: 1,
     borderWidth: 1,
-    borderColor: "#e2e8f0",
-    backgroundColor: "#ffffff",
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
     borderRadius: 10,
     paddingVertical: 11,
     alignItems: "center",
   },
   segmentActive: {
-    backgroundColor: "#eff6ff",
-    borderColor: "#2563eb",
+    backgroundColor: colors.primarySoft,
+    borderColor: colors.primary,
   },
   segmentText: {
     fontSize: 14,
-    color: "#475569",
+    color: colors.textMuted,
     fontWeight: "800",
   },
   segmentTextActive: {
-    color: "#2563eb",
+    color: colors.primary,
   },
   rowBetween: {
     flexDirection: "row",
@@ -947,12 +951,12 @@ const styles = StyleSheet.create({
   },
   cardTitle: {
     fontSize: 15,
-    color: "#111827",
+    color: colors.text,
     fontWeight: "900",
   },
   cardDetail: {
     fontSize: 13,
-    color: "#64748b",
+    color: colors.textMuted,
     lineHeight: 18,
     marginTop: 2,
   },
@@ -962,34 +966,34 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   chip: {
-    backgroundColor: "#ffffff",
+    backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: "#e2e8f0",
+    borderColor: colors.border,
     borderRadius: 10,
     paddingHorizontal: 11,
     paddingVertical: 8,
   },
   chipActive: {
-    backgroundColor: "#eff6ff",
-    borderColor: "#2563eb",
+    backgroundColor: colors.primarySoft,
+    borderColor: colors.primary,
   },
   chipText: {
-    color: "#475569",
+    color: colors.textMuted,
     fontSize: 13,
     fontWeight: "800",
   },
   chipTextActive: {
-    color: "#2563eb",
+    color: colors.primary,
   },
   targetBlock: {
     borderTopWidth: 1,
-    borderTopColor: "#e2e8f0",
+    borderTopColor: colors.border,
     paddingTop: 13,
     gap: 10,
   },
   targetValue: {
     fontSize: 14,
-    color: "#111827",
+    color: colors.text,
     fontWeight: "900",
   },
   stepperRow: {
@@ -1001,12 +1005,12 @@ const styles = StyleSheet.create({
     width: 38,
     height: 38,
     borderRadius: 10,
-    backgroundColor: "#111827",
+    backgroundColor: colors.surfaceInverse,
     alignItems: "center",
     justifyContent: "center",
   },
   stepButtonText: {
-    color: "#ffffff",
+    color: colors.textInverse,
     fontSize: 20,
     lineHeight: 22,
     fontWeight: "800",
@@ -1015,7 +1019,7 @@ const styles = StyleSheet.create({
     flex: 1,
     textAlign: "center",
     fontSize: 12,
-    color: "#64748b",
+    color: colors.textMuted,
     fontWeight: "700",
   },
   toggleRow: {
@@ -1025,25 +1029,25 @@ const styles = StyleSheet.create({
   },
   selectedCount: {
     fontSize: 13,
-    color: "#2563eb",
+    color: colors.primary,
     fontWeight: "800",
   },
   rangeBox: {
-    backgroundColor: "#eff6ff",
+    backgroundColor: colors.primarySoft,
     borderWidth: 1,
-    borderColor: "#bfdbfe",
+    borderColor: colors.primaryBorder,
     borderRadius: 12,
     padding: 12,
     gap: 8,
   },
   rangeTitle: {
-    color: "#1d4ed8",
+    color: colors.primary,
     fontSize: 14,
     fontWeight: "800",
   },
   applyRangeButton: {
     borderRadius: 10,
-    backgroundColor: "#2563eb",
+    backgroundColor: colors.primary,
     paddingVertical: 9,
     paddingHorizontal: 13,
   },
@@ -1051,12 +1055,12 @@ const styles = StyleSheet.create({
     opacity: 0.45,
   },
   applyRangeText: {
-    color: "#ffffff",
+    color: colors.textInverse,
     fontSize: 13,
     fontWeight: "800",
   },
   rangeLabel: {
-    color: "#1d4ed8",
+    color: colors.primary,
     fontSize: 12,
     fontWeight: "800",
   },
@@ -1065,31 +1069,31 @@ const styles = StyleSheet.create({
     paddingRight: 2,
   },
   rangeChip: {
-    backgroundColor: "#ffffff",
+    backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: "#bfdbfe",
+    borderColor: colors.primaryBorder,
     borderRadius: 999,
     paddingHorizontal: 10,
     paddingVertical: 7,
   },
   rangeChipActive: {
-    backgroundColor: "#2563eb",
-    borderColor: "#2563eb",
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
   },
   rangeChipText: {
-    color: "#1d4ed8",
+    color: colors.primary,
     fontSize: 12,
     fontWeight: "800",
   },
   rangeChipTextActive: {
-    color: "#ffffff",
+    color: colors.textInverse,
   },
   clearSelectionButton: {
     alignSelf: "flex-start",
     paddingVertical: 4,
   },
   clearSelectionText: {
-    color: "#1d4ed8",
+    color: colors.primary,
     fontSize: 12,
     fontWeight: "800",
     textDecorationLine: "underline",
@@ -1104,16 +1108,16 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   surahCard: {
-    backgroundColor: "#ffffff",
+    backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: "#e2e8f0",
+    borderColor: colors.border,
     borderRadius: 12,
     padding: 12,
     gap: 10,
   },
   surahCardActive: {
-    borderColor: "#bfdbfe",
-    backgroundColor: "#f8fbff",
+    borderColor: colors.primaryBorder,
+    backgroundColor: colors.primarySoft,
   },
   surahTopRow: {
     flexDirection: "row",
@@ -1125,24 +1129,24 @@ const styles = StyleSheet.create({
     height: 28,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: "#bfdbfe",
-    backgroundColor: "#eff6ff",
+    borderColor: colors.primaryBorder,
+    backgroundColor: colors.primarySoft,
     alignItems: "center",
     justifyContent: "center",
   },
   checkMark: {
-    color: "#2563eb",
+    color: colors.primary,
     fontSize: 16,
     fontWeight: "900",
   },
   surahName: {
     fontSize: 15,
-    color: "#111827",
+    color: colors.text,
     fontWeight: "900",
   },
   surahSetup: {
     borderTopWidth: 1,
-    borderTopColor: "#e2e8f0",
+    borderTopColor: colors.border,
     paddingTop: 10,
     gap: 10,
   },
@@ -1150,14 +1154,14 @@ const styles = StyleSheet.create({
     flex: 1,
     minHeight: 38,
     borderRadius: 10,
-    backgroundColor: "#ffffff",
+    backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: "#d1d5db",
+    borderColor: colors.inputBorder,
     alignItems: "center",
     justifyContent: "center",
   },
   fullButtonText: {
-    color: "#111827",
+    color: colors.text,
     fontSize: 13,
     fontWeight: "800",
   },
@@ -1171,17 +1175,17 @@ const styles = StyleSheet.create({
     minHeight: 58,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: "#e2e8f0",
-    backgroundColor: "#ffffff",
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
     padding: 9,
   },
   strengthLabel: {
-    color: "#111827",
+    color: colors.text,
     fontSize: 13,
     fontWeight: "800",
   },
   strengthDetail: {
-    color: "#64748b",
+    color: colors.textMuted,
     fontSize: 11,
     fontWeight: "600",
     marginTop: 2,
@@ -1191,27 +1195,27 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
   submitButton: {
-    backgroundColor: "#111827",
+    backgroundColor: colors.surfaceInverse,
     borderRadius: 12,
     paddingVertical: 15,
     alignItems: "center",
   },
   submitButtonDisabled: {
-    backgroundColor: "#9ca3af",
+    backgroundColor: colors.disabled,
   },
   submitButtonText: {
-    color: "#ffffff",
+    color: colors.textInverse,
     fontSize: 16,
     fontWeight: "800",
   },
   stickyFooter: {
     borderTopWidth: 1,
-    borderTopColor: "#e2e8f0",
-    backgroundColor: "#ffffff",
+    borderTopColor: colors.border,
+    backgroundColor: colors.surface,
     paddingHorizontal: 20,
     paddingTop: 12,
     paddingBottom: 20,
-    shadowColor: "#0f172a",
+    shadowColor: colors.shadow,
     shadowOpacity: 0.08,
     shadowRadius: 14,
     shadowOffset: { width: 0, height: -4 },
@@ -1220,8 +1224,8 @@ const styles = StyleSheet.create({
   keyboardAccessory: {
     alignItems: "flex-end",
     borderTopWidth: 1,
-    borderTopColor: "#d1d5db",
-    backgroundColor: "#f9fafb",
+    borderTopColor: colors.border,
+    backgroundColor: colors.surfaceSubtle,
     paddingHorizontal: 16,
     paddingVertical: 8,
   },
@@ -1230,8 +1234,9 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
   },
   keyboardDoneText: {
-    color: "#2563eb",
+    color: colors.primary,
     fontSize: 16,
     fontWeight: "800",
   },
-});
+  });
+}

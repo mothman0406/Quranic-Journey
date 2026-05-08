@@ -2,6 +2,16 @@
 
 Expo/React Native mobile app for NoorPath. This app uses Expo Router and EAS.
 
+## Change Log
+
+### 2026-05-08
+
+- Added app-wide appearance preferences for Light, Dark, and System modes.
+- Themed the main mobile surfaces for dark mode, including home, sign-in, child dashboard, memorization, plan, progress, profile, more, notes/bookmarks, stories, du'aas, review sheets, and shared navigation/components.
+- Updated child and standalone Mushaf reader chrome for dark mode while keeping Quran page bitmaps on their original white page surface.
+- Added dark-mode support for memorization settings and removed lingering light-only surfaces that caused unreadable text on dark backgrounds.
+- Restored the review Mushaf page frame so its visual size matches the previous review experience.
+
 ## Local Development
 
 From this folder:

@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { type Href, useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
@@ -12,6 +12,7 @@ import {
   ScreenScrollView,
 } from "@/src/components/screen-primitives";
 import { fetchStory, type StoryDetail, type StoryType } from "@/src/lib/stories";
+import { useAppTheme, type AppThemeColors } from "@/src/lib/app-theme";
 
 type StoryDetailState =
   | { status: "loading" }
@@ -50,6 +51,8 @@ export default function StoryDetailScreen() {
     name?: string;
   }>();
   const router = useRouter();
+  const { colors } = useAppTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const [state, setState] = useState<StoryDetailState>({ status: "loading" });
 
   const load = useCallback(async () => {
@@ -103,9 +106,9 @@ export default function StoryDetailScreen() {
             <View style={styles.metaRow}>
               <BadgePill
                 label={STORY_TYPE_LABELS[state.story.storyType]}
-                color="#1d4ed8"
-                backgroundColor="#eff6ff"
-                borderColor="#bfdbfe"
+                color={colors.primary}
+                backgroundColor={colors.primarySoft}
+                borderColor={colors.primaryBorder}
               />
               <BadgePill label={`${state.story.readingTimeMinutes} min`} />
             </View>
@@ -124,7 +127,7 @@ export default function StoryDetailScreen() {
               ]}
             >
               <View style={styles.previousIcon}>
-                <Ionicons name="arrow-back" size={16} color="#2563eb" />
+                <Ionicons name="arrow-back" size={16} color={colors.primary} />
               </View>
               <View style={styles.previousBody}>
                 <Text style={styles.previousLabel}>Previously in this story:</Text>
@@ -133,7 +136,7 @@ export default function StoryDetailScreen() {
                   {truncateSummary(state.story.previousStory.summary)}
                 </Text>
               </View>
-              <Ionicons name="chevron-forward" size={18} color="#64748b" />
+              <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
             </Pressable>
           ) : null}
 
@@ -148,7 +151,7 @@ export default function StoryDetailScreen() {
           {(state.story.morals?.length ?? 0) > 0 ? (
             <View style={styles.lessonCard}>
               <View style={styles.sectionHeader}>
-                <Ionicons name="sparkles-outline" size={16} color="#b45309" />
+                <Ionicons name="sparkles-outline" size={16} color={colors.warning} />
                 <Text style={styles.lessonTitle}>Lessons</Text>
               </View>
               {(state.story.morals ?? []).map((moral) => (
@@ -163,7 +166,7 @@ export default function StoryDetailScreen() {
           {(state.story.relatedAyahs?.length ?? 0) > 0 ? (
             <View style={styles.relatedCard}>
               <View style={styles.sectionHeader}>
-                <Ionicons name="book-outline" size={16} color="#0f766e" />
+                <Ionicons name="book-outline" size={16} color={colors.success} />
                 <Text style={styles.relatedTitle}>Related Ayahs</Text>
               </View>
               <View style={styles.relatedWrap}>
@@ -171,9 +174,9 @@ export default function StoryDetailScreen() {
                   <BadgePill
                     key={`${ref.surahNumber}-${ref.ayahStart}-${ref.ayahEnd}`}
                     label={ref.label ?? `${ref.surahNumber}:${ref.ayahStart}-${ref.ayahEnd}`}
-                    color="#0f766e"
-                    backgroundColor="#ecfdf5"
-                    borderColor="#a7f3d0"
+                    color={colors.success}
+                    backgroundColor={colors.successSoft}
+                    borderColor={colors.successBorder}
                   />
                 ))}
               </View>
@@ -183,7 +186,7 @@ export default function StoryDetailScreen() {
           {(state.story.discussionQuestions?.length ?? 0) > 0 ? (
             <View style={styles.questionCard}>
               <View style={styles.sectionHeader}>
-                <Ionicons name="chatbubbles-outline" size={16} color="#475569" />
+                <Ionicons name="chatbubbles-outline" size={16} color={colors.textMuted} />
                 <Text style={styles.questionTitle}>Talk About It</Text>
               </View>
               {(state.story.discussionQuestions ?? []).map((question, index) => (
@@ -208,7 +211,8 @@ export default function StoryDetailScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(colors: AppThemeColors) {
+  return StyleSheet.create({
   content: {
     paddingBottom: 24,
   },
@@ -221,21 +225,21 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   title: {
-    color: "#111827",
+    color: colors.text,
     fontSize: 24,
     lineHeight: 30,
     fontWeight: "900",
   },
   summary: {
-    color: "#64748b",
+    color: colors.textMuted,
     fontSize: 14,
     lineHeight: 21,
     fontWeight: "600",
   },
   storyCard: {
-    backgroundColor: "#ffffff",
+    backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: "#e2e8f0",
+    borderColor: colors.border,
     borderRadius: 12,
     padding: 16,
     gap: 12,
@@ -244,9 +248,9 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
-    backgroundColor: "#eff6ff",
+    backgroundColor: colors.primarySoft,
     borderWidth: 1,
-    borderColor: "#bfdbfe",
+    borderColor: colors.primaryBorder,
     borderRadius: 12,
     padding: 14,
   },
@@ -257,7 +261,7 @@ const styles = StyleSheet.create({
     width: 34,
     height: 34,
     borderRadius: 17,
-    backgroundColor: "#ffffff",
+    backgroundColor: colors.surface,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -266,48 +270,48 @@ const styles = StyleSheet.create({
     gap: 3,
   },
   previousLabel: {
-    color: "#1d4ed8",
+    color: colors.primary,
     fontSize: 12,
     lineHeight: 16,
     fontWeight: "900",
   },
   previousTitle: {
-    color: "#111827",
+    color: colors.text,
     fontSize: 15,
     lineHeight: 20,
     fontWeight: "900",
   },
   previousSummary: {
-    color: "#475569",
+    color: colors.textMuted,
     fontSize: 13,
     lineHeight: 18,
     fontWeight: "600",
   },
   paragraph: {
-    color: "#1f2937",
+    color: colors.text,
     fontSize: 15,
     lineHeight: 24,
   },
   lessonCard: {
-    backgroundColor: "#fffbeb",
+    backgroundColor: colors.warningSoft,
     borderWidth: 1,
-    borderColor: "#fde68a",
+    borderColor: colors.warningBorder,
     borderRadius: 12,
     padding: 14,
     gap: 8,
   },
   relatedCard: {
-    backgroundColor: "#f0fdfa",
+    backgroundColor: colors.successSoft,
     borderWidth: 1,
-    borderColor: "#99f6e4",
+    borderColor: colors.successBorder,
     borderRadius: 12,
     padding: 14,
     gap: 10,
   },
   questionCard: {
-    backgroundColor: "#ffffff",
+    backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: "#e2e8f0",
+    borderColor: colors.border,
     borderRadius: 12,
     padding: 14,
     gap: 10,
@@ -318,17 +322,17 @@ const styles = StyleSheet.create({
     gap: 7,
   },
   lessonTitle: {
-    color: "#92400e",
+    color: colors.warning,
     fontSize: 14,
     fontWeight: "900",
   },
   relatedTitle: {
-    color: "#0f766e",
+    color: colors.success,
     fontSize: 14,
     fontWeight: "900",
   },
   questionTitle: {
-    color: "#334155",
+    color: colors.textMuted,
     fontSize: 14,
     fontWeight: "900",
   },
@@ -338,14 +342,14 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   lessonBullet: {
-    color: "#f59e0b",
+    color: colors.warning,
     fontSize: 14,
     lineHeight: 21,
     fontWeight: "900",
   },
   lessonText: {
     flex: 1,
-    color: "#92400e",
+    color: colors.warning,
     fontSize: 14,
     lineHeight: 21,
     fontWeight: "600",
@@ -364,25 +368,26 @@ const styles = StyleSheet.create({
     width: 24,
     height: 24,
     borderRadius: 12,
-    backgroundColor: "#eff6ff",
+    backgroundColor: colors.primarySoft,
     alignItems: "center",
     justifyContent: "center",
   },
   questionNumberText: {
-    color: "#2563eb",
+    color: colors.primary,
     fontSize: 12,
     fontWeight: "900",
   },
   questionText: {
     flex: 1,
-    color: "#334155",
+    color: colors.textMuted,
     fontSize: 14,
     lineHeight: 21,
   },
   sourceFooter: {
-    color: "#64748b",
+    color: colors.textMuted,
     fontSize: 12,
     lineHeight: 18,
     textAlign: "center",
   },
-});
+  });
+}

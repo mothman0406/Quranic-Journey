@@ -24,6 +24,7 @@ import {
   type Dua,
   type DuaCategory,
 } from "@/src/lib/duas";
+import { useAppTheme } from "@/src/lib/app-theme";
 
 type DuaCategoryState =
   | { status: "loading" }
@@ -48,14 +49,16 @@ function describeError(error: unknown) {
 }
 
 function LearnedTrailing({ learned }: { learned: boolean }) {
+  const { colors } = useAppTheme();
+
   return (
     <View style={styles.trailing}>
       <Ionicons
         name={learned ? "checkmark-circle" : "bookmark-outline"}
         size={19}
-        color={learned ? "#059669" : "#94a3b8"}
+        color={learned ? colors.success : colors.textSubtle}
       />
-      <Ionicons name="chevron-forward" size={18} color="#9ca3af" />
+      <Ionicons name="chevron-forward" size={18} color={colors.textSubtle} />
     </View>
   );
 }

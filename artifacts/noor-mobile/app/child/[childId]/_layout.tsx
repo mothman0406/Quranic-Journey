@@ -1,8 +1,11 @@
 import { Stack } from "expo-router";
+import { useAppTheme } from "@/src/lib/app-theme";
 
 export default function ChildLayout() {
+  const { colors } = useAppTheme();
+
   return (
-    <Stack screenOptions={{ headerShown: false }}>
+    <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.background } }}>
       <Stack.Screen name="index" />
       <Stack.Screen name="mushaf" />
       <Stack.Screen name="review" />

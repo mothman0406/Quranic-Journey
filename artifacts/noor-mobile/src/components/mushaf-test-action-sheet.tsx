@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
 import {
   ActivityIndicator,
@@ -10,6 +10,7 @@ import {
   Text,
   View,
 } from "react-native";
+import { useAppTheme, type AppThemeColors } from "@/src/lib/app-theme";
 import {
   fetchAyahTranslation,
   fetchAyahWithWords,
@@ -75,6 +76,8 @@ function ActionRow({
   color: string;
   onPress: () => void;
 }) {
+  const { colors } = useAppTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   return (
     <Pressable style={styles.actionRow} onPress={onPress} accessibilityRole="button">
       <Ionicons name={icon} size={20} color={color} />
@@ -97,6 +100,8 @@ export function MushafTestActionSheet({
   onViewInFullMushaf,
   onCopy,
 }: MushafTestActionSheetProps) {
+  const { colors } = useAppTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const verseKey = `${surah}:${ayah}`;
   const [ayahTextState, setAyahTextState] = useState<LoadState>({
     status: "idle",
@@ -256,14 +261,14 @@ export function MushafTestActionSheet({
                 style={styles.closeButton}
                 onPress={onClose}
               >
-                <Ionicons name="close" size={19} color="#6b7280" />
+                <Ionicons name="close" size={19} color={colors.textMuted} />
               </Pressable>
             </View>
 
             <View style={styles.arabicCard}>
               {ayahTextState.status === "loading" || ayahTextState.status === "idle" ? (
                 <View style={styles.inlineLoadingRow}>
-                  <ActivityIndicator size="small" color="#b45309" />
+                  <ActivityIndicator size="small" color={colors.warning} />
                   <Text style={styles.arabicStateText}>Loading ayah...</Text>
                 </View>
               ) : ayahTextState.status === "error" ? (
@@ -329,7 +334,7 @@ export function MushafTestActionSheet({
                     accessibilityRole="button"
                     accessibilityLabel="Close word translation"
                   >
-                    <Ionicons name="close" size={16} color="#6b7280" />
+                    <Ionicons name="close" size={16} color={colors.textMuted} />
                   </Pressable>
                 </View>
                 {wordTranslationState.status === "loading" ||
@@ -371,7 +376,7 @@ export function MushafTestActionSheet({
                       <Ionicons
                         name={translationExpanded ? "chevron-up" : "chevron-down"}
                         size={14}
-                        color="#2563eb"
+                        color={colors.primary}
                       />
                     </Pressable>
                   ) : null}
@@ -383,31 +388,31 @@ export function MushafTestActionSheet({
               <ActionRow
                 label="Listen"
                 icon="play-circle-outline"
-                color="#2563eb"
+                color={colors.primary}
                 onPress={onListen}
               />
               <ActionRow
                 label="Play from here"
                 icon="play-skip-forward-outline"
-                color="#2563eb"
+                color={colors.primary}
                 onPress={onPlayFromHere}
               />
               <ActionRow
                 label="Bookmark"
                 icon="bookmark-outline"
-                color="#b45309"
+                color={colors.warning}
                 onPress={onBookmark}
               />
               <ActionRow
                 label="View in Full Mushaf"
                 icon="reader-outline"
-                color="#0369a1"
+                color={colors.success}
                 onPress={onViewInFullMushaf}
               />
               <ActionRow
                 label="Copy"
                 icon="copy-outline"
-                color="#475569"
+                color={colors.textMuted}
                 onPress={onCopy}
               />
             </View>
@@ -418,20 +423,21 @@ export function MushafTestActionSheet({
   );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(colors: AppThemeColors) {
+  return StyleSheet.create({
   modalRoot: {
     ...StyleSheet.absoluteFillObject,
     justifyContent: "flex-end",
   },
   backdrop: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(15,23,42,0.38)",
+    backgroundColor: colors.overlay,
   },
   sheet: {
     maxHeight: "88%",
     borderTopLeftRadius: 18,
     borderTopRightRadius: 18,
-    backgroundColor: "#ffffff",
+    backgroundColor: colors.surface,
     paddingTop: 28,
     paddingHorizontal: 20,
     paddingBottom: 34,
@@ -456,22 +462,22 @@ const styles = StyleSheet.create({
     fontSize: 18,
     lineHeight: 24,
     fontWeight: "900",
-    color: "#111827",
+    color: colors.text,
   },
   subtitle: {
     marginTop: 2,
     fontSize: 13,
     lineHeight: 18,
     fontWeight: "600",
-    color: "#6b7280",
+    color: colors.textMuted,
   },
   closeButton: {
     width: 36,
     height: 36,
     borderRadius: 18,
     borderWidth: 1,
-    borderColor: "#e5e7eb",
-    backgroundColor: "#ffffff",
+    borderColor: colors.border,
+    backgroundColor: colors.surfaceSubtle,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -479,8 +485,8 @@ const styles = StyleSheet.create({
     minHeight: 96,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#fde68a",
-    backgroundColor: "#fffbeb",
+    borderColor: colors.warningBorder,
+    backgroundColor: colors.warningSoft,
     paddingVertical: 22,
     paddingHorizontal: 18,
     justifyContent: "center",
@@ -501,12 +507,12 @@ const styles = StyleSheet.create({
     fontFamily: "AmiriQuran",
     fontSize: 25,
     lineHeight: 42,
-    color: "#111827",
+    color: colors.text,
     textAlign: "right",
     writingDirection: "rtl",
   },
   arabicWordTextSelected: {
-    color: "#1d4ed8",
+    color: colors.primary,
   },
   arabicWordAudioHighlight: {
     ...StyleSheet.absoluteFillObject,
@@ -517,7 +523,7 @@ const styles = StyleSheet.create({
     fontFamily: "AmiriQuran",
     fontSize: 25,
     lineHeight: 42,
-    color: "#111827",
+    color: colors.text,
     textAlign: "right",
     writingDirection: "rtl",
   },
@@ -531,14 +537,14 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 18,
     fontWeight: "700",
-    color: "#92400e",
+    color: colors.warning,
     textAlign: "center",
   },
   wordTranslationPanel: {
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#dbeafe",
-    backgroundColor: "#eff6ff",
+    borderColor: colors.primaryBorder,
+    backgroundColor: colors.primarySoft,
     paddingVertical: 12,
     paddingHorizontal: 14,
     gap: 6,
@@ -551,31 +557,31 @@ const styles = StyleSheet.create({
   wordTranslationLabel: {
     fontSize: 11,
     fontWeight: "900",
-    color: "#1e40af",
+    color: colors.primary,
     textTransform: "uppercase",
     letterSpacing: 0,
   },
   wordTranslationText: {
     fontSize: 15,
     lineHeight: 22,
-    color: "#1e293b",
+    color: colors.text,
     fontWeight: "600",
   },
   wordTranslationStateText: {
     fontSize: 13,
     fontWeight: "700",
-    color: "#1e40af",
+    color: colors.primary,
   },
   wordTranslationErrorText: {
     fontSize: 13,
     fontWeight: "700",
-    color: "#b91c1c",
+    color: colors.danger,
   },
   translationPanel: {
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#e2e8f0",
-    backgroundColor: "#ffffff",
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
     padding: 14,
   },
   translationLabel: {
@@ -583,26 +589,26 @@ const styles = StyleSheet.create({
     fontSize: 11,
     lineHeight: 15,
     fontWeight: "900",
-    color: "#64748b",
+    color: colors.textMuted,
     textTransform: "uppercase",
   },
   translationText: {
     fontSize: 15,
     lineHeight: 26,
-    color: "#374151",
+    color: colors.textMuted,
     fontWeight: "600",
   },
   translationStateText: {
     fontSize: 14,
     lineHeight: 22,
     fontWeight: "700",
-    color: "#64748b",
+    color: colors.textMuted,
   },
   translationErrorText: {
     fontSize: 14,
     lineHeight: 22,
     fontWeight: "700",
-    color: "#dc2626",
+    color: colors.danger,
   },
   expandToggle: {
     alignSelf: "flex-start",
@@ -613,13 +619,13 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     paddingHorizontal: 10,
     borderRadius: 8,
-    backgroundColor: "#eff6ff",
+    backgroundColor: colors.primarySoft,
     borderWidth: 1,
-    borderColor: "#bfdbfe",
+    borderColor: colors.primaryBorder,
   },
   expandToggleText: {
     fontSize: 13,
-    color: "#2563eb",
+    color: colors.primary,
     fontWeight: "800",
   },
   actionList: {
@@ -630,8 +636,8 @@ const styles = StyleSheet.create({
     minHeight: 48,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#e5e7eb",
-    backgroundColor: "#ffffff",
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
     paddingVertical: 12,
     paddingHorizontal: 14,
     flexDirection: "row",
@@ -643,6 +649,7 @@ const styles = StyleSheet.create({
     minWidth: 0,
     fontSize: 15,
     fontWeight: "800",
-    color: "#111827",
+    color: colors.text,
   },
-});
+  });
+}

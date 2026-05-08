@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useMemo } from "react";
 import { Ionicons } from "@expo/vector-icons";
 import {
   Modal,
@@ -8,6 +8,7 @@ import {
   Text,
   View,
 } from "react-native";
+import { hexToRgba, useAppTheme, type AppThemeColors } from "@/src/lib/app-theme";
 
 type IoniconName = React.ComponentProps<typeof Ionicons>["name"];
 
@@ -40,13 +41,15 @@ function ActionRow({
   color: string;
   onPress: () => void;
 }) {
+  const { colors } = useAppTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   return (
     <Pressable style={styles.actionRow} onPress={onPress} accessibilityRole="button">
-      <View style={[styles.actionIcon, { backgroundColor: `${color}17` }]}>
+      <View style={[styles.actionIcon, { backgroundColor: hexToRgba(color, 0.09) }]}>
         <Ionicons name={icon} size={19} color={color} />
       </View>
       <Text style={styles.actionRowText}>{label}</Text>
-      <Ionicons name="chevron-forward" size={17} color="#94a3b8" />
+      <Ionicons name="chevron-forward" size={17} color={colors.textSubtle} />
     </Pressable>
   );
 }
@@ -60,6 +63,8 @@ export function ReviewActionSheet({
   onBookmark,
   onCopy,
 }: ReviewActionSheetProps) {
+  const { colors } = useAppTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const visible = target !== null;
 
   return (
@@ -74,7 +79,7 @@ export function ReviewActionSheet({
               <Text style={styles.title}>Ayah actions</Text>
             </View>
             <Pressable style={styles.closeButton} onPress={onClose} accessibilityRole="button">
-              <Ionicons name="close" size={19} color="#475569" />
+              <Ionicons name="close" size={19} color={colors.textMuted} />
             </Pressable>
           </View>
 
@@ -98,25 +103,25 @@ export function ReviewActionSheet({
               <ActionRow
                 label="Translation"
                 icon="language-outline"
-                color="#2563eb"
+                color={colors.primary}
                 onPress={onTranslation}
               />
               <ActionRow
                 label="View in Full Mushaf"
                 icon="reader-outline"
-                color="#0369a1"
+                color={colors.success}
                 onPress={onViewInFullMushaf}
               />
               <ActionRow
                 label="Bookmark"
                 icon="bookmark-outline"
-                color="#b45309"
+                color={colors.warning}
                 onPress={onBookmark}
               />
               <ActionRow
                 label="Copy"
                 icon="copy-outline"
-                color="#475569"
+                color={colors.textMuted}
                 onPress={onCopy}
               />
             </View>
@@ -127,26 +132,27 @@ export function ReviewActionSheet({
   );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(colors: AppThemeColors) {
+  return StyleSheet.create({
   modalRoot: {
     flex: 1,
     justifyContent: "flex-end",
   },
   backdrop: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(15, 23, 42, 0.34)",
+    backgroundColor: colors.overlay,
   },
   sheet: {
     maxHeight: "78%",
     borderTopLeftRadius: 26,
     borderTopRightRadius: 26,
-    backgroundColor: "#fffdf8",
+    backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: "#eadfca",
+    borderColor: colors.border,
     paddingHorizontal: 18,
     paddingTop: 10,
     paddingBottom: 18,
-    shadowColor: "#0f172a",
+    shadowColor: colors.shadow,
     shadowOpacity: 0.18,
     shadowRadius: 20,
     shadowOffset: { width: 0, height: -6 },
@@ -157,7 +163,7 @@ const styles = StyleSheet.create({
     width: 44,
     height: 5,
     borderRadius: 999,
-    backgroundColor: "#d6c7aa",
+    backgroundColor: colors.borderStrong,
     marginBottom: 14,
   },
   header: {
@@ -168,12 +174,12 @@ const styles = StyleSheet.create({
     marginBottom: 14,
   },
   eyebrow: {
-    color: "#64748b",
+    color: colors.textMuted,
     fontSize: 12,
     fontWeight: "800",
   },
   title: {
-    color: "#111827",
+    color: colors.text,
     fontSize: 20,
     fontWeight: "900",
   },
@@ -183,9 +189,9 @@ const styles = StyleSheet.create({
     borderRadius: 17,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#f8fafc",
+    backgroundColor: colors.surfaceSubtle,
     borderWidth: 1,
-    borderColor: "#e2e8f0",
+    borderColor: colors.border,
   },
   scrollContent: {
     paddingBottom: 8,
@@ -194,20 +200,20 @@ const styles = StyleSheet.create({
   arabicBox: {
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: "#eadfca",
-    backgroundColor: "#fffaf0",
+    borderColor: colors.warningBorder,
+    backgroundColor: colors.warningSoft,
     paddingHorizontal: 16,
     paddingVertical: 14,
   },
   arabicText: {
-    color: "#1f2937",
+    color: colors.text,
     fontSize: 24,
     lineHeight: 42,
     textAlign: "right",
     writingDirection: "rtl",
   },
   translationText: {
-    color: "#475569",
+    color: colors.textMuted,
     fontSize: 14,
     lineHeight: 21,
     fontWeight: "700",
@@ -216,8 +222,8 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     overflow: "hidden",
     borderWidth: 1,
-    borderColor: "#e2e8f0",
-    backgroundColor: "#ffffff",
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
   },
   actionRow: {
     minHeight: 58,
@@ -226,7 +232,7 @@ const styles = StyleSheet.create({
     gap: 12,
     paddingHorizontal: 14,
     borderBottomWidth: 1,
-    borderBottomColor: "#eef2f7",
+    borderBottomColor: colors.separator,
   },
   actionIcon: {
     width: 34,
@@ -237,8 +243,9 @@ const styles = StyleSheet.create({
   },
   actionRowText: {
     flex: 1,
-    color: "#1f2937",
+    color: colors.text,
     fontSize: 15,
     fontWeight: "800",
   },
-});
+  });
+}

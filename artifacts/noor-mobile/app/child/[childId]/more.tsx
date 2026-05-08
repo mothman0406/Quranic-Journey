@@ -15,6 +15,7 @@ import {
   SectionLabel,
 } from "@/src/components/screen-primitives";
 import { apiFetch } from "@/src/lib/api";
+import { useAppTheme } from "@/src/lib/app-theme";
 
 type IconName = ComponentProps<typeof Ionicons>["name"];
 
@@ -122,6 +123,7 @@ function formatDayStreak(days: number) {
 export default function MoreScreen() {
   const { childId, name } = useLocalSearchParams<{ childId: string; name: string }>();
   const router = useRouter();
+  const { colors } = useAppTheme();
   const [child, setChild] = useState<ChildSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -199,7 +201,7 @@ export default function MoreScreen() {
                     trailing={item.badge ? (
                       <View style={styles.openBadgeTrailing}>
                         <BadgePill label={item.badge} />
-                        <Ionicons name="chevron-forward" size={18} color="#9ca3af" />
+                        <Ionicons name="chevron-forward" size={18} color={colors.textSubtle} />
                       </View>
                     ) : undefined}
                     onPress={route ? () => openRoute(route) : undefined}

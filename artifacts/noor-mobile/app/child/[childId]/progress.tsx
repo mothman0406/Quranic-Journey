@@ -6,6 +6,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  type ColorValue,
   View,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
@@ -17,6 +18,7 @@ import {
   fetchHafidhProjections,
   type ProjectionResponse,
 } from "@/src/lib/projections";
+import { APP_ADAPTIVE_COLORS as appColors } from "@/src/lib/app-theme";
 
 type IconName = ComponentProps<typeof Ionicons>["name"];
 type ProgressRange = "week" | "month";
@@ -79,35 +81,35 @@ const STAT_CARDS: Array<{
   label: string;
   icon: IconName;
   color: string;
-  soft: string;
+  soft: ColorValue;
 }> = [
   {
     key: "streak",
     label: "Streak",
     icon: "flame-outline",
     color: "#ea580c",
-    soft: "#fff7ed",
+    soft: appColors.warningSoft,
   },
   {
     key: "points",
     label: "Points",
     icon: "star-outline",
     color: "#d97706",
-    soft: "#fffbeb",
+    soft: appColors.warningSoft,
   },
   {
     key: "surahs",
     label: "Surahs",
     icon: "book-outline",
     color: "#2563eb",
-    soft: "#eff6ff",
+    soft: appColors.primarySoft,
   },
   {
     key: "badges",
     label: "Badges",
     icon: "trophy-outline",
     color: "#be123c",
-    soft: "#fff1f2",
+    soft: appColors.dangerSoft,
   },
 ];
 
@@ -228,7 +230,7 @@ function Header({
         style={styles.headerIconButton}
         onPress={goDashboard}
       >
-        <Ionicons name="chevron-back" size={22} color="#111827" />
+        <Ionicons name="chevron-back" size={22} color={appColors.text as string} />
       </Pressable>
 
       <View style={styles.headerIdentity}>
@@ -245,7 +247,7 @@ function Header({
         style={styles.headerIconButton}
         onPress={openSettings}
       >
-        <Ionicons name="settings-outline" size={21} color="#111827" />
+        <Ionicons name="settings-outline" size={21} color={appColors.text as string} />
       </Pressable>
     </View>
   );
@@ -264,7 +266,7 @@ function StatCard({
   detail: string;
   icon: IconName;
   color: string;
-  soft: string;
+  soft: ColorValue;
 }) {
   return (
     <View style={styles.statCard}>
@@ -339,7 +341,7 @@ function ActivityChart({
                         styles.bar,
                         {
                           height: `${heightPercent}%`,
-                          backgroundColor: day.totalActivityScore > 0 ? "#2563eb" : "#e5e7eb",
+                          backgroundColor: day.totalActivityScore > 0 ? "#2563eb" : appColors.border,
                         },
                       ]}
                     />
@@ -358,7 +360,7 @@ function ActivityChart({
         </>
       ) : (
         <View style={styles.emptyChart}>
-          <Ionicons name="bar-chart-outline" size={24} color="#94a3b8" />
+          <Ionicons name="bar-chart-outline" size={24} color={appColors.textSubtle as string} />
           <Text style={styles.emptyChartText}>No activity yet - start memorizing today.</Text>
         </View>
       )}
@@ -671,7 +673,7 @@ export default function ProgressScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#f8fafc",
+    backgroundColor: appColors.background,
   },
   header: {
     flexDirection: "row",
@@ -680,8 +682,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingBottom: 12,
     borderBottomWidth: 1,
-    borderBottomColor: "#e2e8f0",
-    backgroundColor: "#ffffff",
+    borderBottomColor: appColors.border,
+    backgroundColor: appColors.surface,
   },
   headerIconButton: {
     width: 40,
@@ -703,9 +705,9 @@ const styles = StyleSheet.create({
     width: 30,
     height: 30,
     borderRadius: 15,
-    backgroundColor: "#f8fafc",
+    backgroundColor: appColors.surfaceSubtle,
     borderWidth: 1,
-    borderColor: "#e5e7eb",
+    borderColor: appColors.border,
     overflow: "hidden",
     textAlign: "center",
     lineHeight: 30,
@@ -713,7 +715,7 @@ const styles = StyleSheet.create({
   },
   headerChildName: {
     maxWidth: 185,
-    color: "#111827",
+    color: appColors.text,
     fontSize: 17,
     fontWeight: "900",
   },
@@ -735,15 +737,15 @@ const styles = StyleSheet.create({
   errorCard: {
     width: "100%",
     borderWidth: 1,
-    borderColor: "#fecaca",
+    borderColor: appColors.dangerBorder,
     borderRadius: 12,
-    backgroundColor: "#fff7f7",
+    backgroundColor: appColors.dangerSoft,
     padding: 18,
     alignItems: "center",
     gap: 10,
   },
   errorText: {
-    color: "#dc2626",
+    color: appColors.danger,
     fontSize: 14,
     lineHeight: 20,
     fontWeight: "700",
@@ -765,19 +767,19 @@ const styles = StyleSheet.create({
     paddingTop: 2,
   },
   kicker: {
-    color: "#2563eb",
+    color: appColors.primary,
     fontSize: 12,
     fontWeight: "900",
     textTransform: "uppercase",
   },
   pageTitle: {
-    color: "#111827",
+    color: appColors.text,
     fontSize: 24,
     lineHeight: 29,
     fontWeight: "900",
   },
   pageSubtitle: {
-    color: "#64748b",
+    color: appColors.textMuted,
     fontSize: 13,
     lineHeight: 18,
     fontWeight: "700",
@@ -790,9 +792,9 @@ const styles = StyleSheet.create({
   statCard: {
     width: "48%",
     minHeight: 96,
-    backgroundColor: "#ffffff",
+    backgroundColor: appColors.surface,
     borderWidth: 1,
-    borderColor: "#e5e7eb",
+    borderColor: appColors.border,
     borderRadius: 12,
     padding: 12,
   },
@@ -805,28 +807,28 @@ const styles = StyleSheet.create({
     marginBottom: 7,
   },
   statLabel: {
-    color: "#64748b",
+    color: appColors.textMuted,
     fontSize: 11,
     fontWeight: "900",
     textTransform: "uppercase",
   },
   statValue: {
-    color: "#111827",
+    color: appColors.text,
     fontSize: 25,
     lineHeight: 30,
     fontWeight: "900",
     marginTop: 1,
   },
   statDetail: {
-    color: "#64748b",
+    color: appColors.textMuted,
     fontSize: 12,
     lineHeight: 16,
     fontWeight: "700",
   },
   chartHeaderCard: {
-    backgroundColor: "#ffffff",
+    backgroundColor: appColors.surface,
     borderWidth: 1,
-    borderColor: "#e5e7eb",
+    borderColor: appColors.border,
     borderRadius: 12,
     padding: 14,
     gap: 12,
@@ -842,12 +844,12 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   chartHeading: {
-    color: "#111827",
+    color: appColors.text,
     fontSize: 17,
     fontWeight: "900",
   },
   chartHeadingDetail: {
-    color: "#64748b",
+    color: appColors.textMuted,
     fontSize: 12,
     fontWeight: "700",
     marginTop: 1,
@@ -855,9 +857,9 @@ const styles = StyleSheet.create({
   segmentedControl: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#f8fafc",
+    backgroundColor: appColors.surfaceSubtle,
     borderWidth: 1,
-    borderColor: "#e5e7eb",
+    borderColor: appColors.border,
     borderRadius: 10,
     padding: 3,
   },
@@ -873,7 +875,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#2563eb",
   },
   segmentText: {
-    color: "#64748b",
+    color: appColors.textMuted,
     fontSize: 12,
     fontWeight: "900",
   },
@@ -884,7 +886,7 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   cardTitle: {
-    color: "#111827",
+    color: appColors.text,
     fontSize: 17,
     fontWeight: "900",
   },
@@ -907,7 +909,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "flex-end",
     borderBottomWidth: 1,
-    borderBottomColor: "#e5e7eb",
+    borderBottomColor: appColors.border,
   },
   bar: {
     width: "76%",
@@ -917,7 +919,7 @@ const styles = StyleSheet.create({
   },
   barLabel: {
     minHeight: 14,
-    color: "#64748b",
+    color: appColors.textMuted,
     fontSize: 10,
     lineHeight: 12,
     fontWeight: "800",
@@ -936,32 +938,32 @@ const styles = StyleSheet.create({
     backgroundColor: "#2563eb",
   },
   legendText: {
-    color: "#64748b",
+    color: appColors.textMuted,
     fontSize: 12,
     fontWeight: "700",
   },
   emptyChart: {
     minHeight: 154,
     borderWidth: 1,
-    borderColor: "#e5e7eb",
+    borderColor: appColors.border,
     borderRadius: 12,
-    backgroundColor: "#f8fafc",
+    backgroundColor: appColors.surfaceSubtle,
     alignItems: "center",
     justifyContent: "center",
     padding: 20,
     gap: 8,
   },
   emptyChartText: {
-    color: "#64748b",
+    color: appColors.textMuted,
     fontSize: 13,
     lineHeight: 18,
     fontWeight: "800",
     textAlign: "center",
   },
   trajectoryCard: {
-    backgroundColor: "#ffffff",
+    backgroundColor: appColors.surface,
     borderWidth: 1,
-    borderColor: "#ccfbf1",
+    borderColor: appColors.successBorder,
     borderRadius: 12,
     padding: 14,
     gap: 12,
@@ -977,7 +979,7 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   trajectoryDetail: {
-    color: "#64748b",
+    color: appColors.textMuted,
     fontSize: 12,
     lineHeight: 17,
     fontWeight: "800",
@@ -989,7 +991,7 @@ const styles = StyleSheet.create({
     borderRadius: 11,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#f0fdfa",
+    backgroundColor: appColors.successSoft,
   },
   trajectoryGrid: {
     flexDirection: "row",
@@ -999,34 +1001,34 @@ const styles = StyleSheet.create({
     flex: 1,
     minHeight: 90,
     borderWidth: 1,
-    borderColor: "#ccfbf1",
+    borderColor: appColors.successBorder,
     borderRadius: 12,
-    backgroundColor: "#f0fdfa",
+    backgroundColor: appColors.successSoft,
     padding: 12,
     justifyContent: "center",
   },
   trajectoryMetricLabel: {
-    color: "#0f766e",
+    color: appColors.success,
     fontSize: 11,
     fontWeight: "900",
     textTransform: "uppercase",
   },
   trajectoryMetricValue: {
-    color: "#111827",
+    color: appColors.text,
     fontSize: 25,
     lineHeight: 30,
     fontWeight: "900",
     marginTop: 2,
   },
   trajectoryMetricDetail: {
-    color: "#0f766e",
+    color: appColors.success,
     fontSize: 11,
     lineHeight: 15,
     fontWeight: "800",
   },
   trajectoryDates: {
     borderTopWidth: 1,
-    borderTopColor: "#e5e7eb",
+    borderTopColor: appColors.border,
     paddingTop: 4,
   },
   trajectoryDateRow: {
@@ -1037,28 +1039,28 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   trajectoryDateLabel: {
-    color: "#64748b",
+    color: appColors.textMuted,
     fontSize: 12,
     fontWeight: "800",
   },
   trajectoryDateValue: {
     flexShrink: 0,
     maxWidth: 160,
-    color: "#111827",
+    color: appColors.text,
     fontSize: 12,
     fontWeight: "900",
     textAlign: "right",
   },
   trajectoryStatus: {
-    color: "#0f766e",
+    color: appColors.success,
     fontSize: 12,
     lineHeight: 17,
     fontWeight: "900",
   },
   achievementsCard: {
-    backgroundColor: "#ffffff",
+    backgroundColor: appColors.surface,
     borderWidth: 1,
-    borderColor: "#e5e7eb",
+    borderColor: appColors.border,
     borderRadius: 12,
     padding: 14,
     gap: 14,
@@ -1067,7 +1069,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   groupTitle: {
-    color: "#64748b",
+    color: appColors.textMuted,
     fontSize: 12,
     fontWeight: "900",
     textTransform: "uppercase",
@@ -1084,12 +1086,12 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   earnedRow: {
-    backgroundColor: "#fffbeb",
-    borderColor: "#fde68a",
+    backgroundColor: appColors.warningSoft,
+    borderColor: appColors.warningBorder,
   },
   inProgressRow: {
-    backgroundColor: "#f8fafc",
-    borderColor: "#e5e7eb",
+    backgroundColor: appColors.surfaceSubtle,
+    borderColor: appColors.border,
   },
   achievementIcon: {
     width: 42,
@@ -1099,10 +1101,10 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   earnedIcon: {
-    backgroundColor: "#fef3c7",
+    backgroundColor: appColors.warningSoft,
   },
   inProgressIcon: {
-    backgroundColor: "#f1f5f9",
+    backgroundColor: appColors.surfaceSubtle,
   },
   achievementEmoji: {
     fontSize: 20,
@@ -1123,12 +1125,12 @@ const styles = StyleSheet.create({
   achievementTitle: {
     flex: 1,
     minWidth: 0,
-    color: "#111827",
+    color: appColors.text,
     fontSize: 14,
     fontWeight: "900",
   },
   achievementDetail: {
-    color: "#64748b",
+    color: appColors.textMuted,
     fontSize: 12,
     lineHeight: 17,
     fontWeight: "700",
@@ -1146,7 +1148,7 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   achievementProgressText: {
-    color: "#64748b",
+    color: appColors.textMuted,
     fontSize: 11,
     fontWeight: "800",
   },
@@ -1155,7 +1157,7 @@ const styles = StyleSheet.create({
     height: 6,
     borderRadius: 999,
     overflow: "hidden",
-    backgroundColor: "#e5e7eb",
+    backgroundColor: appColors.border,
   },
   progressFill: {
     height: "100%",

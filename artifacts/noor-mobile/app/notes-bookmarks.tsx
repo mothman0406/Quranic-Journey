@@ -1,4 +1,4 @@
-import { useCallback, useState, type ReactNode } from "react";
+import { useCallback, useMemo, useState, type ReactNode } from "react";
 import { FlatList, StyleSheet, Text, View } from "react-native";
 import { useFocusEffect, useRouter } from "expo-router";
 import {
@@ -20,6 +20,7 @@ import {
   ScreenScrollView,
   SectionLabel,
 } from "@/src/components/screen-primitives";
+import { useAppTheme, type AppThemeColors } from "@/src/lib/app-theme";
 
 export default function StandaloneNotesBookmarksScreen() {
   const router = useRouter();
@@ -110,6 +111,8 @@ function AnnotationSection({
   title: string;
   children: ReactNode;
 }) {
+  const { colors } = useAppTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   return (
     <View style={styles.section}>
       <SectionLabel>{title}</SectionLabel>
@@ -119,6 +122,8 @@ function AnnotationSection({
 }
 
 function EmptyNotesBookmarksState() {
+  const { colors } = useAppTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   return (
     <View style={styles.emptyCard}>
       <Text style={styles.emptyTitle}>No bookmarks or notes yet</Text>
@@ -127,38 +132,40 @@ function EmptyNotesBookmarksState() {
   );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(colors: AppThemeColors) {
+  return StyleSheet.create({
   section: {
     gap: 8,
   },
   card: {
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#e2e8f0",
-    backgroundColor: "#ffffff",
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
     overflow: "hidden",
   },
   emptyCard: {
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#e2e8f0",
-    backgroundColor: "#ffffff",
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
     paddingVertical: 30,
     paddingHorizontal: 18,
     alignItems: "center",
   },
   emptyTitle: {
-    color: "#111827",
+    color: colors.text,
     fontSize: 17,
     fontWeight: "900",
     textAlign: "center",
   },
   emptyText: {
-    color: "#64748b",
+    color: colors.textMuted,
     fontSize: 14,
     lineHeight: 20,
     fontWeight: "600",
     marginTop: 6,
     textAlign: "center",
   },
-});
+  });
+}

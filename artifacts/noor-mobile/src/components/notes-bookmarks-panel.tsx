@@ -1,7 +1,8 @@
-import type { ComponentProps, ReactNode } from "react";
+import { useMemo, type ComponentProps, type ReactNode } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { MUSHAF_SURAHS } from "@/src/lib/mushaf";
+import { hexToRgba, useAppTheme, type AppThemeColors } from "@/src/lib/app-theme";
 import {
   listMushafBookmarks,
   listMushafNotes,
@@ -54,10 +55,12 @@ export function NotesBookmarksRow({
   noteNumberOfLines?: number;
   notePreviewMode?: "panel" | "full";
 }) {
+  const { colors } = useAppTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const isNote = kind === "note" && "text" in entry;
   const title = `${getSurahName(entry)} · ${entry.verseKey}`;
   const iconName: IconName = kind === "bookmark" ? "bookmark" : "document-text-outline";
-  const iconColor = kind === "bookmark" ? "#b45309" : "#2563eb";
+  const iconColor = kind === "bookmark" ? colors.warning : colors.primary;
   const noteText = isNote
     ? notePreviewMode === "panel"
       ? formatMushafNotePreview(entry.text)
@@ -87,7 +90,7 @@ export function NotesBookmarksRow({
           </Text>
         ) : null}
       </View>
-      <View style={[styles.rowIcon, { backgroundColor: `${iconColor}14` }]}>
+      <View style={[styles.rowIcon, { backgroundColor: hexToRgba(iconColor, 0.08) }]}>
         <Ionicons name={iconName} size={19} color={iconColor} />
       </View>
     </Pressable>
@@ -101,6 +104,8 @@ function PanelSection({
   title: string;
   children: ReactNode;
 }) {
+  const { colors } = useAppTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   return (
     <View style={styles.section}>
       <Text style={styles.sectionLabel}>{title}</Text>
@@ -115,6 +120,8 @@ export function NotesBookmarksPanel({
   onViewAll,
   emptyLabel = DEFAULT_EMPTY_LABEL,
 }: NotesBookmarksPanelProps) {
+  const { colors } = useAppTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const bookmarks = listMushafBookmarks(annotations);
   const notes = listMushafNotes(annotations);
   const totalCount = bookmarks.length + notes.length;
@@ -171,23 +178,24 @@ export function NotesBookmarksPanel({
           onPress={onViewAll}
         >
           <Text style={styles.footerText}>View all ({totalCount})</Text>
-          <Ionicons name="arrow-forward" size={16} color="#2563eb" />
+          <Ionicons name="arrow-forward" size={16} color={colors.primary} />
         </Pressable>
       ) : null}
     </View>
   );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(colors: AppThemeColors) {
+  return StyleSheet.create({
   panel: {
     width: "100%",
-    backgroundColor: "#ffffff",
+    backgroundColor: colors.surface,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#e2e8f0",
+    borderColor: colors.border,
     padding: 14,
     gap: 12,
-    shadowColor: "#0f172a",
+    shadowColor: colors.shadow,
     shadowOpacity: 0.035,
     shadowRadius: 10,
     shadowOffset: { width: 0, height: 3 },
@@ -200,13 +208,13 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   kicker: {
-    color: "#64748b",
+    color: colors.textMuted,
     fontSize: 11,
     fontWeight: "800",
     textTransform: "uppercase",
   },
   title: {
-    color: "#111827",
+    color: colors.text,
     fontSize: 17,
     fontWeight: "900",
     marginTop: 2,
@@ -215,20 +223,20 @@ const styles = StyleSheet.create({
     minWidth: 32,
     height: 28,
     borderRadius: 14,
-    backgroundColor: "#f0fdfa",
+    backgroundColor: colors.successSoft,
     borderWidth: 1,
-    borderColor: "#99f6e4",
+    borderColor: colors.successBorder,
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: 9,
   },
   countText: {
-    color: "#0f766e",
+    color: colors.success,
     fontSize: 12,
     fontWeight: "900",
   },
   emptyText: {
-    color: "#64748b",
+    color: colors.textMuted,
     fontSize: 13,
     lineHeight: 18,
     fontWeight: "700",
@@ -240,14 +248,14 @@ const styles = StyleSheet.create({
     gap: 7,
   },
   sectionLabel: {
-    color: "#475569",
+    color: colors.textMuted,
     fontSize: 12,
     fontWeight: "900",
     textTransform: "uppercase",
   },
   sectionRows: {
     borderWidth: 1,
-    borderColor: "#f1f5f9",
+    borderColor: colors.separator,
     borderRadius: 10,
     overflow: "hidden",
   },
@@ -259,8 +267,8 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     paddingHorizontal: 10,
     borderBottomWidth: 1,
-    borderBottomColor: "#f1f5f9",
-    backgroundColor: "#ffffff",
+    borderBottomColor: colors.separator,
+    backgroundColor: colors.surface,
   },
   rowIcon: {
     width: 36,
@@ -274,18 +282,18 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   rowTitle: {
-    color: "#111827",
+    color: colors.text,
     fontSize: 14,
     fontWeight: "900",
   },
   rowMeta: {
-    color: "#0f766e",
+    color: colors.success,
     fontSize: 12,
     fontWeight: "800",
     marginTop: 2,
   },
   notePreview: {
-    color: "#64748b",
+    color: colors.textMuted,
     fontSize: 12,
     lineHeight: 17,
     fontWeight: "600",
@@ -299,8 +307,9 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
   },
   footerText: {
-    color: "#2563eb",
+    color: colors.primary,
     fontSize: 13,
     fontWeight: "900",
   },
-});
+  });
+}

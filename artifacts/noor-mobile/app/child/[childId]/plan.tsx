@@ -9,6 +9,7 @@ import {
   Text,
   View,
   type StyleProp,
+  type ColorValue,
   type ViewStyle,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
@@ -20,6 +21,7 @@ import {
   type ProjectionResponse,
   type ProjectionTier,
 } from "@/src/lib/projections";
+import { APP_ADAPTIVE_COLORS as appColors } from "@/src/lib/app-theme";
 
 type IconName = ComponentProps<typeof Ionicons>["name"];
 
@@ -102,37 +104,37 @@ const AGE_GROUP_LABELS: Record<string, string> = {
 const WEEKLY_TILES: Array<{
   key: keyof WeeklyGoal;
   label: string;
-  color: string;
-  backgroundColor: string;
-  borderColor: string;
+  color: ColorValue;
+  backgroundColor: ColorValue;
+  borderColor: ColorValue;
 }> = [
   {
     key: "memorizationDays",
     label: "Memorization days",
-    color: "#2563eb",
-    backgroundColor: "#eff6ff",
-    borderColor: "#bfdbfe",
+    color: appColors.primary,
+    backgroundColor: appColors.primarySoft,
+    borderColor: appColors.primaryBorder,
   },
   {
     key: "reviewDays",
     label: "Review days",
-    color: "#d97706",
-    backgroundColor: "#fffbeb",
-    borderColor: "#fde68a",
+    color: appColors.warning,
+    backgroundColor: appColors.warningSoft,
+    borderColor: appColors.warningBorder,
   },
   {
     key: "storyDays",
     label: "Story days",
     color: "#0891b2",
-    backgroundColor: "#ecfeff",
-    borderColor: "#a5f3fc",
+    backgroundColor: appColors.primarySoft,
+    borderColor: appColors.primaryBorder,
   },
   {
     key: "duasDays",
     label: "Du'a days",
-    color: "#e11d48",
-    backgroundColor: "#fff1f2",
-    borderColor: "#fecdd3",
+    color: appColors.danger,
+    backgroundColor: appColors.dangerSoft,
+    borderColor: appColors.dangerBorder,
   },
 ];
 
@@ -256,7 +258,7 @@ function Header({
         style={styles.headerIconButton}
         onPress={goDashboard}
       >
-        <Ionicons name="chevron-back" size={22} color="#111827" />
+        <Ionicons name="chevron-back" size={22} color={appColors.text as string} />
       </Pressable>
 
       <View style={styles.headerIdentity}>
@@ -273,7 +275,7 @@ function Header({
         style={styles.headerIconButton}
         onPress={openSettings}
       >
-        <Ionicons name="settings-outline" size={21} color="#111827" />
+        <Ionicons name="settings-outline" size={21} color={appColors.text as string} />
       </Pressable>
     </View>
   );
@@ -380,9 +382,9 @@ function WeeklyTile({
 }: {
   label: string;
   value: number;
-  color: string;
-  backgroundColor: string;
-  borderColor: string;
+  color: ColorValue;
+  backgroundColor: ColorValue;
+  borderColor: ColorValue;
 }) {
   return (
     <View style={[styles.weeklyTile, { backgroundColor, borderColor }]}>
@@ -481,7 +483,7 @@ function HafidhProjectionCard({
           <Ionicons
             name={activeTier.meetsExplicitTarget ? "checkmark-circle-outline" : "alert-circle-outline"}
             size={16}
-            color={activeTier.meetsExplicitTarget ? "#047857" : "#b45309"}
+            color={(activeTier.meetsExplicitTarget ? appColors.success : appColors.warning) as string}
           />
           <Text
             style={[
@@ -754,7 +756,7 @@ export default function PlanScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#f8fafc",
+    backgroundColor: appColors.background,
   },
   header: {
     flexDirection: "row",
@@ -763,8 +765,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingBottom: 12,
     borderBottomWidth: 1,
-    borderBottomColor: "#e2e8f0",
-    backgroundColor: "#ffffff",
+    borderBottomColor: appColors.border,
+    backgroundColor: appColors.surface,
   },
   headerIconButton: {
     width: 40,
@@ -786,9 +788,9 @@ const styles = StyleSheet.create({
     width: 30,
     height: 30,
     borderRadius: 15,
-    backgroundColor: "#f8fafc",
+    backgroundColor: appColors.surfaceSubtle,
     borderWidth: 1,
-    borderColor: "#e5e7eb",
+    borderColor: appColors.border,
     overflow: "hidden",
     textAlign: "center",
     lineHeight: 30,
@@ -796,7 +798,7 @@ const styles = StyleSheet.create({
   },
   headerChildName: {
     maxWidth: 185,
-    color: "#111827",
+    color: appColors.text,
     fontSize: 17,
     fontWeight: "900",
   },
@@ -818,15 +820,15 @@ const styles = StyleSheet.create({
   errorCard: {
     width: "100%",
     borderWidth: 1,
-    borderColor: "#fecaca",
+    borderColor: appColors.dangerBorder,
     borderRadius: 12,
-    backgroundColor: "#fff7f7",
+    backgroundColor: appColors.dangerSoft,
     padding: 18,
     alignItems: "center",
     gap: 10,
   },
   errorText: {
-    color: "#dc2626",
+    color: appColors.danger,
     fontSize: 14,
     lineHeight: 20,
     fontWeight: "700",
@@ -849,7 +851,7 @@ const styles = StyleSheet.create({
     paddingBottom: 2,
   },
   pageTitle: {
-    color: "#111827",
+    color: appColors.text,
     fontSize: 24,
     lineHeight: 30,
     fontWeight: "900",
@@ -859,22 +861,22 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    backgroundColor: "#eff6ff",
+    backgroundColor: appColors.primarySoft,
     borderWidth: 1,
-    borderColor: "#bfdbfe",
+    borderColor: appColors.primaryBorder,
     borderRadius: 999,
     paddingVertical: 6,
     paddingHorizontal: 10,
   },
   practiceText: {
-    color: "#2563eb",
+    color: appColors.primary,
     fontSize: 12,
     fontWeight: "900",
   },
   card: {
-    backgroundColor: "#ffffff",
+    backgroundColor: appColors.surface,
     borderWidth: 1,
-    borderColor: "#e5e7eb",
+    borderColor: appColors.border,
     borderRadius: 12,
     padding: 14,
     gap: 12,
@@ -900,32 +902,32 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   cardTitle: {
-    color: "#111827",
+    color: appColors.text,
     fontSize: 17,
     fontWeight: "900",
   },
   resetText: {
-    color: "#2563eb",
+    color: appColors.primary,
     fontSize: 12,
     fontWeight: "900",
   },
   resetTextDisabled: {
-    color: "#94a3b8",
+    color: appColors.textSubtle,
   },
   goalList: {
     gap: 10,
   },
   goalCard: {
     borderWidth: 1,
-    borderColor: "#e5e7eb",
+    borderColor: appColors.border,
     borderRadius: 12,
-    backgroundColor: "#ffffff",
+    backgroundColor: appColors.surface,
     padding: 12,
     gap: 9,
   },
   goalCardComplete: {
-    borderColor: "#a7f3d0",
-    backgroundColor: "#ecfdf5",
+    borderColor: appColors.successBorder,
+    backgroundColor: appColors.successSoft,
   },
   goalHeader: {
     flexDirection: "row",
@@ -939,13 +941,13 @@ const styles = StyleSheet.create({
     gap: 3,
   },
   goalTitle: {
-    color: "#111827",
+    color: appColors.text,
     fontSize: 14,
     lineHeight: 18,
     fontWeight: "900",
   },
   goalDescription: {
-    color: "#64748b",
+    color: appColors.textMuted,
     fontSize: 12,
     lineHeight: 17,
     fontWeight: "600",
@@ -953,35 +955,35 @@ const styles = StyleSheet.create({
   daysBadge: {
     flexShrink: 0,
     borderWidth: 1,
-    borderColor: "#bfdbfe",
-    backgroundColor: "#eff6ff",
+    borderColor: appColors.primaryBorder,
+    backgroundColor: appColors.primarySoft,
     borderRadius: 999,
     paddingVertical: 4,
     paddingHorizontal: 8,
   },
   daysBadgeText: {
-    color: "#2563eb",
+    color: appColors.primary,
     fontSize: 11,
     fontWeight: "900",
   },
   completedBadge: {
     flexShrink: 0,
     borderWidth: 1,
-    borderColor: "#a7f3d0",
-    backgroundColor: "#d1fae5",
+    borderColor: appColors.successBorder,
+    backgroundColor: appColors.successSoft,
     borderRadius: 999,
     paddingVertical: 4,
     paddingHorizontal: 8,
   },
   completedBadgeText: {
-    color: "#047857",
+    color: appColors.success,
     fontSize: 11,
     fontWeight: "900",
   },
   progressTrack: {
     height: 8,
     borderRadius: 999,
-    backgroundColor: "#e5e7eb",
+    backgroundColor: appColors.border,
     overflow: "hidden",
   },
   progressFill: {
@@ -995,23 +997,23 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   goalCountText: {
-    color: "#475569",
+    color: appColors.textMuted,
     fontSize: 12,
     fontWeight: "800",
   },
   goalPercentText: {
-    color: "#2563eb",
+    color: appColors.primary,
     fontSize: 12,
     fontWeight: "900",
   },
   targetDateText: {
-    color: "#64748b",
+    color: appColors.textMuted,
     fontSize: 11,
     lineHeight: 15,
     fontWeight: "700",
   },
   goalsFooter: {
-    color: "#64748b",
+    color: appColors.textMuted,
     fontSize: 11,
     lineHeight: 16,
     fontWeight: "700",
@@ -1019,26 +1021,26 @@ const styles = StyleSheet.create({
   },
   projectionHero: {
     borderWidth: 1,
-    borderColor: "#fed7aa",
-    backgroundColor: "#fff7ed",
+    borderColor: appColors.warningBorder,
+    backgroundColor: appColors.warningSoft,
     borderRadius: 12,
     padding: 14,
     gap: 4,
   },
   projectionKicker: {
-    color: "#c2410c",
+    color: appColors.warning,
     fontSize: 12,
     fontWeight: "900",
     textTransform: "uppercase",
   },
   projectionDate: {
-    color: "#111827",
+    color: appColors.text,
     fontSize: 24,
     lineHeight: 30,
     fontWeight: "900",
   },
   projectionMeta: {
-    color: "#9a3412",
+    color: appColors.warning,
     fontSize: 12,
     lineHeight: 17,
     fontWeight: "800",
@@ -1052,12 +1054,12 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   targetStatusGood: {
-    borderColor: "#a7f3d0",
-    backgroundColor: "#ecfdf5",
+    borderColor: appColors.successBorder,
+    backgroundColor: appColors.successSoft,
   },
   targetStatusWarning: {
-    borderColor: "#fde68a",
-    backgroundColor: "#fffbeb",
+    borderColor: appColors.warningBorder,
+    backgroundColor: appColors.warningSoft,
   },
   targetStatusText: {
     flex: 1,
@@ -1067,14 +1069,14 @@ const styles = StyleSheet.create({
     fontWeight: "900",
   },
   targetStatusTextGood: {
-    color: "#047857",
+    color: appColors.success,
   },
   targetStatusTextWarning: {
-    color: "#b45309",
+    color: appColors.warning,
   },
   projectionTierList: {
     borderTopWidth: 1,
-    borderTopColor: "#e5e7eb",
+    borderTopColor: appColors.border,
   },
   projectionTierRow: {
     minHeight: 54,
@@ -1084,7 +1086,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     gap: 12,
     borderBottomWidth: 1,
-    borderBottomColor: "#f1f5f9",
+    borderBottomColor: appColors.separator,
   },
   projectionTierText: {
     flex: 1,
@@ -1092,46 +1094,46 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   projectionTierTitle: {
-    color: "#111827",
+    color: appColors.text,
     fontSize: 13,
     fontWeight: "900",
   },
   projectionTierDetail: {
-    color: "#64748b",
+    color: appColors.textMuted,
     fontSize: 11,
     fontWeight: "700",
   },
   projectionTierDate: {
     flexShrink: 0,
     maxWidth: 124,
-    color: "#2563eb",
+    color: appColors.primary,
     fontSize: 12,
     lineHeight: 16,
     fontWeight: "900",
     textAlign: "right",
   },
   descriptionText: {
-    color: "#475569",
+    color: appColors.textMuted,
     fontSize: 15,
     lineHeight: 22,
     fontWeight: "600",
   },
   phasePill: {
     alignSelf: "flex-start",
-    backgroundColor: "#eff6ff",
+    backgroundColor: appColors.primarySoft,
     borderWidth: 1,
-    borderColor: "#bfdbfe",
+    borderColor: appColors.primaryBorder,
     borderRadius: 999,
     paddingVertical: 6,
     paddingHorizontal: 10,
   },
   phasePillText: {
-    color: "#2563eb",
+    color: appColors.primary,
     fontSize: 12,
     fontWeight: "900",
   },
   bodyText: {
-    color: "#475569",
+    color: appColors.textMuted,
     fontSize: 14,
     lineHeight: 21,
     fontWeight: "600",
@@ -1142,15 +1144,15 @@ const styles = StyleSheet.create({
     gap: 7,
   },
   surahChip: {
-    backgroundColor: "#f8fafc",
+    backgroundColor: appColors.surfaceSubtle,
     borderWidth: 1,
-    borderColor: "#e5e7eb",
+    borderColor: appColors.border,
     borderRadius: 999,
     paddingVertical: 6,
     paddingHorizontal: 9,
   },
   surahChipText: {
-    color: "#475569",
+    color: appColors.textMuted,
     fontSize: 12,
     fontWeight: "800",
   },
@@ -1174,7 +1176,7 @@ const styles = StyleSheet.create({
     fontWeight: "900",
   },
   weeklyLabel: {
-    color: "#475569",
+    color: appColors.textMuted,
     fontSize: 12,
     lineHeight: 16,
     fontWeight: "800",
@@ -1186,7 +1188,7 @@ const styles = StyleSheet.create({
   },
   separatedRow: {
     borderBottomWidth: 1,
-    borderBottomColor: "#e5e7eb",
+    borderBottomColor: appColors.border,
   },
   milestoneRow: {
     paddingVertical: 11,
@@ -1194,25 +1196,25 @@ const styles = StyleSheet.create({
     gap: 5,
   },
   rowTitle: {
-    color: "#111827",
+    color: appColors.text,
     fontSize: 14,
     lineHeight: 18,
     fontWeight: "900",
   },
   rowDescription: {
-    color: "#64748b",
+    color: appColors.textMuted,
     fontSize: 12,
     lineHeight: 17,
     fontWeight: "600",
   },
   rewardText: {
-    color: "#92400e",
+    color: appColors.warning,
     fontSize: 12,
     lineHeight: 17,
     fontWeight: "900",
   },
   footerLine: {
-    color: "#94a3b8",
+    color: appColors.textSubtle,
     fontSize: 11,
     lineHeight: 15,
     fontWeight: "700",
@@ -1233,14 +1235,14 @@ const styles = StyleSheet.create({
   agePill: {
     flexShrink: 0,
     borderWidth: 1,
-    borderColor: "#ccfbf1",
-    backgroundColor: "#f0fdfa",
+    borderColor: appColors.successBorder,
+    backgroundColor: appColors.successSoft,
     borderRadius: 999,
     paddingVertical: 5,
     paddingHorizontal: 8,
   },
   agePillText: {
-    color: "#0f766e",
+    color: appColors.success,
     fontSize: 11,
     fontWeight: "900",
   },

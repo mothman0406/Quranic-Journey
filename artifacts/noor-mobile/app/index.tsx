@@ -26,6 +26,7 @@ import {
   loadStandaloneMushafAnnotations,
   type MushafAnnotations,
 } from "@/src/lib/mushaf-annotations";
+import { useAppTheme, type AppThemeColors } from "@/src/lib/app-theme";
 
 type IconName = ComponentProps<typeof Ionicons>["name"];
 
@@ -144,6 +145,8 @@ function compareByName(a: Child, b: Child) {
 export default function HomeScreen() {
   const { data: session, isPending: sessionPending } = authClient.useSession();
   const router = useRouter();
+  const { colors } = useAppTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const [children, setChildren] = useState<Child[] | null>(null);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
@@ -383,7 +386,7 @@ export default function HomeScreen() {
   if (sessionPending) {
     return (
       <View style={styles.center}>
-        <ActivityIndicator size="large" color="#2563eb" />
+        <ActivityIndicator size="large" color={colors.primary} />
       </View>
     );
   }
@@ -415,7 +418,7 @@ export default function HomeScreen() {
 
       {children === null && !fetchError ? (
         <View style={styles.center}>
-          <ActivityIndicator size="large" color="#2563eb" />
+          <ActivityIndicator size="large" color={colors.primary} />
         </View>
       ) : fetchError ? (
         <View style={styles.center}>
@@ -427,7 +430,7 @@ export default function HomeScreen() {
       ) : loadedChildren.length === 0 ? (
         <View style={styles.center}>
           <View style={styles.emptyIcon}>
-            <Ionicons name="person-add-outline" size={24} color="#2563eb" />
+            <Ionicons name="person-add-outline" size={24} color={colors.primary} />
           </View>
           <Text style={styles.emptyTitle}>Add your first child</Text>
           <Text style={styles.emptyText}>
@@ -437,7 +440,7 @@ export default function HomeScreen() {
             <Text style={styles.primaryButtonText}>Add Child</Text>
           </Pressable>
           <Pressable style={styles.secondaryButton} onPress={openGeneralMushaf}>
-            <Ionicons name="reader-outline" size={17} color="#0f766e" />
+            <Ionicons name="reader-outline" size={17} color={colors.success} />
             <Text style={styles.secondaryButtonText}>Read Quran</Text>
           </Pressable>
           <NotesBookmarksPanel
@@ -456,13 +459,13 @@ export default function HomeScreen() {
               accessibilityLabel="Read Quran without selecting a profile"
             >
               <View style={styles.readerEntryIcon}>
-                <Ionicons name="reader-outline" size={20} color="#0f766e" />
+                <Ionicons name="reader-outline" size={20} color={colors.success} />
               </View>
               <View style={styles.readerEntryText}>
                 <Text style={styles.readerEntryTitle}>Read Quran</Text>
                 <Text style={styles.readerEntryDetail}>Standalone mushaf</Text>
               </View>
-              <Ionicons name="chevron-forward" size={18} color="#94a3b8" />
+              <Ionicons name="chevron-forward" size={18} color={colors.textSubtle} />
             </Pressable>
 
             <NotesBookmarksPanel
@@ -477,7 +480,7 @@ export default function HomeScreen() {
                   <View style={styles.activeStripRule} />
                   <Text style={styles.activeStripLabel}>Active today</Text>
                   {activityLoading ? (
-                    <ActivityIndicator size="small" color="#2563eb" />
+                    <ActivityIndicator size="small" color={colors.primary} />
                   ) : null}
                 </View>
                 <ScrollView
@@ -508,18 +511,18 @@ export default function HomeScreen() {
             <View style={styles.listHeader}>
               <Text style={styles.subtitle}>Profiles</Text>
               <Pressable style={styles.addButton} onPress={openCreateProfile}>
-                <Ionicons name="add" size={17} color="#ffffff" />
+                <Ionicons name="add" size={17} color={colors.textInverse} />
                 <Text style={styles.addButtonText}>Add</Text>
               </Pressable>
             </View>
 
             <View style={styles.searchBox}>
-              <Ionicons name="search-outline" size={18} color="#64748b" />
+              <Ionicons name="search-outline" size={18} color={colors.textMuted} />
               <TextInput
                 value={searchQuery}
                 onChangeText={setSearchQuery}
                 placeholder="Search profiles"
-                placeholderTextColor="#94a3b8"
+                placeholderTextColor={colors.textSubtle}
                 returnKeyType="done"
                 blurOnSubmit
                 onSubmitEditing={() => Keyboard.dismiss()}
@@ -559,7 +562,7 @@ export default function HomeScreen() {
                 <Ionicons
                   name="flash-outline"
                   size={14}
-                  color={activeOnly ? "#ffffff" : "#2563eb"}
+                  color={activeOnly ? colors.textInverse : colors.primary}
                 />
                 <Text style={[styles.chipText, activeOnly && styles.chipTextSelected]}>
                   Active today
@@ -604,7 +607,7 @@ export default function HomeScreen() {
           >
             {filteredChildren.length === 0 ? (
               <View style={styles.noResults}>
-                <Ionicons name="search-outline" size={22} color="#94a3b8" />
+                <Ionicons name="search-outline" size={22} color={colors.textSubtle} />
                 <Text style={styles.noResultsTitle}>No matching profiles</Text>
                 <Text style={styles.noResultsText}>
                   Try a different name, role, or activity filter.
@@ -639,7 +642,7 @@ export default function HomeScreen() {
                     style={styles.rowIconButton}
                     onPress={(event) => openChildActions(child, event)}
                   >
-                    <Ionicons name="settings-outline" size={17} color="#64748b" />
+                    <Ionicons name="settings-outline" size={17} color={colors.textMuted} />
                   </Pressable>
                   <Pressable
                     accessibilityRole="button"
@@ -651,7 +654,7 @@ export default function HomeScreen() {
                       navigateToChild(child);
                     }}
                   >
-                    <Ionicons name="chevron-forward" size={19} color="#94a3b8" />
+                    <Ionicons name="chevron-forward" size={19} color={colors.textSubtle} />
                   </Pressable>
                 </Pressable>
               ))
@@ -691,6 +694,8 @@ function ParentMenuModal({
   onAccountSettings: () => void;
   onSignOut: () => void;
 }) {
+  const { colors } = useAppTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   return (
     <Modal
       visible={visible}
@@ -709,7 +714,7 @@ function ParentMenuModal({
           <MenuAction
             icon="log-out-outline"
             label="Sign out"
-            tone="#dc2626"
+            tone={colors.danger}
             onPress={onSignOut}
           />
         </Pressable>
@@ -731,6 +736,8 @@ function ChildActionsSheet({
   onOpenTargets: (child: Child) => void;
   onDeleteProfile: (child: Child) => void;
 }) {
+  const { colors } = useAppTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   return (
     <Modal
       visible={child !== null}
@@ -758,7 +765,7 @@ function ChildActionsSheet({
               <MenuAction
                 icon="trash-outline"
                 label="Delete profile"
-                tone="#dc2626"
+                tone={colors.danger}
                 onPress={() => onDeleteProfile(child)}
               />
             </>
@@ -775,7 +782,7 @@ function ChildActionsSheet({
 function MenuAction({
   icon,
   label,
-  tone = "#111827",
+  tone,
   onPress,
 }: {
   icon: IconName;
@@ -783,18 +790,22 @@ function MenuAction({
   tone?: string;
   onPress: () => void;
 }) {
+  const { colors } = useAppTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const actionTone = tone ?? colors.text;
   return (
     <Pressable style={styles.menuAction} onPress={onPress}>
-      <Ionicons name={icon} size={19} color={tone} />
-      <Text style={[styles.menuActionText, { color: tone }]}>{label}</Text>
+      <Ionicons name={icon} size={19} color={actionTone} />
+      <Text style={[styles.menuActionText, { color: actionTone }]}>{label}</Text>
     </Pressable>
   );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(colors: AppThemeColors) {
+  return StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#f8fafc",
+    backgroundColor: colors.background,
   },
   header: {
     flexDirection: "row",
@@ -804,13 +815,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingBottom: 12,
     borderBottomWidth: 1,
-    borderBottomColor: "#e2e8f0",
-    backgroundColor: "#ffffff",
+    borderBottomColor: colors.border,
+    backgroundColor: colors.surface,
   },
   title: {
     fontSize: 22,
     fontWeight: "900",
-    color: "#111827",
+    color: colors.text,
   },
   parentAvatarTapTarget: {
     width: 38,
@@ -823,9 +834,9 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   tools: {
-    backgroundColor: "#ffffff",
+    backgroundColor: colors.surface,
     borderBottomWidth: 1,
-    borderBottomColor: "#e5e7eb",
+    borderBottomColor: colors.border,
     paddingHorizontal: 16,
     paddingTop: 12,
     paddingBottom: 10,
@@ -842,10 +853,10 @@ const styles = StyleSheet.create({
   activeStripRule: {
     flex: 1,
     height: 1,
-    backgroundColor: "#e5e7eb",
+    backgroundColor: colors.border,
   },
   activeStripLabel: {
-    color: "#64748b",
+    color: colors.textMuted,
     fontSize: 12,
     fontWeight: "800",
     textTransform: "uppercase",
@@ -863,9 +874,9 @@ const styles = StyleSheet.create({
     width: 42,
     height: 42,
     borderRadius: 21,
-    backgroundColor: "#f8fafc",
+    backgroundColor: colors.surfaceSubtle,
     borderWidth: 1,
-    borderColor: "#e5e7eb",
+    borderColor: colors.border,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -873,7 +884,7 @@ const styles = StyleSheet.create({
     fontSize: 24,
   },
   activeMiniName: {
-    color: "#475569",
+    color: colors.textMuted,
     fontSize: 11,
     fontWeight: "700",
     width: 64,
@@ -887,10 +898,10 @@ const styles = StyleSheet.create({
   subtitle: {
     fontSize: 18,
     fontWeight: "900",
-    color: "#111827",
+    color: colors.text,
   },
   addButton: {
-    backgroundColor: "#111827",
+    backgroundColor: colors.surfaceInverse,
     borderRadius: 10,
     paddingHorizontal: 12,
     paddingVertical: 8,
@@ -899,7 +910,7 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   addButtonText: {
-    color: "#ffffff",
+    color: colors.textInverse,
     fontSize: 13,
     fontWeight: "800",
   },
@@ -907,8 +918,8 @@ const styles = StyleSheet.create({
     minHeight: 42,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#e5e7eb",
-    backgroundColor: "#f8fafc",
+    borderColor: colors.border,
+    backgroundColor: colors.input,
     flexDirection: "row",
     alignItems: "center",
     paddingHorizontal: 12,
@@ -916,13 +927,13 @@ const styles = StyleSheet.create({
   },
   searchInput: {
     flex: 1,
-    color: "#111827",
+    color: colors.text,
     fontSize: 15,
     fontWeight: "600",
     paddingVertical: 9,
   },
   searchCount: {
-    color: "#94a3b8",
+    color: colors.textSubtle,
     fontSize: 12,
     fontWeight: "700",
   },
@@ -934,8 +945,8 @@ const styles = StyleSheet.create({
     minHeight: 34,
     borderRadius: 17,
     borderWidth: 1,
-    borderColor: "#e5e7eb",
-    backgroundColor: "#ffffff",
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
     paddingHorizontal: 12,
     flexDirection: "row",
     alignItems: "center",
@@ -943,25 +954,25 @@ const styles = StyleSheet.create({
     gap: 5,
   },
   activityChip: {
-    borderColor: "#bfdbfe",
+    borderColor: colors.primaryBorder,
   },
   chipSelected: {
-    backgroundColor: "#2563eb",
-    borderColor: "#2563eb",
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
   },
   chipText: {
-    color: "#475569",
+    color: colors.textMuted,
     fontSize: 13,
     fontWeight: "800",
   },
   chipTextSelected: {
-    color: "#ffffff",
+    color: colors.textInverse,
   },
   sortRow: {
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#e5e7eb",
-    backgroundColor: "#f8fafc",
+    borderColor: colors.border,
+    backgroundColor: colors.surfaceSubtle,
     padding: 3,
     gap: 3,
   },
@@ -973,15 +984,15 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   sortSegmentSelected: {
-    backgroundColor: "#111827",
+    backgroundColor: colors.surfaceInverse,
   },
   sortSegmentText: {
-    color: "#64748b",
+    color: colors.textMuted,
     fontSize: 12,
     fontWeight: "800",
   },
   sortSegmentTextSelected: {
-    color: "#ffffff",
+    color: colors.textInverse,
   },
   results: {
     flex: 1,
@@ -993,10 +1004,10 @@ const styles = StyleSheet.create({
   },
   row: {
     minHeight: 60,
-    backgroundColor: "#ffffff",
+    backgroundColor: colors.surface,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: "#e5e7eb",
+    borderColor: colors.border,
     paddingHorizontal: 10,
     paddingVertical: 8,
     flexDirection: "row",
@@ -1007,9 +1018,9 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: "#f8fafc",
+    backgroundColor: colors.surfaceSubtle,
     borderWidth: 1,
-    borderColor: "#e5e7eb",
+    borderColor: colors.border,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -1029,16 +1040,16 @@ const styles = StyleSheet.create({
   childName: {
     fontSize: 15,
     fontWeight: "900",
-    color: "#111827",
+    color: colors.text,
     flexShrink: 1,
   },
   agePill: {
     fontSize: 10,
-    color: "#2563eb",
+    color: colors.primary,
     fontWeight: "800",
-    backgroundColor: "#eff6ff",
+    backgroundColor: colors.primarySoft,
     borderWidth: 1,
-    borderColor: "#bfdbfe",
+    borderColor: colors.primaryBorder,
     borderRadius: 99,
     paddingHorizontal: 7,
     paddingVertical: 2,
@@ -1046,7 +1057,7 @@ const styles = StyleSheet.create({
   },
   childMeta: {
     fontSize: 12,
-    color: "#64748b",
+    color: colors.textMuted,
     fontWeight: "700",
   },
   rowIconButton: {
@@ -1069,24 +1080,24 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
   },
   errorText: {
-    color: "#dc2626",
+    color: colors.danger,
     fontSize: 14,
     textAlign: "center",
     paddingHorizontal: 24,
   },
   retryButton: {
-    backgroundColor: "#2563eb",
+    backgroundColor: colors.primary,
     borderRadius: 10,
     paddingVertical: 10,
     paddingHorizontal: 20,
   },
   retryText: {
-    color: "#ffffff",
+    color: colors.textInverse,
     fontSize: 14,
     fontWeight: "600",
   },
   emptyText: {
-    color: "#64748b",
+    color: colors.textMuted,
     fontSize: 15,
     textAlign: "center",
     lineHeight: 21,
@@ -1095,26 +1106,26 @@ const styles = StyleSheet.create({
     width: 52,
     height: 52,
     borderRadius: 14,
-    backgroundColor: "#eff6ff",
+    backgroundColor: colors.primarySoft,
     borderWidth: 1,
-    borderColor: "#bfdbfe",
+    borderColor: colors.primaryBorder,
     alignItems: "center",
     justifyContent: "center",
   },
   emptyTitle: {
-    color: "#111827",
+    color: colors.text,
     fontSize: 20,
     fontWeight: "900",
     textAlign: "center",
   },
   primaryButton: {
-    backgroundColor: "#111111",
+    backgroundColor: colors.surfaceInverse,
     borderRadius: 12,
     paddingVertical: 12,
     paddingHorizontal: 22,
   },
   primaryButtonText: {
-    color: "#ffffff",
+    color: colors.textInverse,
     fontSize: 15,
     fontWeight: "800",
   },
@@ -1124,14 +1135,14 @@ const styles = StyleSheet.create({
     paddingVertical: 11,
     paddingHorizontal: 18,
     borderWidth: 1,
-    borderColor: "#99f6e4",
-    backgroundColor: "#f0fdfa",
+    borderColor: colors.successBorder,
+    backgroundColor: colors.successSoft,
     flexDirection: "row",
     alignItems: "center",
     gap: 7,
   },
   secondaryButtonText: {
-    color: "#0f766e",
+    color: colors.success,
     fontSize: 15,
     fontWeight: "900",
   },
@@ -1139,8 +1150,8 @@ const styles = StyleSheet.create({
     minHeight: 62,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#99f6e4",
-    backgroundColor: "#f0fdfa",
+    borderColor: colors.successBorder,
+    backgroundColor: colors.successSoft,
     paddingHorizontal: 12,
     paddingVertical: 9,
     flexDirection: "row",
@@ -1151,7 +1162,7 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 12,
-    backgroundColor: "#ccfbf1",
+    backgroundColor: colors.successBorder,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -1161,38 +1172,38 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   readerEntryTitle: {
-    color: "#0f172a",
+    color: colors.text,
     fontSize: 15,
     fontWeight: "900",
   },
   readerEntryDetail: {
-    color: "#0f766e",
+    color: colors.success,
     fontSize: 12,
     fontWeight: "800",
   },
   noResults: {
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#e5e7eb",
-    backgroundColor: "#ffffff",
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
     padding: 18,
     alignItems: "center",
     gap: 7,
   },
   noResultsTitle: {
-    color: "#111827",
+    color: colors.text,
     fontSize: 15,
     fontWeight: "900",
   },
   noResultsText: {
-    color: "#64748b",
+    color: colors.textMuted,
     fontSize: 13,
     textAlign: "center",
     lineHeight: 18,
   },
   menuBackdrop: {
     flex: 1,
-    backgroundColor: "rgba(15, 23, 42, 0.14)",
+    backgroundColor: colors.overlay,
   },
   parentMenu: {
     position: "absolute",
@@ -1201,10 +1212,10 @@ const styles = StyleSheet.create({
     width: 218,
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: "#e5e7eb",
-    backgroundColor: "#ffffff",
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
     padding: 6,
-    shadowColor: "#0f172a",
+    shadowColor: colors.shadow,
     shadowOpacity: 0.12,
     shadowRadius: 18,
     shadowOffset: { width: 0, height: 8 },
@@ -1224,39 +1235,39 @@ const styles = StyleSheet.create({
   },
   menuDivider: {
     height: 1,
-    backgroundColor: "#f1f5f9",
+    backgroundColor: colors.separator,
     marginVertical: 3,
   },
   sheetBackdrop: {
     flex: 1,
     justifyContent: "flex-end",
-    backgroundColor: "rgba(15, 23, 42, 0.28)",
+    backgroundColor: colors.overlay,
   },
   sheet: {
     borderTopLeftRadius: 22,
     borderTopRightRadius: 22,
-    backgroundColor: "#ffffff",
+    backgroundColor: colors.surface,
     paddingTop: 10,
     paddingHorizontal: 16,
     paddingBottom: 28,
     borderWidth: 1,
-    borderColor: "#e5e7eb",
+    borderColor: colors.border,
   },
   sheetHandle: {
     alignSelf: "center",
     width: 40,
     height: 4,
     borderRadius: 2,
-    backgroundColor: "#cbd5e1",
+    backgroundColor: colors.borderStrong,
     marginBottom: 14,
   },
   sheetTitle: {
-    color: "#111827",
+    color: colors.text,
     fontSize: 18,
     fontWeight: "900",
   },
   sheetSubtitle: {
-    color: "#64748b",
+    color: colors.textMuted,
     fontSize: 13,
     fontWeight: "700",
     marginTop: 2,
@@ -1266,15 +1277,16 @@ const styles = StyleSheet.create({
     minHeight: 46,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#e5e7eb",
-    backgroundColor: "#f8fafc",
+    borderColor: colors.border,
+    backgroundColor: colors.surfaceSubtle,
     alignItems: "center",
     justifyContent: "center",
     marginTop: 8,
   },
   sheetCancelText: {
-    color: "#111827",
+    color: colors.text,
     fontSize: 14,
     fontWeight: "900",
   },
-});
+  });
+}

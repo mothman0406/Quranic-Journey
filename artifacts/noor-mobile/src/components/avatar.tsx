@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { Image } from "expo-image";
+import { useAppTheme } from "@/src/lib/app-theme";
 
 type AvatarSize = "sm" | "md" | "lg";
 
@@ -26,6 +27,7 @@ export function Avatar({
   email?: string;
   size: AvatarSize;
 }) {
+  const { colors } = useAppTheme();
   const [imageFailed, setImageFailed] = useState(false);
   const dimensions = SIZE_MAP[size];
   const borderRadius = dimensions.size / 2;
@@ -41,6 +43,7 @@ export function Avatar({
       width: dimensions.size,
       height: dimensions.size,
       borderRadius,
+      borderColor: colors.success,
     },
   ];
 
@@ -56,7 +59,7 @@ export function Avatar({
   }
 
   return (
-    <View style={[avatarStyle, styles.fallback]}>
+    <View style={[avatarStyle, styles.fallback, { backgroundColor: colors.success }]}>
       <Text style={[styles.initial, { fontSize: dimensions.fontSize }]}>
         {getInitial(name, email)}
       </Text>

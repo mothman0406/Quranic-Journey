@@ -73,6 +73,7 @@ import {
   saveProfileSettings,
   type MushafViewMode,
 } from "@/src/lib/settings";
+import { APP_ADAPTIVE_COLORS as appColors } from "@/src/lib/app-theme";
 
 const BOOKMARK_LIMIT = 12;
 const RECENT_READ_LIMIT = 5;
@@ -756,7 +757,7 @@ function ToolButton({
       style={[styles.toolButton, active && { borderColor: color, backgroundColor: `${color}12` }]}
       onPress={onPress}
     >
-      <Ionicons name={iconName} size={18} color={active ? color : "#374151"} />
+      <Ionicons name={iconName} size={18} color={active ? color : appColors.textMuted as string} />
       <Text style={[styles.toolButtonText, active && { color }]} numberOfLines={1}>
         {label}
       </Text>
@@ -791,7 +792,7 @@ function ReaderQuickActionButton({
       accessibilityState={{ selected: active }}
       accessibilityLabel={accessibilityLabel}
     >
-      <Ionicons name={iconName} size={20} color={active ? color : "#475569"} />
+      <Ionicons name={iconName} size={20} color={active ? color : appColors.textMuted as string} />
     </Pressable>
   );
 }
@@ -931,7 +932,7 @@ function MushafAudioDock({
             <Ionicons
               name="play-skip-back"
               size={21}
-              color={canPrevious ? "#111827" : "#9ca3af"}
+              color={(canPrevious ? appColors.text : appColors.textSubtle) as string}
             />
           </Pressable>
           <Pressable
@@ -962,7 +963,7 @@ function MushafAudioDock({
             <Ionicons
               name="play-skip-forward"
               size={21}
-              color={canNext ? "#111827" : "#9ca3af"}
+              color={(canNext ? appColors.text : appColors.textSubtle) as string}
             />
           </Pressable>
         </View>
@@ -1280,7 +1281,7 @@ function ReaderSettingsModal({
                       <Ionicons
                         name={mode === "swipe" ? "swap-horizontal-outline" : "reorder-four-outline"}
                         size={15}
-                        color={active ? "#ffffff" : "#475569"}
+                        color={active ? "#ffffff" : appColors.textMuted as string}
                       />
                       <Text
                         style={[
@@ -3039,7 +3040,7 @@ export default function MushafScreen() {
           accessibilityRole="button"
           accessibilityLabel="Go back"
         >
-          <Ionicons name="chevron-back" size={22} color="#2563eb" />
+          <Ionicons name="chevron-back" size={22} color={appColors.primary as string} />
         </Pressable>
         <Pressable
           style={styles.surahPill}
@@ -3060,7 +3061,7 @@ export default function MushafScreen() {
           accessibilityRole="button"
           accessibilityLabel="Reader settings"
         >
-          <Ionicons name="settings-outline" size={21} color="#2563eb" />
+          <Ionicons name="settings-outline" size={21} color={appColors.primary as string} />
         </Pressable>
       </View>
 
@@ -3464,7 +3465,7 @@ export default function MushafScreen() {
                   title={`${surah.number}. ${surah.name}`}
                   detail={`${surah.translation} · ${surah.verseCount} ayahs · Juz ${surah.juzStart}`}
                   iconName="book-outline"
-                  color={surah.number === currentSurah.number ? "#2563eb" : "#111827"}
+                  color={surah.number === currentSurah.number ? "#2563eb" : "#64748b"}
                   trailing={`p. ${surah.startPage}`}
                   onPress={() => jumpToSurah(surah)}
                 />
@@ -3486,7 +3487,7 @@ export default function MushafScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#f8fafc",
+    backgroundColor: appColors.background,
   },
   header: {
     flexDirection: "row",
@@ -3495,9 +3496,9 @@ const styles = StyleSheet.create({
     paddingBottom: 12,
     paddingHorizontal: 16,
     gap: 10,
-    backgroundColor: "#ffffff",
+    backgroundColor: appColors.surface,
     borderBottomWidth: 1,
-    borderBottomColor: "#e2e8f0",
+    borderBottomColor: appColors.border,
   },
   backButton: {
     width: 42,
@@ -3505,9 +3506,9 @@ const styles = StyleSheet.create({
     borderRadius: 21,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#eff6ff",
+    backgroundColor: appColors.primarySoft,
     borderWidth: 1,
-    borderColor: "#bfdbfe",
+    borderColor: appColors.primaryBorder,
   },
   surahPill: {
     flex: 1,
@@ -3516,20 +3517,20 @@ const styles = StyleSheet.create({
     minHeight: 48,
     borderRadius: 999,
     paddingHorizontal: 16,
-    backgroundColor: "#f8fafc",
+    backgroundColor: appColors.surfaceSubtle,
     borderWidth: 1,
-    borderColor: "#e2e8f0",
+    borderColor: appColors.border,
   },
   surahPillTitle: {
     fontSize: 15,
-    color: "#111827",
+    color: appColors.text,
     fontWeight: "900",
     textAlign: "center",
   },
   surahPillMeta: {
     marginTop: 2,
     fontSize: 11,
-    color: "#666666",
+    color: appColors.textMuted,
     fontWeight: "800",
     textAlign: "center",
   },
@@ -3539,15 +3540,15 @@ const styles = StyleSheet.create({
     borderRadius: 21,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#eff6ff",
+    backgroundColor: appColors.primarySoft,
     borderWidth: 1,
-    borderColor: "#bfdbfe",
+    borderColor: appColors.primaryBorder,
   },
   readerQuickToolbar: {
     minHeight: 52,
     paddingHorizontal: 18,
     paddingVertical: 6,
-    backgroundColor: "#f8fafc",
+    backgroundColor: appColors.background,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
@@ -3559,10 +3560,10 @@ const styles = StyleSheet.create({
     borderRadius: 21,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#ffffff",
+    backgroundColor: appColors.surface,
     borderWidth: 1,
-    borderColor: "#e2e8f0",
-    shadowColor: "#0f172a",
+    borderColor: appColors.border,
+    shadowColor: appColors.shadow,
     shadowOpacity: 0.06,
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 2 },
@@ -3572,9 +3573,9 @@ const styles = StyleSheet.create({
     alignSelf: "center",
     minHeight: 38,
     borderRadius: 999,
-    backgroundColor: "rgba(255, 255, 255, 0.86)",
+    backgroundColor: appColors.surfaceSubtle,
     borderWidth: 1,
-    borderColor: "#e3d5bd",
+    borderColor: appColors.border,
     flexDirection: "row",
     alignItems: "center",
     padding: 3,
@@ -3595,7 +3596,7 @@ const styles = StyleSheet.create({
   },
   viewModePillText: {
     fontSize: 12,
-    color: "#475569",
+    color: appColors.textMuted,
     fontWeight: "900",
   },
   viewModePillTextSelected: {
@@ -3606,14 +3607,14 @@ const styles = StyleSheet.create({
     minHeight: 46,
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: "#e2e8f0",
-    backgroundColor: "rgba(255, 255, 255, 0.96)",
+    borderColor: appColors.border,
+    backgroundColor: appColors.surface,
     alignItems: "center",
     justifyContent: "center",
     flexDirection: "row",
     gap: 6,
     paddingHorizontal: 16,
-    shadowColor: "#0f172a",
+    shadowColor: appColors.shadow,
     shadowOpacity: 0.12,
     shadowRadius: 14,
     shadowOffset: { width: 0, height: 4 },
@@ -3621,7 +3622,7 @@ const styles = StyleSheet.create({
   },
   toolButtonText: {
     fontSize: 12,
-    color: "#374151",
+    color: appColors.textMuted,
     fontWeight: "900",
   },
   readerSettingsWrap: {
@@ -3632,7 +3633,7 @@ const styles = StyleSheet.create({
     maxHeight: "82%",
     borderTopLeftRadius: 18,
     borderTopRightRadius: 18,
-    backgroundColor: "#ffffff",
+    backgroundColor: appColors.surface,
     overflow: "hidden",
   },
   readerSettingsHeader: {
@@ -3643,7 +3644,7 @@ const styles = StyleSheet.create({
     paddingTop: 16,
     paddingBottom: 12,
     borderBottomWidth: 1,
-    borderBottomColor: "#e2e8f0",
+    borderBottomColor: appColors.border,
   },
   readerSettingsTitleBlock: {
     flex: 1,
@@ -3651,20 +3652,20 @@ const styles = StyleSheet.create({
   },
   readerSettingsTitle: {
     fontSize: 19,
-    color: "#111827",
+    color: appColors.text,
     fontWeight: "900",
   },
   readerSettingsSubtitle: {
     marginTop: 2,
     fontSize: 12,
-    color: "#666666",
+    color: appColors.textMuted,
     fontWeight: "700",
   },
   readerSettingsClose: {
     width: 34,
     height: 34,
     borderRadius: 10,
-    backgroundColor: "#f3f4f6",
+    backgroundColor: appColors.surfaceSubtle,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -3686,8 +3687,8 @@ const styles = StyleSheet.create({
     minHeight: 56,
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: "#e2e8f0",
-    backgroundColor: "#ffffff",
+    borderColor: appColors.border,
+    backgroundColor: appColors.surface,
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
@@ -3707,13 +3708,13 @@ const styles = StyleSheet.create({
   },
   readerSettingsRowTitle: {
     fontSize: 14,
-    color: "#111827",
+    color: appColors.text,
     fontWeight: "900",
   },
   readerSettingsRowSubtitle: {
     marginTop: 2,
     fontSize: 11,
-    color: "#64748b",
+    color: appColors.textMuted,
     fontWeight: "700",
   },
   readerToolPills: {
@@ -3722,9 +3723,9 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   errorBanner: {
-    backgroundColor: "#fef2f2",
+    backgroundColor: appColors.dangerSoft,
     borderBottomWidth: 1,
-    borderBottomColor: "#fecaca",
+    borderBottomColor: appColors.dangerBorder,
     paddingVertical: 8,
     paddingHorizontal: 20,
   },
@@ -3742,12 +3743,12 @@ const styles = StyleSheet.create({
   },
   loadingCenterText: {
     fontSize: 13,
-    color: "#666666",
+    color: appColors.textMuted,
     fontWeight: "700",
   },
   pageArea: {
     flex: 1,
-    backgroundColor: "#f8fafc",
+    backgroundColor: appColors.background,
     overflow: "hidden",
   },
   pageList: {
@@ -3757,7 +3758,7 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#f8fafc",
+    backgroundColor: appColors.background,
   },
   pageImageShell: {
     backgroundColor: "#ffffff",
@@ -3832,7 +3833,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     padding: 24,
-    backgroundColor: "#fef2f2",
+    backgroundColor: appColors.dangerSoft,
   },
   errorTitle: {
     fontSize: 14,
@@ -3849,9 +3850,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18,
     paddingTop: 8,
     borderTopWidth: 1,
-    borderTopColor: "#e5e7eb",
-    backgroundColor: "#ffffff",
-    shadowColor: "#0f172a",
+    borderTopColor: appColors.border,
+    backgroundColor: appColors.surface,
+    shadowColor: appColors.shadow,
     shadowOpacity: 0.05,
     shadowRadius: 10,
     shadowOffset: { width: 0, height: -3 },
@@ -3875,9 +3876,9 @@ const styles = StyleSheet.create({
     borderRadius: 21,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#ffffff",
+    backgroundColor: appColors.surface,
     borderWidth: 1,
-    borderColor: "#e5e7eb",
+    borderColor: appColors.border,
   },
   audioDockButtonDisabled: {
     opacity: 0.42,
@@ -3901,20 +3902,20 @@ const styles = StyleSheet.create({
     minHeight: 48,
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: "#e2e8f0",
-    backgroundColor: "#f8fafc",
+    borderColor: appColors.border,
+    backgroundColor: appColors.surfaceSubtle,
     justifyContent: "center",
     paddingHorizontal: 12,
   },
   audioDockTitle: {
     fontSize: 13,
-    color: "#111827",
+    color: appColors.text,
     fontWeight: "900",
   },
   audioDockMeta: {
     marginTop: 2,
     fontSize: 11,
-    color: "#64748b",
+    color: appColors.textMuted,
     fontWeight: "800",
   },
   audioBar: {
@@ -3924,7 +3925,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#eff6ff",
     padding: 12,
     gap: 10,
-    shadowColor: "#0f172a",
+    shadowColor: appColors.shadow,
     shadowOpacity: 0.045,
     shadowRadius: 10,
     shadowOffset: { width: 0, height: 3 },
@@ -3947,22 +3948,22 @@ const styles = StyleSheet.create({
   audioTitle: {
     marginTop: 2,
     fontSize: 14,
-    color: "#111827",
+    color: appColors.text,
     fontWeight: "900",
   },
   audioMeta: {
     marginTop: 2,
     fontSize: 11,
-    color: "#4b5563",
+    color: appColors.textMuted,
     fontWeight: "700",
   },
   audioIconButton: {
     width: 36,
     height: 36,
     borderRadius: 10,
-    backgroundColor: "#ffffff",
+    backgroundColor: appColors.surface,
     borderWidth: 1,
-    borderColor: "#dbeafe",
+    borderColor: appColors.primaryBorder,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -3975,15 +3976,15 @@ const styles = StyleSheet.create({
     width: 38,
     height: 38,
     borderRadius: 19,
-    backgroundColor: "#ffffff",
+    backgroundColor: appColors.surface,
     borderWidth: 1,
-    borderColor: "#dbeafe",
+    borderColor: appColors.primaryBorder,
     alignItems: "center",
     justifyContent: "center",
   },
   audioRoundButtonDisabled: {
-    backgroundColor: "#f8fafc",
-    borderColor: "#e2e8f0",
+    backgroundColor: appColors.surfaceSubtle,
+    borderColor: appColors.border,
   },
   audioPrimaryRoundButton: {
     width: 44,
@@ -3997,8 +3998,8 @@ const styles = StyleSheet.create({
     minHeight: 38,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: "#fecaca",
-    backgroundColor: "#fff1f2",
+    borderColor: appColors.dangerBorder,
+    backgroundColor: appColors.dangerSoft,
     paddingHorizontal: 12,
     flexDirection: "row",
     alignItems: "center",
@@ -4012,15 +4013,15 @@ const styles = StyleSheet.create({
   },
   sheet: {
     flex: 1,
-    backgroundColor: "#f8fafc",
+    backgroundColor: appColors.background,
   },
   sheetHeader: {
     paddingTop: 56,
     paddingHorizontal: 18,
     paddingBottom: 14,
     borderBottomWidth: 1,
-    borderBottomColor: "#e2e8f0",
-    backgroundColor: "#ffffff",
+    borderBottomColor: appColors.border,
+    backgroundColor: appColors.surface,
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
@@ -4038,13 +4039,13 @@ const styles = StyleSheet.create({
   },
   sheetTitle: {
     fontSize: 20,
-    color: "#111827",
+    color: appColors.text,
     fontWeight: "900",
   },
   sheetSubtitle: {
     marginTop: 2,
     fontSize: 12,
-    color: "#666666",
+    color: appColors.textMuted,
     fontWeight: "700",
   },
   sheetHeaderSpacer: {
@@ -4069,10 +4070,10 @@ const styles = StyleSheet.create({
     width: "100%",
     maxWidth: 420,
     borderRadius: 16,
-    backgroundColor: "#ffffff",
+    backgroundColor: appColors.surface,
     padding: 16,
     gap: 12,
-    shadowColor: "#0f172a",
+    shadowColor: appColors.shadow,
     shadowOpacity: 0.18,
     shadowRadius: 22,
     shadowOffset: { width: 0, height: 10 },
@@ -4096,21 +4097,21 @@ const styles = StyleSheet.create({
   creditTitle: {
     flex: 1,
     fontSize: 17,
-    color: "#111827",
+    color: appColors.text,
     fontWeight: "900",
   },
   creditClose: {
     width: 34,
     height: 34,
     borderRadius: 10,
-    backgroundColor: "#f3f4f6",
+    backgroundColor: appColors.surfaceSubtle,
     alignItems: "center",
     justifyContent: "center",
   },
   creditText: {
     fontSize: 13,
     lineHeight: 20,
-    color: "#374151",
+    color: appColors.textMuted,
     fontWeight: "700",
   },
   ayahKeyboardAvoider: {
@@ -4122,7 +4123,7 @@ const styles = StyleSheet.create({
   ayahActionSheet: {
     borderTopLeftRadius: 18,
     borderTopRightRadius: 18,
-    backgroundColor: "#ffffff",
+    backgroundColor: appColors.surface,
     paddingTop: 10,
     overflow: "hidden",
   },
@@ -4130,7 +4131,7 @@ const styles = StyleSheet.create({
     width: 42,
     height: 4,
     borderRadius: 2,
-    backgroundColor: "#d1d5db",
+    backgroundColor: appColors.borderStrong,
     alignSelf: "center",
     marginBottom: 10,
   },
@@ -4147,20 +4148,20 @@ const styles = StyleSheet.create({
   },
   ayahActionTitle: {
     fontSize: 19,
-    color: "#111827",
+    color: appColors.text,
     fontWeight: "900",
   },
   ayahActionSubtitle: {
     marginTop: 2,
     fontSize: 12,
-    color: "#666666",
+    color: appColors.textMuted,
     fontWeight: "700",
   },
   ayahActionClose: {
     width: 34,
     height: 34,
     borderRadius: 10,
-    backgroundColor: "#f3f4f6",
+    backgroundColor: appColors.surfaceSubtle,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -4174,15 +4175,15 @@ const styles = StyleSheet.create({
   },
   ayahPreviewCard: {
     borderRadius: 12,
-    backgroundColor: "#ffffff",
+    backgroundColor: appColors.surface,
     borderWidth: 1,
-    borderColor: "#e2e8f0",
+    borderColor: appColors.border,
     padding: 14,
   },
   ayahPreviewText: {
     fontSize: 22,
     lineHeight: 40,
-    color: "#111827",
+    color: appColors.text,
     textAlign: "right",
     writingDirection: "rtl",
   },
@@ -4196,22 +4197,22 @@ const styles = StyleSheet.create({
     minHeight: 48,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: "#e2e8f0",
-    backgroundColor: "#ffffff",
+    borderColor: appColors.border,
+    backgroundColor: appColors.surface,
     paddingHorizontal: 10,
     paddingVertical: 8,
     justifyContent: "center",
   },
   ayahMetaLabel: {
     fontSize: 10,
-    color: "#6b7280",
+    color: appColors.textMuted,
     fontWeight: "800",
     textTransform: "uppercase",
   },
   ayahMetaValue: {
     marginTop: 2,
     fontSize: 13,
-    color: "#111827",
+    color: appColors.text,
     fontWeight: "900",
   },
   ayahStatusRow: {
@@ -4223,9 +4224,9 @@ const styles = StyleSheet.create({
   ayahStatusChip: {
     minHeight: 24,
     borderRadius: 999,
-    backgroundColor: "#ffffff",
+    backgroundColor: appColors.surface,
     borderWidth: 1,
-    borderColor: "#e2e8f0",
+    borderColor: appColors.border,
     paddingHorizontal: 9,
     flexDirection: "row",
     alignItems: "center",
@@ -4233,7 +4234,7 @@ const styles = StyleSheet.create({
   },
   ayahStatusChipText: {
     fontSize: 11,
-    color: "#374151",
+    color: appColors.textMuted,
     fontWeight: "800",
   },
   ayahPrimaryButton: {
@@ -4252,9 +4253,9 @@ const styles = StyleSheet.create({
   },
   ayahMenuGroup: {
     borderRadius: 12,
-    backgroundColor: "#ffffff",
+    backgroundColor: appColors.surface,
     borderWidth: 1,
-    borderColor: "#e2e8f0",
+    borderColor: appColors.border,
     overflow: "hidden",
   },
   ayahMenuRow: {
@@ -4265,12 +4266,12 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 10,
     borderBottomWidth: 1,
-    borderBottomColor: "#f3f4f6",
+    borderBottomColor: appColors.separator,
   },
   ayahMenuRowText: {
     flex: 1,
     fontSize: 14,
-    color: "#111827",
+    color: appColors.text,
     fontWeight: "800",
   },
   ayahNavigationRow: {
@@ -4282,16 +4283,16 @@ const styles = StyleSheet.create({
     minHeight: 42,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: "#bfdbfe",
-    backgroundColor: "#eff6ff",
+    borderColor: appColors.primaryBorder,
+    backgroundColor: appColors.primarySoft,
     alignItems: "center",
     justifyContent: "center",
     flexDirection: "row",
     gap: 5,
   },
   ayahNavButtonDisabled: {
-    borderColor: "#e2e8f0",
-    backgroundColor: "#f8fafc",
+    borderColor: appColors.border,
+    backgroundColor: appColors.surfaceSubtle,
   },
   ayahNavButtonText: {
     fontSize: 12,
@@ -4321,7 +4322,7 @@ const styles = StyleSheet.create({
   ayahSubTitle: {
     flex: 1,
     fontSize: 16,
-    color: "#111827",
+    color: appColors.text,
     fontWeight: "900",
     textAlign: "center",
   },
@@ -4349,15 +4350,15 @@ const styles = StyleSheet.create({
   },
   highlightSwatchText: {
     fontSize: 12,
-    color: "#111827",
+    color: appColors.text,
     fontWeight: "900",
   },
   ayahDangerButton: {
     minHeight: 44,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#fecaca",
-    backgroundColor: "#fef2f2",
+    borderColor: appColors.dangerBorder,
+    backgroundColor: appColors.dangerSoft,
     alignItems: "center",
     justifyContent: "center",
     flexDirection: "row",
@@ -4373,17 +4374,17 @@ const styles = StyleSheet.create({
   },
   noteEditorMeta: {
     fontSize: 12,
-    color: "#6b7280",
+    color: appColors.textMuted,
     fontWeight: "800",
   },
   noteInput: {
     minHeight: 128,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#d1d5db",
-    backgroundColor: "#ffffff",
+    borderColor: appColors.inputBorder,
+    backgroundColor: appColors.input,
     padding: 12,
-    color: "#111827",
+    color: appColors.text,
     fontSize: 15,
     lineHeight: 21,
   },
@@ -4411,8 +4412,8 @@ const styles = StyleSheet.create({
     minHeight: 44,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: "#fecaca",
-    backgroundColor: "#fef2f2",
+    borderColor: appColors.dangerBorder,
+    backgroundColor: appColors.dangerSoft,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -4424,27 +4425,27 @@ const styles = StyleSheet.create({
   ayahTextPanel: {
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#e2e8f0",
-    backgroundColor: "#ffffff",
+    borderColor: appColors.border,
+    backgroundColor: appColors.surface,
     padding: 14,
   },
   ayahTextPanelArabic: {
     fontSize: 22,
     lineHeight: 38,
-    color: "#111827",
+    color: appColors.text,
     textAlign: "right",
     writingDirection: "rtl",
   },
   ayahTextPanelSource: {
     marginTop: 8,
     fontSize: 11,
-    color: "#6b7280",
+    color: appColors.textMuted,
     fontWeight: "800",
   },
   ayahLongText: {
     fontSize: 15,
     lineHeight: 26,
-    color: "#374151",
+    color: appColors.textMuted,
     fontWeight: "600",
   },
   expandToggle: {
@@ -4456,9 +4457,9 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     paddingHorizontal: 10,
     borderRadius: 8,
-    backgroundColor: "#eff6ff",
+    backgroundColor: appColors.primarySoft,
     borderWidth: 1,
-    borderColor: "#bfdbfe",
+    borderColor: appColors.primaryBorder,
   },
   expandToggleText: {
     fontSize: 13,
@@ -4469,8 +4470,8 @@ const styles = StyleSheet.create({
     minHeight: 120,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#e2e8f0",
-    backgroundColor: "#ffffff",
+    borderColor: appColors.border,
+    backgroundColor: appColors.surface,
     alignItems: "center",
     justifyContent: "center",
     padding: 18,
@@ -4478,13 +4479,13 @@ const styles = StyleSheet.create({
   },
   ayahContentStateTitle: {
     fontSize: 14,
-    color: "#111827",
+    color: appColors.text,
     fontWeight: "900",
     textAlign: "center",
   },
   ayahContentStateText: {
     fontSize: 13,
-    color: "#6b7280",
+    color: appColors.textMuted,
     fontWeight: "700",
     textAlign: "center",
   },
@@ -4498,15 +4499,15 @@ const styles = StyleSheet.create({
     minHeight: 116,
     borderRadius: 11,
     borderWidth: 1,
-    borderColor: "#e2e8f0",
-    backgroundColor: "#ffffff",
+    borderColor: appColors.border,
+    backgroundColor: appColors.surface,
     padding: 8,
     alignItems: "center",
   },
   wbwArabic: {
     fontSize: 20,
     lineHeight: 30,
-    color: "#111827",
+    color: appColors.text,
     textAlign: "center",
     writingDirection: "rtl",
   },
@@ -4514,7 +4515,7 @@ const styles = StyleSheet.create({
     marginTop: 5,
     fontSize: 10,
     lineHeight: 13,
-    color: "#6b7280",
+    color: appColors.textMuted,
     fontWeight: "700",
     textAlign: "center",
   },
@@ -4522,7 +4523,7 @@ const styles = StyleSheet.create({
     marginTop: 3,
     fontSize: 10,
     lineHeight: 13,
-    color: "#374151",
+    color: appColors.textMuted,
     fontWeight: "700",
     textAlign: "center",
   },
@@ -4530,9 +4531,9 @@ const styles = StyleSheet.create({
     margin: 16,
     marginBottom: 10,
     borderRadius: 12,
-    backgroundColor: "#ffffff",
+    backgroundColor: appColors.surface,
     borderWidth: 1,
-    borderColor: "#e2e8f0",
+    borderColor: appColors.border,
     padding: 12,
     gap: 8,
   },
@@ -4545,11 +4546,11 @@ const styles = StyleSheet.create({
     minHeight: 44,
     borderRadius: 9,
     borderWidth: 1,
-    borderColor: "#d1d5db",
-    backgroundColor: "#ffffff",
+    borderColor: appColors.inputBorder,
+    backgroundColor: appColors.input,
     paddingHorizontal: 12,
     fontSize: 16,
-    color: "#111827",
+    color: appColors.text,
     fontWeight: "700",
   },
   pageInputButton: {
@@ -4571,8 +4572,8 @@ const styles = StyleSheet.create({
     minHeight: 44,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#d1d5db",
-    backgroundColor: "#ffffff",
+    borderColor: appColors.inputBorder,
+    backgroundColor: appColors.input,
     paddingHorizontal: 12,
     flexDirection: "row",
     alignItems: "center",
@@ -4581,7 +4582,7 @@ const styles = StyleSheet.create({
   searchInput: {
     flex: 1,
     fontSize: 15,
-    color: "#111827",
+    color: appColors.text,
     fontWeight: "700",
   },
   sheetScroll: {
@@ -4604,8 +4605,8 @@ const styles = StyleSheet.create({
     minHeight: 54,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#e2e8f0",
-    backgroundColor: "#ffffff",
+    borderColor: appColors.border,
+    backgroundColor: appColors.surface,
     paddingHorizontal: 12,
     paddingVertical: 10,
     flexDirection: "row",
@@ -4613,15 +4614,15 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   reciterRowSelected: {
-    borderColor: "#93c5fd",
-    backgroundColor: "#eff6ff",
+    borderColor: appColors.primaryBorder,
+    backgroundColor: appColors.primarySoft,
   },
   reciterTextBlock: {
     flex: 1,
   },
   reciterName: {
     fontSize: 13,
-    color: "#111827",
+    color: appColors.text,
     fontWeight: "900",
   },
   reciterNameSelected: {
@@ -4630,7 +4631,7 @@ const styles = StyleSheet.create({
   reciterStyle: {
     marginTop: 2,
     fontSize: 11,
-    color: "#6b7280",
+    color: appColors.textMuted,
     fontWeight: "700",
   },
   optionChipRow: {
@@ -4643,19 +4644,19 @@ const styles = StyleSheet.create({
     minWidth: 58,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: "#e2e8f0",
-    backgroundColor: "#ffffff",
+    borderColor: appColors.border,
+    backgroundColor: appColors.surface,
     paddingHorizontal: 12,
     alignItems: "center",
     justifyContent: "center",
   },
   optionChipSelected: {
-    borderColor: "#93c5fd",
-    backgroundColor: "#eff6ff",
+    borderColor: appColors.primaryBorder,
+    backgroundColor: appColors.primarySoft,
   },
   optionChipText: {
     fontSize: 12,
-    color: "#374151",
+    color: appColors.textMuted,
     fontWeight: "900",
   },
   optionChipTextSelected: {
@@ -4673,26 +4674,26 @@ const styles = StyleSheet.create({
     minHeight: 58,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#e2e8f0",
-    backgroundColor: "#ffffff",
+    borderColor: appColors.border,
+    backgroundColor: appColors.surface,
     paddingHorizontal: 12,
     paddingVertical: 10,
     justifyContent: "center",
   },
   recentChipTitle: {
     fontSize: 13,
-    color: "#111827",
+    color: appColors.text,
     fontWeight: "900",
   },
   recentChipDetail: {
     marginTop: 3,
     fontSize: 11,
-    color: "#666666",
+    color: appColors.textMuted,
     fontWeight: "700",
   },
   sectionLabel: {
     fontSize: 12,
-    color: "#6b7280",
+    color: appColors.textMuted,
     fontWeight: "900",
     textTransform: "uppercase",
   },
@@ -4703,8 +4704,8 @@ const styles = StyleSheet.create({
     minHeight: 60,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#e2e8f0",
-    backgroundColor: "#ffffff",
+    borderColor: appColors.border,
+    backgroundColor: appColors.surface,
     paddingHorizontal: 12,
     paddingVertical: 10,
   },
@@ -4721,13 +4722,13 @@ const styles = StyleSheet.create({
   },
   jumpTitle: {
     fontSize: 14,
-    color: "#111827",
+    color: appColors.text,
     fontWeight: "900",
   },
   jumpDetail: {
     marginTop: 2,
     fontSize: 12,
-    color: "#666666",
+    color: appColors.textMuted,
     fontWeight: "600",
   },
   jumpTrailing: {
@@ -4745,20 +4746,20 @@ const styles = StyleSheet.create({
     minHeight: 48,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: "#e2e8f0",
-    backgroundColor: "#ffffff",
+    borderColor: appColors.border,
+    backgroundColor: appColors.surface,
     alignItems: "center",
     justifyContent: "center",
     gap: 2,
   },
   juzChipTitle: {
     fontSize: 12,
-    color: "#111827",
+    color: appColors.text,
     fontWeight: "900",
   },
   juzChipDetail: {
     fontSize: 10,
-    color: "#666666",
+    color: appColors.textMuted,
     fontWeight: "700",
   },
   emptyResults: {
@@ -4768,12 +4769,12 @@ const styles = StyleSheet.create({
   },
   emptyResultsTitle: {
     fontSize: 15,
-    color: "#111827",
+    color: appColors.text,
     fontWeight: "900",
   },
   emptyResultsDetail: {
     fontSize: 12,
-    color: "#666666",
+    color: appColors.textMuted,
     fontWeight: "600",
   },
 });

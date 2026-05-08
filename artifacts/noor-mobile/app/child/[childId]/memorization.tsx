@@ -15,6 +15,7 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  type ColorValue,
   type StyleProp,
   type TextStyle,
   useWindowDimensions,
@@ -109,6 +110,7 @@ import {
   getCanonicalPageLayout,
   getCanonicalWordKeysInRange,
 } from "@/src/lib/qul-layout";
+import { APP_ADAPTIVE_COLORS as appColors } from "@/src/lib/app-theme";
 
 const PLAYBACK_RATES = [0.75, 0.85, 1.0, 1.15, 1.25, 1.5] as const;
 const AYAH_ROW_ESTIMATED_HEIGHT = 190;
@@ -327,25 +329,25 @@ const DISCOVERY_CHUNK_AYAHS = 5;
 
 const REVIEW_TONE_META: Record<
   ReviewStrengthTone,
-  { label: string; color: string; bg: string; border: string }
+  { label: string; color: ColorValue; bg: ColorValue; border: ColorValue }
 > = {
   red: {
     label: "Review red",
-    color: "#dc2626",
-    bg: "#fff1f2",
-    border: "#fecdd3",
+    color: appColors.danger,
+    bg: appColors.dangerSoft,
+    border: appColors.dangerBorder,
   },
   orange: {
     label: "Review orange",
-    color: "#f59e0b",
-    bg: "#fffbeb",
-    border: "#fde68a",
+    color: appColors.warning,
+    bg: appColors.warningSoft,
+    border: appColors.warningBorder,
   },
   green: {
     label: "Review green",
-    color: "#059669",
-    bg: "#ecfdf5",
-    border: "#a7f3d0",
+    color: appColors.success,
+    bg: appColors.successSoft,
+    border: appColors.successBorder,
   },
 };
 
@@ -360,33 +362,33 @@ const QUALITY_OPTIONS: Array<{
   value: QualityRatingValue;
   label: string;
   detail: string;
-  color: string;
-  bg: string;
-  border: string;
+  color: ColorValue;
+  bg: ColorValue;
+  border: ColorValue;
 }> = [
   {
     value: 2,
     label: "Needs Work",
     detail: "Mark this range red for more practice.",
-    color: "#be123c",
-    bg: "#fff1f2",
-    border: "#fecdd3",
+    color: appColors.danger,
+    bg: appColors.dangerSoft,
+    border: appColors.dangerBorder,
   },
   {
     value: 4,
     label: "Good",
     detail: "Mark this range yellow while it settles.",
-    color: "#b45309",
-    bg: "#fffbeb",
-    border: "#fde68a",
+    color: appColors.warning,
+    bg: appColors.warningSoft,
+    border: appColors.warningBorder,
   },
   {
     value: 5,
     label: "Excellent",
     detail: "Mark this range green and strong.",
-    color: "#047857",
-    bg: "#ecfdf5",
-    border: "#a7f3d0",
+    color: appColors.success,
+    bg: appColors.successSoft,
+    border: appColors.successBorder,
   },
 ];
 
@@ -535,14 +537,14 @@ function getRecognitionErrorCode(error: unknown) {
 function getStatusCopy(status: MemorizationStatus) {
   switch (status) {
     case "memorized":
-      return { label: "Memorized", color: "#047857", bg: "#ecfdf5", border: "#a7f3d0" };
+      return { label: "Memorized", color: appColors.success, bg: appColors.successSoft, border: appColors.successBorder };
     case "in_progress":
-      return { label: "Learning", color: "#b45309", bg: "#fffbeb", border: "#fde68a" };
+      return { label: "Learning", color: appColors.warning, bg: appColors.warningSoft, border: appColors.warningBorder };
     case "needs_review":
-      return { label: "Needs review", color: "#be123c", bg: "#fff1f2", border: "#fecdd3" };
+      return { label: "Needs review", color: appColors.danger, bg: appColors.dangerSoft, border: appColors.dangerBorder };
     case "not_started":
     default:
-      return { label: "New", color: "#2563eb", bg: "#eff6ff", border: "#bfdbfe" };
+      return { label: "New", color: appColors.primary, bg: appColors.primarySoft, border: appColors.primaryBorder };
   }
 }
 
@@ -7364,7 +7366,7 @@ export default function MemorizationScreen() {
             <Ionicons
               name="refresh-circle-outline"
               size={26}
-              color={canUseRepeatReset ? "#2563eb" : "#9ca3af"}
+              color={(canUseRepeatReset ? appColors.primary : appColors.textSubtle) as string}
             />
           </Pressable>
 
@@ -7381,7 +7383,7 @@ export default function MemorizationScreen() {
             <Ionicons
               name="play-skip-back"
               size={24}
-              color={canPrev ? "#111827" : "#9ca3af"}
+              color={(canPrev ? appColors.text : appColors.textSubtle) as string}
             />
           </Pressable>
 
@@ -7407,7 +7409,7 @@ export default function MemorizationScreen() {
             <Ionicons
               name="play-skip-forward"
               size={24}
-              color={canNext ? "#111827" : "#9ca3af"}
+              color={(canNext ? appColors.text : appColors.textSubtle) as string}
             />
           </Pressable>
 
@@ -7784,15 +7786,15 @@ export default function MemorizationScreen() {
                       style={[
                         styles.ratingOption,
                         {
-                          backgroundColor: selected ? option.bg : "#ffffff",
-                          borderColor: selected ? option.border : "#e5e7eb",
+                          backgroundColor: selected ? option.bg : appColors.surface,
+                          borderColor: selected ? option.border : appColors.border,
                         },
                       ]}
                       onPress={() => setSelectedQuality(option.value)}
                       disabled={submitting}
                     >
                       <View style={styles.ratingOptionTextBlock}>
-                        <Text style={[styles.ratingOptionTitle, { color: selected ? option.color : "#111827" }]}>
+                        <Text style={[styles.ratingOptionTitle, { color: selected ? option.color : appColors.text }]}>
                           {option.label}
                         </Text>
                         <Text style={styles.ratingOptionDetail}>{option.detail}</Text>
@@ -7801,8 +7803,8 @@ export default function MemorizationScreen() {
                         style={[
                           styles.ratingRadio,
                           {
-                            borderColor: selected ? option.color : "#d1d5db",
-                            backgroundColor: selected ? option.color : "#ffffff",
+                            borderColor: selected ? option.color : appColors.inputBorder,
+                            backgroundColor: selected ? option.color : appColors.surface,
                           },
                         ]}
                       />
@@ -9672,7 +9674,7 @@ function SurahAyahStatusSheet({
             <Ionicons
               name={selectionMode ? "checkmark-circle" : "checkmark-circle-outline"}
               size={18}
-              color={selectionMode ? "#ffffff" : "#2563eb"}
+              color={(selectionMode ? appColors.textInverse : appColors.primary) as string}
             />
             <Text
               style={[
@@ -9790,7 +9792,7 @@ function SurahAyahStatusSheet({
                   {pending ? (
                     <ActivityIndicator
                       size="small"
-                      color={tone === "white" ? "#64748b" : "#ffffff"}
+                      color={(tone === "white" ? appColors.textMuted : appColors.textInverse) as string}
                     />
                   ) : (
                     <Text
@@ -9816,42 +9818,42 @@ type OverviewCardTone = "today" | "todayDone" | "current" | "next" | "empty";
 
 const OVERVIEW_CARD_TONES: Record<
   OverviewCardTone,
-  { bg: string; border: string; accent: string; actionBg: string; actionBorder: string }
+  { bg: ColorValue; border: ColorValue; accent: string; actionBg: ColorValue; actionBorder: ColorValue }
 > = {
   today: {
-    bg: "#f8fbff",
-    border: "#bfdbfe",
+    bg: appColors.primarySoft,
+    border: appColors.primaryBorder,
     accent: "#2563eb",
-    actionBg: "#dbeafe",
-    actionBorder: "#bfdbfe",
+    actionBg: appColors.primarySoft,
+    actionBorder: appColors.primaryBorder,
   },
   todayDone: {
-    bg: "#ecfdf5",
-    border: "#a7f3d0",
+    bg: appColors.successSoft,
+    border: appColors.successBorder,
     accent: "#047857",
-    actionBg: "#d1fae5",
-    actionBorder: "#a7f3d0",
+    actionBg: appColors.successSoft,
+    actionBorder: appColors.successBorder,
   },
   current: {
-    bg: "#fffbeb",
-    border: "#fde68a",
+    bg: appColors.warningSoft,
+    border: appColors.warningBorder,
     accent: "#b45309",
-    actionBg: "#fef3c7",
-    actionBorder: "#fde68a",
+    actionBg: appColors.warningSoft,
+    actionBorder: appColors.warningBorder,
   },
   next: {
-    bg: "#f9fafb",
-    border: "#e5e7eb",
+    bg: appColors.surfaceSubtle,
+    border: appColors.border,
     accent: "#4b5563",
-    actionBg: "#f3f4f6",
-    actionBorder: "#d1d5db",
+    actionBg: appColors.surfaceSubtle,
+    actionBorder: appColors.borderStrong,
   },
   empty: {
-    bg: "#f9fafb",
-    border: "#e5e7eb",
+    bg: appColors.surfaceSubtle,
+    border: appColors.border,
     accent: "#6b7280",
-    actionBg: "#ffffff",
-    actionBorder: "#e5e7eb",
+    actionBg: appColors.surface,
+    actionBorder: appColors.border,
   },
 };
 
@@ -10483,7 +10485,7 @@ function makeThemedStyles(theme: MushafTheme) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#f8fafc",
+    backgroundColor: appColors.background,
   },
   centered: {
     justifyContent: "center",
@@ -10491,7 +10493,7 @@ const styles = StyleSheet.create({
   },
   discoveryContainer: {
     flex: 1,
-    backgroundColor: "#f8fafc",
+    backgroundColor: appColors.background,
   },
   discoveryHeader: {
     flexDirection: "row",
@@ -10500,8 +10502,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingBottom: 12,
     borderBottomWidth: 1,
-    borderBottomColor: "#e2e8f0",
-    backgroundColor: "#ffffff",
+    borderBottomColor: appColors.border,
+    backgroundColor: appColors.surface,
   },
   discoveryBackButton: {
     width: 70,
@@ -10521,9 +10523,9 @@ const styles = StyleSheet.create({
     width: 70,
     minHeight: 36,
     borderRadius: 12,
-    backgroundColor: "#eff6ff",
+    backgroundColor: appColors.primarySoft,
     borderWidth: 1,
-    borderColor: "#dbeafe",
+    borderColor: appColors.primaryBorder,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -10535,13 +10537,13 @@ const styles = StyleSheet.create({
   discoveryTitle: {
     fontSize: 18,
     fontWeight: "900",
-    color: "#111827",
+    color: appColors.text,
   },
   discoverySubtitle: {
     marginTop: 2,
     fontSize: 12,
     fontWeight: "600",
-    color: "#6b7280",
+    color: appColors.textMuted,
   },
   discoveryBodyCenter: {
     flex: 1,
@@ -10552,11 +10554,11 @@ const styles = StyleSheet.create({
   discoveryMuted: {
     marginTop: 12,
     fontSize: 14,
-    color: "#6b7280",
+    color: appColors.textMuted,
   },
   setupContainer: {
     flex: 1,
-    backgroundColor: "#f8fafc",
+    backgroundColor: appColors.background,
   },
   setupScroll: {
     flex: 1,
@@ -10573,8 +10575,8 @@ const styles = StyleSheet.create({
     gap: 16,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#bfdbfe",
-    backgroundColor: "#f8fbff",
+    borderColor: appColors.primaryBorder,
+    backgroundColor: appColors.primarySoft,
     padding: 16,
   },
   setupHeroText: {
@@ -10592,14 +10594,14 @@ const styles = StyleSheet.create({
     fontSize: 22,
     lineHeight: 27,
     fontWeight: "900",
-    color: "#111827",
+    color: appColors.text,
   },
   setupDetail: {
     marginTop: 4,
     fontSize: 12,
     lineHeight: 18,
     fontWeight: "700",
-    color: "#4b5563",
+    color: appColors.textMuted,
   },
   setupArabic: {
     fontFamily: "AmiriQuran",
@@ -10634,33 +10636,33 @@ const styles = StyleSheet.create({
     minHeight: 52,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#d1d5db",
-    backgroundColor: "#ffffff",
+    borderColor: appColors.inputBorder,
+    backgroundColor: appColors.surface,
     justifyContent: "center",
     paddingHorizontal: 14,
   },
   setupSelectButtonLocked: {
-    backgroundColor: "#f9fafb",
+    backgroundColor: appColors.surfaceSubtle,
   },
   setupSelectTitle: {
     fontSize: 14,
     fontWeight: "900",
-    color: "#111827",
+    color: appColors.text,
   },
   setupSelectMeta: {
     marginTop: 2,
     fontSize: 11,
     fontWeight: "800",
-    color: "#6b7280",
+    color: appColors.textMuted,
   },
   setupCard: {
     gap: 12,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#e2e8f0",
-    backgroundColor: "#ffffff",
+    borderColor: appColors.border,
+    backgroundColor: appColors.surface,
     padding: 14,
-    shadowColor: "#0f172a",
+    shadowColor: appColors.shadow,
     shadowOpacity: 0.035,
     shadowRadius: 10,
     shadowOffset: { width: 0, height: 3 },
@@ -10669,14 +10671,14 @@ const styles = StyleSheet.create({
   setupCardTitle: {
     fontSize: 15,
     fontWeight: "900",
-    color: "#111827",
+    color: appColors.text,
   },
   setupCardDetail: {
     marginTop: 3,
     fontSize: 12,
     lineHeight: 17,
     fontWeight: "600",
-    color: "#6b7280",
+    color: appColors.textMuted,
   },
   setupRangeRow: {
     flexDirection: "row",
@@ -10689,7 +10691,7 @@ const styles = StyleSheet.create({
   setupInputLabel: {
     fontSize: 11,
     fontWeight: "900",
-    color: "#4b5563",
+    color: appColors.textMuted,
     textTransform: "uppercase",
   },
   setupStepperRow: {
@@ -10702,8 +10704,8 @@ const styles = StyleSheet.create({
     height: 42,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: "#e5e7eb",
-    backgroundColor: "#f9fafb",
+    borderColor: appColors.border,
+    backgroundColor: appColors.surfaceSubtle,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -10712,18 +10714,18 @@ const styles = StyleSheet.create({
     minHeight: 42,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: "#bfdbfe",
-    backgroundColor: "#eff6ff",
+    borderColor: appColors.primaryBorder,
+    backgroundColor: appColors.primarySoft,
     textAlign: "center",
     fontSize: 17,
     fontWeight: "900",
-    color: "#111827",
+    color: appColors.text,
     paddingHorizontal: 8,
   },
   setupInputDisabled: {
-    borderColor: "#e5e7eb",
-    backgroundColor: "#f9fafb",
-    color: "#6b7280",
+    borderColor: appColors.border,
+    backgroundColor: appColors.surfaceSubtle,
+    color: appColors.textMuted,
   },
   setupSettingText: {
     flex: 1,
@@ -10732,17 +10734,17 @@ const styles = StyleSheet.create({
   setupNestedSettingRow: {
     paddingTop: 12,
     borderTopWidth: 1,
-    borderTopColor: "#e5e7eb",
+    borderTopColor: appColors.border,
   },
   setupNestedTitle: {
     fontSize: 13,
     fontWeight: "900",
-    color: "#111827",
+    color: appColors.text,
   },
   setupPrimaryButton: {
     minHeight: 52,
     borderRadius: 12,
-    backgroundColor: "#111827",
+    backgroundColor: appColors.surfaceInverse,
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: 16,
@@ -10750,14 +10752,14 @@ const styles = StyleSheet.create({
   setupPrimaryButtonText: {
     fontSize: 16,
     fontWeight: "900",
-    color: "#ffffff",
+    color: appColors.textInverse,
   },
   setupSecondaryButton: {
     minHeight: 52,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#c7d2fe",
-    backgroundColor: "#eef2ff",
+    borderColor: appColors.primaryBorder,
+    backgroundColor: appColors.primarySoft,
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: 16,
@@ -10765,11 +10767,11 @@ const styles = StyleSheet.create({
   setupSecondaryButtonText: {
     fontSize: 16,
     fontWeight: "900",
-    color: "#4f46e5",
+    color: appColors.primary,
   },
   setupPickerSheet: {
     maxHeight: "78%",
-    backgroundColor: "#ffffff",
+    backgroundColor: appColors.surface,
     borderTopLeftRadius: 18,
     borderTopRightRadius: 18,
     padding: 20,
@@ -10790,25 +10792,25 @@ const styles = StyleSheet.create({
     gap: 12,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#e2e8f0",
-    backgroundColor: "#ffffff",
+    borderColor: appColors.border,
+    backgroundColor: appColors.surface,
     padding: 12,
   },
   setupPickerRowSelected: {
-    borderColor: "#bfdbfe",
-    backgroundColor: "#eff6ff",
+    borderColor: appColors.primaryBorder,
+    backgroundColor: appColors.primarySoft,
   },
   setupPickerNumber: {
     width: 34,
     height: 34,
     borderRadius: 17,
     overflow: "hidden",
-    backgroundColor: "#f3f4f6",
+    backgroundColor: appColors.surfaceSubtle,
     textAlign: "center",
     lineHeight: 34,
     fontSize: 12,
     fontWeight: "900",
-    color: "#111827",
+    color: appColors.text,
   },
   setupPickerText: {
     flex: 1,
@@ -10817,18 +10819,18 @@ const styles = StyleSheet.create({
   setupPickerTitle: {
     fontSize: 14,
     fontWeight: "900",
-    color: "#111827",
+    color: appColors.text,
   },
   setupPickerDetail: {
     marginTop: 3,
     fontSize: 12,
     fontWeight: "700",
-    color: "#6b7280",
+    color: appColors.textMuted,
   },
   setupPickerArabic: {
     fontFamily: "AmiriQuran",
     fontSize: 22,
-    color: "#111827",
+    color: appColors.text,
   },
   discoveryScroll: {
     flex: 1,
@@ -10843,12 +10845,12 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     gap: 16,
-    backgroundColor: "#f8fbff",
+    backgroundColor: appColors.primarySoft,
     borderWidth: 1,
-    borderColor: "#bfdbfe",
+    borderColor: appColors.primaryBorder,
     borderRadius: 12,
     padding: 16,
-    shadowColor: "#0f172a",
+    shadowColor: appColors.shadow,
     shadowOpacity: 0.035,
     shadowRadius: 10,
     shadowOffset: { width: 0, height: 3 },
@@ -10864,13 +10866,13 @@ const styles = StyleSheet.create({
     marginTop: 4,
     fontSize: 18,
     fontWeight: "900",
-    color: "#111827",
+    color: appColors.text,
   },
   discoverySummaryDetail: {
     marginTop: 3,
     fontSize: 13,
     fontWeight: "600",
-    color: "#4b5563",
+    color: appColors.textMuted,
   },
   overviewGrid: {
     flexDirection: "row",
@@ -10882,7 +10884,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
     padding: 10,
-    shadowColor: "#0f172a",
+    shadowColor: appColors.shadow,
     shadowOpacity: 0.025,
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 2 },
@@ -10901,7 +10903,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 17,
     fontWeight: "900",
-    color: "#111827",
+    color: appColors.text,
   },
   overviewCardDetail: {
     marginTop: 4,
@@ -10909,7 +10911,7 @@ const styles = StyleSheet.create({
     fontSize: 10,
     lineHeight: 16,
     fontWeight: "700",
-    color: "#4b5563",
+    color: appColors.textMuted,
   },
   overviewCardStatus: {
     marginTop: 5,
@@ -10936,8 +10938,8 @@ const styles = StyleSheet.create({
     gap: 12,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#c7d2fe",
-    backgroundColor: "#eef2ff",
+    borderColor: appColors.primaryBorder,
+    backgroundColor: appColors.primarySoft,
     padding: 14,
   },
   reviewShortcutText: {
@@ -10954,14 +10956,14 @@ const styles = StyleSheet.create({
     marginTop: 4,
     fontSize: 17,
     fontWeight: "900",
-    color: "#111827",
+    color: appColors.text,
   },
   reviewShortcutDetail: {
     marginTop: 3,
     fontSize: 12,
     lineHeight: 18,
     fontWeight: "700",
-    color: "#4b5563",
+    color: appColors.textMuted,
   },
   reviewShortcutButton: {
     minWidth: 104,
@@ -10986,19 +10988,19 @@ const styles = StyleSheet.create({
   discoverySectionTitle: {
     fontSize: 15,
     fontWeight: "800",
-    color: "#111827",
+    color: appColors.text,
   },
   discoverySectionMeta: {
     fontSize: 12,
     fontWeight: "700",
-    color: "#6b7280",
+    color: appColors.textMuted,
   },
   discoveryFeaturedCard: {
     gap: 14,
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: "#bfdbfe",
-    backgroundColor: "#eff6ff",
+    borderColor: appColors.primaryBorder,
+    backgroundColor: appColors.primarySoft,
     padding: 16,
   },
   discoveryFeaturedTop: {
@@ -11010,14 +11012,14 @@ const styles = StyleSheet.create({
     marginTop: 4,
     fontSize: 22,
     fontWeight: "800",
-    color: "#111827",
+    color: appColors.text,
   },
   discoveryFeaturedDetail: {
     marginTop: 4,
     fontSize: 13,
     lineHeight: 19,
     fontWeight: "600",
-    color: "#374151",
+    color: appColors.textMuted,
   },
   discoveryNumberBadge: {
     width: 44,
@@ -11025,9 +11027,9 @@ const styles = StyleSheet.create({
     borderRadius: 22,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#ffffff",
+    backgroundColor: appColors.surface,
     borderWidth: 1,
-    borderColor: "#bfdbfe",
+    borderColor: appColors.primaryBorder,
   },
   discoveryNumberText: {
     fontSize: 15,
@@ -11050,20 +11052,20 @@ const styles = StyleSheet.create({
   discoveryEmptyCard: {
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#e2e8f0",
-    backgroundColor: "#ffffff",
+    borderColor: appColors.border,
+    backgroundColor: appColors.surface,
     padding: 16,
   },
   discoveryEmptyTitle: {
     fontSize: 15,
     fontWeight: "800",
-    color: "#111827",
+    color: appColors.text,
   },
   discoveryEmptyDetail: {
     marginTop: 4,
     fontSize: 13,
     lineHeight: 19,
-    color: "#6b7280",
+    color: appColors.textMuted,
   },
   discoveryCardList: {
     gap: 10,
@@ -11075,8 +11077,8 @@ const styles = StyleSheet.create({
     gap: 12,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#fde68a",
-    backgroundColor: "#fffbeb",
+    borderColor: appColors.warningBorder,
+    backgroundColor: appColors.warningSoft,
     padding: 14,
   },
   discoverySavedSessionCard: {
@@ -11086,8 +11088,8 @@ const styles = StyleSheet.create({
     gap: 12,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#fbbf24",
-    backgroundColor: "#fffbeb",
+    borderColor: appColors.warningBorder,
+    backgroundColor: appColors.warningSoft,
     padding: 14,
   },
   discoveryResumeText: {
@@ -11102,13 +11104,13 @@ const styles = StyleSheet.create({
   discoveryResumeTitle: {
     fontSize: 15,
     fontWeight: "800",
-    color: "#111827",
+    color: appColors.text,
   },
   discoveryResumeDetail: {
     marginTop: 4,
     fontSize: 12,
     fontWeight: "600",
-    color: "#6b7280",
+    color: appColors.textMuted,
   },
   discoverySavedSessionMeta: {
     marginTop: 4,
@@ -11125,11 +11127,11 @@ const styles = StyleSheet.create({
     minHeight: 46,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#cbd5e1",
-    backgroundColor: "#ffffff",
+    borderColor: appColors.inputBorder,
+    backgroundColor: appColors.input,
     paddingHorizontal: 14,
     fontSize: 15,
-    color: "#111827",
+    color: appColors.text,
   },
   discoveryFilterRow: {
     gap: 8,
@@ -11138,8 +11140,8 @@ const styles = StyleSheet.create({
   discoveryFilterPill: {
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: "#e2e8f0",
-    backgroundColor: "#ffffff",
+    borderColor: appColors.border,
+    backgroundColor: appColors.surface,
     paddingVertical: 8,
     paddingHorizontal: 13,
   },
@@ -11150,7 +11152,7 @@ const styles = StyleSheet.create({
   discoveryFilterText: {
     fontSize: 13,
     fontWeight: "800",
-    color: "#4b5563",
+    color: appColors.textMuted,
   },
   discoveryFilterTextSelected: {
     color: "#ffffff",
@@ -11160,11 +11162,11 @@ const styles = StyleSheet.create({
     gap: 10,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#e2e8f0",
-    backgroundColor: "#ffffff",
+    borderColor: appColors.border,
+    backgroundColor: appColors.surface,
     padding: 14,
     overflow: "hidden",
-    shadowColor: "#0f172a",
+    shadowColor: appColors.shadow,
     shadowOpacity: 0.03,
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 2 },
@@ -11184,8 +11186,8 @@ const styles = StyleSheet.create({
     width: 4,
   },
   surahRowCurrent: {
-    borderColor: "#bfdbfe",
-    backgroundColor: "#f8fbff",
+    borderColor: appColors.primaryBorder,
+    backgroundColor: appColors.primarySoft,
   },
   surahRowTop: {
     flexDirection: "row",
@@ -11198,12 +11200,12 @@ const styles = StyleSheet.create({
     borderRadius: 19,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#f3f4f6",
+    backgroundColor: appColors.surfaceSubtle,
   },
   surahNumberText: {
     fontSize: 13,
     fontWeight: "900",
-    color: "#111827",
+    color: appColors.text,
   },
   surahTitleBlock: {
     flex: 1,
@@ -11218,12 +11220,12 @@ const styles = StyleSheet.create({
   surahTitle: {
     fontSize: 16,
     fontWeight: "800",
-    color: "#111827",
+    color: appColors.text,
   },
   currentPill: {
     overflow: "hidden",
     borderRadius: 999,
-    backgroundColor: "#dbeafe",
+    backgroundColor: appColors.primarySoft,
     paddingHorizontal: 7,
     paddingVertical: 2,
     fontSize: 10,
@@ -11234,12 +11236,12 @@ const styles = StyleSheet.create({
     marginTop: 3,
     fontSize: 12,
     fontWeight: "600",
-    color: "#6b7280",
+    color: appColors.textMuted,
   },
   surahArabic: {
     fontFamily: "AmiriQuran",
     fontSize: 22,
-    color: "#111827",
+    color: appColors.text,
   },
   surahProgressLine: {
     flexDirection: "row",
@@ -11250,7 +11252,7 @@ const styles = StyleSheet.create({
     flex: 1,
     height: 8,
     borderRadius: 999,
-    backgroundColor: "#e5e7eb",
+    backgroundColor: appColors.border,
     overflow: "hidden",
   },
   surahProgressFill: {
@@ -11377,8 +11379,8 @@ const styles = StyleSheet.create({
     gap: 5,
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: "#fecdd3",
-    backgroundColor: "#fff1f2",
+    borderColor: appColors.dangerBorder,
+    backgroundColor: appColors.dangerSoft,
     paddingHorizontal: 11,
   },
   surahStoryText: {
@@ -11402,8 +11404,8 @@ const styles = StyleSheet.create({
   tajweedAccordion: {
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#fde68a",
-    backgroundColor: "#fffbeb",
+    borderColor: appColors.warningBorder,
+    backgroundColor: appColors.warningSoft,
     overflow: "hidden",
   },
   tajweedToggle: {
@@ -11429,7 +11431,7 @@ const styles = StyleSheet.create({
   tajweedNotesList: {
     gap: 7,
     borderTopWidth: 1,
-    borderTopColor: "#fde68a",
+    borderTopColor: appColors.warningBorder,
     paddingVertical: 10,
     paddingHorizontal: 12,
   },
@@ -11458,8 +11460,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingBottom: 12,
     borderBottomWidth: 1,
-    borderBottomColor: "#e2e8f0",
-    backgroundColor: "#ffffff",
+    borderBottomColor: appColors.border,
+    backgroundColor: appColors.surface,
   },
   back: {
     fontSize: 15,
@@ -11472,7 +11474,7 @@ const styles = StyleSheet.create({
     textAlign: "center",
     fontSize: 15,
     fontWeight: "800",
-    color: "#111827",
+    color: appColors.text,
   },
   headerButton: {
     width: 60,
@@ -11492,8 +11494,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingBottom: 12,
     borderBottomWidth: 1,
-    borderBottomColor: "#e2e8f0",
-    backgroundColor: "#ffffff",
+    borderBottomColor: appColors.border,
+    backgroundColor: appColors.surface,
   },
   sessionBackButton: {
     position: "absolute",
@@ -11507,7 +11509,7 @@ const styles = StyleSheet.create({
     textAlign: "center",
     fontSize: 15,
     fontWeight: "800",
-    color: "#111827",
+    color: appColors.text,
   },
   sessionHeaderActions: {
     position: "absolute",
@@ -11527,7 +11529,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   sessionHeaderIconButtonActive: {
-    backgroundColor: "#dbeafe",
+    backgroundColor: appColors.primarySoft,
   },
   toggleContainer: {
     flexDirection: "row",
@@ -11536,14 +11538,14 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: "#e2e8f0",
-    backgroundColor: "#ffffff",
+    borderBottomColor: appColors.border,
+    backgroundColor: appColors.surface,
   },
   togglePill: {
-    backgroundColor: "#ffffff",
+    backgroundColor: appColors.surface,
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: "#e2e8f0",
+    borderColor: appColors.border,
     paddingVertical: 8,
     paddingHorizontal: 14,
   },
@@ -11554,7 +11556,7 @@ const styles = StyleSheet.create({
   togglePillText: {
     fontSize: 14,
     fontWeight: "800",
-    color: "#111827",
+    color: appColors.text,
   },
   togglePillTextSelected: {
     color: "#ffffff",
@@ -11570,7 +11572,7 @@ const styles = StyleSheet.create({
   },
   mushafPagerShell: {
     flex: 1,
-    backgroundColor: "#f8fafc",
+    backgroundColor: appColors.background,
   },
   mushafPagerList: {
     flex: 1,
@@ -11590,7 +11592,7 @@ const styles = StyleSheet.create({
     gap: 6,
     paddingTop: 8,
     paddingBottom: 6,
-    backgroundColor: "#f8fafc",
+    backgroundColor: appColors.background,
   },
   mushafPageIndicatorPill: {
     minHeight: 26,
@@ -11598,15 +11600,15 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: "#e5e7eb",
-    backgroundColor: "#ffffff",
+    borderColor: appColors.border,
+    backgroundColor: appColors.surface,
     paddingHorizontal: 12,
   },
   mushafPageIndicatorText: {
     fontSize: 12,
     lineHeight: 15,
     fontWeight: "800",
-    color: "#475569",
+    color: appColors.textMuted,
   },
   mushafPageIndicatorButton: {
     width: 28,
@@ -11615,8 +11617,8 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: "#e5e7eb",
-    backgroundColor: "#ffffff",
+    borderColor: appColors.border,
+    backgroundColor: appColors.surface,
   },
   mushafPageIndicatorButtonDisabled: {
     opacity: 0.58,
@@ -11624,7 +11626,7 @@ const styles = StyleSheet.create({
   mushafPageFrame: {
     flex: 1,
     height: "100%",
-    backgroundColor: "#f8fafc",
+    backgroundColor: appColors.background,
   },
   mushafPageFrameStacked: {
     flex: 0,
@@ -11669,14 +11671,14 @@ const styles = StyleSheet.create({
     right: 0,
     top: 14,
     height: 1,
-    backgroundColor: "#e5e7eb",
+    backgroundColor: appColors.border,
   },
   ayahKeyPill: {
     zIndex: 1,
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: "#e5e7eb",
-    backgroundColor: "#ffffff",
+    borderColor: appColors.border,
+    backgroundColor: appColors.surface,
     paddingVertical: 5,
     paddingHorizontal: 12,
   },
@@ -11684,7 +11686,7 @@ const styles = StyleSheet.create({
     fontSize: 11,
     lineHeight: 14,
     fontWeight: "800",
-    color: "#64748b",
+    color: appColors.textMuted,
   },
   ayahMenuButton: {
     position: "absolute",
@@ -11713,7 +11715,7 @@ const styles = StyleSheet.create({
     fontSize: 15,
     lineHeight: 22,
     fontWeight: "400",
-    color: "#475569",
+    color: appColors.textMuted,
     textAlign: "left",
     writingDirection: "ltr",
   },
@@ -11729,14 +11731,14 @@ const styles = StyleSheet.create({
   // ── Ayah-by-Ayah card ────────────────────────────────────────────────────────
   verseCard: {
     width: "100%",
-    backgroundColor: "#ffffff",
+    backgroundColor: appColors.surface,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#e2e8f0",
+    borderColor: appColors.border,
     padding: 20,
     minHeight: 160,
     justifyContent: "center",
-    shadowColor: "#0f172a",
+    shadowColor: appColors.shadow,
     shadowOpacity: 0.035,
     shadowRadius: 10,
     shadowOffset: { width: 0, height: 3 },
@@ -11903,9 +11905,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 8,
     paddingBottom: 8,
-    backgroundColor: "rgba(255, 255, 255, 0.96)",
+    backgroundColor: appColors.surface,
     borderTopWidth: 1,
-    borderTopColor: "#e2e8f0",
+    borderTopColor: appColors.border,
   },
   readingReciteReturnButton: {
     position: "absolute",
@@ -11946,24 +11948,24 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   reciteShowPill: {
-    backgroundColor: "#f0fdf4",
-    borderColor: "#86efac",
+    backgroundColor: appColors.successSoft,
+    borderColor: appColors.successBorder,
   },
   reciteSkipPill: {
-    backgroundColor: "#fffbeb",
-    borderColor: "#fcd34d",
+    backgroundColor: appColors.warningSoft,
+    borderColor: appColors.warningBorder,
   },
   recitePagePill: {
     minHeight: 36,
     paddingHorizontal: 12,
-    backgroundColor: "#ffffff",
-    borderColor: "#cbd5e1",
+    backgroundColor: appColors.surface,
+    borderColor: appColors.borderStrong,
   },
   reciteCurrentWordPill: {
     minHeight: 36,
     paddingHorizontal: 12,
-    backgroundColor: "#eff6ff",
-    borderColor: "#bfdbfe",
+    backgroundColor: appColors.primarySoft,
+    borderColor: appColors.primaryBorder,
   },
   reciteAssistPillText: {
     fontSize: 13,
@@ -11976,10 +11978,10 @@ const styles = StyleSheet.create({
     color: "#b45309",
   },
   recitePagePillText: {
-    color: "#475569",
+    color: appColors.textMuted,
   },
   reciteCurrentWordPillText: {
-    color: "#2563eb",
+    color: appColors.primary,
   },
   // ── Fixed controls island ────────────────────────────────────────────────────
   controlsIsland: {
@@ -11987,9 +11989,9 @@ const styles = StyleSheet.create({
     paddingTop: 8,
     paddingBottom: 10,
     borderTopWidth: 1,
-    borderTopColor: "#e5e7eb",
-    backgroundColor: "#ffffff",
-    shadowColor: "#0f172a",
+    borderTopColor: appColors.border,
+    backgroundColor: appColors.surface,
+    shadowColor: appColors.shadow,
     shadowOpacity: 0.04,
     shadowRadius: 8,
     shadowOffset: { width: 0, height: -2 },
@@ -12008,9 +12010,9 @@ const styles = StyleSheet.create({
     borderRadius: 22,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#ffffff",
+    backgroundColor: appColors.surface,
     borderWidth: 1,
-    borderColor: "#e5e7eb",
+    borderColor: appColors.border,
   },
   playbackIconButtonDisabled: {
     opacity: 0.4,
@@ -12021,9 +12023,9 @@ const styles = StyleSheet.create({
   },
   modeButton: {
     flex: 1,
-    backgroundColor: "#ffffff",
+    backgroundColor: appColors.surface,
     borderWidth: 1,
-    borderColor: "#e2e8f0",
+    borderColor: appColors.border,
     borderRadius: 999,
     paddingVertical: 10,
     alignItems: "center",
@@ -12036,7 +12038,7 @@ const styles = StyleSheet.create({
   modeButtonText: {
     fontSize: 14,
     fontWeight: "800",
-    color: "#111827",
+    color: appColors.text,
   },
   modeButtonTextActive: {
     color: "#ffffff",
@@ -12045,8 +12047,8 @@ const styles = StyleSheet.create({
     minHeight: 44,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#bae6fd",
-    backgroundColor: "#f0f9ff",
+    borderColor: appColors.primaryBorder,
+    backgroundColor: appColors.primarySoft,
     paddingHorizontal: 14,
     flexDirection: "row",
     alignItems: "center",
@@ -12074,10 +12076,10 @@ const styles = StyleSheet.create({
     gap: 16,
   },
   navButton: {
-    backgroundColor: "#ffffff",
+    backgroundColor: appColors.surface,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#e2e8f0",
+    borderColor: appColors.border,
     paddingVertical: 12,
     paddingHorizontal: 20,
   },
@@ -12087,7 +12089,7 @@ const styles = StyleSheet.create({
   navButtonText: {
     fontSize: 15,
     fontWeight: "800",
-    color: "#111827",
+    color: appColors.text,
   },
   playButton: {
     backgroundColor: "#2563eb",
@@ -12115,8 +12117,8 @@ const styles = StyleSheet.create({
     minHeight: 44,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#bfdbfe",
-    backgroundColor: "#eff6ff",
+    borderColor: appColors.primaryBorder,
+    backgroundColor: appColors.primarySoft,
     paddingHorizontal: 12,
     flexDirection: "row",
     alignItems: "center",
@@ -12124,8 +12126,8 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   skipControlButtonDisabled: {
-    borderColor: "#e5e7eb",
-    backgroundColor: "#f9fafb",
+    borderColor: appColors.border,
+    backgroundColor: appColors.surfaceSubtle,
     opacity: 0.65,
   },
   skipControlText: {
@@ -12138,7 +12140,7 @@ const styles = StyleSheet.create({
   },
   completeButton: {
     width: "100%",
-    backgroundColor: "#111827",
+    backgroundColor: appColors.surfaceInverse,
     paddingVertical: 16,
     borderRadius: 12,
     alignItems: "center",
@@ -12147,7 +12149,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#555555",
   },
   completeButtonText: {
-    color: "#ffffff",
+    color: appColors.textInverse,
     fontSize: 16,
     fontWeight: "900",
   },
@@ -12165,9 +12167,9 @@ const styles = StyleSheet.create({
   },
   readyNoorPathButton: {
     width: "100%",
-    backgroundColor: "#ffffff",
+    backgroundColor: appColors.surface,
     borderWidth: 1,
-    borderColor: "#a7f3d0",
+    borderColor: appColors.successBorder,
     paddingVertical: 16,
     borderRadius: 12,
     alignItems: "center",
@@ -12193,7 +12195,7 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0,0,0,0.4)",
   },
   settingsSheet: {
-    backgroundColor: "#ffffff",
+    backgroundColor: appColors.surface,
     borderTopLeftRadius: 18,
     borderTopRightRadius: 18,
     paddingTop: 20,
@@ -12216,7 +12218,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 16,
     fontWeight: "900",
-    color: "#64748b",
+    color: appColors.textMuted,
     textTransform: "uppercase",
   },
   settingsSegment: {
@@ -12224,8 +12226,8 @@ const styles = StyleSheet.create({
     gap: 8,
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: "#e5e7eb",
-    backgroundColor: "#f8fafc",
+    borderColor: appColors.border,
+    backgroundColor: appColors.surfaceSubtle,
     padding: 4,
   },
   settingsSegmentPill: {
@@ -12242,7 +12244,7 @@ const styles = StyleSheet.create({
   settingsSegmentText: {
     fontSize: 13,
     fontWeight: "900",
-    color: "#475569",
+    color: appColors.textMuted,
     textAlign: "center",
   },
   settingsSegmentTextSelected: {
@@ -12264,8 +12266,8 @@ const styles = StyleSheet.create({
     minHeight: 54,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#e5e7eb",
-    backgroundColor: "#ffffff",
+    borderColor: appColors.border,
+    backgroundColor: appColors.surface,
     paddingVertical: 9,
     paddingHorizontal: 12,
     flexDirection: "row",
@@ -12280,21 +12282,21 @@ const styles = StyleSheet.create({
   sessionSettingLabel: {
     fontSize: 14,
     fontWeight: "900",
-    color: "#111827",
+    color: appColors.text,
   },
   sessionSettingDetail: {
     marginTop: 2,
     fontSize: 12,
     lineHeight: 16,
     fontWeight: "600",
-    color: "#64748b",
+    color: appColors.textMuted,
   },
   sessionActionRow: {
     minHeight: 48,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#bae6fd",
-    backgroundColor: "#f0f9ff",
+    borderColor: appColors.primaryBorder,
+    backgroundColor: appColors.primarySoft,
     paddingVertical: 11,
     paddingHorizontal: 12,
     flexDirection: "row",
@@ -12316,8 +12318,8 @@ const styles = StyleSheet.create({
     color: "#0369a1",
   },
   sessionPauseActionRow: {
-    borderColor: "#fed7aa",
-    backgroundColor: "#fff7ed",
+    borderColor: appColors.warningBorder,
+    backgroundColor: appColors.warningSoft,
   },
   sessionPauseActionText: {
     color: "#b45309",
@@ -12332,12 +12334,12 @@ const styles = StyleSheet.create({
   sheetTitle: {
     fontSize: 18,
     fontWeight: "900",
-    color: "#111827",
+    color: appColors.text,
     textAlign: "center",
     marginBottom: 4,
   },
   completionSheet: {
-    backgroundColor: "#ffffff",
+    backgroundColor: appColors.surface,
     borderTopLeftRadius: 18,
     borderTopRightRadius: 18,
     padding: 24,
@@ -12350,7 +12352,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 19,
     fontWeight: "600",
-    color: "#6b7280",
+    color: appColors.textMuted,
     textAlign: "center",
   },
   readySheetHeader: {
@@ -12375,14 +12377,14 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: "#f8fafc",
+    backgroundColor: appColors.surfaceSubtle,
     borderWidth: 1,
-    borderColor: "#e2e8f0",
+    borderColor: appColors.border,
     alignItems: "center",
     justifyContent: "center",
   },
   surahAyahSheet: {
-    backgroundColor: "#ffffff",
+    backgroundColor: appColors.surface,
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     paddingTop: 18,
@@ -12426,8 +12428,8 @@ const styles = StyleSheet.create({
     minWidth: 94,
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: "#bfdbfe",
-    backgroundColor: "#eff6ff",
+    borderColor: appColors.primaryBorder,
+    backgroundColor: appColors.primarySoft,
     alignItems: "center",
     justifyContent: "center",
     flexDirection: "row",
@@ -12453,7 +12455,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: 8,
     borderRadius: 12,
-    backgroundColor: "#f8fafc",
+    backgroundColor: appColors.surfaceSubtle,
     paddingVertical: 8,
     paddingHorizontal: 10,
   },
@@ -12470,7 +12472,7 @@ const styles = StyleSheet.create({
   ayahLegendText: {
     fontSize: 11,
     fontWeight: "800",
-    color: "#64748b",
+    color: appColors.textMuted,
   },
   ayahBulkBar: {
     flexDirection: "row",
@@ -12479,8 +12481,8 @@ const styles = StyleSheet.create({
     gap: 10,
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: "#bfdbfe",
-    backgroundColor: "#eff6ff",
+    borderColor: appColors.primaryBorder,
+    backgroundColor: appColors.primarySoft,
     padding: 10,
   },
   ayahBulkTextBlock: {
@@ -12496,7 +12498,7 @@ const styles = StyleSheet.create({
     marginTop: 1,
     fontSize: 11,
     fontWeight: "700",
-    color: "#64748b",
+    color: appColors.textMuted,
   },
   ayahBulkActions: {
     flexDirection: "row",
@@ -12519,25 +12521,25 @@ const styles = StyleSheet.create({
     opacity: 0.45,
   },
   ayahBulkMarkButton: {
-    borderColor: "#a7f3d0",
-    backgroundColor: "#ecfdf5",
+    borderColor: appColors.successBorder,
+    backgroundColor: appColors.successSoft,
   },
   ayahBulkMarkButtonText: {
-    color: "#047857",
+    color: appColors.success,
   },
   ayahBulkUnmarkButton: {
-    borderColor: "#fecdd3",
-    backgroundColor: "#fff1f2",
+    borderColor: appColors.dangerBorder,
+    backgroundColor: appColors.dangerSoft,
   },
   ayahBulkUnmarkButtonText: {
-    color: "#be123c",
+    color: appColors.danger,
   },
   ayahBulkClearButton: {
-    borderColor: "#e2e8f0",
-    backgroundColor: "#ffffff",
+    borderColor: appColors.border,
+    backgroundColor: appColors.surface,
   },
   ayahBulkClearButtonText: {
-    color: "#475569",
+    color: appColors.textMuted,
   },
   surahAyahList: {
     flexShrink: 1,
@@ -12560,8 +12562,8 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   ayahCircleEmpty: {
-    borderColor: "#d1d5db",
-    backgroundColor: "#f8fafc",
+    borderColor: appColors.borderStrong,
+    backgroundColor: appColors.surfaceSubtle,
   },
   ayahCircleRed: {
     borderColor: "#be123c",
@@ -12589,7 +12591,7 @@ const styles = StyleSheet.create({
   ayahCircleText: {
     fontSize: 13,
     fontWeight: "900",
-    color: "#475569",
+    color: appColors.textMuted,
   },
   ayahCircleTextFilled: {
     color: "#ffffff",
@@ -12608,23 +12610,23 @@ const styles = StyleSheet.create({
     height: 36,
     borderRadius: 18,
     borderWidth: 1,
-    borderColor: "#e5e7eb",
-    backgroundColor: "#ffffff",
+    borderColor: appColors.border,
+    backgroundColor: appColors.surface,
     alignItems: "center",
     justifyContent: "center",
   },
   ayahSheetArabicCard: {
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#fde68a",
-    backgroundColor: "#fffbeb",
+    borderColor: appColors.warningBorder,
+    backgroundColor: appColors.warningSoft,
     padding: 14,
   },
   ayahSheetArabicText: {
     fontFamily: "AmiriQuran",
     fontSize: 24,
     lineHeight: 42,
-    color: "#111827",
+    color: appColors.text,
     textAlign: "right",
     writingDirection: "rtl",
   },
@@ -12643,8 +12645,8 @@ const styles = StyleSheet.create({
     minHeight: 48,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#e5e7eb",
-    backgroundColor: "#ffffff",
+    borderColor: appColors.border,
+    backgroundColor: appColors.surface,
     paddingVertical: 12,
     paddingHorizontal: 14,
     flexDirection: "row",
@@ -12656,7 +12658,7 @@ const styles = StyleSheet.create({
     minWidth: 0,
     fontSize: 15,
     fontWeight: "800",
-    color: "#111827",
+    color: appColors.text,
   },
   ayahPrimaryActionButton: {
     width: "100%",
@@ -12679,8 +12681,8 @@ const styles = StyleSheet.create({
     minHeight: 48,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#bae6fd",
-    backgroundColor: "#f0f9ff",
+    borderColor: appColors.primaryBorder,
+    backgroundColor: appColors.primarySoft,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
@@ -12694,7 +12696,7 @@ const styles = StyleSheet.create({
   },
   recitationCheckContainer: {
     flex: 1,
-    backgroundColor: "#f8fafc",
+    backgroundColor: appColors.background,
   },
   recitationCheckContent: {
     padding: 16,
@@ -12704,8 +12706,8 @@ const styles = StyleSheet.create({
   recitationCheckIntroCard: {
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#bfdbfe",
-    backgroundColor: "#eff6ff",
+    borderColor: appColors.primaryBorder,
+    backgroundColor: appColors.primarySoft,
     padding: 16,
   },
   recitationCheckKicker: {
@@ -12718,20 +12720,20 @@ const styles = StyleSheet.create({
     marginTop: 5,
     fontSize: 21,
     fontWeight: "900",
-    color: "#111827",
+    color: appColors.text,
   },
   recitationCheckRange: {
     marginTop: 4,
     fontSize: 13,
     fontWeight: "700",
-    color: "#374151",
+    color: appColors.textMuted,
   },
   recitationScoreCard: {
     alignItems: "center",
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#a7f3d0",
-    backgroundColor: "#ecfdf5",
+    borderColor: appColors.successBorder,
+    backgroundColor: appColors.successSoft,
     padding: 20,
   },
   recitationScoreKicker: {
@@ -12764,38 +12766,38 @@ const styles = StyleSheet.create({
   recitationRatingCard: {
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#e2e8f0",
-    backgroundColor: "#ffffff",
+    borderColor: appColors.border,
+    backgroundColor: appColors.surface,
     padding: 14,
     gap: 12,
   },
   recitationRatingTitle: {
     fontSize: 15,
     fontWeight: "900",
-    color: "#111827",
+    color: appColors.text,
   },
   pauseSummaryCard: {
-    backgroundColor: "#ffffff",
+    backgroundColor: appColors.surface,
     borderWidth: 1,
-    borderColor: "#e2e8f0",
+    borderColor: appColors.border,
     borderRadius: 12,
     padding: 14,
     gap: 12,
   },
   leaveWarningCard: {
-    backgroundColor: "#fff7ed",
-    borderColor: "#fed7aa",
+    backgroundColor: appColors.warningSoft,
+    borderColor: appColors.warningBorder,
   },
   pauseSummaryTitle: {
     fontSize: 15,
     fontWeight: "900",
-    color: "#111827",
+    color: appColors.text,
   },
   pauseSummaryDetail: {
     fontSize: 13,
     lineHeight: 19,
     fontWeight: "600",
-    color: "#6b7280",
+    color: appColors.textMuted,
   },
   pauseStepperRow: {
     flexDirection: "row",
@@ -12808,8 +12810,8 @@ const styles = StyleSheet.create({
     minHeight: 64,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#bfdbfe",
-    backgroundColor: "#eff6ff",
+    borderColor: appColors.primaryBorder,
+    backgroundColor: appColors.primarySoft,
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: 12,
@@ -12824,7 +12826,7 @@ const styles = StyleSheet.create({
     marginTop: 3,
     fontSize: 18,
     fontWeight: "900",
-    color: "#111827",
+    color: appColors.text,
   },
   pauseQuickRow: {
     flexDirection: "row",
@@ -12834,8 +12836,8 @@ const styles = StyleSheet.create({
     flex: 1,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: "#d1d5db",
-    backgroundColor: "#ffffff",
+    borderColor: appColors.borderStrong,
+    backgroundColor: appColors.surface,
     paddingVertical: 10,
     alignItems: "center",
   },
@@ -12869,7 +12871,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 17,
     fontWeight: "600",
-    color: "#6b7280",
+    color: appColors.textMuted,
   },
   ratingRadio: {
     width: 18,
@@ -12896,14 +12898,14 @@ const styles = StyleSheet.create({
   leaveDestructiveButton: {
     width: "100%",
     borderWidth: 1,
-    borderColor: "#fecdd3",
-    backgroundColor: "#fff1f2",
+    borderColor: appColors.dangerBorder,
+    backgroundColor: appColors.dangerSoft,
     paddingVertical: 14,
     borderRadius: 12,
     alignItems: "center",
   },
   leaveDestructiveText: {
-    color: "#be123c",
+    color: appColors.danger,
     fontSize: 15,
     fontWeight: "900",
   },
@@ -12916,7 +12918,7 @@ const styles = StyleSheet.create({
   settingLabel: {
     flex: 1,
     fontSize: 15,
-    color: "#111827",
+    color: appColors.text,
     fontWeight: "800",
   },
   stepper: {
@@ -12927,9 +12929,9 @@ const styles = StyleSheet.create({
   stepperButton: {
     width: 40,
     height: 40,
-    backgroundColor: "#ffffff",
+    backgroundColor: appColors.surface,
     borderWidth: 1,
-    borderColor: "#e2e8f0",
+    borderColor: appColors.border,
     borderRadius: 8,
     alignItems: "center",
     justifyContent: "center",
@@ -12937,12 +12939,12 @@ const styles = StyleSheet.create({
   stepperButtonText: {
     fontSize: 18,
     fontWeight: "800",
-    color: "#111827",
+    color: appColors.text,
   },
   stepperValue: {
     fontSize: 15,
     fontWeight: "800",
-    color: "#111827",
+    color: appColors.text,
     minWidth: 36,
     textAlign: "center",
   },
@@ -12950,7 +12952,7 @@ const styles = StyleSheet.create({
     width: 48,
     height: 28,
     borderRadius: 14,
-    backgroundColor: "#e5e7eb",
+    backgroundColor: appColors.disabled,
     justifyContent: "center",
     paddingHorizontal: 2,
   },
@@ -12961,7 +12963,7 @@ const styles = StyleSheet.create({
     width: 24,
     height: 24,
     borderRadius: 12,
-    backgroundColor: "#ffffff",
+    backgroundColor: appColors.surface,
   },
   toggleKnobOn: {
     alignSelf: "flex-end",
@@ -12980,10 +12982,10 @@ const styles = StyleSheet.create({
   },
   // ── Theme + Reciter picker pills ─────────────────────────────────────────────
   themePill: {
-    backgroundColor: "#ffffff",
+    backgroundColor: appColors.surface,
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: "#e2e8f0",
+    borderColor: appColors.border,
     paddingVertical: 8,
     paddingHorizontal: 14,
   },
@@ -12994,16 +12996,16 @@ const styles = StyleSheet.create({
   themePillText: {
     fontSize: 13,
     fontWeight: "800",
-    color: "#111827",
+    color: appColors.text,
   },
   themePillTextSelected: {
     color: "#ffffff",
   },
   reciterPill: {
-    backgroundColor: "#ffffff",
+    backgroundColor: appColors.surface,
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: "#e2e8f0",
+    borderColor: appColors.border,
     paddingVertical: 8,
     paddingHorizontal: 14,
   },
@@ -13014,16 +13016,16 @@ const styles = StyleSheet.create({
   reciterPillText: {
     fontSize: 13,
     fontWeight: "800",
-    color: "#111827",
+    color: appColors.text,
   },
   reciterPillTextSelected: {
     color: "#ffffff",
   },
   ratePill: {
-    backgroundColor: "#ffffff",
+    backgroundColor: appColors.surface,
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: "#e2e8f0",
+    borderColor: appColors.border,
     paddingVertical: 8,
     paddingHorizontal: 14,
     minWidth: 56,
@@ -13036,7 +13038,7 @@ const styles = StyleSheet.create({
   ratePillText: {
     fontSize: 13,
     fontWeight: "800",
-    color: "#111827",
+    color: appColors.text,
   },
   ratePillTextSelected: {
     color: "#ffffff",
@@ -13046,16 +13048,16 @@ const styles = StyleSheet.create({
     justifyContent: "flex-end",
     paddingHorizontal: 16,
     paddingBottom: 190,
-    backgroundColor: "rgba(0,0,0,0.02)",
+    backgroundColor: appColors.overlay,
   },
   wordTooltipCard: {
     width: "100%",
     maxWidth: 360,
     alignSelf: "center",
-    backgroundColor: "#ffffff",
+    backgroundColor: appColors.surface,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: "#fde68a",
+    borderColor: appColors.warningBorder,
     padding: 14,
     gap: 10,
     shadowColor: "#000000",
@@ -13091,11 +13093,11 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: "#fef3c7",
+    backgroundColor: appColors.warningSoft,
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
-    borderColor: "#fde68a",
+    borderColor: appColors.warningBorder,
   },
   wordTooltipAudioButtonDisabled: {
     opacity: 0.7,
@@ -13111,7 +13113,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 20,
     fontWeight: "600",
-    color: "#374151",
+    color: appColors.textMuted,
   },
   wordTooltipEmpty: {
     fontSize: 13,
@@ -13128,7 +13130,7 @@ const styles = StyleSheet.create({
     padding: 24,
   },
   translationCard: {
-    backgroundColor: "#ffffff",
+    backgroundColor: appColors.surface,
     borderRadius: 16,
     padding: 24,
     alignItems: "center",

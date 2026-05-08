@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Pressable,
@@ -18,6 +18,11 @@ import {
 } from "@/src/components/screen-primitives";
 import { Avatar } from "@/src/components/avatar";
 import { authClient } from "@/src/lib/auth-client";
+import {
+  APP_THEME_OPTIONS,
+  useAppTheme,
+  type AppThemeColors,
+} from "@/src/lib/app-theme";
 
 const AVATAR_IMAGE_SIZE = 256;
 const JPEG_COMPRESSION = 0.8;
@@ -50,6 +55,8 @@ function buildProfileImageDataUrl(base64: string | undefined) {
 
 export default function AccountSettingsScreen() {
   const router = useRouter();
+  const { colors, effectiveTheme, preference, setPreference } = useAppTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const sessionQuery = authClient.useSession();
   const user = sessionQuery.data?.user;
   const [savingAction, setSavingAction] = useState<"change" | "remove" | null>(null);
@@ -127,7 +134,7 @@ export default function AccountSettingsScreen() {
       <ScreenContainer>
         <ScreenHeader title="Account settings" onBack={() => router.back()} />
         <View style={styles.center}>
-          <ActivityIndicator size="large" color="#2563eb" />
+          <ActivityIndicator size="large" color={colors.primary} />
         </View>
       </ScreenContainer>
     );
@@ -161,7 +168,7 @@ export default function AccountSettingsScreen() {
                 size="lg"
               />
               <View style={styles.cameraBadge}>
-                <Ionicons name="camera" size={16} color="#ffffff" />
+                <Ionicons name="camera" size={16} color={colors.textInverse} />
               </View>
             </Pressable>
             <View style={styles.identityBlock}>
@@ -182,10 +189,10 @@ export default function AccountSettingsScreen() {
               disabled={actionDisabled}
             >
               {savingAction === "change" ? (
-                <ActivityIndicator color="#ffffff" />
+                <ActivityIndicator color={colors.textInverse} />
               ) : (
                 <>
-                  <Ionicons name="image-outline" size={18} color="#ffffff" />
+                  <Ionicons name="image-outline" size={18} color={colors.textInverse} />
                   <Text style={styles.primaryButtonText}>Change photo</Text>
                 </>
               )}
@@ -197,10 +204,10 @@ export default function AccountSettingsScreen() {
               disabled={removeDisabled}
             >
               {savingAction === "remove" ? (
-                <ActivityIndicator color="#0f766e" />
+                <ActivityIndicator color={colors.success} />
               ) : (
                 <>
-                  <Ionicons name="trash-outline" size={18} color="#0f766e" />
+                  <Ionicons name="trash-outline" size={18} color={colors.success} />
                   <Text style={styles.secondaryButtonText}>Remove photo</Text>
                 </>
               )}
@@ -210,12 +217,67 @@ export default function AccountSettingsScreen() {
           {error ? <InlineError message={error} /> : null}
           {status ? <Text style={styles.statusText}>{status}</Text> : null}
         </View>
+
+        <View style={styles.card}>
+          <Text style={styles.sectionTitle}>Appearance</Text>
+          <Text style={styles.sectionDetail}>
+            Light stays as the default. Choose another mode when you want the app chrome to change.
+          </Text>
+          <View style={styles.themeOptionGroup}>
+            {APP_THEME_OPTIONS.map((option) => {
+              const selected = preference === option.value;
+              return (
+                <Pressable
+                  key={option.value}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected }}
+                  style={[
+                    styles.themeOption,
+                    selected && styles.themeOptionSelected,
+                  ]}
+                  onPress={() => setPreference(option.value)}
+                >
+                  <View
+                    style={[
+                      styles.themeIcon,
+                      selected && styles.themeIconSelected,
+                    ]}
+                  >
+                    <Ionicons
+                      name={option.icon}
+                      size={18}
+                      color={selected ? colors.primary : colors.textMuted}
+                    />
+                  </View>
+                  <View style={styles.themeText}>
+                    <Text
+                      style={[
+                        styles.themeLabel,
+                        selected && styles.themeLabelSelected,
+                      ]}
+                    >
+                      {option.label}
+                    </Text>
+                    <Text style={styles.themeDetail}>{option.detail}</Text>
+                  </View>
+                  {selected ? (
+                    <Ionicons name="checkmark-circle" size={20} color={colors.primary} />
+                  ) : null}
+                </Pressable>
+              );
+            })}
+          </View>
+          <Text style={styles.modeDetail}>
+            Active mode: {effectiveTheme === "dark" ? "Dark" : "Light"}
+          </Text>
+        </View>
       </ScreenScrollView>
     </ScreenContainer>
   );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(colors: AppThemeColors) {
+  return StyleSheet.create({
   content: {
     padding: 16,
   },
@@ -227,15 +289,21 @@ const styles = StyleSheet.create({
   card: {
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#e5e7eb",
-    backgroundColor: "#ffffff",
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
     padding: 16,
     gap: 16,
   },
   sectionTitle: {
-    color: "#111827",
+    color: colors.text,
     fontSize: 18,
     fontWeight: "900",
+  },
+  sectionDetail: {
+    color: colors.textMuted,
+    fontSize: 13,
+    lineHeight: 19,
+    fontWeight: "700",
   },
   profileRow: {
     flexDirection: "row",
@@ -256,8 +324,8 @@ const styles = StyleSheet.create({
     height: 30,
     borderRadius: 15,
     borderWidth: 2,
-    borderColor: "#ffffff",
-    backgroundColor: "#0f766e",
+    borderColor: colors.surface,
+    backgroundColor: colors.success,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -266,12 +334,12 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   name: {
-    color: "#111827",
+    color: colors.text,
     fontSize: 17,
     fontWeight: "900",
   },
   email: {
-    color: "#64748b",
+    color: colors.textMuted,
     fontSize: 13,
     lineHeight: 18,
     fontWeight: "700",
@@ -285,7 +353,7 @@ const styles = StyleSheet.create({
     flex: 1,
     minHeight: 46,
     borderRadius: 10,
-    backgroundColor: "#0f766e",
+    backgroundColor: colors.success,
     alignItems: "center",
     justifyContent: "center",
     flexDirection: "row",
@@ -293,7 +361,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
   },
   primaryButtonText: {
-    color: "#ffffff",
+    color: colors.textInverse,
     fontSize: 14,
     fontWeight: "900",
   },
@@ -302,8 +370,8 @@ const styles = StyleSheet.create({
     minHeight: 46,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: "#99f6e4",
-    backgroundColor: "#f0fdfa",
+    borderColor: colors.successBorder,
+    backgroundColor: colors.successSoft,
     alignItems: "center",
     justifyContent: "center",
     flexDirection: "row",
@@ -311,7 +379,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
   },
   secondaryButtonText: {
-    color: "#0f766e",
+    color: colors.success,
     fontSize: 14,
     fontWeight: "900",
   },
@@ -319,9 +387,66 @@ const styles = StyleSheet.create({
     opacity: 0.55,
   },
   statusText: {
-    color: "#0f766e",
+    color: colors.success,
     fontSize: 13,
     lineHeight: 18,
     fontWeight: "800",
   },
-});
+  themeOptionGroup: {
+    gap: 10,
+  },
+  themeOption: {
+    minHeight: 64,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surfaceSubtle,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  themeOptionSelected: {
+    borderColor: colors.primaryBorder,
+    backgroundColor: colors.primarySoft,
+  },
+  themeIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  themeIconSelected: {
+    borderColor: colors.primaryBorder,
+  },
+  themeText: {
+    flex: 1,
+    minWidth: 0,
+  },
+  themeLabel: {
+    color: colors.text,
+    fontSize: 15,
+    fontWeight: "900",
+  },
+  themeLabelSelected: {
+    color: colors.primary,
+  },
+  themeDetail: {
+    marginTop: 2,
+    color: colors.textMuted,
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: "700",
+  },
+  modeDetail: {
+    color: colors.textSubtle,
+    fontSize: 12,
+    fontWeight: "800",
+  },
+  });
+}
