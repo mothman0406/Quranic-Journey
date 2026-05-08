@@ -138,30 +138,86 @@ export const HIZB_QUARTER_STARTS: VerseRef[] = [
 export const versePageCache = new Map<string, number>();
 export const pageLastVerseCache = new Map<number, VerseRef>();
 let cacheLoaded = false;
+let cacheLoadPromise: Promise<void> | null = null;
+let cacheRetryTimer: ReturnType<typeof setTimeout> | null = null;
+let cacheRetryAttempt = 0;
+
+const CACHE_RETRY_DELAYS_MS = [30_000, 120_000, 600_000] as const;
+
+function getCacheRetryDelayMs(): number {
+  return CACHE_RETRY_DELAYS_MS[
+    Math.min(cacheRetryAttempt, CACHE_RETRY_DELAYS_MS.length - 1)
+  ]!;
+}
+
+function scheduleVersePageCacheRetry(): void {
+  if (cacheLoaded || cacheRetryTimer) return;
+
+  const delayMs = getCacheRetryDelayMs();
+  cacheRetryAttempt += 1;
+  console.warn(
+    `[quran-meta] Retrying verse page cache load in ${Math.round(delayMs / 1000)}s`,
+  );
+
+  cacheRetryTimer = setTimeout(() => {
+    cacheRetryTimer = null;
+    void ensureVersePageCache();
+  }, delayMs);
+  cacheRetryTimer.unref?.();
+}
 
 export async function ensureVersePageCache(): Promise<void> {
   if (cacheLoaded) return;
-  cacheLoaded = true;
+  if (cacheLoadPromise) return cacheLoadPromise;
+
+  cacheLoadPromise = loadVersePageCache();
+  try {
+    await cacheLoadPromise;
+  } finally {
+    cacheLoadPromise = null;
+  }
+}
+
+async function loadVersePageCache(): Promise<void> {
   try {
     const rows = await db.select({
       surahNumber: quranVersesTable.surahNumber,
       ayahNumber: quranVersesTable.ayahNumber,
       pageNumber: quranVersesTable.pageNumber,
     }).from(quranVersesTable);
+
+    const nextVersePageCache = new Map<string, number>();
+    const nextPageLastVerseCache = new Map<number, VerseRef>();
+
     for (const row of rows) {
-      versePageCache.set(`${row.surahNumber}:${row.ayahNumber}`, row.pageNumber);
+      nextVersePageCache.set(`${row.surahNumber}:${row.ayahNumber}`, row.pageNumber);
     }
-    console.log(`[quran-meta] Loaded ${versePageCache.size} verse→page mappings from DB`);
-    for (const [key, page] of versePageCache) {
+
+    for (const [key, page] of nextVersePageCache) {
       const [s, a] = key.split(":").map(Number);
-      const existing = pageLastVerseCache.get(page);
+      const existing = nextPageLastVerseCache.get(page);
       if (!existing || s > existing.surah || (s === existing.surah && a > existing.ayah)) {
-        pageLastVerseCache.set(page, { surah: s, ayah: a });
+        nextPageLastVerseCache.set(page, { surah: s, ayah: a });
       }
     }
+
+    versePageCache.clear();
+    for (const [key, page] of nextVersePageCache) {
+      versePageCache.set(key, page);
+    }
+
+    pageLastVerseCache.clear();
+    for (const [page, verse] of nextPageLastVerseCache) {
+      pageLastVerseCache.set(page, verse);
+    }
+
+    cacheLoaded = true;
+    cacheRetryAttempt = 0;
+    console.log(`[quran-meta] Loaded ${versePageCache.size} verse→page mappings from DB`);
     console.log(`[quran-meta] Built page→lastVerse map for ${pageLastVerseCache.size} pages`);
   } catch (err) {
     console.error("[quran-meta] Failed to load verse page cache from DB:", err);
+    scheduleVersePageCacheRetry();
   }
 }
 
