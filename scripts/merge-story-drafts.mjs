@@ -146,6 +146,18 @@ function sortStories(stories) {
   return [...stories].sort((a, b) => storySortKey(a).localeCompare(storySortKey(b)));
 }
 
+function valuesEqual(left, right) {
+  return JSON.stringify(left) === JSON.stringify(right);
+}
+
+function changedStoryFields(existing, incoming) {
+  return storyFields.filter((field) => !valuesEqual(existing[field], incoming[field]));
+}
+
+function formatReplacementTarget(existing, incoming) {
+  return existing.slug === incoming.slug ? incoming.slug : `${existing.slug} -> ${incoming.slug}`;
+}
+
 async function loadStories() {
   const data = JSON.parse(await readFile(STORIES_PATH, "utf8"));
   assertObject(data, "stories.json");
@@ -206,7 +218,15 @@ async function main() {
       if (stories.some((existing) => existing.id !== preservedId && existing.slug === story.slug)) {
         fail(`${filename} would rename to duplicate slug "${story.slug}"`);
       }
-      stories[index] = { ...story, id: preservedId };
+      const replacement = { ...story, id: preservedId };
+      const changedFields = changedStoryFields(stories[index], replacement);
+      console.log(
+        `[approved-replace] id ${preservedId} (${formatReplacementTarget(
+          stories[index],
+          replacement,
+        )}): changed fields = [${changedFields.join(", ")}]`,
+      );
+      stories[index] = replacement;
       replaced.push({ filename, slug: story.slug, id: preservedId });
       await rm(filePath);
       continue;

@@ -2490,7 +2490,12 @@
         "Why do you think Allah kept Musa safe in Pharaoh's own house?",
         "Can you think of a time when something scary turned out okay?"
       ],
-      "sources": {}
+      "sources": {
+        "primary": "Quran, Ta-Ha 20:38-40 and Al-Qasas 28:7-13; Arabic Tafsir Ibn Kathir, Wikisource",
+        "hadith": [],
+        "seerah": [],
+        "notes": "Provenance backfill for a hand-written original; documents sources consistent with existing content rather than original drafting. The inspiration to Musa's mother, his sister following, Pharaoh's wife, and his return to his mother are Quranic. The name Yukabid is a traditional/tafsir identification, not Quranic. No story content changed."
+      }
     },
     {
       "id": 37,
@@ -2571,7 +2576,12 @@
         "How did Ibrahim stay so brave when facing the fire?",
         "What would you say to someone who asked you to do something wrong?"
       ],
-      "sources": {}
+      "sources": {
+        "primary": "Quran, Al-Anbiya 21:51-70 and As-Saffat 37:83-98; Arabic Tafsir Ibn Kathir, Wikisource",
+        "hadith": [],
+        "seerah": [],
+        "notes": "Provenance backfill for a hand-written original; documents sources consistent with existing content rather than original drafting. The idol dialogue and Allah's command to the fire are Quranic; vivid fire details are source-consistent with tafsir/common narration rather than direct Quran wording. No story content changed."
+      }
     },
     {
       "id": 20,
@@ -2834,7 +2844,12 @@
         "What does it tell us about Sulayman that he smiled instead of getting angry?",
         "How can we show kindness to animals?"
       ],
-      "sources": {}
+      "sources": {
+        "primary": "Quran, An-Naml 27:15-19; Arabic Tafsir Ibn Kathir, Wikisource",
+        "hadith": [],
+        "seerah": [],
+        "notes": "Provenance backfill for a hand-written original; documents sources consistent with existing content rather than original drafting. The ant warning, Sulayman hearing it, smiling, and making du'a are directly Quranic. No story content changed."
+      }
     },
     {
       "id": 48,
@@ -3093,7 +3108,14 @@
         "What does this story teach us about Allah's power?",
         "If you were there, how would you have felt?"
       ],
-      "sources": {}
+      "sources": {
+        "primary": "Quran, Al-Fil 105:1-5; Arabic Tafsir Ibn Kathir, Wikisource, Tafsir Ibn Kathir/Surah Al-Fil",
+        "hadith": [],
+        "seerah": [
+          "Ibn Ishaq/Ibn Hisham seerah reports on Abraha's expedition and Abd al-Muttalib's encounter"
+        ],
+        "notes": "Provenance backfill for a hand-written original; documents sources consistent with existing content rather than original drafting. Quran anchors the destruction of the elephant army; details such as Abraha, Mahmoud, Abd al-Muttalib, and the Prophet's birth year are from tafsir/seerah reports. No story content changed."
+      }
     },
     {
       "id": 61,
@@ -3313,7 +3335,7 @@
       "id": 4,
       "slug": "the-cave-of-thawr",
       "title": "The Cave of Thawr",
-      "previousStoryId": null,
+      "previousStoryId": 63,
       "storyType": "seerah_context",
       "ageGroup": "child",
       "summary": "During the hijrah to Madinah, Prophet Muhammad ﷺ and Abu Bakr hid in a cave. The enemies were right outside — but Allah protected them!",
@@ -3338,7 +3360,16 @@
         "How did the Prophet ﷺ calm Abu Bakr when he was scared?",
         "Who is your most trusted friend? What makes them special?"
       ],
-      "sources": {}
+      "sources": {
+        "primary": "Quran, At-Tawbah 9:40; Arabic Tafsir Ibn Kathir, Wikisource",
+        "hadith": [
+          "Sahih al-Bukhari 3653"
+        ],
+        "seerah": [
+          "Ibn Ishaq/Ibn Hisham seerah reports on the Hijrah and Cave of Thawr"
+        ],
+        "notes": "Provenance backfill for a hand-written original; documents sources consistent with existing content rather than original drafting. Sahih al-Bukhari 3653 anchors Abu Bakr's cave fear and the Prophet's reassurance that Allah was with them. The route, three-day stay, and Ali sleeping in the Prophet's bed are from seerah reports. The spider and pigeon detail is a seerah report with disputed strength, retained because content is unchanged. previousStoryId now links this story after migration-to-abyssinia (id 63)."
+      }
     },
     {
       "id": 69,
@@ -3714,7 +3745,17 @@
         "Why do you think Abu Bakr spent money to free Bilal?",
         "What was special about Bilal becoming the first mu'adhdhin?"
       ],
-      "sources": {}
+      "sources": {
+        "primary": "Quran, Al-Inshirah 94:5-6 as a thematic hardship-ease anchor; Al-Layl 92:5-7 in tafsir context for Abu Bakr freeing oppressed believers; Arabic Tafsir Ibn Kathir, Wikisource",
+        "hadith": [
+          "Sahih al-Bukhari 604",
+          "Sahih al-Bukhari 4400"
+        ],
+        "seerah": [
+          "Ibn Ishaq/Ibn Hisham seerah reports on Bilal's torture, 'Ahad! Ahad!', Abu Bakr freeing him, and Bilal's adhan at the conquest of Makkah"
+        ],
+        "notes": "Provenance backfill for a hand-written original; documents sources consistent with existing content rather than original drafting. Al-Inshirah is a thematic hardship-ease anchor. Tafsir on Al-Layl records Abu Bakr freeing oppressed believers. Sahih al-Bukhari anchors Bilal in the adhan and conquest-era Ka'bah reports; torture/freeing and the Ka'bah adhan detail are seerah reports. No story content changed."
+      }
     },
     {
       "id": 62,
@@ -3785,7 +3826,17 @@
         "What qualities made Khadijah so special?",
         "How can we support those we love when they are scared?"
       ],
-      "sources": {}
+      "sources": {
+        "primary": "Quran, Al-'Alaq 96:1-5; Arabic Tafsir Ibn Kathir, Wikisource",
+        "hadith": [
+          "Sahih al-Bukhari 3",
+          "Sahih al-Bukhari 3820"
+        ],
+        "seerah": [
+          "Seerah reports on Khadijah's early support and status as the first believer"
+        ],
+        "notes": "Provenance backfill for a hand-written original; documents sources consistent with existing content rather than original drafting. Sahih al-Bukhari 3 anchors the first revelation, Khadijah's comfort, and Waraqah. Sahih al-Bukhari 3820 anchors Jibril's salam and glad tidings to Khadijah. Her first-believer status and lifelong support are reflected in seerah reports. No story content changed."
+      }
     }
   ]
 }
