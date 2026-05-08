@@ -28,7 +28,7 @@ import {
   useSpeechRecognitionEvent,
 } from "expo-speech-recognition";
 import { ChildBottomNav } from "@/src/components/child-bottom-nav";
-import { ayahAudioUrl, wbwAudioUrl } from "@/src/lib/audio";
+import { resolveAyahAudioSource, wbwAudioUrl } from "@/src/lib/audio";
 import { stripTashkeel, wordMatches, stripAlPrefix, tokenize, SKIP_CHARS } from "@/src/lib/recite";
 import {
   fetchDashboard,
@@ -78,7 +78,7 @@ import {
   getQuranCom1405PageForWord,
   getQuranCom1405PageForVerse,
 } from "@/src/lib/quran-com-1405-ayah-coords";
-import { findReciter, RECITERS } from "@/src/lib/reciters";
+import { findMemorizationReciter, MEMORIZATION_RECITERS } from "@/src/lib/reciters";
 import {
   clearMemorizationSessionBookmark,
   DEFAULT_SESSION_SETTINGS,
@@ -1061,7 +1061,7 @@ export default function MemorizationScreen() {
   const [revealedReciteWords, setRevealedReciteWords] = useState<Set<string>>(new Set());
 
   // Derived from reciterId state
-  const reciter = findReciter(reciterId);
+  const reciter = findMemorizationReciter(reciterId);
   const playingVerseNumber =
     internalPhase === "cumulative" && ayahStart !== null
       ? ayahStart + cumAyahIdx
@@ -1077,6 +1077,7 @@ export default function MemorizationScreen() {
   const rafIdRef = useRef<number>(0);
   const positionRef = useRef(0);
   const durationRef = useRef(0);
+  const playbackStartMillisRef = useRef(0);
   const segsRef = useRef<Segment[]>([]);
   const autoPlayRef = useRef(false);
   const isLoadingRef = useRef(false);
@@ -1095,6 +1096,8 @@ export default function MemorizationScreen() {
   const isPlayingRef = useRef(false);
   const pendingSeekPositionRef = useRef<number | null>(null);
   const reciterRef = useRef(reciter);
+  const profileReciterIdRef = useRef(reciterId);
+  const memorizationReciterChangedRef = useRef(false);
   const readyToReciteSheetOpenRef = useRef(false);
   const restoreReadyPromptAfterLeaveRef = useRef(false);
   const internalPhaseRef = useRef<InternalPhase>("single");
@@ -1210,8 +1213,10 @@ export default function MemorizationScreen() {
     (async () => {
       const p = await loadProfileSettings(childId);
       if (cancelled) return;
+      profileReciterIdRef.current = p.reciterId;
+      memorizationReciterChangedRef.current = false;
       setThemeKey(p.themeKey);
-      setReciterId(p.reciterId);
+      setReciterId(findMemorizationReciter(p.reciterId).id);
       setProfileViewMode(p.viewMode);
       setViewMode(routeViewMode ?? p.viewMode);
       setProfileMushafViewMode(p.mushafViewMode);
@@ -1275,9 +1280,12 @@ export default function MemorizationScreen() {
   // Persist profile settings on change, skip during initial hydration.
   useEffect(() => {
     if (!settingsLoaded) return;
+    const persistedReciterId = memorizationReciterChangedRef.current
+      ? reciterId
+      : profileReciterIdRef.current;
     void saveProfileSettings(childId, {
       themeKey,
-      reciterId,
+      reciterId: persistedReciterId,
       viewMode: routeForcesTestMushaf ? profileViewMode : viewMode,
       mushafViewMode: profileMushafViewMode,
     });
@@ -1400,9 +1408,12 @@ export default function MemorizationScreen() {
 
   async function saveMushafViewAsDefault() {
     setProfileMushafViewMode(mushafViewMode);
+    const persistedReciterId = memorizationReciterChangedRef.current
+      ? reciterId
+      : profileReciterIdRef.current;
     await saveProfileSettings(childId, {
       themeKey,
-      reciterId,
+      reciterId: persistedReciterId,
       viewMode,
       mushafViewMode,
     });
@@ -1616,7 +1627,7 @@ export default function MemorizationScreen() {
     if (!sessionRequested) return;
     if (surahNumber === null) return;
     if (chaptersMap.size === 0) return;
-    const currentReciter = findReciter(reciterId);
+    const currentReciter = findMemorizationReciter(reciterId);
     let cancelled = false;
     (async () => {
       try {
@@ -1979,6 +1990,7 @@ export default function MemorizationScreen() {
     lastMatchedWordRef.current = "";
     positionRef.current = 0;
     durationRef.current = 0;
+    playbackStartMillisRef.current = 0;
 
     let cancelled = false;
     const doChange = async () => {
@@ -2097,6 +2109,7 @@ export default function MemorizationScreen() {
     setHighlightedPage(null);
     positionRef.current = 0;
     durationRef.current = 0;
+    playbackStartMillisRef.current = 0;
     isLoadingRef.current = false;
   }
 
@@ -2237,16 +2250,33 @@ export default function MemorizationScreen() {
         if (soundRef.current === previousSound) soundRef.current = null;
       }
       cancelAnimationFrame(rafIdRef.current);
-      const url = ayahAudioUrl(reciter, surahNumber, verseNum);
+      const source = await resolveAyahAudioSource(reciter, surahNumber, verseNum);
+      if (
+        requestId !== playbackRequestIdRef.current ||
+        verseNum !== playingVerseNumberRef.current ||
+        suppressPlaybackForNavigationRef.current
+      ) {
+        return;
+      }
+      playbackStartMillisRef.current = source.startMillis;
+      positionRef.current = 0;
+      durationRef.current = source.durationMillis ?? 0;
       let createdSound: Audio.Sound | null = null;
+      let finishHandledForPass = false;
       const { sound } = await Audio.Sound.createAsync(
-        { uri: url },
-        { shouldPlay: false },
+        { uri: source.uri },
+        { shouldPlay: false, progressUpdateIntervalMillis: 80 },
         (status) => {
           if (!status.isLoaded) return;
-          positionRef.current = status.positionMillis;
-          if (status.durationMillis) durationRef.current = status.durationMillis;
-          if (status.didJustFinish) {
+          positionRef.current = Math.max(0, status.positionMillis - source.startMillis);
+          if (source.durationMillis || status.durationMillis) {
+            durationRef.current = source.durationMillis ?? status.durationMillis ?? 0;
+          }
+          const reachedAyahEnd =
+            status.didJustFinish ||
+            (source.endMillis !== null && status.positionMillis >= source.endMillis - 80);
+          if (reachedAyahEnd && !finishHandledForPass) {
+            finishHandledForPass = true;
             const finishedSound = createdSound;
             if (
               !finishedSound ||
@@ -2256,18 +2286,19 @@ export default function MemorizationScreen() {
               void finishedSound?.unloadAsync().catch(() => {});
               return;
             }
-            // During cumulative phase each verse plays once (no per-verse repeats).
             const effectiveRepeatCount =
               internalPhaseRef.current === "cumulative" ? 1 : repeatCountRef.current;
             if (currentRepeatRef.current < effectiveRepeatCount) {
               setCurrentRepeat(currentRepeatRef.current + 1);
               finishedSound
-                ?.setPositionAsync(0)
+                ?.setPositionAsync(source.startMillis)
                 .then(() => {
                   if (
                     requestId === playbackRequestIdRef.current &&
                     soundRef.current === finishedSound
                   ) {
+                    positionRef.current = 0;
+                    finishHandledForPass = false;
                     return finishedSound.playAsync();
                   }
                   return undefined;
@@ -2275,7 +2306,6 @@ export default function MemorizationScreen() {
                 .catch(() => {});
               return;
             }
-            // All repeats done for this verse
             setCurrentRepeat(1);
             cancelAnimationFrame(rafIdRef.current);
             isPlayingRef.current = false;
@@ -2283,7 +2313,6 @@ export default function MemorizationScreen() {
             setHighlightedWord(-1);
             setHighlightedPage(null);
 
-            // Unload the just-finished sound so the next playVerse creates a fresh instance.
             void (async () => {
               if (soundRef.current === finishedSound) {
                 try {
@@ -2299,6 +2328,9 @@ export default function MemorizationScreen() {
         },
       );
       createdSound = sound;
+      if (source.startMillis > 0) {
+        await sound.setPositionAsync(source.startMillis);
+      }
       if (
         requestId !== playbackRequestIdRef.current ||
         verseNum !== playingVerseNumberRef.current ||
@@ -2318,8 +2350,6 @@ export default function MemorizationScreen() {
         return;
       }
       soundRef.current = sound;
-      // Ensure max volume — different everyayah recordings have very different
-      // mastered loudness levels (Afasy is significantly quieter than Husary).
       try {
         await sound.setVolumeAsync(1.0);
       } catch {
@@ -2327,7 +2357,6 @@ export default function MemorizationScreen() {
       }
       try {
         await sound.setRateAsync(playbackRateRef.current, true);
-        // shouldCorrectPitch=true keeps recitation pitch natural
       } catch {
         // best-effort; some sound states may reject setRateAsync
       }
@@ -2352,6 +2381,22 @@ export default function MemorizationScreen() {
       isPlayingRef.current = true;
       setIsPlaying(true);
       startRAF();
+    } catch {
+      if (requestId !== playbackRequestIdRef.current) return;
+      try {
+        await soundRef.current?.unloadAsync();
+      } catch {
+        // best-effort cleanup
+      }
+      soundRef.current = null;
+      playbackStartMillisRef.current = 0;
+      positionRef.current = 0;
+      durationRef.current = 0;
+      isPlayingRef.current = false;
+      setIsPlaying(false);
+      setHighlightedWord(-1);
+      setHighlightedPage(null);
+      Alert.alert("Audio unavailable", "Try listening to this ayah again in a moment.");
     } finally {
       if (requestId === playbackRequestIdRef.current) {
         isLoadingRef.current = false;
@@ -2364,7 +2409,9 @@ export default function MemorizationScreen() {
     if (!seg) return;
     const dur = durationRef.current;
     if (soundRef.current && dur > 0) {
-      await soundRef.current.setPositionAsync(Math.floor(seg[1] * dur));
+      await soundRef.current.setPositionAsync(
+        playbackStartMillisRef.current + Math.floor(seg[1] * dur),
+      );
       if (!isPlayingRef.current) {
         await soundRef.current.playAsync();
         isPlayingRef.current = true;
@@ -2379,23 +2426,34 @@ export default function MemorizationScreen() {
       Alert.alert("Recite mode is on", "Turn off Recite mode to play audio.");
       return;
     }
-    // Block re-entry while audio is loading. Without this, rapid taps during
-    // the createAsync window all fall through to playVerse or to the resume
-    // branch and spawn concurrent playback.
     if (isLoadingRef.current) return;
 
     if (isPlayingRef.current) {
       cancelAnimationFrame(rafIdRef.current);
-      await soundRef.current?.pauseAsync();
+      try {
+        await soundRef.current?.pauseAsync();
+      } catch {
+        // best-effort; the sound may already be invalid
+      }
       isPlayingRef.current = false;
       setIsPlaying(false);
     } else if (soundRef.current) {
-      // Resume an existing-but-paused sound. Check ref first to avoid race.
-      if (isPlayingRef.current) return; // double-check after await boundary
+      if (isPlayingRef.current) return;
       isPlayingRef.current = true;
       setIsPlaying(true);
-      await soundRef.current.playAsync();
-      if (!testMushafPlaybackRef.current) startRAF();
+      try {
+        await soundRef.current.playAsync();
+        if (!testMushafPlaybackRef.current) startRAF();
+      } catch {
+        const brokenSound = soundRef.current;
+        soundRef.current = null;
+        await brokenSound?.unloadAsync().catch(() => {});
+        isPlayingRef.current = false;
+        setIsPlaying(false);
+        positionRef.current = 0;
+        playbackStartMillisRef.current = 0;
+        await playVerse(playingVerseNumberRef.current);
+      }
     } else {
       setCurrentRepeat(1);
       await playVerse(playingVerseNumberRef.current);
@@ -2407,7 +2465,9 @@ export default function MemorizationScreen() {
     if (!seg) return;
     const dur = durationRef.current;
     if (soundRef.current && dur > 0) {
-      await soundRef.current.setPositionAsync(Math.floor(seg[1] * dur));
+      await soundRef.current.setPositionAsync(
+        playbackStartMillisRef.current + Math.floor(seg[1] * dur),
+      );
       if (!isPlayingRef.current) {
         await soundRef.current.playAsync();
         isPlayingRef.current = true;
@@ -2551,6 +2611,7 @@ export default function MemorizationScreen() {
     setHighlightedPage(null);
     positionRef.current = 0;
     durationRef.current = 0;
+    playbackStartMillisRef.current = 0;
     segsRef.current = [];
     isLoadingRef.current = false;
   }
@@ -2574,6 +2635,7 @@ export default function MemorizationScreen() {
     setHighlightedPage(null);
     positionRef.current = 0;
     durationRef.current = 0;
+    playbackStartMillisRef.current = 0;
     updateDisplayedMushafPage(target.pageNumber);
 
     try {
@@ -2592,30 +2654,47 @@ export default function MemorizationScreen() {
       }
       segsRef.current = segments;
 
+      const source = await resolveAyahAudioSource(
+        reciterRef.current,
+        target.surahNumber,
+        target.ayahNumber,
+      );
+      playbackStartMillisRef.current = source.startMillis;
+      durationRef.current = source.durationMillis ?? 0;
+
       let createdSound: Audio.Sound | null = null;
+      let finishHandled = false;
       const { sound } = await Audio.Sound.createAsync(
-        { uri: ayahAudioUrl(reciterRef.current, target.surahNumber, target.ayahNumber) },
+        { uri: source.uri },
         {
-          shouldPlay: true,
+          shouldPlay: false,
           progressUpdateIntervalMillis: 80,
           rate: playbackRateRef.current,
           shouldCorrectPitch: true,
         },
         (status) => {
           if (!status.isLoaded) return;
+          const relativePosition = Math.max(0, status.positionMillis - source.startMillis);
           updateTestMushafPlaybackHighlight(
             target,
             segments,
-            status.positionMillis,
-            status.durationMillis,
+            relativePosition,
+            source.durationMillis ?? status.durationMillis,
           );
-          if (status.didJustFinish) {
+          const reachedAyahEnd =
+            status.didJustFinish ||
+            (source.endMillis !== null && status.positionMillis >= source.endMillis - 80);
+          if (reachedAyahEnd && !finishHandled) {
+            finishHandled = true;
             const finishedSound = createdSound;
             void finishTestMushafPlaybackAyah(token, finishedSound);
           }
         },
       );
       createdSound = sound;
+      if (source.startMillis > 0) {
+        await sound.setPositionAsync(source.startMillis);
+      }
 
       if (
         token !== playbackRequestIdRef.current ||
@@ -2631,6 +2710,7 @@ export default function MemorizationScreen() {
       } catch {
         // best-effort
       }
+      await sound.playAsync();
       isPlayingRef.current = true;
       setIsPlaying(true);
     } catch {
@@ -2693,7 +2773,7 @@ export default function MemorizationScreen() {
 
     if (soundRef.current) {
       try {
-        await soundRef.current.setPositionAsync(0);
+        await soundRef.current.setPositionAsync(playbackStartMillisRef.current);
         await soundRef.current.playAsync();
         isPlayingRef.current = true;
         setIsPlaying(true);
@@ -4097,12 +4177,31 @@ export default function MemorizationScreen() {
       isPlayingRef.current = false;
       setIsPlaying(false);
 
+      const source = await resolveAyahAudioSource(
+        reciterRef.current,
+        target.surahNumber,
+        target.ayahNumber,
+      );
+      playbackStartMillisRef.current = source.startMillis;
+      positionRef.current = 0;
+      durationRef.current = source.durationMillis ?? 0;
+
       let createdSound: Audio.Sound | null = null;
+      let finishHandled = false;
       const { sound } = await Audio.Sound.createAsync(
-        { uri: ayahAudioUrl(reciterRef.current, target.surahNumber, target.ayahNumber) },
-        { shouldPlay: true },
+        { uri: source.uri },
+        {
+          shouldPlay: false,
+          progressUpdateIntervalMillis: 80,
+        },
         (status) => {
-          if (!status.isLoaded || !status.didJustFinish) return;
+          if (!status.isLoaded) return;
+          positionRef.current = Math.max(0, status.positionMillis - source.startMillis);
+          const reachedAyahEnd =
+            status.didJustFinish ||
+            (source.endMillis !== null && status.positionMillis >= source.endMillis - 80);
+          if (!reachedAyahEnd || finishHandled) return;
+          finishHandled = true;
           const finishedSound = createdSound;
           void (async () => {
             if (soundRef.current === finishedSound) {
@@ -4111,6 +4210,8 @@ export default function MemorizationScreen() {
               setIsPlaying(false);
               setHighlightedWord(-1);
               setHighlightedPage(null);
+              positionRef.current = 0;
+              playbackStartMillisRef.current = 0;
             }
             try {
               await finishedSound?.unloadAsync();
@@ -4128,6 +4229,10 @@ export default function MemorizationScreen() {
       } catch {
         // best-effort
       }
+      if (source.startMillis > 0) {
+        await sound.setPositionAsync(source.startMillis);
+      }
+      await sound.playAsync();
       isPlayingRef.current = true;
       setIsPlaying(true);
     } catch {
@@ -6737,10 +6842,14 @@ export default function MemorizationScreen() {
                 showsHorizontalScrollIndicator={false}
                 contentContainerStyle={{ gap: 8, paddingVertical: 4 }}
               >
-                {RECITERS.map((r) => (
+                {MEMORIZATION_RECITERS.map((r) => (
                   <Pressable
                     key={r.id}
-                    onPress={() => setReciterId(r.id)}
+                    onPress={() => {
+                      profileReciterIdRef.current = r.id;
+                      memorizationReciterChangedRef.current = true;
+                      setReciterId(r.id);
+                    }}
                     style={[
                       styles.reciterPill,
                       reciterId === r.id && styles.reciterPillSelected,

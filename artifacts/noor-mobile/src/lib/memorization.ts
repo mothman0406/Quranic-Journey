@@ -164,9 +164,17 @@ export async function fetchQdcChapterTimings(
         const verseDur = vt.timestamp_to - offset;
         if (verseDur <= 0) continue;
 
-        const raw: Segment[] = (vt.segments ?? []).map(
-          (s) => [s[0], (s[1] - offset) / verseDur, (s[2] - offset) / verseDur] as Segment,
-        );
+        const raw: Segment[] = (vt.segments ?? [])
+          .filter(
+            (s) =>
+              s.length >= 3 &&
+              Number.isFinite(s[0]) &&
+              Number.isFinite(s[1]) &&
+              Number.isFinite(s[2]),
+          )
+          .map(
+            (s) => [s[0], (s[1] - offset) / verseDur, (s[2] - offset) / verseDur] as Segment,
+          );
 
         // de-dupe consecutive same-word entries
         const segs: Segment[] = [];
@@ -180,9 +188,17 @@ export async function fetchQdcChapterTimings(
             segs[i] = [segs[i][0], segs[i][1], segs[i + 1][1]];
           }
         }
-        // re-index 1-based contiguous so seg[0]-1 === 0-based display index
-        const reindexed = segs.map((s, i) => [i + 1, s[1], s[2]] as Segment);
-        result.set(vt.verse_key, reindexed);
+        const normalized = segs
+          .map(
+            (s) =>
+              [
+                s[0],
+                Math.max(0, Math.min(s[1], 1)),
+                Math.max(0, Math.min(s[2], 1)),
+              ] as Segment,
+          )
+          .filter((s) => s[2] > s[1]);
+        result.set(vt.verse_key, normalized);
       }
       return result;
     } catch {

@@ -20,7 +20,7 @@ import {
   type ReviewActionSheetAyahTarget,
 } from "@/src/components/review-action-sheet";
 import { ReviewMushafPage } from "@/src/components/review-mushaf-page";
-import { ayahAudioUrl } from "@/src/lib/audio";
+import { resolveAyahAudioSource } from "@/src/lib/audio";
 import { DEFAULT_RECITER_ID, findReciter, RECITERS } from "@/src/lib/reciters";
 import { submitReview } from "@/src/lib/reviews";
 import {
@@ -465,13 +465,26 @@ export default function ReviewSession() {
     }
 
     try {
-      const url = ayahAudioUrl(findReciter(reciterId), surahNumberN, ayahNumber);
+      const source = await resolveAyahAudioSource(
+        findReciter(reciterId),
+        surahNumberN,
+        ayahNumber,
+      );
+      let finishHandled = false;
       const { sound } = await Audio.Sound.createAsync(
-        { uri: url },
-        { shouldPlay: false, volume: 1.0 },
+        { uri: source.uri },
+        {
+          shouldPlay: false,
+          volume: 1.0,
+          progressUpdateIntervalMillis: 80,
+        },
         (status) => {
           if (!status.isLoaded) return;
-          if (status.didJustFinish) {
+          const reachedAyahEnd =
+            status.didJustFinish ||
+            (source.endMillis !== null && status.positionMillis >= source.endMillis - 80);
+          if (reachedAyahEnd && !finishHandled) {
+            finishHandled = true;
             const next = currentAyahRef.current + 1;
             if (next > ayahEndN) {
               void stopAudio();
@@ -487,6 +500,9 @@ export default function ReviewSession() {
       );
       soundRef.current = sound;
       await sound.setRateAsync(playbackRateRef.current, true).catch(() => {});
+      if (source.startMillis > 0) {
+        await sound.setPositionAsync(source.startMillis);
+      }
       await sound.playAsync();
       setIsPlaying(true);
       console.log("[noor-review] play-ayah-started", {
@@ -496,7 +512,12 @@ export default function ReviewSession() {
     } catch (e) {
       console.log("[noor-review] play-ayah-error", {
         message: e instanceof Error ? e.message : "Audio could not start",
+        reciterId,
+        ayahKey: `${surahNumberN}:${ayahNumber}`,
       });
+      const failedSound = soundRef.current;
+      soundRef.current = null;
+      await failedSound?.unloadAsync().catch(() => {});
       setAudioError(e instanceof Error ? e.message : "Audio could not start");
       setIsPlaying(false);
     } finally {

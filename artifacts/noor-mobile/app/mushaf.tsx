@@ -26,7 +26,7 @@ import { Audio } from "expo-av";
 import { Image } from "expo-image";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { ayahAudioUrl } from "@/src/lib/audio";
+import { resolveAyahAudioSource } from "@/src/lib/audio";
 import {
   QURAN_COM_1405_NATIVE_HEIGHT,
   QURAN_COM_1405_NATIVE_WIDTH,
@@ -2600,15 +2600,28 @@ export default function MushafScreen() {
 
     try {
       await unloadCurrentMushafAudio();
+      const source = await resolveAyahAudioSource(
+        reciter,
+        target.surahNumber,
+        target.ayahNumber,
+      );
+      let finishHandled = false;
       const { sound } = await Audio.Sound.createAsync(
-        { uri: ayahAudioUrl(reciter, target.surahNumber, target.ayahNumber) },
+        { uri: source.uri },
         {
           shouldPlay,
+          positionMillis: source.startMillis,
+          progressUpdateIntervalMillis: 80,
           rate: settings.speed,
           shouldCorrectPitch: true,
         },
         (status) => {
-          if (!status.isLoaded || !status.didJustFinish) return;
+          if (!status.isLoaded) return;
+          const reachedAyahEnd =
+            status.didJustFinish ||
+            (source.endMillis !== null && status.positionMillis >= source.endMillis - 80);
+          if (!reachedAyahEnd || finishHandled) return;
+          finishHandled = true;
           void handleMushafAudioFinished(token);
         },
       );
