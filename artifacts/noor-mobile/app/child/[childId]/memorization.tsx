@@ -1148,6 +1148,7 @@ export default function MemorizationScreen() {
   const matchedHeardTokensRef = useRef<string[]>([]);
   const lastMatchedWordRef = useRef("");
   const lastMatchTimeRef = useRef(0);
+  const reciteRecognitionRestartTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Keep callback-visible refs in sync with state
   useEffect(() => { viewModeRef.current = viewMode; }, [viewMode]);
@@ -2214,6 +2215,7 @@ export default function MemorizationScreen() {
   // Cleanup on unmount
   useEffect(() => {
     return () => {
+      clearReciteRecognitionRestart();
       clearMushafAutoScrollRetry();
       clearAyahAutoScrollRetry();
       void stopAudioCompletely();
@@ -4585,6 +4587,118 @@ export default function MemorizationScreen() {
     return null;
   }
 
+  function getReciteExpectedWordNormalized(word?: ApiWord) {
+    const expectedRaw = word?.text_uthmani ?? "";
+    if (!expectedRaw || SKIP_CHARS.test(expectedRaw)) return null;
+
+    const expectedNorm = stripTashkeel(expectedRaw);
+    if (!expectedNorm) return null;
+
+    if (expectedNorm.length <= 2 && /^[هاا]+$/.test(expectedNorm)) return null;
+
+    return expectedNorm;
+  }
+
+  function normalizeReciteHeardToken(token: string) {
+    const stripped = stripAlPrefix(token);
+    return stripped.length >= 2 ? stripped : token;
+  }
+
+  function reciteAnchorMatches(heardRaw: string, anchor: string) {
+    if (heardRaw === anchor) return true;
+
+    const heardFinal = normalizeReciteHeardToken(heardRaw);
+    if (heardFinal === anchor) return true;
+
+    return (
+      anchor.length <= 2 &&
+      heardFinal.startsWith(anchor) &&
+      heardFinal.length <= anchor.length + 1
+    );
+  }
+
+  function reciteWordMatches(
+    heardFinal: string,
+    expectedFinal: string,
+  ) {
+    if (expectedFinal.length <= 2 && heardFinal !== expectedFinal) {
+      return (
+        heardFinal.startsWith(expectedFinal) &&
+        heardFinal.length <= expectedFinal.length + 1
+      );
+    }
+
+    if (wordMatches(heardFinal, expectedFinal, "")) return true;
+
+    // Hamza-led words are often heard without the opening alef, and short verbs
+    // can arrive with a trailing alef sound. Example: أَسَرَّ -> سرا.
+    if (expectedFinal.startsWith("ا") && expectedFinal.length >= 3) {
+      const expectedWithoutInitialAlef = expectedFinal.slice(1);
+      const heardWithoutFinalAlef = heardFinal.replace(/ا$/, "");
+      if (
+        expectedWithoutInitialAlef.length >= 2 &&
+        heardWithoutFinalAlef === expectedWithoutInitialAlef
+      ) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  function findReciteHeardWordMatch({
+    heardTokens,
+    searchFrom,
+    expectedFinal,
+  }: {
+    heardTokens: string[];
+    searchFrom: number;
+    expectedFinal: string;
+  }) {
+    for (let index = searchFrom; index < heardTokens.length; index++) {
+      const heardRaw = heardTokens[index];
+      if (!heardRaw) continue;
+
+      const heardFinal = normalizeReciteHeardToken(heardRaw);
+      if (reciteWordMatches(heardFinal, expectedFinal)) {
+        return { index, matchedNormalized: heardFinal };
+      }
+    }
+
+    return null;
+  }
+
+  function resolveReciteHeardWatermark(
+    previousWatermark: number,
+    anchorWatermark: number,
+    heardTokenCount: number,
+    anchorFallbackDepth: number,
+  ) {
+    if (previousWatermark <= 0) {
+      return {
+        watermark: Math.max(0, Math.min(anchorWatermark, heardTokenCount)),
+        policy: "initial-anchor",
+      };
+    }
+
+    if (heardTokenCount < previousWatermark) {
+      return {
+        watermark: Math.max(0, Math.min(anchorWatermark, heardTokenCount)),
+        policy: "transcript-shrunk-anchor",
+      };
+    }
+
+    return {
+      watermark: previousWatermark,
+      policy:
+        anchorFallbackDepth > 0 && anchorWatermark < previousWatermark
+          ? "kept-previous-ignored-old-anchor"
+          : anchorWatermark > previousWatermark
+            ? "kept-previous-ignored-forward-anchor"
+            : "kept-previous",
+    };
+  }
+
   function setReciteCursor(verseNumber: number, expectedIdx: number) {
     reciteExpectedIdxRef.current = expectedIdx;
     setReciteExpectedIdx(expectedIdx);
@@ -4624,6 +4738,41 @@ export default function MemorizationScreen() {
     const empty = new Set<string>();
     revealedReciteWordsRef.current = empty;
     setRevealedReciteWords(empty);
+  }
+
+  function clearReciteRecognitionRestart() {
+    if (reciteRecognitionRestartTimeoutRef.current) {
+      clearTimeout(reciteRecognitionRestartTimeoutRef.current);
+      reciteRecognitionRestartTimeoutRef.current = null;
+    }
+  }
+
+  function scheduleReciteRecognitionRestart(reason: string) {
+    if (!reciteModeRef.current) return;
+    clearReciteRecognitionRestart();
+    reciteRecognitionRestartTimeoutRef.current = setTimeout(() => {
+      reciteRecognitionRestartTimeoutRef.current = null;
+      if (!reciteModeRef.current) return;
+      console.log("[recite-debug] recite recognition decision", {
+        decision: "restart-recognition",
+        reason,
+        currentAyahKey:
+          surahNumberRef.current !== null
+            ? `${surahNumberRef.current}:${currentVerseRef.current}`
+            : null,
+        activeRange: {
+          surahNumber: surahNumberRef.current,
+          ayahStart: ayahStartRef.current,
+          ayahEnd: ayahEndRef.current,
+        },
+        modeFlags: {
+          reciteMode: reciteModeRef.current,
+          readingReciteSession,
+          viewMode: viewModeRef.current,
+        },
+      });
+      void startRecognition();
+    }, 350);
   }
 
   function calculateReciteScore(attempts = reciteAttemptsRef.current) {
@@ -4830,6 +4979,7 @@ export default function MemorizationScreen() {
   }
 
   async function startRecognition() {
+    clearReciteRecognitionRestart();
     const { granted } = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
     if (!granted) {
       console.log("[recite-debug] recite recognition permission denied", {
@@ -4919,10 +5069,8 @@ export default function MemorizationScreen() {
     const debugExpectedWord =
       debugExpectedIdx !== null ? debugVerseWords[debugExpectedIdx] : undefined;
     const debugExpectedWordText = debugExpectedWord?.text_uthmani ?? "";
-    const debugExpectedWordNorm = stripTashkeel(debugExpectedWordText);
-    const debugExpectedWordTry = stripAlPrefix(debugExpectedWordNorm);
     const debugExpectedWordNormalized =
-      debugExpectedWordTry.length >= 2 ? debugExpectedWordTry : debugExpectedWordNorm;
+      getReciteExpectedWordNormalized(debugExpectedWord) ?? "";
     if (!isFinal) {
       console.log("[recite-debug] raw interim transcript", {
         rawTranscript: transcript,
@@ -4978,7 +5126,8 @@ export default function MemorizationScreen() {
       const candidate = matchedHeardTokens[matchedHeardTokens.length - 1 - depth];
       if (!candidate) continue;
       for (let j = heardTokens.length - 1; j >= 0; j--) {
-        if (heardTokens[j] === candidate) {
+        const heardRaw = heardTokens[j];
+        if (heardRaw && reciteAnchorMatches(heardRaw, candidate)) {
           anchorIdx = j + 1;
           anchorToken = candidate;
           anchorFallbackDepth = depth;
@@ -4986,12 +5135,21 @@ export default function MemorizationScreen() {
         }
       }
     }
-    matchedWordCountRef.current = anchorIdx;
+    const { watermark: resolvedWatermark, policy: watermarkPolicy } =
+      resolveReciteHeardWatermark(
+        prevWatermark,
+        anchorIdx,
+        heardTokens.length,
+        anchorFallbackDepth,
+      );
+    matchedWordCountRef.current = resolvedWatermark;
     console.log("[recite-debug] heard buffer reanchor", {
       prevWatermark,
-      newWatermark: anchorIdx,
+      newWatermark: resolvedWatermark,
+      anchorWatermark: anchorIdx,
       anchorToken,
       anchorFallbackDepth,
+      watermarkPolicy,
     });
     let searchFrom = matchedWordCountRef.current;
 
@@ -4999,55 +5157,29 @@ export default function MemorizationScreen() {
     // matches in the heard tokens. This handles iOS's growing partial transcript
     // — every result event includes everything heard so far in this utterance.
     while (expectedIdx < verseWords.length) {
-      const expectedRaw = verseWords[expectedIdx]?.text_uthmani ?? "";
-      if (!expectedRaw || SKIP_CHARS.test(expectedRaw)) {
-        expectedIdx++;
-        continue;
-      }
-
-      const expectedNorm = stripTashkeel(expectedRaw);
-      if (!expectedNorm) {
-        expectedIdx++;
-        continue;
-      }
-      // Try with and without ال prefix
-      const expectedTry = stripAlPrefix(expectedNorm);
-      const expectedFinal = expectedTry.length >= 2 ? expectedTry : expectedNorm;
-
-      // Skip Uthmani words that strip to ≤2 chars of only ه/ا — ligature artifacts
-      // speech recognition will never produce.
-      if (expectedFinal.length <= 2 && /^[هاا]+$/.test(expectedFinal)) {
+      const expectedFinal = getReciteExpectedWordNormalized(verseWords[expectedIdx]);
+      if (!expectedFinal) {
         expectedIdx++;
         continue;
       }
 
       // Scan the heard transcript from searchFrom onward for any token matching expected
-      let foundAt = -1;
-      for (let i = searchFrom; i < heardTokens.length; i++) {
-        const heardRaw = heardTokens[i];
-        if (!heardRaw) continue;
-        const heardTry = stripAlPrefix(heardRaw);
-        const heardFinal = heardTry.length >= 2 ? heardTry : heardRaw;
-        if (wordMatches(heardFinal, expectedFinal, lastMatchedWordRef.current)) {
-          foundAt = i;
-          break;
-        }
-      }
+      const foundMatch = findReciteHeardWordMatch({
+        heardTokens,
+        searchFrom,
+        expectedFinal,
+      });
 
-      if (foundAt === -1) {
+      if (!foundMatch) {
         break; // no more expected matches in this transcript
       }
 
       advanced = true;
       lastMatchTimeRef.current = Date.now();
-      const matchedRaw = heardTokens[foundAt];
-      if (!matchedRaw) break;
-      const matchedTry = stripAlPrefix(matchedRaw);
-      const matchedNormalized = matchedTry.length >= 2 ? matchedTry : matchedRaw;
-      lastMatchedWordRef.current = matchedNormalized;
-      matchedHeardTokensRef.current.push(matchedNormalized);
-      matchedWordCountRef.current = foundAt + 1;
-      searchFrom = foundAt + 1;
+      lastMatchedWordRef.current = foundMatch.matchedNormalized;
+      matchedHeardTokensRef.current.push(foundMatch.matchedNormalized);
+      matchedWordCountRef.current = foundMatch.index + 1;
+      searchFrom = foundMatch.index + 1;
 
       expectedIdx++;
     }
@@ -5159,6 +5291,9 @@ export default function MemorizationScreen() {
       },
     });
     setReciteListening(false);
+    if (reciteModeRef.current) {
+      scheduleReciteRecognitionRestart("recognition-ended");
+    }
   });
 
   useEffect(() => {
@@ -5183,6 +5318,7 @@ export default function MemorizationScreen() {
       });
       void startRecognition();
     } else {
+      clearReciteRecognitionRestart();
       console.log("[recite-debug] recite recognition decision", {
         decision: "stop-recognition",
         currentAyahKey:
@@ -6383,15 +6519,46 @@ export default function MemorizationScreen() {
     currentAudioWord?.ayah,
     currentAudioWord?.surah,
   ]);
+  useEffect(() => {
+    if (!reciteMode || surahNumber === null || sessionAyahNumbers.length === 0) return;
+
+    let cancelled = false;
+    for (const ayahNumber of sessionAyahNumbers) {
+      const verseKey = `${surahNumber}:${ayahNumber}`;
+      void getAudioToGlyphPositionMap(surahNumber, ayahNumber).then((positions) => {
+        if (cancelled || !positions) return;
+        if (
+          surahNumberRef.current === surahNumber &&
+          playingVerseNumberRef.current === ayahNumber
+        ) {
+          setAudioToGlyphMap({ verseKey, positions });
+        }
+      });
+    }
+
+    return () => {
+      cancelled = true;
+    };
+  }, [reciteMode, sessionAyahNumbers, surahNumber]);
   const reciteCurrentWord = useMemo<ReciteWordPointer | null>(() => {
     if (!reciteMode || surahNumber === null || currentReciteExpectedIndex === null) return null;
     const word = words[currentReciteExpectedIndex];
+    const mappedPosition = currentAudioToGlyphPositions?.[currentReciteExpectedIndex];
     const position =
-      word && Number.isFinite(word.position) && word.position > 0
-        ? word.position
-        : currentReciteExpectedIndex + 1;
+      mappedPosition && Number.isFinite(mappedPosition) && mappedPosition > 0
+        ? mappedPosition
+        : word && Number.isFinite(word.position) && word.position > 0
+          ? word.position
+          : currentReciteExpectedIndex + 1;
     return { surah: surahNumber, ayah: playingVerseNumber, position };
-  }, [currentReciteExpectedIndex, playingVerseNumber, reciteMode, surahNumber, words]);
+  }, [
+    currentAudioToGlyphPositions,
+    currentReciteExpectedIndex,
+    playingVerseNumber,
+    reciteMode,
+    surahNumber,
+    words,
+  ]);
   const reciteCurrentWordRevealed =
     reciteMode &&
     currentReciteExpectedIndex !== null &&
