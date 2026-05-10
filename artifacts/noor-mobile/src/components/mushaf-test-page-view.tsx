@@ -20,6 +20,7 @@ import {
   getQuranCom1405PageForWord,
   getQuranCom1405VerseMarkerKeys,
   getQuranCom1405WordRectsForPage,
+  type QuranCom1405MaskRect,
   type QuranCom1405WordRect,
 } from "@/src/lib/quran-com-1405-ayah-coords";
 import {
@@ -124,6 +125,7 @@ type WordTranslationTarget = MushafTestWordTarget & {
 
 type WordReciteState = "past" | "current" | "future" | "out-of-range";
 
+const RECITE_MASK_SEPARATOR_GAP = 1;
 const PAGE_NUMBERS = Array.from(
   { length: TOTAL_QURAN_COM_1405_PAGES },
   (_, index) => index + 1,
@@ -204,6 +206,69 @@ function buildWordOverlayRects(pageNumber: number, layout: PageLayout): WordOver
   });
 
   return rects;
+}
+
+function buildReciteMaskOverlayRects(
+  maskRects: ReadonlyArray<QuranCom1405MaskRect>,
+  wordRects: ReadonlyArray<WordOverlayRect>,
+): QuranCom1405MaskRect[] {
+  const wordRectByKey = new Map(wordRects.map((rect) => [rect.key, rect]));
+  const itemsByLine = new Map<
+    number,
+    Array<{
+      mask: QuranCom1405MaskRect;
+      baseLeft: number;
+      baseRight: number;
+    }>
+  >();
+
+  maskRects.forEach((mask) => {
+    const wordRect = wordRectByKey.get(mask.key);
+    const baseLeft = wordRect?.left ?? mask.left;
+    const baseRight = wordRect ? wordRect.left + wordRect.width : mask.left + mask.width;
+    const lineItems = itemsByLine.get(mask.lineNumber) ?? [];
+    lineItems.push({ mask, baseLeft, baseRight });
+    itemsByLine.set(mask.lineNumber, lineItems);
+  });
+
+  const adjustedRects = new Map<string, QuranCom1405MaskRect>();
+
+  itemsByLine.forEach((lineItems) => {
+    const sortedLineItems = [...lineItems].sort((a, b) => a.baseLeft - b.baseLeft);
+
+    sortedLineItems.forEach((item, index) => {
+      const previous = sortedLineItems[index - 1];
+      const next = sortedLineItems[index + 1];
+      let left = item.mask.left;
+      let right = item.mask.left + item.mask.width;
+
+      if (previous) {
+        const separator = (previous.baseRight + item.baseLeft) / 2;
+        left = Math.max(
+          left,
+          Math.min(item.baseLeft, separator + RECITE_MASK_SEPARATOR_GAP),
+        );
+      }
+
+      if (next) {
+        const separator = (item.baseRight + next.baseLeft) / 2;
+        right = Math.min(
+          right,
+          Math.max(item.baseRight, separator - RECITE_MASK_SEPARATOR_GAP),
+        );
+      }
+
+      if (right > left) {
+        adjustedRects.set(item.mask.key, {
+          ...item.mask,
+          left,
+          width: right - left,
+        });
+      }
+    });
+  });
+
+  return maskRects.map((rect) => adjustedRects.get(rect.key) ?? rect);
 }
 
 function compareVersePosition(
@@ -328,6 +393,13 @@ function MushafTestPage({
     () => getQuranCom1405VerseMarkerKeys(maskOverlayRects),
     [maskOverlayRects],
   );
+  const reciteMaskOverlayRects = useMemo(
+    () =>
+      reciteActive
+        ? buildReciteMaskOverlayRects(maskOverlayRects, overlayRects)
+        : maskOverlayRects,
+    [maskOverlayRects, overlayRects, reciteActive],
+  );
   const flashedRect = useMemo(
     () =>
       flashedWord?.pageNumber === pageNumber
@@ -363,7 +435,7 @@ function MushafTestPage({
 
   const reciteClassifiedRects = useMemo(() => {
     if (!reciteActive) return [];
-    return maskOverlayRects
+    return reciteMaskOverlayRects
       .filter((rect) => !verseMarkerKeys.has(rect.key))
       .map((rect) => ({
         rect,
@@ -374,7 +446,7 @@ function MushafTestPage({
           reciteActive,
         ),
       }));
-  }, [maskOverlayRects, reciteActive, reciteCurrentWord, reciteRange, verseMarkerKeys]);
+  }, [reciteActive, reciteCurrentWord, reciteMaskOverlayRects, reciteRange, verseMarkerKeys]);
   useEffect(() => {
     if (!reciteActive) return;
     const stateCounts = reciteClassifiedRects.reduce<Record<WordReciteState, number>>(
@@ -1382,10 +1454,10 @@ function makeStyles(colors: AppThemeColors) {
     zIndex: 4,
   },
   reciteMaskCurrent: {
-    // Current target: blue outline on top of the mask while text stays hidden.
+    // Current target: blue outline on top of an opaque mask while text stays hidden.
     borderWidth: 2,
     borderColor: colors.primary,
-    backgroundColor: colors.primarySoft,
+    backgroundColor: "#ffffff",
     zIndex: 5,
   },
   reciteMaskCurrentRevealed: {
