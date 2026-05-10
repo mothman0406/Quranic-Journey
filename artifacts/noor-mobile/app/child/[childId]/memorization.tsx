@@ -1149,6 +1149,7 @@ export default function MemorizationScreen() {
   const lastMatchedWordRef = useRef("");
   const lastMatchTimeRef = useRef(0);
   const reciteRecognitionRestartTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const reciteSuppressSpeechResultsUntilRef = useRef(0);
 
   // Keep callback-visible refs in sync with state
   useEffect(() => { viewModeRef.current = viewMode; }, [viewMode]);
@@ -4646,26 +4647,106 @@ export default function MemorizationScreen() {
     return false;
   }
 
+  function reciteStrongSequenceWordMatches(
+    heardFinal: string,
+    expectedFinal: string,
+  ) {
+    const expectedWithoutAl = stripAlPrefix(expectedFinal);
+    const expectedComparable =
+      expectedWithoutAl.length >= 2 ? expectedWithoutAl : expectedFinal;
+    if (heardFinal === expectedFinal || heardFinal === expectedComparable) return true;
+
+    // Keep the stricter resync path tolerant of the same final ta/ha shape that
+    // audio matching already allows, without accepting broad subsequence matches.
+    const heardTaNormalized = heardFinal.replace(/ت$/, "ه");
+    const expectedTaNormalized = expectedComparable.replace(/ت$/, "ه");
+    return heardTaNormalized === expectedTaNormalized;
+  }
+
   function findReciteHeardWordMatch({
     heardTokens,
     searchFrom,
     expectedFinal,
+    strongSequenceOnly = false,
   }: {
     heardTokens: string[];
     searchFrom: number;
     expectedFinal: string;
+    strongSequenceOnly?: boolean;
   }) {
     for (let index = searchFrom; index < heardTokens.length; index++) {
       const heardRaw = heardTokens[index];
       if (!heardRaw) continue;
 
       const heardFinal = normalizeReciteHeardToken(heardRaw);
-      if (reciteWordMatches(heardFinal, expectedFinal)) {
+      const matches = strongSequenceOnly
+        ? reciteStrongSequenceWordMatches(heardFinal, expectedFinal)
+        : reciteWordMatches(heardFinal, expectedFinal);
+      if (matches) {
         return { index, matchedNormalized: heardFinal };
       }
     }
 
     return null;
+  }
+
+  function findReciteFutureSequenceResync({
+    heardTokens,
+    searchFrom,
+    verseWords,
+    missedExpectedIdx,
+    minFutureMatches = 2,
+  }: {
+    heardTokens: string[];
+    searchFrom: number;
+    verseWords: ApiWord[];
+    missedExpectedIdx: number;
+    minFutureMatches?: number;
+  }) {
+    const matches: Array<{
+      expectedIdx: number;
+      expectedText: string | null;
+      expectedNormalized: string;
+      heardIdx: number;
+      matchedNormalized: string;
+    }> = [];
+    let scanFrom = searchFrom;
+    let expectedIdx = getNextReciteWordIndex(verseWords, missedExpectedIdx + 1);
+
+    while (expectedIdx !== null && matches.length < minFutureMatches) {
+      const expectedFinal = getReciteExpectedWordNormalized(verseWords[expectedIdx]);
+      if (!expectedFinal) {
+        expectedIdx = getNextReciteWordIndex(verseWords, expectedIdx + 1);
+        continue;
+      }
+
+      const foundMatch = findReciteHeardWordMatch({
+        heardTokens,
+        searchFrom: scanFrom,
+        expectedFinal,
+        strongSequenceOnly: true,
+      });
+      if (!foundMatch) return null;
+
+      matches.push({
+        expectedIdx,
+        expectedText: verseWords[expectedIdx]?.text_uthmani ?? null,
+        expectedNormalized: expectedFinal,
+        heardIdx: foundMatch.index,
+        matchedNormalized: foundMatch.matchedNormalized,
+      });
+      scanFrom = foundMatch.index + 1;
+      expectedIdx = getNextReciteWordIndex(verseWords, expectedIdx + 1);
+    }
+
+    if (matches.length < minFutureMatches) return null;
+
+    const lastMatch = matches[matches.length - 1];
+    return {
+      matches,
+      matchedWordCount: lastMatch.heardIdx + 1,
+      toExpectedIdx: lastMatch.expectedIdx + 1,
+    };
   }
 
   function resolveReciteHeardWatermark(
@@ -4740,6 +4821,13 @@ export default function MemorizationScreen() {
     setRevealedReciteWords(empty);
   }
 
+  function resetReciteSpeechBuffer() {
+    matchedWordCountRef.current = 0;
+    matchedHeardTokensRef.current = [];
+    lastMatchedWordRef.current = "";
+    lastMatchTimeRef.current = 0;
+  }
+
   function clearReciteRecognitionRestart() {
     if (reciteRecognitionRestartTimeoutRef.current) {
       clearTimeout(reciteRecognitionRestartTimeoutRef.current);
@@ -4747,12 +4835,13 @@ export default function MemorizationScreen() {
     }
   }
 
-  function scheduleReciteRecognitionRestart(reason: string) {
+  function scheduleReciteRecognitionRestart(reason: string, delayMs = 350) {
     if (!reciteModeRef.current) return;
     clearReciteRecognitionRestart();
     reciteRecognitionRestartTimeoutRef.current = setTimeout(() => {
       reciteRecognitionRestartTimeoutRef.current = null;
       if (!reciteModeRef.current) return;
+      reciteSuppressSpeechResultsUntilRef.current = 0;
       console.log("[recite-debug] recite recognition decision", {
         decision: "restart-recognition",
         reason,
@@ -4772,7 +4861,32 @@ export default function MemorizationScreen() {
         },
       });
       void startRecognition();
-    }, 350);
+    }, delayMs);
+  }
+
+  function restartReciteRecognitionWithFreshTranscript(reason: string) {
+    if (!reciteModeRef.current) return;
+    resetReciteSpeechBuffer();
+    reciteSuppressSpeechResultsUntilRef.current = Date.now() + 1000;
+    setReciteListening(false);
+    try {
+      ExpoSpeechRecognitionModule.stop();
+    } catch (error) {
+      console.log("[recite-debug] caught error:", error, {
+        source: "restart-recite-recognition-fresh-transcript",
+        reason,
+        currentAyahKey:
+          surahNumberRef.current !== null
+            ? `${surahNumberRef.current}:${currentVerseRef.current}`
+            : null,
+        activeRange: {
+          surahNumber: surahNumberRef.current,
+          ayahStart: ayahStartRef.current,
+          ayahEnd: ayahEndRef.current,
+        },
+      });
+    }
+    scheduleReciteRecognitionRestart(reason, 250);
   }
 
   function calculateReciteScore(attempts = reciteAttemptsRef.current) {
@@ -4813,6 +4927,7 @@ export default function MemorizationScreen() {
       currentVerseRef.current = nextVerse;
       setCurrentVerse(nextVerse);
       setReciteCursor(nextVerse, nextExpectedIdx);
+      restartReciteRecognitionWithFreshTranscript("ayah-advance");
       return;
     }
 
@@ -5021,6 +5136,7 @@ export default function MemorizationScreen() {
       });
       return;
     }
+    reciteSuppressSpeechResultsUntilRef.current = 0;
 
     console.log("[recite-debug] recite recognition start", {
       currentAyahKey:
@@ -5058,6 +5174,7 @@ export default function MemorizationScreen() {
     const transcript = result.transcript ?? "";
     const isFinal = !!event.isFinal;
     if (!transcript) return;
+    if (reciteSuppressSpeechResultsUntilRef.current > Date.now()) return;
 
     const heardNormFull = stripTashkeel(transcript);
     const heardTokens = tokenize(heardNormFull);
@@ -5116,6 +5233,18 @@ export default function MemorizationScreen() {
 
     let expectedIdx = reciteExpectedIdxRef.current;
     let advanced = false;
+    const resyncedMissedWords: Array<{
+      index: number;
+      position: number;
+      text: string | null;
+      matchedFutureWords: Array<{
+        expectedIdx: number;
+        expectedText: string | null;
+        expectedNormalized: string;
+        heardIdx: number;
+        matchedNormalized: string;
+      }>;
+    }> = [];
     const prevWatermark = matchedWordCountRef.current;
     let anchorIdx = 0;
     let anchorToken: string | null = null;
@@ -5171,7 +5300,53 @@ export default function MemorizationScreen() {
       });
 
       if (!foundMatch) {
-        break; // no more expected matches in this transcript
+        const resync = findReciteFutureSequenceResync({
+          heardTokens,
+          searchFrom,
+          verseWords,
+          missedExpectedIdx: expectedIdx,
+        });
+        if (!resync) {
+          break; // no more expected matches in this transcript
+        }
+
+        const missedWord = verseWords[expectedIdx];
+        advanced = true;
+        lastMatchTimeRef.current = Date.now();
+        for (const match of resync.matches) {
+          matchedHeardTokensRef.current.push(match.matchedNormalized);
+        }
+        matchedWordCountRef.current = resync.matchedWordCount;
+        searchFrom = resync.matchedWordCount;
+        resyncedMissedWords.push({
+          index: expectedIdx,
+          position: missedWord?.position ?? expectedIdx + 1,
+          text: missedWord?.text_uthmani ?? null,
+          matchedFutureWords: resync.matches,
+        });
+        console.log("[recite-debug] recite speech resync skipped undetected word", {
+          currentAyahKey:
+            surahNumberRef.current !== null
+              ? `${surahNumberRef.current}:${currentVerseRef.current}`
+              : null,
+          skippedWord: {
+            index: expectedIdx,
+            position: missedWord?.position ?? expectedIdx + 1,
+            text: missedWord?.text_uthmani ?? null,
+            normalized: expectedFinal,
+          },
+          matchedFutureWords: resync.matches,
+          matchedWordCount: matchedWordCountRef.current,
+          triggerSource: isFinal ? "speech-final" : "speech-interim",
+          transcript,
+          activeRange: {
+            surahNumber: surahNumberRef.current,
+            ayahStart: ayahStartRef.current,
+            ayahEnd: ayahEndRef.current,
+          },
+        });
+        expectedIdx = resync.toExpectedIdx;
+        continue;
       }
 
       advanced = true;
@@ -5196,6 +5371,7 @@ export default function MemorizationScreen() {
         transcript,
         heardTokens,
         matchedWordCount: matchedWordCountRef.current,
+        resyncedMissedWords,
         activeRange: {
           surahNumber: surahNumberRef.current,
           ayahStart: ayahStartRef.current,
@@ -5291,7 +5467,7 @@ export default function MemorizationScreen() {
       },
     });
     setReciteListening(false);
-    if (reciteModeRef.current) {
+    if (reciteModeRef.current && !reciteRecognitionRestartTimeoutRef.current) {
       scheduleReciteRecognitionRestart("recognition-ended");
     }
   });
@@ -5319,6 +5495,7 @@ export default function MemorizationScreen() {
       void startRecognition();
     } else {
       clearReciteRecognitionRestart();
+      reciteSuppressSpeechResultsUntilRef.current = 0;
       console.log("[recite-debug] recite recognition decision", {
         decision: "stop-recognition",
         currentAyahKey:
