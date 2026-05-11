@@ -52,6 +52,16 @@ function isSubsequence(short: string, long: string): boolean {
 
 const stripNW = (w: string): string => w.replace(/[نو]/g, "");
 
+const SPEECH_EQUIVALENTS: Record<string, readonly string[]> = {
+  // iOS Arabic speech recognition commonly hears نَبَّأَنِىَ as نبهني.
+  نباني: ["نبهني"],
+  نبهني: ["نباني"],
+};
+
+function areSpeechEquivalent(a: string, b: string): boolean {
+  return SPEECH_EQUIVALENTS[a]?.includes(b) || SPEECH_EQUIVALENTS[b]?.includes(a) || false;
+}
+
 // Multi-predicate match. Returns true if heard word looks like expected word
 // across any of: equality, substring (either direction), subsequence (either
 // direction), noun-vowel-stripped equality, or word-final ت→ه swap.
@@ -75,6 +85,8 @@ export function wordMatches(
     isSubsequence(heardNorm, expectedNorm) ||
     isSubsequence(expectedNorm, heardNorm)
   ) return true;
+
+  if (areSpeechEquivalent(heardNorm, expectedNorm)) return true;
 
   const hStripped = stripNW(heardNorm);
   const eStripped = stripNW(expectedNorm);
