@@ -107,9 +107,12 @@ export const auth = betterAuth({
     enabled: true,
     revokeSessionsOnPasswordReset: true,
     sendResetPassword: async ({ user, url }) => {
-      void sendPasswordResetEmail({ to: user.email, url }).catch((err) => {
+      try {
+        await sendPasswordResetEmail({ to: user.email, url });
+      } catch (err) {
         logger.error({ err, userId: user.id }, "Password reset email failed");
-      });
+        throw err;
+      }
     },
   },
   socialProviders: buildSocialProviders(),
