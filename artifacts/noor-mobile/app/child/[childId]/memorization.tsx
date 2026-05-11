@@ -4588,16 +4588,226 @@ export default function MemorizationScreen() {
     return null;
   }
 
-  function getReciteExpectedWordNormalized(word?: ApiWord) {
+  type ReciteExpectedForm = {
+    text: string;
+    exactOnly?: boolean;
+  };
+
+  const RECITE_CONNECTED_SILENT_CLASSES = new Set([
+    "ham_wasl",
+    "laam_shamsiyya",
+    "laam_shamsiyyah",
+    "laam_shamsiyah",
+    "lam_shamsiyya",
+    "lam_shamsiyyah",
+    "lam_shamsiyah",
+    "slnt",
+  ]);
+  const RECITE_NOON_ASSIMILATION_CLASSES = new Set([
+    "idgham_ghunna",
+    "idgham_ghunnah",
+    "idgham_wo_ghunna",
+    "idgham_wo_ghunnah",
+    "ikhafa",
+    "iqlab",
+  ]);
+  const RECITE_NEXT_WORD_ABSORPTION_CLASSES = new Set([
+    "idgham_ghunna",
+    "idgham_ghunnah",
+    "idgham_wo_ghunna",
+    "idgham_wo_ghunnah",
+    "iqlab",
+    "idgham_shafawi",
+  ]);
+  const RECITE_MEEM_ASSIMILATION_CLASSES = new Set([
+    "idgham_shafawi",
+    "ikhafa_shafawi",
+  ]);
+  const RECITE_FINAL_CONSONANT_ASSIMILATION_CLASSES = new Set([
+    "idgham_mutajanisayn",
+    "idgham_mutaqaribain",
+  ]);
+
+  function getReciteClassNames(classValue: string | undefined) {
+    return (classValue ?? "").split(/\s+/).filter(Boolean);
+  }
+
+  function extractReciteTajweedClasses(html: string | undefined) {
+    const classes = new Set<string>();
+    if (!html) return classes;
+
+    const classAttributeRegex = /class\s*=\s*(?:"([^"]+)"|'([^']+)'|([^\s>]+))/g;
+    let match: RegExpExecArray | null;
+    while ((match = classAttributeRegex.exec(html))) {
+      for (const className of getReciteClassNames(match[1] ?? match[2] ?? match[3])) {
+        classes.add(className);
+      }
+    }
+    return classes;
+  }
+
+  function reciteHasAnyClass(classes: Set<string>, candidates: Set<string>) {
+    for (const className of classes) {
+      if (candidates.has(className)) return true;
+    }
+    return false;
+  }
+
+  function stripReciteTajweedTags(html: string | undefined) {
+    return (html ?? "").replace(/<[^>]+>/g, "");
+  }
+
+  function stripReciteTajweedClassText(html: string | undefined, removedClasses: Set<string>) {
+    if (!html) return "";
+
+    return html
+      .replace(
+        /<([a-zA-Z][\w:-]*)\b([^>]*)>([\s\S]*?)<\/\1>/g,
+        (_full, _tag: string, attrs: string, inner: string) => {
+          const classMatch = attrs.match(/class\s*=\s*(?:"([^"]+)"|'([^']+)'|([^\s>]+))/);
+          const classNames = getReciteClassNames(
+            classMatch?.[1] ?? classMatch?.[2] ?? classMatch?.[3],
+          );
+          return classNames.some((className) => removedClasses.has(className)) ? "" : inner;
+        },
+      )
+      .replace(/<[^>]+>/g, "");
+  }
+
+  function normalizeReciteExpectedText(text: string) {
+    const normalized = stripTashkeel(text);
+    if (!normalized) return null;
+    if (normalized.length <= 2 && /^[هاا]+$/.test(normalized)) return null;
+    return normalized;
+  }
+
+  function addReciteExpectedForm(
+    forms: ReciteExpectedForm[],
+    text: string,
+    exactOnly = false,
+  ) {
+    const normalized = normalizeReciteExpectedText(text);
+    if (!normalized) return;
+
+    const existing = forms.find((form) => form.text === normalized);
+    if (existing) {
+      if (!exactOnly) existing.exactOnly = false;
+      return;
+    }
+
+    forms.push(exactOnly ? { text: normalized, exactOnly: true } : { text: normalized });
+  }
+
+  function addReciteNormalizedExpectedForm(
+    forms: ReciteExpectedForm[],
+    normalized: string,
+    exactOnly = false,
+  ) {
+    addReciteExpectedForm(forms, normalized, exactOnly);
+  }
+
+  function addReciteExpectedSpeechVariants(
+    forms: ReciteExpectedForm[],
+    candidate: string,
+    classes: Set<string>,
+    word: ApiWord,
+  ) {
+    for (const imalahSpelling of ["مجريها", "مجرياها", "مجرٮاها"]) {
+      if (candidate.includes(imalahSpelling)) {
+        addReciteNormalizedExpectedForm(forms, candidate.replaceAll(imalahSpelling, "مجراها"));
+        addReciteNormalizedExpectedForm(forms, candidate.replaceAll(imalahSpelling, "مجريها"));
+      }
+    }
+
+    const hasSmallSeen = word.text_uthmani.includes("\u06DC")
+      || (word.text_uthmani_tajweed ?? "").includes("\u06DC");
+    if (hasSmallSeen && candidate.includes("ص")) {
+      addReciteNormalizedExpectedForm(forms, candidate.replace(/ص/g, "س"));
+    }
+
+    if (classes.has("iqlab")) {
+      const iqlabInsideWord = candidate.replace(/ن(?=ب)/g, "م");
+      if (iqlabInsideWord !== candidate) {
+        addReciteNormalizedExpectedForm(forms, iqlabInsideWord);
+      }
+
+      if (candidate.endsWith("ن")) {
+        const finalNoonAsMeem = `${candidate.slice(0, -1)}م`;
+        addReciteNormalizedExpectedForm(forms, finalNoonAsMeem, finalNoonAsMeem.length < 2);
+      }
+    }
+
+    if (
+      reciteHasAnyClass(classes, RECITE_NOON_ASSIMILATION_CLASSES)
+      && candidate.endsWith("ن")
+    ) {
+      const withoutFinalNoon = candidate.slice(0, -1);
+      addReciteNormalizedExpectedForm(forms, withoutFinalNoon, withoutFinalNoon.length < 2);
+    }
+
+    if (
+      reciteHasAnyClass(classes, RECITE_MEEM_ASSIMILATION_CLASSES)
+      && candidate.endsWith("م")
+    ) {
+      const withoutFinalMeem = candidate.slice(0, -1);
+      addReciteNormalizedExpectedForm(forms, withoutFinalMeem, withoutFinalMeem.length < 2);
+    }
+
+    if (
+      reciteHasAnyClass(classes, RECITE_FINAL_CONSONANT_ASSIMILATION_CLASSES)
+      && candidate.length >= 3
+    ) {
+      const withoutAssimilatedConsonant = candidate.slice(0, -1);
+      addReciteNormalizedExpectedForm(
+        forms,
+        withoutAssimilatedConsonant,
+        withoutAssimilatedConsonant.length < 2,
+      );
+    }
+  }
+
+  function getReciteExpectedWordForms(word?: ApiWord) {
     const expectedRaw = word?.text_uthmani ?? "";
-    if (!expectedRaw || SKIP_CHARS.test(expectedRaw)) return null;
+    if (!word || !expectedRaw || SKIP_CHARS.test(expectedRaw)) return [];
 
-    const expectedNorm = stripTashkeel(expectedRaw);
-    if (!expectedNorm) return null;
+    const forms: ReciteExpectedForm[] = [];
+    addReciteExpectedForm(forms, expectedRaw);
 
-    if (expectedNorm.length <= 2 && /^[هاا]+$/.test(expectedNorm)) return null;
+    const tajweedText = word.text_uthmani_tajweed ?? "";
+    const classes = extractReciteTajweedClasses(tajweedText);
+    if (tajweedText) {
+      addReciteExpectedForm(forms, stripReciteTajweedTags(tajweedText));
+      addReciteExpectedForm(
+        forms,
+        stripReciteTajweedClassText(tajweedText, RECITE_CONNECTED_SILENT_CLASSES),
+      );
+    }
 
-    return expectedNorm;
+    for (const candidate of forms.map((form) => form.text)) {
+      addReciteExpectedSpeechVariants(forms, candidate, classes, word);
+    }
+
+    return forms;
+  }
+
+  function getReciteExpectedWordNormalized(word?: ApiWord) {
+    return getReciteExpectedWordForms(word)[0]?.text ?? null;
+  }
+
+  function canReciteShortWordBeAbsorbedIntoNextToken(word?: ApiWord) {
+    const expectedRaw = word?.text_uthmani ?? "";
+    if (!word || !expectedRaw || SKIP_CHARS.test(expectedRaw)) return false;
+
+    const expectedNorm = normalizeReciteExpectedText(expectedRaw);
+    if (!expectedNorm || expectedNorm.length > 2) return false;
+
+    const classes = extractReciteTajweedClasses(word.text_uthmani_tajweed ?? "");
+    return (
+      (expectedNorm.endsWith("ن")
+        && reciteHasAnyClass(classes, RECITE_NEXT_WORD_ABSORPTION_CLASSES))
+      || (expectedNorm.endsWith("م")
+        && reciteHasAnyClass(classes, RECITE_MEEM_ASSIMILATION_CLASSES))
+    );
   }
 
   function normalizeReciteHeardToken(token: string) {
@@ -4647,6 +4857,14 @@ export default function MemorizationScreen() {
     return false;
   }
 
+  function reciteExpectedFormMatches(
+    heardFinal: string,
+    expectedForm: ReciteExpectedForm,
+  ) {
+    if (expectedForm.exactOnly) return heardFinal === expectedForm.text;
+    return reciteWordMatches(heardFinal, expectedForm.text);
+  }
+
   function reciteStrongSequenceWordMatches(
     heardFinal: string,
     expectedFinal: string,
@@ -4663,31 +4881,79 @@ export default function MemorizationScreen() {
     return heardTaNormalized === expectedTaNormalized;
   }
 
+  function reciteStrongSequenceExpectedFormMatches(
+    heardFinal: string,
+    expectedForm: ReciteExpectedForm,
+  ) {
+    if (expectedForm.exactOnly) return heardFinal === expectedForm.text;
+    return reciteStrongSequenceWordMatches(heardFinal, expectedForm.text);
+  }
+
   function findReciteHeardWordMatch({
     heardTokens,
     searchFrom,
-    expectedFinal,
+    expectedForms,
     strongSequenceOnly = false,
   }: {
     heardTokens: string[];
     searchFrom: number;
-    expectedFinal: string;
+    expectedForms: ReciteExpectedForm[];
     strongSequenceOnly?: boolean;
   }) {
+    if (expectedForms.length === 0) return null;
+
     for (let index = searchFrom; index < heardTokens.length; index++) {
       const heardRaw = heardTokens[index];
       if (!heardRaw) continue;
 
       const heardFinal = normalizeReciteHeardToken(heardRaw);
       const matches = strongSequenceOnly
-        ? reciteStrongSequenceWordMatches(heardFinal, expectedFinal)
-        : reciteWordMatches(heardFinal, expectedFinal);
+        ? expectedForms.some((form) => reciteStrongSequenceExpectedFormMatches(heardFinal, form))
+        : expectedForms.some((form) => reciteExpectedFormMatches(heardFinal, form));
       if (matches) {
         return { index, matchedNormalized: heardFinal };
       }
     }
 
     return null;
+  }
+
+  function findReciteAssimilatedNextWordMatch({
+    heardTokens,
+    searchFrom,
+    verseWords,
+    expectedIdx,
+  }: {
+    heardTokens: string[];
+    searchFrom: number;
+    verseWords: ApiWord[];
+    expectedIdx: number;
+  }) {
+    if (!canReciteShortWordBeAbsorbedIntoNextToken(verseWords[expectedIdx])) {
+      return null;
+    }
+
+    const nextExpectedIdx = getNextReciteWordIndex(verseWords, expectedIdx + 1);
+    if (nextExpectedIdx === null) return null;
+
+    const nextExpectedForms = getReciteExpectedWordForms(verseWords[nextExpectedIdx]);
+    const nextExpectedFinal = nextExpectedForms[0]?.text ?? null;
+    if (!nextExpectedFinal) return null;
+
+    const foundMatch = findReciteHeardWordMatch({
+      heardTokens,
+      searchFrom,
+      expectedForms: nextExpectedForms,
+      strongSequenceOnly: true,
+    });
+    if (!foundMatch) return null;
+    if (foundMatch.index > searchFrom + 1) return null;
+
+    return {
+      nextExpectedIdx,
+      nextExpectedFinal,
+      foundMatch,
+    };
   }
 
   function findReciteFutureSequenceResync({
@@ -4703,18 +4969,19 @@ export default function MemorizationScreen() {
     missedExpectedIdx: number;
     minFutureMatches?: number;
   }) {
-    const matches: Array<{
+    const matches: {
       expectedIdx: number;
       expectedText: string | null;
       expectedNormalized: string;
       heardIdx: number;
       matchedNormalized: string;
-    }> = [];
+    }[] = [];
     let scanFrom = searchFrom;
     let expectedIdx = getNextReciteWordIndex(verseWords, missedExpectedIdx + 1);
 
     while (expectedIdx !== null && matches.length < minFutureMatches) {
-      const expectedFinal = getReciteExpectedWordNormalized(verseWords[expectedIdx]);
+      const expectedForms = getReciteExpectedWordForms(verseWords[expectedIdx]);
+      const expectedFinal = expectedForms[0]?.text ?? null;
       if (!expectedFinal) {
         expectedIdx = getNextReciteWordIndex(verseWords, expectedIdx + 1);
         continue;
@@ -4723,7 +4990,7 @@ export default function MemorizationScreen() {
       const foundMatch = findReciteHeardWordMatch({
         heardTokens,
         searchFrom: scanFrom,
-        expectedFinal,
+        expectedForms,
         strongSequenceOnly: true,
       });
       if (!foundMatch) return null;
@@ -5233,18 +5500,18 @@ export default function MemorizationScreen() {
 
     let expectedIdx = reciteExpectedIdxRef.current;
     let advanced = false;
-    const resyncedMissedWords: Array<{
+    const resyncedMissedWords: {
       index: number;
       position: number;
       text: string | null;
-      matchedFutureWords: Array<{
+      matchedFutureWords: {
         expectedIdx: number;
         expectedText: string | null;
         expectedNormalized: string;
         heardIdx: number;
         matchedNormalized: string;
-      }>;
-    }> = [];
+      }[];
+    }[] = [];
     const prevWatermark = matchedWordCountRef.current;
     let anchorIdx = 0;
     let anchorToken: string | null = null;
@@ -5286,7 +5553,8 @@ export default function MemorizationScreen() {
     // matches in the heard tokens. This handles iOS's growing partial transcript
     // — every result event includes everything heard so far in this utterance.
     while (expectedIdx < verseWords.length) {
-      const expectedFinal = getReciteExpectedWordNormalized(verseWords[expectedIdx]);
+      const expectedForms = getReciteExpectedWordForms(verseWords[expectedIdx]);
+      const expectedFinal = expectedForms[0]?.text ?? null;
       if (!expectedFinal) {
         expectedIdx++;
         continue;
@@ -5296,8 +5564,61 @@ export default function MemorizationScreen() {
       const foundMatch = findReciteHeardWordMatch({
         heardTokens,
         searchFrom,
-        expectedFinal,
+        expectedForms,
       });
+      const assimilatedNextMatch = findReciteAssimilatedNextWordMatch({
+        heardTokens,
+        searchFrom,
+        verseWords,
+        expectedIdx,
+      });
+
+      if (
+        assimilatedNextMatch
+        && (!foundMatch || assimilatedNextMatch.foundMatch.index <= foundMatch.index)
+      ) {
+        const currentWord = verseWords[expectedIdx];
+        const nextWord = verseWords[assimilatedNextMatch.nextExpectedIdx];
+        advanced = true;
+        lastMatchTimeRef.current = Date.now();
+        lastMatchedWordRef.current = assimilatedNextMatch.foundMatch.matchedNormalized;
+        matchedHeardTokensRef.current.push(assimilatedNextMatch.foundMatch.matchedNormalized);
+        matchedWordCountRef.current = assimilatedNextMatch.foundMatch.index + 1;
+        searchFrom = assimilatedNextMatch.foundMatch.index + 1;
+
+        console.log("[recite-debug] recite speech absorbed short word into next", {
+          currentAyahKey:
+            surahNumberRef.current !== null
+              ? `${surahNumberRef.current}:${currentVerseRef.current}`
+              : null,
+          absorbedWord: {
+            index: expectedIdx,
+            position: currentWord?.position ?? expectedIdx + 1,
+            text: currentWord?.text_uthmani ?? null,
+            normalized: expectedFinal,
+          },
+          nextWord: {
+            index: assimilatedNextMatch.nextExpectedIdx,
+            position:
+              nextWord?.position
+              ?? assimilatedNextMatch.nextExpectedIdx + 1,
+            text: nextWord?.text_uthmani ?? null,
+            normalized: assimilatedNextMatch.nextExpectedFinal,
+          },
+          heardIdx: assimilatedNextMatch.foundMatch.index,
+          matchedNormalized: assimilatedNextMatch.foundMatch.matchedNormalized,
+          matchedWordCount: matchedWordCountRef.current,
+          triggerSource: isFinal ? "speech-final" : "speech-interim",
+          transcript,
+          activeRange: {
+            surahNumber: surahNumberRef.current,
+            ayahStart: ayahStartRef.current,
+            ayahEnd: ayahEndRef.current,
+          },
+        });
+        expectedIdx = assimilatedNextMatch.nextExpectedIdx + 1;
+        continue;
+      }
 
       if (!foundMatch) {
         const resync = findReciteFutureSequenceResync({
