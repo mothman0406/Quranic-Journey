@@ -15,8 +15,14 @@ const PROD_ALLOWED_ORIGINS = (process.env.PROD_ALLOWED_ORIGINS ?? "")
   .map((s) => s.trim())
   .filter(Boolean);
 
+const AUTH_ALLOWED_ORIGINS = ["https://appleid.apple.com"];
+
 function isAllowedProdOrigin(origin: string): boolean {
   return PROD_ALLOWED_ORIGINS.includes(origin);
+}
+
+function isAllowedAuthOrigin(origin: string): boolean {
+  return AUTH_ALLOWED_ORIGINS.includes(origin);
 }
 
 const DEV_FRONTEND_ORIGIN_PATTERNS = [
@@ -55,7 +61,7 @@ app.use(
 app.use(
   cors({
     origin(origin, callback) {
-      if (!origin || isAllowedDevOrigin(origin) || isAllowedProdOrigin(origin)) {
+      if (!origin || isAllowedDevOrigin(origin) || isAllowedProdOrigin(origin) || isAllowedAuthOrigin(origin)) {
         callback(null, true);
         return;
       }
@@ -65,8 +71,6 @@ app.use(
     credentials: true,
   }),
 );
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
 
 app.get("/api/auth/config", (_req, res) => {
   res.json(getAuthPublicConfig());
@@ -74,6 +78,9 @@ app.get("/api/auth/config", (_req, res) => {
 
 // Better Auth handles all /api/auth/* routes (sign-in, sign-up, sign-out, session)
 app.all("/api/auth/*splat", toNodeHandler(auth));
+
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
 // Public health check — must be BEFORE requireAuth
 app.use("/api", healthRouter);
