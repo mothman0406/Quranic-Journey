@@ -262,6 +262,61 @@ function getActiveReviewChunkForDashboard(
   );
 }
 
+type DashboardReviewChunk = ReturnType<typeof getActiveReviewChunkForDashboard>;
+type DashboardReviewCandidate = {
+  review: typeof reviewScheduleTable.$inferSelect;
+  surah: typeof SURAHS[0];
+  activeChunk: DashboardReviewChunk;
+};
+
+function getDashboardReviewChunkPages(chunk: DashboardReviewChunk): number[] {
+  const first = Math.min(chunk.pageStart, chunk.pageEnd);
+  const last = Math.max(chunk.pageStart, chunk.pageEnd);
+  return Array.from({ length: last - first + 1 }, (_, index) => first + index);
+}
+
+function budgetDashboardReviewCandidates(
+  items: DashboardReviewCandidate[],
+  reviewBudget: number,
+  fillItems: DashboardReviewCandidate[] = [],
+): DashboardReviewCandidate[] {
+  const budgeted: DashboardReviewCandidate[] = [];
+  const covered = new Set<number>();
+  const selected = new Set<number>();
+  const safeBudget = Number.isFinite(reviewBudget)
+    ? Math.max(reviewBudget, 0.5)
+    : 1;
+
+  const addCandidates = (candidates: DashboardReviewCandidate[]) => {
+    for (const item of candidates) {
+      if (selected.has(item.surah.id)) continue;
+
+      const chunkPages = getDashboardReviewChunkPages(item.activeChunk);
+      const newPages = chunkPages.filter((page) => !covered.has(page));
+      const currentUnder = Math.max(0, safeBudget - covered.size);
+      const wouldBeOver = Math.max(0, covered.size + newPages.length - safeBudget);
+      const include =
+        newPages.length === 0 ||
+        covered.size === 0 ||
+        covered.size + newPages.length <= safeBudget ||
+        wouldBeOver <= currentUnder;
+
+      if (!include) continue;
+
+      selected.add(item.surah.id);
+      chunkPages.forEach((page) => covered.add(page));
+      budgeted.push(item);
+    }
+  };
+
+  addCandidates(items);
+  if (covered.size < safeBudget && fillItems.length > 0) {
+    addCandidates(fillItems);
+  }
+
+  return budgeted;
+}
+
 function getAgeGroup(age: number): "toddler" | "child" | "preteen" | "teen" {
   if (age <= 6) return "toddler";
   if (age <= 10) return "child";
@@ -804,11 +859,10 @@ router.get("/children/:childId/dashboard", async (req, res) => {
       .map((surah) => surah.id),
   );
   const reviewBudget = child.reviewPagesPerDay ?? 2;
-  const dueReviewCandidates = (await db.select().from(reviewScheduleTable).where(
+  const reviewCandidates = (await db.select().from(reviewScheduleTable).where(
     eq(reviewScheduleTable.childId, childId)
   ))
     .filter((review) => doneSurahIds.has(review.surahId))
-    .filter((review) => review.dueDate <= today)
     .map((review) => {
       const surah = SURAHS.find((candidate) => candidate.id === review.surahId);
       if (!surah) return null;
@@ -839,35 +893,12 @@ router.get("/children/:childId/dashboard", async (req, res) => {
         a.surah.recommendedOrder - b.surah.recommendedOrder
       );
     });
-  const dueReviewItems: typeof dueReviewCandidates = [];
-  const coveredReviewPages = new Set<number>();
-  let reviewQueueBlocked = false;
-
-  for (const item of dueReviewCandidates) {
-    if (reviewQueueBlocked) break;
-
-    const chunkPages = new Set<number>();
-    for (let page = item.activeChunk.pageStart; page <= item.activeChunk.pageEnd; page += 1) {
-      chunkPages.add(page);
-    }
-
-    const newPages = [...chunkPages].filter((page) => !coveredReviewPages.has(page));
-    const currentUnder = reviewBudget - coveredReviewPages.size;
-    const wouldBeOver = (coveredReviewPages.size + newPages.length) - reviewBudget;
-    const closerToInclude = newPages.length > 0 && wouldBeOver <= currentUnder;
-    const include =
-      coveredReviewPages.size < reviewBudget ||
-      newPages.length === 0 ||
-      closerToInclude;
-
-    if (!include) {
-      reviewQueueBlocked = true;
-      continue;
-    }
-
-    newPages.forEach((page) => coveredReviewPages.add(page));
-    dueReviewItems.push(item);
-  }
+  const dueReviewCandidates = reviewCandidates.filter((item) => item.review.dueDate <= today);
+  const dueReviewItems = budgetDashboardReviewCandidates(
+    dueReviewCandidates,
+    reviewBudget,
+    reviewCandidates,
+  );
   const dueReviews = dueReviewItems.map((item) => item.review);
 
   // Auto goals for dashboard teaser

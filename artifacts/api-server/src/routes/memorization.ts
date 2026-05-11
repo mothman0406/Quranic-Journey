@@ -386,37 +386,107 @@ function parseFrozenSurahIds(raw: string | null | undefined): number[] {
   }
 }
 
+function getChunkPages(chunk: SurahMemorizationChunk): number[] {
+  const first = Math.min(chunk.pageStart, chunk.pageEnd);
+  const last = Math.max(chunk.pageStart, chunk.pageEnd);
+  return Array.from({ length: last - first + 1 }, (_, index) => first + index);
+}
+
+function getCoveredReviewPages(
+  items: ReviewableWithScheduleItem[],
+  getChunk: (item: ReviewableWithScheduleItem) => SurahMemorizationChunk = (item) => item.activeChunk,
+): Set<number> {
+  const covered = new Set<number>();
+  for (const item of items) {
+    for (const page of getChunkPages(getChunk(item))) {
+      covered.add(page);
+    }
+  }
+  return covered;
+}
+
 function budgetReviewItems(
   items: ReviewableWithScheduleItem[],
   reviewBudget: number,
+  fillItems: ReviewableWithScheduleItem[] = [],
 ): ReviewableWithScheduleItem[] {
   const budgeted: ReviewableWithScheduleItem[] = [];
   const covered = new Set<number>();
-  let blocked = false;
+  const selected = new Set<number>();
+  const safeBudget = Number.isFinite(reviewBudget)
+    ? Math.max(reviewBudget, 0.5)
+    : 1;
 
-  for (const item of items) {
-    if (blocked) break;
+  const addCandidates = (candidates: ReviewableWithScheduleItem[]) => {
+    for (const item of candidates) {
+      if (selected.has(item.surah.id)) continue;
 
-    const chunkPages = new Set<number>();
-    for (let page = item.activeChunk.pageStart; page <= item.activeChunk.pageEnd; page += 1) {
-      chunkPages.add(page);
-    }
+      const chunkPages = getChunkPages(item.activeChunk);
+      const newPages = chunkPages.filter((page) => !covered.has(page));
+      const currentUnder = Math.max(0, safeBudget - covered.size);
+      const wouldBeOver = Math.max(0, covered.size + newPages.length - safeBudget);
+      const include =
+        newPages.length === 0 ||
+        covered.size === 0 ||
+        covered.size + newPages.length <= safeBudget ||
+        wouldBeOver <= currentUnder;
 
-    const newPages = [...chunkPages].filter((page) => !covered.has(page));
-    const currentUnder = reviewBudget - covered.size;
-    const wouldBeOver = (covered.size + newPages.length) - reviewBudget;
-    const closerToInclude = newPages.length > 0 && wouldBeOver <= currentUnder;
-    const include = covered.size < reviewBudget || newPages.length === 0 || closerToInclude;
+      if (!include) continue;
 
-    if (include) {
-      newPages.forEach((page) => covered.add(page));
+      selected.add(item.surah.id);
+      chunkPages.forEach((page) => covered.add(page));
       budgeted.push(item);
-    } else {
-      blocked = true;
     }
+  };
+
+  addCandidates(items);
+  if (covered.size < safeBudget && fillItems.length > 0) {
+    addCandidates(fillItems);
   }
 
   return budgeted;
+}
+
+function logReviewAssignment(params: {
+  childId: number;
+  localDate: string;
+  queryDate: string;
+  reviewBudget: number;
+  dueToday: ReviewableWithScheduleItem[];
+  reviewedToday: ReviewableWithScheduleItem[];
+}) {
+  const duePages = getCoveredReviewPages(params.dueToday);
+  const reviewedPages = getCoveredReviewPages(
+    params.reviewedToday,
+    (item) => item.reviewedChunk ?? item.activeChunk,
+  );
+  const totalPages = new Set([...duePages, ...reviewedPages]);
+
+  console.info("[reviews] daily assignment", {
+    childId: params.childId,
+    localDate: params.localDate,
+    queryDate: params.queryDate,
+    targetPages: params.reviewBudget,
+    remainingPageCount: duePages.size,
+    reviewedPageCount: reviewedPages.size,
+    assignedPageCount: totalPages.size,
+    remaining: params.dueToday.map((item) => ({
+      surahNumber: item.surah.number,
+      surahName: item.surah.nameTransliteration,
+      ayahStart: item.activeChunk.ayahStart,
+      ayahEnd: item.activeChunk.ayahEnd,
+      pageStart: item.activeChunk.pageStart,
+      pageEnd: item.activeChunk.pageEnd,
+    })),
+    reviewed: params.reviewedToday.map((item) => ({
+      surahNumber: item.surah.number,
+      surahName: item.surah.nameTransliteration,
+      ayahStart: item.reviewedChunk?.ayahStart ?? item.activeChunk.ayahStart,
+      ayahEnd: item.reviewedChunk?.ayahEnd ?? item.activeChunk.ayahEnd,
+      pageStart: item.reviewedChunk?.pageStart ?? item.activeChunk.pageStart,
+      pageEnd: item.reviewedChunk?.pageEnd ?? item.activeChunk.pageEnd,
+    })),
+  });
 }
 
 function formatDate(date: Date): string {
@@ -937,13 +1007,26 @@ router.get("/children/:childId/reviews", async (req, res) => {
     : 0;
   const queryDate = addDaysToLocalDate(today, continueOffset);
 
-  const candidatesForQueryDate = sortByCanonicalPriority(
-    reviewableWithSchedule.filter(({ schedule }) => schedule.dueDate <= queryDate),
-  );
-  let frozenCandidates = budgetReviewItems(candidatesForQueryDate, reviewBudget);
-  if (frozenCandidates.length === 0) {
-    frozenCandidates = pickWrapFallback(reviewableWithSchedule);
-  }
+  const allBudgetFillCandidates = sortByCanonicalPriority(reviewableWithSchedule);
+  const buildBudgetForDate = (localDate: string) => {
+    const dueCandidates = sortByCanonicalPriority(
+      reviewableWithSchedule.filter(({ schedule }) => schedule.dueDate <= localDate),
+    );
+    let budgeted = budgetReviewItems(
+      dueCandidates,
+      reviewBudget,
+      allBudgetFillCandidates,
+    );
+    if (budgeted.length === 0) {
+      budgeted = budgetReviewItems(allBudgetFillCandidates, reviewBudget);
+    }
+    if (budgeted.length === 0) {
+      budgeted = pickWrapFallback(reviewableWithSchedule);
+    }
+    return budgeted;
+  };
+
+  let frozenCandidates = buildBudgetForDate(queryDate);
 
   const reviewedTodaySurahIdsForWrapCheck = new Set(
     reviewableWithSchedule
@@ -959,8 +1042,7 @@ router.get("/children/:childId/reviews", async (req, res) => {
       reviewedTodaySurahIdsForWrapCheck.has(item.surah.id),
     )
   ) {
-    const wrapLapSorted = sortByCanonicalPriority(reviewableWithSchedule);
-    frozenCandidates = budgetReviewItems(wrapLapSorted, reviewBudget);
+    frozenCandidates = budgetReviewItems(allBudgetFillCandidates, reviewBudget);
     if (frozenCandidates.length === 0) {
       frozenCandidates = pickWrapFallback(reviewableWithSchedule);
     }
@@ -976,6 +1058,34 @@ router.get("/children/:childId/reviews", async (req, res) => {
     return parseFrozenSurahIds(frozen?.surahIds);
   };
 
+  const frozenItemMap = new Map(reviewableWithSchedule.map((item) => [item.surah.id, item]));
+  const ensureFrozenSurahIdsMeetBudget = async (
+    surahIds: number[],
+    frozenRowId?: number,
+    previousSurahIds = surahIds,
+  ): Promise<number[]> => {
+    const frozenItems = surahIds
+      .map((id) => frozenItemMap.get(id))
+      .filter((item): item is ReviewableWithScheduleItem => item != null);
+    const augmentedItems = budgetReviewItems(
+      frozenItems,
+      reviewBudget,
+      frozenCandidates.length > 0 ? frozenCandidates : allBudgetFillCandidates,
+    );
+    const nextSurahIds = augmentedItems.map((item) => item.surah.id);
+
+    if (
+      frozenRowId != null &&
+      JSON.stringify(nextSurahIds) !== JSON.stringify(previousSurahIds)
+    ) {
+      await db.update(reviewDailySetTable).set({
+        surahIds: JSON.stringify(nextSurahIds),
+      }).where(eq(reviewDailySetTable.id, frozenRowId));
+    }
+
+    return nextSurahIds.length > 0 ? nextSurahIds : surahIds;
+  };
+
   let frozenSurahIds: number[];
   if (continueOffset === 0) {
     const [existingFrozen] = await db.select()
@@ -986,10 +1096,16 @@ router.get("/children/:childId/reviews", async (req, res) => {
       ));
 
     if (existingFrozen) {
-      frozenSurahIds = parseFrozenSurahIds(existingFrozen.surahIds);
+      const existingFrozenSurahIds = parseFrozenSurahIds(existingFrozen.surahIds);
+      frozenSurahIds = existingFrozenSurahIds;
       if (frozenSurahIds.length === 0) {
         frozenSurahIds = frozenCandidates.map((item) => item.surah.id);
       }
+      frozenSurahIds = await ensureFrozenSurahIdsMeetBudget(
+        frozenSurahIds,
+        existingFrozen.id,
+        existingFrozenSurahIds,
+      );
     } else {
       frozenSurahIds = frozenCandidates.map((item) => item.surah.id);
       if (frozenSurahIds.length > 0) {
@@ -1014,7 +1130,6 @@ router.get("/children/:childId/reviews", async (req, res) => {
       .map((item) => item.surah.id),
   );
 
-  const frozenItemMap = new Map(reviewableWithSchedule.map((item) => [item.surah.id, item]));
   const dueTodayItems = frozenSurahIds
     .map((id) => frozenItemMap.get(id))
     .filter((item): item is ReviewableWithScheduleItem => item != null)
@@ -1034,13 +1149,7 @@ router.get("/children/:childId/reviews", async (req, res) => {
 
     for (let offset = 1; offset < continueOffset; offset += 1) {
       const intermediateDate = addDaysToLocalDate(today, offset);
-      const intermediateCandidates = sortByCanonicalPriority(
-        reviewableWithSchedule.filter(({ schedule }) => schedule.dueDate <= intermediateDate),
-      );
-      let intermediateBudgeted = budgetReviewItems(intermediateCandidates, reviewBudget);
-      if (intermediateBudgeted.length === 0) {
-        intermediateBudgeted = pickWrapFallback(reviewableWithSchedule);
-      }
+      let intermediateBudgeted = buildBudgetForDate(intermediateDate);
       // Keep multi-tap Continue Reviewing from getting stuck on lapped days.
       if (
         intermediateBudgeted.length > 0 &&
@@ -1048,8 +1157,7 @@ router.get("/children/:childId/reviews", async (req, res) => {
           reviewedTodaySurahIdsForWrapCheck.has(item.surah.id),
         )
       ) {
-        const wrapLapSorted = sortByCanonicalPriority(reviewableWithSchedule);
-        intermediateBudgeted = budgetReviewItems(wrapLapSorted, reviewBudget);
+        intermediateBudgeted = budgetReviewItems(allBudgetFillCandidates, reviewBudget);
         if (intermediateBudgeted.length === 0) {
           intermediateBudgeted = pickWrapFallback(reviewableWithSchedule);
         }
@@ -1144,22 +1252,30 @@ router.get("/children/:childId/reviews", async (req, res) => {
     );
   });
 
-  const reviewedToday = reviewableWithSchedule
-    .filter(
-      (item) =>
-        item.schedule.lastReviewedLocalDate === today &&
-        item.reviewedChunk != null,
-    )
-    .map((item) => {
-      const mem = memProgress.find((m) => m.surahId === item.schedule.surahId);
-      return formatReview(
-        item,
-        item.reviewedChunk ?? item.activeChunk,
-        item.reviewedChunk?.index ?? item.activeChunkIndex,
-        false,
-        mem ? getReviewPriorityFromMemProgress(mem) : "green",
-      );
-    });
+  const reviewedTodayItems = reviewableWithSchedule.filter(
+    (item) =>
+      item.schedule.lastReviewedLocalDate === today &&
+      item.reviewedChunk != null,
+  );
+  const reviewedToday = reviewedTodayItems.map((item) => {
+    const mem = memProgress.find((m) => m.surahId === item.schedule.surahId);
+    return formatReview(
+      item,
+      item.reviewedChunk ?? item.activeChunk,
+      item.reviewedChunk?.index ?? item.activeChunkIndex,
+      false,
+      mem ? getReviewPriorityFromMemProgress(mem) : "green",
+    );
+  });
+
+  logReviewAssignment({
+    childId,
+    localDate: today,
+    queryDate,
+    reviewBudget,
+    dueToday: mergedDueTodayItems,
+    reviewedToday: reviewedTodayItems,
+  });
 
   res.json({ dueToday, upcoming, todayRange, reviewedToday });
 });
