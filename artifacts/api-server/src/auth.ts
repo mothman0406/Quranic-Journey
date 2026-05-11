@@ -32,12 +32,15 @@ const MOBILE_TRUSTED_ORIGINS = [
   "http://127.0.0.1:8081",
 ];
 
+const APPLE_TRUSTED_ORIGINS = ["https://appleid.apple.com"];
+
 function buildSocialProviders(): SocialProviders | undefined {
   const socialProviders: SocialProviders = {};
   const googleClientId = process.env.GOOGLE_CLIENT_ID;
   const googleClientSecret = process.env.GOOGLE_CLIENT_SECRET;
   const appleClientId = process.env.APPLE_CLIENT_ID;
   const appleClientSecret = process.env.APPLE_CLIENT_SECRET;
+  const appleAppBundleIdentifier = process.env.APPLE_APP_BUNDLE_IDENTIFIER;
 
   if (googleClientId && googleClientSecret) {
     socialProviders.google = {
@@ -52,7 +55,8 @@ function buildSocialProviders(): SocialProviders | undefined {
     socialProviders.apple = {
       clientId: appleClientId,
       clientSecret: appleClientSecret,
-      appBundleIdentifier: process.env.APPLE_APP_BUNDLE_IDENTIFIER,
+      appBundleIdentifier: appleAppBundleIdentifier,
+      audience: appleAppBundleIdentifier ? [appleClientId, appleAppBundleIdentifier] : appleClientId,
     };
   } else {
     logger.warn("Apple sign-in is disabled because APPLE_CLIENT_ID or APPLE_CLIENT_SECRET is missing");
@@ -116,7 +120,12 @@ export const auth = betterAuth({
     },
   },
   socialProviders: buildSocialProviders(),
-  trustedOrigins: [...DEV_TRUSTED_ORIGINS, ...PROD_TRUSTED_ORIGINS, ...MOBILE_TRUSTED_ORIGINS],
+  trustedOrigins: [
+    ...DEV_TRUSTED_ORIGINS,
+    ...PROD_TRUSTED_ORIGINS,
+    ...MOBILE_TRUSTED_ORIGINS,
+    ...APPLE_TRUSTED_ORIGINS,
+  ],
 });
 
 export type Session = typeof auth.$Infer.Session;
