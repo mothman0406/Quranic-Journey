@@ -2,7 +2,7 @@ import express, { type Express } from "express";
 import cors from "cors";
 import pinoHttp from "pino-http";
 import { toNodeHandler } from "better-auth/node";
-import { auth } from "./auth.js";
+import { auth, getAuthPublicConfig } from "./auth.js";
 import router from "./routes/index.js";
 import healthRouter from "./routes/health.js";
 import { requireAuth } from "./middlewares/requireAuth.js";
@@ -67,6 +67,10 @@ app.use(
 );
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+app.get("/api/auth/config", (_req, res) => {
+  res.json(getAuthPublicConfig());
+});
 
 // Better Auth handles all /api/auth/* routes (sign-in, sign-up, sign-out, session)
 app.all("/api/auth/*splat", toNodeHandler(auth));

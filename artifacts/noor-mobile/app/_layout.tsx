@@ -11,6 +11,9 @@ function RootStack() {
       <Stack screenOptions={{ contentStyle: { backgroundColor: colors.background } }}>
         <Stack.Screen name="index" options={{ headerShown: false }} />
         <Stack.Screen name="sign-in" options={{ headerShown: false }} />
+        <Stack.Screen name="sign-up" options={{ headerShown: false }} />
+        <Stack.Screen name="forgot-password" options={{ headerShown: false }} />
+        <Stack.Screen name="reset-password" options={{ headerShown: false }} />
         <Stack.Screen name="account-settings" options={{ headerShown: false }} />
         <Stack.Screen name="mushaf" options={{ headerShown: false }} />
         <Stack.Screen name="notes-bookmarks" options={{ headerShown: false }} />

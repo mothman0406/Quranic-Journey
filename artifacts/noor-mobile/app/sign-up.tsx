@@ -18,30 +18,55 @@ import { authClient } from "@/src/lib/auth-client";
 import { createAuthRedirect } from "@/src/lib/auth-redirects";
 import { useAppTheme, type AppThemeColors } from "@/src/lib/app-theme";
 
-export default function SignInScreen() {
+export default function SignUpScreen() {
   const router = useRouter();
   const { colors } = useAppTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const authConfig = useAuthPublicConfig();
+  const emailInputRef = useRef<TextInput>(null);
   const passwordInputRef = useRef<TextInput>(null);
+  const confirmInputRef = useRef<TextInput>(null);
+  const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [socialLoading, setSocialLoading] = useState<SocialAuthProvider | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const formDisabled = loading || socialLoading !== null;
 
-  async function handleSignIn() {
+  async function handleSignUp() {
     if (formDisabled) return;
 
     Keyboard.dismiss();
     setError(null);
+
+    const trimmedName = name.trim();
+    const trimmedEmail = email.trim();
+    if (!trimmedName) {
+      setError("Enter your name.");
+      return;
+    }
+    if (password.length < 8) {
+      setError("Password must be at least 8 characters.");
+      return;
+    }
+    if (password !== confirmPassword) {
+      setError("Passwords do not match.");
+      return;
+    }
+
     setLoading(true);
     try {
-      const result = await authClient.signIn.email({ email: email.trim(), password });
+      const result = await authClient.signUp.email({
+        name: trimmedName,
+        email: trimmedEmail,
+        password,
+      });
+
       if (result.error) {
-        setError(result.error.message ?? "Sign-in failed.");
+        setError(result.error.message ?? "Account could not be created.");
       } else {
         router.replace("/");
       }
@@ -64,12 +89,12 @@ export default function SignInScreen() {
       });
 
       if (result.error) {
-        setError(result.error.message ?? `${providerLabel(provider)} sign-in failed.`);
+        setError(result.error.message ?? `${providerLabel(provider)} sign-up failed.`);
       } else {
         router.replace("/");
       }
     } catch {
-      setError(`${providerLabel(provider)} sign-in could not be started.`);
+      setError(`${providerLabel(provider)} sign-up could not be started.`);
     } finally {
       setSocialLoading(null);
     }
@@ -87,9 +112,23 @@ export default function SignInScreen() {
         onScrollBeginDrag={Keyboard.dismiss}
       >
         <View style={styles.card}>
-          <Text style={styles.title}>NoorPath</Text>
-          <Text style={styles.subtitle}>Sign in to continue</Text>
+          <Text style={styles.title}>Create account</Text>
+          <Text style={styles.subtitle}>Start your NoorPath journey</Text>
           <TextInput
+            style={styles.input}
+            placeholder="Your name"
+            placeholderTextColor={colors.textSubtle}
+            autoCapitalize="words"
+            autoComplete="name"
+            editable={!formDisabled}
+            returnKeyType="next"
+            textContentType="name"
+            value={name}
+            onChangeText={setName}
+            onSubmitEditing={() => emailInputRef.current?.focus()}
+          />
+          <TextInput
+            ref={emailInputRef}
             style={styles.input}
             placeholder="Email"
             placeholderTextColor={colors.textSubtle}
@@ -108,34 +147,39 @@ export default function SignInScreen() {
             style={styles.input}
             placeholder="Password"
             placeholderTextColor={colors.textSubtle}
-            autoComplete="current-password"
+            autoComplete="new-password"
+            editable={!formDisabled}
+            returnKeyType="next"
+            secureTextEntry
+            textContentType="newPassword"
+            value={password}
+            onChangeText={setPassword}
+            onSubmitEditing={() => confirmInputRef.current?.focus()}
+          />
+          <TextInput
+            ref={confirmInputRef}
+            style={styles.input}
+            placeholder="Confirm password"
+            placeholderTextColor={colors.textSubtle}
+            autoComplete="new-password"
             editable={!formDisabled}
             returnKeyType="done"
             secureTextEntry
-            textContentType="password"
-            value={password}
-            onChangeText={setPassword}
-            onSubmitEditing={handleSignIn}
+            textContentType="newPassword"
+            value={confirmPassword}
+            onChangeText={setConfirmPassword}
+            onSubmitEditing={handleSignUp}
           />
-          <View style={styles.inlineActions}>
-            <Link href="./forgot-password" asChild>
-              <Pressable disabled={formDisabled}>
-                <Text style={[styles.linkText, formDisabled && styles.disabledText]}>
-                  Forgot password?
-                </Text>
-              </Pressable>
-            </Link>
-          </View>
           {error ? <Text style={styles.error}>{error}</Text> : null}
           <Pressable
             style={[styles.button, formDisabled && styles.buttonDisabled]}
-            onPress={handleSignIn}
+            onPress={handleSignUp}
             disabled={formDisabled}
           >
             {loading ? (
               <ActivityIndicator color={colors.textInverse} />
             ) : (
-              <Text style={styles.buttonText}>Sign in</Text>
+              <Text style={styles.buttonText}>Create account</Text>
             )}
           </Pressable>
           <AuthSocialButtons
@@ -145,12 +189,10 @@ export default function SignInScreen() {
             onPress={handleSocialSignIn}
           />
           <View style={styles.footerRow}>
-            <Text style={styles.footerText}>Do not have an account?</Text>
-            <Link href="./sign-up" asChild>
+            <Text style={styles.footerText}>Already have an account?</Text>
+            <Link href="/sign-in" asChild>
               <Pressable disabled={formDisabled}>
-                <Text style={[styles.linkText, formDisabled && styles.disabledText]}>
-                  Create one
-                </Text>
+                <Text style={[styles.linkText, formDisabled && styles.disabledText]}>Sign in</Text>
               </Pressable>
             </Link>
           </View>
@@ -193,7 +235,7 @@ function makeStyles(colors: AppThemeColors) {
     },
     title: {
       color: colors.text,
-      fontSize: 28,
+      fontSize: 26,
       fontWeight: "900",
       textAlign: "center",
     },
@@ -213,10 +255,6 @@ function makeStyles(colors: AppThemeColors) {
       fontSize: 16,
       fontWeight: "600",
       padding: 12,
-    },
-    inlineActions: {
-      alignItems: "flex-end",
-      minHeight: 22,
     },
     error: {
       color: colors.danger,
