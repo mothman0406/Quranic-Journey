@@ -14,6 +14,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.mothman.noorpath",
+      "usesAppleSignIn": true,
       "infoPlist": {
         "NSSpeechRecognitionUsageDescription": "Allow NoorPath to recognize your recitation so it can follow along word by word.",
         "NSMicrophoneUsageDescription": "Allow NoorPath to use the microphone to listen as you recite Quran.",
