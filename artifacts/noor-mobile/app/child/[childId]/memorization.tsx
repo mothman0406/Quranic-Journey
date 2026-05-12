@@ -115,6 +115,10 @@ import { APP_ADAPTIVE_COLORS as appColors } from "@/src/lib/app-theme";
 const PLAYBACK_RATES = [0.75, 0.85, 1.0, 1.15, 1.25, 1.5] as const;
 const AYAH_ROW_ESTIMATED_HEIGHT = 190;
 const SILENT_RECITE_ERROR_CODES = new Set(["no-speech", "no-match"]);
+const RECITE_RECOGNITION_RESTART_DELAY_MS = 120;
+const RECITE_AYAH_ADVANCE_RESTART_DELAY_MS = 90;
+const RECITE_FRESH_TRANSCRIPT_SUPPRESSION_MS = 150;
+const RECITE_INTERIM_MATCH_DEBOUNCE_MS = 75;
 const MUSHAF_BISMILLAH_TEXT = "بِسْمِ ٱللَّهِ ٱلرَّحْمَٰنِ ٱلرَّحِيمِ";
 const MUSHAF_WORD_FONT_SIZE = 20;
 const MUSHAF_END_MARKER_FONT_SIZE = 16;
@@ -4604,10 +4608,16 @@ export default function MemorizationScreen() {
     "slnt",
   ]);
   const RECITE_NOON_ASSIMILATION_CLASSES = new Set([
+    "ghunna",
+    "ghunnah",
     "idgham_ghunna",
     "idgham_ghunnah",
     "idgham_wo_ghunna",
     "idgham_wo_ghunnah",
+    "ikhfa",
+    "ikhfa_haqiqi",
+    "ikhfaa",
+    "ikhfaa_haqiqi",
     "ikhafa",
     "iqlab",
   ]);
@@ -4706,6 +4716,23 @@ export default function MemorizationScreen() {
     addReciteExpectedForm(forms, normalized, exactOnly);
   }
 
+  function addReciteNasalNoonVariants(
+    forms: ReciteExpectedForm[],
+    candidate: string,
+    classes: Set<string>,
+  ) {
+    if (!reciteHasAnyClass(classes, RECITE_NOON_ASSIMILATION_CLASSES)) return;
+
+    for (let index = 0; index < candidate.length; index += 1) {
+      if (candidate[index] !== "ن") continue;
+
+      const withoutNoon = `${candidate.slice(0, index)}${candidate.slice(index + 1)}`;
+      if (withoutNoon.length >= 2) {
+        addReciteNormalizedExpectedForm(forms, withoutNoon);
+      }
+    }
+  }
+
   function addReciteExpectedSpeechVariants(
     forms: ReciteExpectedForm[],
     candidate: string,
@@ -4724,6 +4751,8 @@ export default function MemorizationScreen() {
     if (hasSmallSeen && candidate.includes("ص")) {
       addReciteNormalizedExpectedForm(forms, candidate.replace(/ص/g, "س"));
     }
+
+    addReciteNasalNoonVariants(forms, candidate, classes);
 
     if (classes.has("iqlab")) {
       const iqlabInsideWord = candidate.replace(/ن(?=ب)/g, "م");
@@ -5102,7 +5131,10 @@ export default function MemorizationScreen() {
     }
   }
 
-  function scheduleReciteRecognitionRestart(reason: string, delayMs = 350) {
+  function scheduleReciteRecognitionRestart(
+    reason: string,
+    delayMs = RECITE_RECOGNITION_RESTART_DELAY_MS,
+  ) {
     if (!reciteModeRef.current) return;
     clearReciteRecognitionRestart();
     reciteRecognitionRestartTimeoutRef.current = setTimeout(() => {
@@ -5134,7 +5166,8 @@ export default function MemorizationScreen() {
   function restartReciteRecognitionWithFreshTranscript(reason: string) {
     if (!reciteModeRef.current) return;
     resetReciteSpeechBuffer();
-    reciteSuppressSpeechResultsUntilRef.current = Date.now() + 1000;
+    reciteSuppressSpeechResultsUntilRef.current =
+      Date.now() + RECITE_FRESH_TRANSCRIPT_SUPPRESSION_MS;
     setReciteListening(false);
     try {
       ExpoSpeechRecognitionModule.stop();
@@ -5153,7 +5186,7 @@ export default function MemorizationScreen() {
         },
       });
     }
-    scheduleReciteRecognitionRestart(reason, 250);
+    scheduleReciteRecognitionRestart(reason, RECITE_AYAH_ADVANCE_RESTART_DELAY_MS);
   }
 
   function calculateReciteScore(attempts = reciteAttemptsRef.current) {
@@ -5194,7 +5227,11 @@ export default function MemorizationScreen() {
       currentVerseRef.current = nextVerse;
       setCurrentVerse(nextVerse);
       setReciteCursor(nextVerse, nextExpectedIdx);
-      restartReciteRecognitionWithFreshTranscript("ayah-advance");
+      if (triggerSource.startsWith("speech-")) {
+        reciteSuppressSpeechResultsUntilRef.current = 0;
+      } else {
+        restartReciteRecognitionWithFreshTranscript("ayah-advance");
+      }
       return;
     }
 
@@ -5476,7 +5513,10 @@ export default function MemorizationScreen() {
 
     // Debounce only interim events. Final events are authoritative for an utterance
     // and must always run so iOS can commit the last word of an ayah.
-    if (!isFinal && Date.now() - lastMatchTimeRef.current < 150) return;
+    if (
+      !isFinal &&
+      Date.now() - lastMatchTimeRef.current < RECITE_INTERIM_MATCH_DEBOUNCE_MS
+    ) return;
 
     const verseWords = displayWordsMapRef.current.get(currentVerseRef.current);
     if (!verseWords) {
