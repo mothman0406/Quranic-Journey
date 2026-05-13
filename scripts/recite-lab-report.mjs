@@ -101,6 +101,13 @@ function predictedPassDecision(row) {
   return row.comparison?.decision === "pass" ? "pass" : "not_pass";
 }
 
+function verifierPassDecision(row) {
+  const status = row.verifier?.status;
+  if (status === "pass") return "pass";
+  if (status === "hold") return "not_pass";
+  return null;
+}
+
 function exactPrediction(row) {
   return row.comparison?.decision ?? "unknown";
 }
@@ -138,15 +145,24 @@ function summarizeRows(rows) {
   const byScope = {};
   const byWindowStatus = {};
   const byPhraseStatus = {};
+  const byVerifierStatus = {};
+  const byVerifierReason = {};
   const byAlignmentVersion = {};
   const byWindowVersion = {};
   const passMatrix = {};
+  const verifierMatrix = {};
   const exactMatrix = {};
   const falsePasses = [];
   const falseRejects = [];
+  const verifierFalsePasses = [];
+  const verifierFalseRejects = [];
+  const verifierCaptureIssues = [];
   const exactMismatches = [];
   let knownPassRows = 0;
   let correctPassRows = 0;
+  let verifierRows = 0;
+  let verifierEvaluatedRows = 0;
+  let verifierCorrectRows = 0;
   let knownExactRows = 0;
   let correctExactRows = 0;
 
@@ -162,6 +178,10 @@ function summarizeRows(rows) {
     increment(byScope, scope);
     increment(byWindowStatus, row.window?.status ?? "unknown");
     increment(byPhraseStatus, row.phrase?.status ?? "unknown");
+    if (row.verifier) {
+      increment(byVerifierStatus, row.verifier.status ?? "unknown");
+      increment(byVerifierReason, row.verifier.reason ?? "unknown");
+    }
     increment(byAlignmentVersion, alignmentVersion);
     increment(byWindowVersion, windowVersion);
 
@@ -173,6 +193,19 @@ function summarizeRows(rows) {
       increment(passMatrix, `${actualPass}:${predictedPass}`);
       if (actualPass === "not_pass" && predictedPass === "pass") falsePasses.push(row);
       if (actualPass === "pass" && predictedPass === "not_pass") falseRejects.push(row);
+    }
+
+    if (row.verifier) {
+      verifierRows += 1;
+      if (row.verifier.status === "capture_issue") verifierCaptureIssues.push(row);
+      const verifierPredicted = verifierPassDecision(row);
+      if (actualPass && verifierPredicted) {
+        verifierEvaluatedRows += 1;
+        if (actualPass === verifierPredicted) verifierCorrectRows += 1;
+        increment(verifierMatrix, `${actualPass}:${verifierPredicted}`);
+        if (actualPass === "not_pass" && verifierPredicted === "pass") verifierFalsePasses.push(row);
+        if (actualPass === "pass" && verifierPredicted === "not_pass") verifierFalseRejects.push(row);
+      }
     }
 
     const expectedExact = expectedExactDecision(row);
@@ -197,6 +230,8 @@ function summarizeRows(rows) {
     byScope,
     byWindowStatus,
     byPhraseStatus,
+    byVerifierStatus,
+    byVerifierReason,
     byAlignmentVersion,
     byWindowVersion,
     passNotPass: {
@@ -207,6 +242,19 @@ function summarizeRows(rows) {
       matrix: passMatrix,
       falsePassCount: falsePasses.length,
       falseRejectCount: falseRejects.length,
+    },
+    verifierPolicy: {
+      rows: verifierRows,
+      evaluatedRows: verifierEvaluatedRows,
+      correct: verifierCorrectRows,
+      accuracy:
+        verifierEvaluatedRows === 0
+          ? null
+          : Number((verifierCorrectRows / verifierEvaluatedRows).toFixed(4)),
+      matrix: verifierMatrix,
+      falsePassCount: verifierFalsePasses.length,
+      falseRejectCount: verifierFalseRejects.length,
+      captureIssueCount: verifierCaptureIssues.length,
     },
     exact: {
       knownRows: knownExactRows,
@@ -238,6 +286,9 @@ function summarizeRows(rows) {
     },
     falsePasses,
     falseRejects,
+    verifierFalsePasses,
+    verifierFalseRejects,
+    verifierCaptureIssues,
     exactMismatches,
   };
 }
@@ -262,12 +313,40 @@ function compactRow(row) {
     decision: row.comparison?.decision ?? null,
     scope: row.expectedScope?.label ?? row.expectedScope?.mode ?? null,
     score: row.comparison?.score ?? null,
+    verifierStatus: row.verifier?.status ?? null,
+    verifierReason: row.verifier?.reason ?? null,
+    verifierConfidence: row.verifier?.confidence ?? null,
+    verifierRescuedBy: row.verifier?.rescuedBy ?? null,
     windowStatus: row.window?.status ?? null,
     windowAccepted: row.window?.acceptedCount ?? null,
     expectedCount: row.counts?.expected ?? null,
     heardCount: row.counts?.heard ?? null,
     firstIssues: row.comparison?.firstIssues ?? [],
   };
+}
+
+function renderVerifierRows(rows) {
+  if (rows.length === 0) return "_None._";
+  return renderTable(
+    ["ID", "Label", "Verifier", "Reason", "Rescue", "Confidence", "Scope", "Window"],
+    rows.slice(-12).map((row) => {
+      const compact = compactRow(row);
+      return [
+        compact.shortId,
+        compact.label,
+        compact.verifierStatus,
+        compact.verifierReason,
+        compact.verifierRescuedBy,
+        Number.isFinite(compact.verifierConfidence)
+          ? Number(compact.verifierConfidence).toFixed(3)
+          : "",
+        compact.scope,
+        `${compact.windowStatus ?? "?"} ${compact.windowAccepted ?? "?"}/${
+          compact.expectedCount ?? "?"
+        }`,
+      ];
+    }),
+  );
 }
 
 function renderTable(headers, rows) {
@@ -362,6 +441,12 @@ function renderMarkdown(report) {
         ["Pass/not-pass accuracy", summary.passNotPass.accuracy ?? ""],
         ["False passes", summary.passNotPass.falsePassCount],
         ["False rejects", summary.passNotPass.falseRejectCount],
+        ["Verifier rows", summary.verifierPolicy.rows],
+        ["Verifier evaluated", summary.verifierPolicy.evaluatedRows],
+        ["Verifier accuracy", summary.verifierPolicy.accuracy ?? ""],
+        ["Verifier false passes", summary.verifierPolicy.falsePassCount],
+        ["Verifier false rejects", summary.verifierPolicy.falseRejectCount],
+        ["Verifier capture issues", summary.verifierPolicy.captureIssueCount],
         ["Exact label accuracy", summary.exact.accuracy ?? ""],
         ["First result p50", `${summary.latency.firstResultLatencyMs.p50 ?? ""} ms`],
         ["First result p90", `${summary.latency.firstResultLatencyMs.p90 ?? ""} ms`],
@@ -395,6 +480,24 @@ function renderMarkdown(report) {
   lines.push(JSON.stringify(summary.passNotPass.matrix, null, 2));
   lines.push("```");
   lines.push("");
+  lines.push("Verifier policy:");
+  lines.push("");
+  lines.push("```json");
+  lines.push(JSON.stringify(summary.verifierPolicy.matrix, null, 2));
+  lines.push("```");
+  lines.push("");
+  lines.push("Verifier statuses:");
+  lines.push("");
+  lines.push("```json");
+  lines.push(JSON.stringify(summary.byVerifierStatus, null, 2));
+  lines.push("```");
+  lines.push("");
+  lines.push("Verifier reasons:");
+  lines.push("");
+  lines.push("```json");
+  lines.push(JSON.stringify(summary.byVerifierReason, null, 2));
+  lines.push("```");
+  lines.push("");
   lines.push("Exact labels:");
   lines.push("");
   lines.push("```json");
@@ -409,6 +512,18 @@ function renderMarkdown(report) {
   lines.push("");
   lines.push(renderTopRows(summary.falseRejects));
   lines.push("");
+  lines.push("## Verifier False Passes");
+  lines.push("");
+  lines.push(renderVerifierRows(summary.verifierFalsePasses));
+  lines.push("");
+  lines.push("## Verifier False Rejects");
+  lines.push("");
+  lines.push(renderVerifierRows(summary.verifierFalseRejects));
+  lines.push("");
+  lines.push("## Verifier Capture Issues");
+  lines.push("");
+  lines.push(renderVerifierRows(summary.verifierCaptureIssues));
+  lines.push("");
   lines.push("## Exact Mismatches");
   lines.push("");
   lines.push(renderTopRows(summary.exactMismatches));
@@ -421,6 +536,9 @@ function stripHeavyRows(summary) {
     ...summary,
     falsePasses: summary.falsePasses.map(compactRow),
     falseRejects: summary.falseRejects.map(compactRow),
+    verifierFalsePasses: summary.verifierFalsePasses.map(compactRow),
+    verifierFalseRejects: summary.verifierFalseRejects.map(compactRow),
+    verifierCaptureIssues: summary.verifierCaptureIssues.map(compactRow),
     exactMismatches: summary.exactMismatches.map(compactRow),
   };
 }
@@ -435,6 +553,11 @@ function printSummary(report) {
   console.log(
     `False passes: ${summary.passNotPass.falsePassCount}, false rejects: ${summary.passNotPass.falseRejectCount}`,
   );
+  if (summary.verifierPolicy.rows > 0) {
+    console.log(
+      `Verifier: ${summary.verifierPolicy.correct}/${summary.verifierPolicy.evaluatedRows} (${summary.verifierPolicy.accuracy}) falsePass=${summary.verifierPolicy.falsePassCount} falseReject=${summary.verifierPolicy.falseRejectCount} capture=${summary.verifierPolicy.captureIssueCount}`,
+    );
+  }
   console.log(
     `First result latency p50/p90: ${summary.latency.firstResultLatencyMs.p50}/${summary.latency.firstResultLatencyMs.p90} ms`,
   );

@@ -88,11 +88,23 @@ function predictedPassDecision(row) {
   return row.comparison?.decision === "pass" ? "pass" : "not_pass";
 }
 
+function verifierPassDecision(row) {
+  const status = row.verifier?.status;
+  if (status === "pass") return "pass";
+  if (status === "hold") return "not_pass";
+  return null;
+}
+
 function reviewReason(row) {
   if (row.labels?.overridden) return "label override";
   const expected = expectedPassDecision(row);
+  const verifierPredicted = verifierPassDecision(row);
+  if (row.verifier?.status === "capture_issue") return "capture issue";
+  if (expected && verifierPredicted && expected !== verifierPredicted) {
+    return expected === "not_pass" ? "verifier false pass" : "verifier false reject";
+  }
   if (expected && expected !== predictedPassDecision(row)) {
-    return expected === "not_pass" ? "false pass" : "false reject";
+    return expected === "not_pass" ? "alignment false pass" : "alignment false reject";
   }
   if (row.review?.missingAudio) return "missing audio";
   return "context";
@@ -121,6 +133,7 @@ function renderRow(row) {
   const label = row.labels?.effective ?? "unlabeled";
   const rawLabel = row.labels?.raw ?? label;
   const decision = row.comparison?.decision ?? "unknown";
+  const verifier = row.verifier;
   const reason = reviewReason(row);
   const issue = summarizeIssue(row.comparison?.firstIssues?.[0]);
   const expectedText = (row.expectedWords ?? []).join(" ");
@@ -133,7 +146,16 @@ function renderRow(row) {
           <h2>${escapeHtml(row.id.slice(0, 8))}</h2>
           <p>${escapeHtml(reason)} · ${escapeHtml(rowScope(row))}</p>
         </div>
-        <span class="decision">${escapeHtml(label)} → ${escapeHtml(decision)}</span>
+        <div class="badges">
+          <span class="decision">${escapeHtml(label)} → ${escapeHtml(decision)}</span>
+          ${
+            verifier
+              ? `<span class="verifier">${escapeHtml(verifier.status)} · ${escapeHtml(
+                  verifier.reason,
+                )}</span>`
+              : ""
+          }
+        </div>
       </header>
       ${
         src
@@ -142,6 +164,9 @@ function renderRow(row) {
       }
       <dl>
         <div><dt>Raw label</dt><dd>${escapeHtml(rawLabel)}</dd></div>
+        <div><dt>Verifier</dt><dd>${escapeHtml(verifier?.status)} ${escapeHtml(
+          verifier?.rescuedBy ? `via ${verifier.rescuedBy}` : "",
+        )}</dd></div>
         <div><dt>Window</dt><dd>${escapeHtml(row.window?.status)} ${escapeHtml(
           row.window?.acceptedCount,
         )}/${escapeHtml(row.counts?.expected)}</dd></div>
@@ -211,10 +236,19 @@ function renderHtml(rows, options) {
       border-radius: 8px;
       padding: 14px;
     }
-    .false-pass {
+    .false-pass,
+    .alignment-false-pass {
       border-color: #b3261e;
     }
-    .false-reject {
+    .verifier-false-pass {
+      border-color: #b3261e;
+    }
+    .false-reject,
+    .alignment-false-reject {
+      border-color: #b98100;
+    }
+    .verifier-false-reject,
+    .capture-issue {
       border-color: #b98100;
     }
     header {
@@ -233,12 +267,23 @@ function renderHtml(rows, options) {
       color: #62675e;
       font-size: 13px;
     }
-    .decision {
+    .badges {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 6px;
+    }
+    .decision,
+    .verifier {
       background: #eceee8;
       border-radius: 999px;
       padding: 5px 9px;
       white-space: nowrap;
       font-size: 12px;
+    }
+    .verifier {
+      background: #e6f2ef;
+      color: #235448;
     }
     audio {
       width: 100%;
