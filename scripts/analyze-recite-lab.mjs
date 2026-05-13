@@ -648,6 +648,7 @@ function toDatasetRow(record, overrides, audioIndex) {
       windows: Array.isArray(windowTracker.windows) ? windowTracker.windows : [],
       version: windowTracker.version ?? null,
     },
+    verifier: payload.verifierVerdict ?? null,
     comparison: {
       decision,
       rawDecision,
@@ -800,6 +801,7 @@ function toAudioManifestRow(row) {
     windowBlockedCount: row.window.blockedWindowCount,
     windowPendingCount: row.window.pendingWindowCount,
     windowDetails: row.window.windows,
+    verifierVerdict: row.verifier,
     score: row.comparison.score,
     missingCount: row.counts.missing,
     extraCount: row.counts.extra,

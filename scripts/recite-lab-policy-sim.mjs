@@ -11,7 +11,7 @@ const DATASET_FILE = path.join(ANALYSIS_DIR, "dataset.jsonl");
 const PASS_LABELS = new Set(["correct"]);
 const NOT_PASS_LABELS = new Set(["skip", "repeat", "wrong"]);
 const KNOWN_LABELS = new Set([...PASS_LABELS, ...NOT_PASS_LABELS]);
-const POLICY_VERSION = "recite-lab-policy-sim-v0.1";
+const POLICY_VERSION = "recite-lab-policy-sim-v0.2";
 
 function parseArgs(argv) {
   const options = {
@@ -114,18 +114,22 @@ function rowFeatures(row) {
   const offTargetExtraCount = row.comparison?.offTargetExtraCount ?? 0;
   const score = row.comparison?.score ?? 0;
   const windowConfidence = row.window?.confidence ?? 0;
+  const heardCount = row.counts?.heard ?? 0;
+  const audioDurationMs = row.timing?.audioDurationMs ?? null;
   const reachedEnd = expectedCount > 0 && acceptedCount >= expectedCount;
   const nearEnd = expectedCount > 0 && acceptedCount >= expectedCount - Math.max(1, Math.ceil(expectedCount * 0.04));
 
   return {
     expectedCount,
     acceptedCount,
+    heardCount,
     missingCount,
     extraCount,
     substituteCount,
     offTargetExtraCount,
     score,
     windowConfidence,
+    audioDurationMs,
     reachedEnd,
     nearEnd,
     decision: row.comparison?.decision ?? "unknown",
@@ -133,6 +137,119 @@ function rowFeatures(row) {
     label: row.labels?.effective ?? "unlabeled",
     scope: rowScope(row),
   };
+}
+
+function median(values) {
+  const sorted = values.filter(Number.isFinite).sort((a, b) => a - b);
+  if (sorted.length === 0) return null;
+  const middle = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 1
+    ? sorted[middle]
+    : ((sorted[middle - 1] ?? 0) + (sorted[middle] ?? 0)) / 2;
+}
+
+function buildPolicyContext(rows) {
+  const durationsByScope = new Map();
+  for (const row of rows) {
+    const features = rowFeatures(row);
+    if (!Number.isFinite(features.audioDurationMs)) continue;
+    const fullEnough =
+      features.expectedCount > 0 &&
+      features.acceptedCount >= Math.floor(features.expectedCount * 0.95) &&
+      features.heardCount >= Math.floor(features.expectedCount * 0.8);
+    if (!fullEnough) continue;
+    const scope = features.scope;
+    if (!durationsByScope.has(scope)) durationsByScope.set(scope, []);
+    durationsByScope.get(scope).push(features.audioDurationMs);
+  }
+
+  const scopeBaselines = {};
+  for (const [scope, values] of durationsByScope.entries()) {
+    scopeBaselines[scope] = {
+      count: values.length,
+      medianDurationMs: median(values),
+    };
+  }
+
+  return { scopeBaselines };
+}
+
+function likelyCaptureIssue(row, context) {
+  const features = rowFeatures(row);
+  const baseline = context.scopeBaselines[features.scope]?.medianDurationMs ?? null;
+  if (!baseline || !Number.isFinite(features.audioDurationMs)) return false;
+  const durationRatio = features.audioDurationMs / baseline;
+  const heardRatio =
+    features.expectedCount === 0 ? 0 : features.heardCount / features.expectedCount;
+  const acceptedRatio =
+    features.expectedCount === 0 ? 0 : features.acceptedCount / features.expectedCount;
+  const sparseTranscript = heardRatio <= 0.5;
+  const lowProgress = acceptedRatio < 0.95 || features.windowStatus === "off_track";
+  return durationRatio < 0.68 && (sparseTranscript || lowProgress);
+}
+
+function normalizeArabic(value) {
+  return String(value ?? "")
+    .normalize("NFKD")
+    .replace(/[\u064B-\u065F\u0670]/g, "")
+    .replace(/[إأآٱ]/g, "ا")
+    .replace(/ى/g, "ي")
+    .replace(/ؤ/g, "و")
+    .replace(/ئ/g, "ي")
+    .replace(/ة/g, "ه")
+    .replace(/[^\u0621-\u064A]/g, "");
+}
+
+function compactArabic(value) {
+  return normalizeArabic(value).replace(/ا/g, "");
+}
+
+function finalTailAsrMerge(row) {
+  const features = rowFeatures(row);
+  if (
+    features.expectedCount < 3 ||
+    features.missingCount !== 1 ||
+    features.extraCount !== 0 ||
+    features.substituteCount !== 0 ||
+    features.offTargetExtraCount !== 0 ||
+    features.acceptedCount < features.expectedCount - 1 ||
+    features.score < 0.94
+  ) {
+    return false;
+  }
+
+  const missingFinal = (row.comparison?.firstIssues ?? []).some(
+    (issue) => issue?.type === "missing" && issue?.expectedIndex === features.expectedCount,
+  );
+  if (!missingFinal) return false;
+
+  const expectedWords = Array.isArray(row.expectedWords) ? row.expectedWords : [];
+  const heardTokens = Array.isArray(row.transcriptTokens) ? row.transcriptTokens : [];
+  const previousExpected = expectedWords[features.expectedCount - 2] ?? "";
+  const finalExpected = expectedWords[features.expectedCount - 1] ?? "";
+  const finalHeard = heardTokens[heardTokens.length - 1] ?? "";
+  const previousCompact = compactArabic(previousExpected);
+  const finalCompact = compactArabic(finalExpected);
+  const heardCompact = compactArabic(finalHeard);
+  if (previousCompact.length < 2 || finalCompact.length < 3 || heardCompact.length < 3) {
+    return false;
+  }
+
+  const previousPrefix = previousCompact.slice(0, Math.min(3, previousCompact.length));
+  const finalSuffix = finalCompact.slice(-Math.min(3, finalCompact.length));
+  return heardCompact.startsWith(previousPrefix) && heardCompact.endsWith(finalSuffix);
+}
+
+function longRangeTranscriptRescue(row) {
+  const features = rowFeatures(row);
+  return (
+    features.expectedCount >= 60 &&
+    features.windowStatus === "needs_audio" &&
+    features.reachedEnd &&
+    features.windowConfidence >= 0.88 &&
+    features.score >= 0.77 &&
+    features.offTargetExtraCount <= 4
+  );
 }
 
 const POLICIES = [
@@ -155,6 +272,16 @@ const POLICIES = [
     },
   },
   {
+    id: "capture_aware_transcript",
+    label: "Capture-aware transcript",
+    description:
+      "Use strict transcript pass, but classify obvious cut-off recordings as capture_issue instead of false rejects.",
+    predict(row, context) {
+      if (likelyCaptureIssue(row, context)) return "capture_issue";
+      return row.comparison?.decision === "pass" ? "pass" : "hold";
+    },
+  },
+  {
     id: "long_range_transcript_rescue",
     label: "Long-range transcript rescue",
     description:
@@ -162,16 +289,20 @@ const POLICIES = [
     predict(row) {
       const features = rowFeatures(row);
       if (features.decision === "pass" || features.windowStatus === "complete") return "pass";
-      if (
-        features.expectedCount >= 60 &&
-        features.windowStatus === "needs_audio" &&
-        features.reachedEnd &&
-        features.windowConfidence >= 0.88 &&
-        features.score >= 0.77 &&
-        features.offTargetExtraCount <= 4
-      ) {
-        return "pass";
-      }
+      if (longRangeTranscriptRescue(row)) return "pass";
+      return "hold";
+    },
+  },
+  {
+    id: "capture_tail_long_rescue",
+    label: "Capture-aware tail + long rescue",
+    description:
+      "Hold cut-off recordings, rescue full long passages with strong window evidence, and rescue final-word ASR merges.",
+    predict(row, context) {
+      const features = rowFeatures(row);
+      if (likelyCaptureIssue(row, context)) return "capture_issue";
+      if (features.decision === "pass" || features.windowStatus === "complete") return "pass";
+      if (longRangeTranscriptRescue(row) || finalTailAsrMerge(row)) return "pass";
       return "hold";
     },
   },
@@ -241,37 +372,44 @@ function increment(object, key) {
   object[key ?? "unknown"] = (object[key ?? "unknown"] ?? 0) + 1;
 }
 
-function summarizePolicy(policy, rows, options) {
+function summarizePolicy(policy, rows, options, context) {
   let knownRows = 0;
+  let evaluatedRows = 0;
   let correct = 0;
   let correctRows = 0;
+  let evaluatedCorrectRows = 0;
   let rescuedCorrect = 0;
   let notPassRows = 0;
+  let captureIssueCount = 0;
   const matrix = {};
   const falsePasses = [];
   const falseRejects = [];
+  const captureIssues = [];
   const rescues = [];
   const byScope = {};
 
   for (const row of rows) {
     const actual = actualPassDecision(row);
     if (!actual) continue;
-    const prediction = policy.predict(row);
-    const predicted = prediction === "pass" ? "pass" : "not_pass";
+    const prediction = policy.predict(row, context);
+    const predicted =
+      prediction === "pass" ? "pass" : prediction === "capture_issue" ? "capture_issue" : "not_pass";
     const features = rowFeatures(row);
     const scope = features.scope;
     knownRows += 1;
     if (actual === "pass") correctRows += 1;
     if (actual === "not_pass") notPassRows += 1;
-    if (actual === predicted) correct += 1;
     increment(matrix, `${actual}:${predicted}`);
 
     if (!byScope[scope]) {
       byScope[scope] = {
         rows: 0,
+        evaluatedRows: 0,
         correct: 0,
         correctRows: 0,
+        evaluatedCorrectRows: 0,
         notPassRows: 0,
+        captureIssues: 0,
         falsePasses: 0,
         falseRejects: 0,
         rescuedCorrect: 0,
@@ -281,7 +419,28 @@ function summarizePolicy(policy, rows, options) {
     scopeStats.rows += 1;
     if (actual === "pass") scopeStats.correctRows += 1;
     if (actual === "not_pass") scopeStats.notPassRows += 1;
-    if (actual === predicted) scopeStats.correct += 1;
+
+    if (predicted === "capture_issue") {
+      captureIssueCount += 1;
+      scopeStats.captureIssues += 1;
+      captureIssues.push(compactRow(row, predicted));
+      if (actual === "not_pass") {
+        evaluatedRows += 1;
+        scopeStats.evaluatedRows += 1;
+        correct += 1;
+        scopeStats.correct += 1;
+      }
+      continue;
+    }
+
+    evaluatedRows += 1;
+    scopeStats.evaluatedRows += 1;
+    if (actual === "pass") evaluatedCorrectRows += 1;
+    if (actual === "pass") scopeStats.evaluatedCorrectRows += 1;
+    if (actual === predicted) {
+      correct += 1;
+      scopeStats.correct += 1;
+    }
 
     const strictPassed = row.comparison?.decision === "pass";
     if (actual === "pass" && predicted === "pass" && !strictPassed) {
@@ -299,7 +458,8 @@ function summarizePolicy(policy, rows, options) {
     }
   }
 
-  const falseRejectRate = correctRows === 0 ? null : falseRejects.length / correctRows;
+  const falseRejectRate =
+    evaluatedCorrectRows === 0 ? null : falseRejects.length / evaluatedCorrectRows;
   const passGate =
     falsePasses.length <= options.maxFalsePasses &&
     falseRejectRate !== null &&
@@ -310,10 +470,13 @@ function summarizePolicy(policy, rows, options) {
     label: policy.label,
     description: policy.description,
     knownRows,
+    evaluatedRows,
     correct,
-    accuracy: knownRows === 0 ? null : Number((correct / knownRows).toFixed(4)),
+    accuracy: evaluatedRows === 0 ? null : Number((correct / evaluatedRows).toFixed(4)),
     correctRows,
+    evaluatedCorrectRows,
     notPassRows,
+    captureIssueCount,
     rescuedCorrect,
     falsePassCount: falsePasses.length,
     falseRejectCount: falseRejects.length,
@@ -330,17 +493,21 @@ function summarizePolicy(policy, rows, options) {
           scope,
           {
             ...stats,
-            accuracy: stats.rows === 0 ? null : Number((stats.correct / stats.rows).toFixed(4)),
-            falseRejectRate:
-              stats.correctRows === 0
+            accuracy:
+              stats.evaluatedRows === 0
                 ? null
-                : Number((stats.falseRejects / stats.correctRows).toFixed(4)),
+                : Number((stats.correct / stats.evaluatedRows).toFixed(4)),
+            falseRejectRate:
+              stats.evaluatedCorrectRows === 0
+                ? null
+                : Number((stats.falseRejects / stats.evaluatedCorrectRows).toFixed(4)),
           },
         ])
         .sort(([a], [b]) => a.localeCompare(b)),
     ),
     falsePasses,
     falseRejects,
+    captureIssues,
     rescues,
   };
 }
@@ -385,6 +552,8 @@ function renderMarkdown(report) {
       [
         "Policy",
         "Accuracy",
+        "Evaluated",
+        "Capture",
         "Rescues",
         "False Pass",
         "False Reject",
@@ -394,6 +563,8 @@ function renderMarkdown(report) {
       report.policies.map((policy) => [
         policy.id,
         policy.accuracy ?? "",
+        policy.evaluatedRows,
+        policy.captureIssueCount,
         policy.rescuedCorrect,
         policy.falsePassCount,
         policy.falseRejectCount,
@@ -412,11 +583,23 @@ function renderMarkdown(report) {
     lines.push("");
     lines.push(
       renderTable(
-        ["Scope", "Rows", "Accuracy", "Rescues", "False Pass", "False Reject", "FR Rate"],
+        [
+          "Scope",
+          "Rows",
+          "Evaluated",
+          "Accuracy",
+          "Capture",
+          "Rescues",
+          "False Pass",
+          "False Reject",
+          "FR Rate",
+        ],
         Object.entries(policy.byScope).map(([scope, stats]) => [
           scope,
           stats.rows,
+          stats.evaluatedRows,
           stats.accuracy ?? "",
+          stats.captureIssues,
           stats.rescuedCorrect,
           stats.falsePasses,
           stats.falseRejects,
@@ -424,6 +607,10 @@ function renderMarkdown(report) {
         ]),
       ),
     );
+    lines.push("");
+    lines.push("Capture issues:");
+    lines.push("");
+    lines.push(renderCompactRows(policy.captureIssues));
     lines.push("");
     lines.push("False passes:");
     lines.push("");
@@ -442,6 +629,7 @@ function compactPolicy(policy) {
     ...policy,
     falsePasses: policy.falsePasses,
     falseRejects: policy.falseRejects,
+    captureIssues: policy.captureIssues,
     rescues: policy.rescues,
   };
 }
@@ -451,7 +639,7 @@ function printSummary(report) {
   console.log(`Rows: ${report.rowCount}`);
   for (const policy of report.policies) {
     console.log(
-      `- ${policy.id}: accuracy=${policy.accuracy} rescues=${policy.rescuedCorrect} falsePass=${policy.falsePassCount} falseReject=${policy.falseRejectCount} gate=${policy.passGate ? "pass" : "hold"}`,
+      `- ${policy.id}: accuracy=${policy.accuracy} evaluated=${policy.evaluatedRows}/${policy.knownRows} capture=${policy.captureIssueCount} rescues=${policy.rescuedCorrect} falsePass=${policy.falsePassCount} falseReject=${policy.falseRejectCount} gate=${policy.passGate ? "pass" : "hold"}`,
     );
   }
 }
@@ -462,6 +650,7 @@ async function main() {
   if (options.scope) rows = rows.filter((row) => rowScope(row) === options.scope);
   if (options.audioOnly) rows = rows.filter((row) => row.audio?.hasAudio);
   rows = rows.filter((row) => KNOWN_LABELS.has(row.labels?.effective ?? ""));
+  const context = buildPolicyContext(rows);
 
   const report = {
     generatedAt: new Date().toISOString(),
@@ -472,7 +661,10 @@ async function main() {
       audioOnly: options.audioOnly,
     },
     rowCount: rows.length,
-    policies: POLICIES.map((policy) => summarizePolicy(policy, rows, options)).map(compactPolicy),
+    context,
+    policies: POLICIES.map((policy) => summarizePolicy(policy, rows, options, context)).map(
+      compactPolicy,
+    ),
   };
 
   if (options.write) {

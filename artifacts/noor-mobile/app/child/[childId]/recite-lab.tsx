@@ -39,6 +39,11 @@ import {
   uploadReciteLabAudio,
   type ReciteLabAttemptLabel,
 } from "@/src/lib/recite-lab";
+import {
+  evaluateReciteLabVerifier,
+  RECITE_LAB_VERDICT_VERSION,
+  type ReciteLabVerifierStatus,
+} from "@/src/lib/recite-lab-verdict";
 import type { MushafViewMode } from "@/src/lib/settings";
 
 type CaptureState = "idle" | "starting" | "listening" | "stopping";
@@ -236,6 +241,17 @@ function getWindowStatusLabel(status: ReciteLabWindowStatus) {
   }
 }
 
+function getVerifierStatusLabel(status: ReciteLabVerifierStatus) {
+  switch (status) {
+    case "pass":
+      return "Pass";
+    case "capture_issue":
+      return "Retry";
+    case "hold":
+      return "Hold";
+  }
+}
+
 function describeIssue(issue: ReciteLabAlignmentOp) {
   if (issue.type === "missing") return `Missing ${issue.expected ?? ""}`.trim();
   if (issue.type === "extra") return `Extra ${issue.heard ?? ""}`.trim();
@@ -392,6 +408,20 @@ export default function ReciteLabScreen() {
   const phraseTracker = tokenAnalysis.phraseTracker;
   const windowTracker = tokenAnalysis.windowTracker;
   const comparison = tokenAnalysis.comparison;
+  const currentAudioDurationMs = diffMs(audioStartedAtRef.current, audioEndedAtRef.current);
+  const verifierVerdict = useMemo(
+    () =>
+      evaluateReciteLabVerifier({
+        expectedWords,
+        transcriptTokens,
+        comparison,
+        windowTracker,
+        timing: {
+          audioDurationMs: currentAudioDurationMs,
+        },
+      }),
+    [comparison, currentAudioDurationMs, expectedWords, transcriptTokens, windowTracker],
+  );
   const currentAttemptKey = useMemo(() => {
     const startedAt = captureStartedAtRef.current;
     const trimmedTranscript = transcript.trim();
@@ -606,19 +636,30 @@ export default function ReciteLabScreen() {
           if (saveMode === "manual") setSaveMessage("Already saved");
           return;
         }
+        const timing = buildTiming(clientSavedAt, clientRecordedAt);
+        const attemptVerifierVerdict = evaluateReciteLabVerifier({
+          expectedWords,
+          transcriptTokens,
+          comparison,
+          windowTracker,
+          timing: {
+            audioDurationMs: timing.audioDurationMs,
+          },
+        });
         const result = await saveReciteLabAttempt({
           algorithmVersions: {
             alignment: RECITE_LAB_ALIGNMENT_VERSION,
             liveProgress: RECITE_LAB_ALIGNMENT_VERSION,
             phraseTracker: RECITE_LAB_PHRASE_TRACKER_VERSION,
             windowTracker: RECITE_LAB_WINDOW_TRACKER_VERSION,
+            verifierVerdict: RECITE_LAB_VERDICT_VERSION,
             logging: "recite-lab-logging-v0.5",
           },
           label: attemptLabel,
           saveMode,
           clientRecordedAt,
           clientSavedAt,
-          timing: buildTiming(clientSavedAt, clientRecordedAt),
+          timing,
           route: {
             surahNumber,
             ayahStart,
@@ -649,6 +690,7 @@ export default function ReciteLabScreen() {
           phraseTracker,
           windowSnapshots: windowSnapshotsRef.current,
           windowTracker,
+          verifierVerdict: attemptVerifierVerdict,
           comparison,
           audioUri,
           recordingSupported,
@@ -954,6 +996,16 @@ export default function ReciteLabScreen() {
       styles.decisionBadgeTextRepeat,
     windowTracker.status === "off_track" && styles.decisionBadgeTextWrong,
   ];
+  const verifierBadgeStyle = [
+    styles.decisionBadge,
+    verifierVerdict.status === "pass" && styles.decisionBadgePass,
+    verifierVerdict.status === "capture_issue" && styles.decisionBadgeRepeat,
+  ];
+  const verifierBadgeTextStyle = [
+    styles.decisionBadgeText,
+    verifierVerdict.status === "pass" && styles.decisionBadgeTextPass,
+    verifierVerdict.status === "capture_issue" && styles.decisionBadgeTextRepeat,
+  ];
   const rangeLabel =
     endSurahNumber === surahNumber
       ? `${surahNumber} · ${formatAyahRange(ayahStart, ayahEnd)}`
@@ -1177,6 +1229,25 @@ export default function ReciteLabScreen() {
           <View style={styles.detailRow}>
             <Text style={styles.detailLabel}>Logging</Text>
             <Text style={styles.detailValue}>{loggingLabel}</Text>
+          </View>
+          <View style={styles.liveProgressCard}>
+            <View style={styles.comparisonHeader}>
+              <View>
+                <Text style={styles.comparisonTitle}>Verifier Policy</Text>
+                <Text style={styles.comparisonMeta}>
+                  {verifierVerdict.reason} | {formatPercent(verifierVerdict.confidence)}
+                </Text>
+              </View>
+              <View style={verifierBadgeStyle}>
+                <Text style={verifierBadgeTextStyle}>
+                  {getVerifierStatusLabel(verifierVerdict.status)}
+                </Text>
+              </View>
+            </View>
+            <Text style={styles.liveReason}>{verifierVerdict.message}</Text>
+            {verifierVerdict.rescuedBy ? (
+              <Text style={styles.comparisonNote}>Rescue: {verifierVerdict.rescuedBy}</Text>
+            ) : null}
           </View>
           <View style={styles.liveProgressCard}>
             <View style={styles.comparisonHeader}>

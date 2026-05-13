@@ -8,6 +8,7 @@ import type {
   ReciteLabWindowStatus,
   ReciteLabWindowTracker,
 } from "@/src/lib/recite-lab-align";
+import type { ReciteLabVerifierVerdict } from "@/src/lib/recite-lab-verdict";
 
 export type ReciteLabAttemptLabel =
   | "correct"
@@ -109,6 +110,7 @@ export type SaveReciteLabAttemptPayload = {
     pendingWindowCount: number;
   }>;
   windowTracker: ReciteLabWindowTracker;
+  verifierVerdict: ReciteLabVerifierVerdict;
   comparison: ReciteLabComparison;
   audioUri: string | null;
   recordingSupported: boolean;
