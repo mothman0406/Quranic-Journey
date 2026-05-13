@@ -274,6 +274,7 @@ function toDatasetRow(record, overrides, audioIndex) {
   const expectedWords = payload.expectedWords ?? [];
   const currentComparison = getCurrentComparison(comparison, expectedWords);
   const liveProgress = payload.liveProgress ?? {};
+  const phraseTracker = payload.phraseTracker ?? {};
   const route = payload.route ?? {};
   const expectedScope = payload.expectedScope ?? null;
   const timing = payload.timing ?? {};
@@ -342,6 +343,16 @@ function toDatasetRow(record, overrides, audioIndex) {
       holdReason: liveProgress.holdReason ?? null,
       firstBlockingEvent: summarizeIssue(liveProgress.firstBlockingEvent),
     },
+    phrase: {
+      status: phraseTracker.status ?? null,
+      holdReason: phraseTracker.holdReason ?? null,
+      acceptedCount: phraseTracker.acceptedCount ?? null,
+      confidence: phraseTracker.confidence ?? null,
+      missingBeforeCursorCount: phraseTracker.missingBeforeCursorCount ?? null,
+      extraBeforeCursorCount: phraseTracker.extraBeforeCursorCount ?? null,
+      substituteBeforeCursorCount: phraseTracker.substituteBeforeCursorCount ?? null,
+      recentPhrase: phraseTracker.recentPhrase ?? null,
+    },
     comparison: {
       decision,
       rawDecision,
@@ -381,8 +392,10 @@ function buildSummary(rows, totalRawAttempts) {
   const byDecision = {};
   const byRawDecision = {};
   const byExpectedScopeMode = {};
+  const byPhraseStatus = {};
   const audioByEffectiveLabel = {};
   const audioByDecision = {};
+  const audioByPhraseStatus = {};
   const audioLabelDecisionMatrix = {};
   const labelDecisionMatrix = {};
   const needsReview = [];
@@ -395,10 +408,12 @@ function buildSummary(rows, totalRawAttempts) {
     increment(byDecision, row.comparison.decision ?? "unknown");
     increment(byRawDecision, row.comparison.rawDecision ?? "unknown");
     increment(byExpectedScopeMode, row.expectedScope.mode ?? "unknown");
+    increment(byPhraseStatus, row.phrase.status ?? "unknown");
     if (row.audio.hasAudio) {
       withAudio += 1;
       increment(audioByEffectiveLabel, row.labels.effective);
       increment(audioByDecision, row.comparison.decision ?? "unknown");
+      increment(audioByPhraseStatus, row.phrase.status ?? "unknown");
       increment(
         audioLabelDecisionMatrix,
         `${row.labels.effective}:${row.comparison.decision ?? "unknown"}`,
@@ -443,8 +458,10 @@ function buildSummary(rows, totalRawAttempts) {
     byDecision,
     byRawDecision,
     byExpectedScopeMode,
+    byPhraseStatus,
     audioByEffectiveLabel,
     audioByDecision,
+    audioByPhraseStatus,
     audioLabelDecisionMatrix,
     labelDecisionMatrix,
     needsReview,
@@ -470,6 +487,9 @@ function toAudioManifestRow(row) {
     expectedWordCount: row.counts.expected,
     heardTokenCount: row.counts.heard,
     acceptedCount: row.counts.accepted,
+    phraseAcceptedCount: row.phrase.acceptedCount,
+    phraseStatus: row.phrase.status,
+    phraseConfidence: row.phrase.confidence,
     score: row.comparison.score,
     missingCount: row.counts.missing,
     extraCount: row.counts.extra,
@@ -525,7 +545,7 @@ function printTextSummary(summary, rows) {
     const shortId = row.id.slice(0, 8);
     const audio = row.audio.hasAudio ? "audio" : "no-audio";
     const override = row.labels.overridden ? `${row.labels.raw}->${row.labels.effective}` : row.labels.effective;
-    return `${shortId} ${override} scope=${row.expectedScope.label ?? row.expectedScope.mode} decision=${row.comparison.decision} live=${row.live.status} accepted=${row.counts.accepted}/${row.counts.expected} ${audio}`;
+    return `${shortId} ${override} scope=${row.expectedScope.label ?? row.expectedScope.mode} decision=${row.comparison.decision} phrase=${row.phrase.status} phraseAccepted=${row.phrase.acceptedCount}/${row.counts.expected} live=${row.live.status} ${audio}`;
   });
 
   console.log("Recite Lab analysis");
@@ -534,6 +554,7 @@ function printTextSummary(summary, rows) {
   console.log(`Overrides: ${summary.overridden}`);
   console.log(`Effective labels: ${JSON.stringify(summary.byEffectiveLabel)}`);
   console.log(`Decisions: ${JSON.stringify(summary.byDecision)}`);
+  console.log(`Phrase: ${JSON.stringify(summary.byPhraseStatus)}`);
   console.log(`Scopes: ${JSON.stringify(summary.byExpectedScopeMode)}`);
   console.log(`Audio labels: ${JSON.stringify(summary.audioByEffectiveLabel)}`);
   console.log("");

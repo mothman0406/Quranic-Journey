@@ -23,11 +23,14 @@ import { stripTashkeel, tokenize } from "@/src/lib/recite";
 import {
   compareReciteLabTokens,
   getReciteLabLiveProgress,
+  getReciteLabPhraseTracker,
   RECITE_LAB_ALIGNMENT_VERSION,
+  RECITE_LAB_PHRASE_TRACKER_VERSION,
   type ReciteLabAlignmentDecision,
   type ReciteLabAlignmentOp,
   type ReciteLabLiveEvent,
   type ReciteLabLiveStatus,
+  type ReciteLabPhraseStatus,
 } from "@/src/lib/recite-lab-align";
 import {
   getReciteLabLoggingBaseURL,
@@ -70,6 +73,19 @@ type LiveSnapshot = {
   skippedCount: number;
   mismatchCount: number;
   firstBlockingEventType: string | null;
+};
+
+type PhraseSnapshot = {
+  timestamp: string;
+  elapsedMs: number | null;
+  status: ReciteLabPhraseStatus;
+  acceptedCount: number;
+  expectedCount: number;
+  transcriptTokenCount: number;
+  nextExpectedWord: string | null;
+  nextExpectedIndex: number | null;
+  confidence: number;
+  recentPhrase: string;
 };
 
 const ATTEMPT_LABELS: Array<{ value: ReciteLabAttemptLabel; label: string }> = [
@@ -170,6 +186,23 @@ function getLiveStatusLabel(status: ReciteLabLiveStatus) {
   }
 }
 
+function getPhraseStatusLabel(status: ReciteLabPhraseStatus) {
+  switch (status) {
+    case "waiting":
+      return "Wait";
+    case "tracking":
+      return "Tracking";
+    case "complete":
+      return "Complete";
+    case "repeat":
+      return "Repeat";
+    case "uncertain":
+      return "Unclear";
+    case "off_track":
+      return "Off";
+  }
+}
+
 function describeIssue(issue: ReciteLabAlignmentOp) {
   if (issue.type === "missing") return `Missing ${issue.expected ?? ""}`.trim();
   if (issue.type === "extra") return `Extra ${issue.heard ?? ""}`.trim();
@@ -238,6 +271,7 @@ export default function ReciteLabScreen() {
   const [lastSavedAttemptKey, setLastSavedAttemptKey] = useState<string | null>(null);
   const [firstResultAt, setFirstResultAt] = useState<string | null>(null);
   const [liveSnapshotCount, setLiveSnapshotCount] = useState(0);
+  const [phraseSnapshotCount, setPhraseSnapshotCount] = useState(0);
   const captureStartedAtRef = useRef<string | null>(null);
   const recognitionStartedAtRef = useRef<string | null>(null);
   const audioStartedAtRef = useRef<string | null>(null);
@@ -247,6 +281,7 @@ export default function ReciteLabScreen() {
   const recognitionEndedAtRef = useRef<string | null>(null);
   const expectedWordsRef = useRef<string[]>([]);
   const liveSnapshotsRef = useRef<LiveSnapshot[]>([]);
+  const phraseSnapshotsRef = useRef<PhraseSnapshot[]>([]);
   const lastAutoSavedKeyRef = useRef<string | null>(null);
   const lastSavedAttemptKeyRef = useRef<string | null>(null);
 
@@ -312,6 +347,10 @@ export default function ReciteLabScreen() {
   );
   const liveProgress = useMemo(
     () => getReciteLabLiveProgress(expectedWords, transcriptTokens),
+    [expectedWords, transcriptTokens],
+  );
+  const phraseTracker = useMemo(
+    () => getReciteLabPhraseTracker(expectedWords, transcriptTokens),
     [expectedWords, transcriptTokens],
   );
   const comparison = useMemo(
@@ -415,6 +454,7 @@ export default function ReciteLabScreen() {
   function appendLiveSnapshot(rawTranscript: string, timestamp: string) {
     const snapshotTokens = tokenize(stripTashkeel(rawTranscript));
     const snapshotProgress = getReciteLabLiveProgress(expectedWordsRef.current, snapshotTokens);
+    const snapshotPhrase = getReciteLabPhraseTracker(expectedWordsRef.current, snapshotTokens);
     const snapshot: LiveSnapshot = {
       timestamp,
       elapsedMs: diffMs(captureStartedAtRef.current, timestamp),
@@ -431,19 +471,44 @@ export default function ReciteLabScreen() {
       firstBlockingEventType: snapshotProgress.firstBlockingEvent?.type ?? null,
     };
     const previous = liveSnapshotsRef.current[liveSnapshotsRef.current.length - 1] ?? null;
-    if (
+    const liveDuplicate =
       previous &&
       previous.status === snapshot.status &&
       previous.acceptedCount === snapshot.acceptedCount &&
       previous.transcriptTokenCount === snapshot.transcriptTokenCount &&
       previous.nextExpectedIndex === snapshot.nextExpectedIndex &&
-      previous.lastHeardWord === snapshot.lastHeardWord
+      previous.lastHeardWord === snapshot.lastHeardWord;
+    if (!liveDuplicate) {
+      liveSnapshotsRef.current = [...liveSnapshotsRef.current, snapshot].slice(-80);
+      setLiveSnapshotCount(liveSnapshotsRef.current.length);
+    }
+
+    const phraseSnapshot: PhraseSnapshot = {
+      timestamp,
+      elapsedMs: diffMs(captureStartedAtRef.current, timestamp),
+      status: snapshotPhrase.status,
+      acceptedCount: snapshotPhrase.acceptedCount,
+      expectedCount: snapshotPhrase.expectedCount,
+      transcriptTokenCount: snapshotTokens.length,
+      nextExpectedWord: snapshotPhrase.nextExpectedWord,
+      nextExpectedIndex: snapshotPhrase.nextExpectedIndex,
+      confidence: snapshotPhrase.confidence,
+      recentPhrase: snapshotPhrase.recentPhrase,
+    };
+    const previousPhrase =
+      phraseSnapshotsRef.current[phraseSnapshotsRef.current.length - 1] ?? null;
+    if (
+      previousPhrase &&
+      previousPhrase.status === phraseSnapshot.status &&
+      previousPhrase.acceptedCount === phraseSnapshot.acceptedCount &&
+      previousPhrase.transcriptTokenCount === phraseSnapshot.transcriptTokenCount &&
+      previousPhrase.nextExpectedIndex === phraseSnapshot.nextExpectedIndex
     ) {
       return;
     }
 
-    liveSnapshotsRef.current = [...liveSnapshotsRef.current, snapshot].slice(-80);
-    setLiveSnapshotCount(liveSnapshotsRef.current.length);
+    phraseSnapshotsRef.current = [...phraseSnapshotsRef.current, phraseSnapshot].slice(-80);
+    setPhraseSnapshotCount(phraseSnapshotsRef.current.length);
   }
 
   const saveCurrentAttempt = useCallback(
@@ -479,6 +544,7 @@ export default function ReciteLabScreen() {
           algorithmVersions: {
             alignment: RECITE_LAB_ALIGNMENT_VERSION,
             liveProgress: RECITE_LAB_ALIGNMENT_VERSION,
+            phraseTracker: RECITE_LAB_PHRASE_TRACKER_VERSION,
             logging: "recite-lab-logging-v0.5",
           },
           label: attemptLabel,
@@ -512,6 +578,8 @@ export default function ReciteLabScreen() {
           heardTokenCount: transcriptTokens.length,
           liveSnapshots: liveSnapshotsRef.current,
           liveProgress,
+          phraseSnapshots: phraseSnapshotsRef.current,
+          phraseTracker,
           comparison,
           audioUri,
           recordingSupported,
@@ -557,6 +625,7 @@ export default function ReciteLabScreen() {
       expectedScopeTarget,
       lastSavedAttemptKey,
       liveProgress,
+      phraseTracker,
       mushafViewMode,
       normalizedTranscript,
       recordingSupported,
@@ -656,6 +725,7 @@ export default function ReciteLabScreen() {
       setLastSavedAttemptKey(null);
       setFirstResultAt(null);
       setLiveSnapshotCount(0);
+      setPhraseSnapshotCount(0);
       recognitionStartedAtRef.current = null;
       audioStartedAtRef.current = null;
       audioEndedAtRef.current = null;
@@ -663,6 +733,7 @@ export default function ReciteLabScreen() {
       lastResultAtRef.current = null;
       recognitionEndedAtRef.current = null;
       liveSnapshotsRef.current = [];
+      phraseSnapshotsRef.current = [];
       lastAutoSavedKeyRef.current = null;
       lastSavedAttemptKeyRef.current = null;
       captureStartedAtRef.current = new Date().toISOString();
@@ -777,6 +848,22 @@ export default function ReciteLabScreen() {
     (liveProgress.status === "repeat" || liveProgress.status === "skip") &&
       styles.decisionBadgeTextRepeat,
     liveProgress.status === "mismatch" && styles.decisionBadgeTextWrong,
+  ];
+  const phraseBadgeStyle = [
+    styles.decisionBadge,
+    (phraseTracker.status === "tracking" || phraseTracker.status === "complete") &&
+      styles.decisionBadgePass,
+    (phraseTracker.status === "repeat" || phraseTracker.status === "uncertain") &&
+      styles.decisionBadgeRepeat,
+    phraseTracker.status === "off_track" && styles.decisionBadgeWrong,
+  ];
+  const phraseBadgeTextStyle = [
+    styles.decisionBadgeText,
+    (phraseTracker.status === "tracking" || phraseTracker.status === "complete") &&
+      styles.decisionBadgeTextPass,
+    (phraseTracker.status === "repeat" || phraseTracker.status === "uncertain") &&
+      styles.decisionBadgeTextRepeat,
+    phraseTracker.status === "off_track" && styles.decisionBadgeTextWrong,
   ];
   const rangeLabel =
     endSurahNumber === surahNumber
@@ -972,6 +1059,10 @@ export default function ReciteLabScreen() {
             <Text style={styles.detailValue}>{liveSnapshotCount}</Text>
           </View>
           <View style={styles.detailRow}>
+            <Text style={styles.detailLabel}>Phrase snaps</Text>
+            <Text style={styles.detailValue}>{phraseSnapshotCount}</Text>
+          </View>
+          <View style={styles.detailRow}>
             <Text style={styles.detailLabel}>Audio</Text>
             <Text style={styles.detailValue}>
               {audioUri ? "Captured locally" : recordingSupported ? "Armed" : "Transcript only"}
@@ -993,6 +1084,74 @@ export default function ReciteLabScreen() {
           <View style={styles.detailRow}>
             <Text style={styles.detailLabel}>Logging</Text>
             <Text style={styles.detailValue}>{loggingLabel}</Text>
+          </View>
+          <View style={styles.liveProgressCard}>
+            <View style={styles.comparisonHeader}>
+              <View>
+                <Text style={styles.comparisonTitle}>Phrase Tracker</Text>
+                <Text style={styles.comparisonMeta}>
+                  Cursor {phraseTracker.acceptedCount}/{phraseTracker.expectedCount} |{" "}
+                  {formatPercent(phraseTracker.confidence)}
+                </Text>
+              </View>
+              <View style={phraseBadgeStyle}>
+                <Text style={phraseBadgeTextStyle}>
+                  {getPhraseStatusLabel(phraseTracker.status)}
+                </Text>
+              </View>
+            </View>
+            <View style={styles.progressTrack}>
+              <View
+                style={[
+                  styles.progressFill,
+                  { width: `${Math.round(phraseTracker.progressRatio * 100)}%` },
+                ]}
+              />
+            </View>
+            <View style={styles.liveWordRow}>
+              <View style={styles.liveWordBlock}>
+                <Text style={styles.liveWordLabel}>Through</Text>
+                <Text style={styles.liveWordValue} numberOfLines={1}>
+                  {phraseTracker.acceptedThroughIndex
+                    ? `${phraseTracker.acceptedThroughIndex}. ${
+                        phraseTracker.acceptedThroughWord ?? ""
+                      }`
+                    : "-"}
+                </Text>
+              </View>
+              <View style={styles.liveWordBlock}>
+                <Text style={styles.liveWordLabel}>Next</Text>
+                <Text style={styles.liveWordValue} numberOfLines={1}>
+                  {phraseTracker.nextExpectedIndex
+                    ? `${phraseTracker.nextExpectedIndex}. ${
+                        phraseTracker.nextExpectedWord ?? ""
+                      }`
+                    : "-"}
+                </Text>
+              </View>
+            </View>
+            <Text style={styles.liveReason}>{phraseTracker.holdReason}</Text>
+            <View style={styles.comparisonStatsRow}>
+              <Text style={styles.comparisonStat}>
+                Missing {phraseTracker.missingBeforeCursorCount}
+              </Text>
+              <Text style={styles.comparisonStat}>
+                Extra {phraseTracker.extraBeforeCursorCount}
+              </Text>
+              <Text style={styles.comparisonStat}>
+                Fuzzy {phraseTracker.substituteBeforeCursorCount}
+              </Text>
+            </View>
+            {phraseTracker.leadingBismillahIgnored ? (
+              <Text style={styles.comparisonNote}>
+                Leading Bismillah ignored for phrase tracking.
+              </Text>
+            ) : null}
+            {phraseTracker.recentPhrase ? (
+              <Text style={styles.issueText} numberOfLines={1}>
+                {phraseTracker.recentPhrase}
+              </Text>
+            ) : null}
           </View>
           <View style={styles.liveProgressCard}>
             <View style={styles.comparisonHeader}>

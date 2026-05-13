@@ -1,6 +1,7 @@
 import { stripAlPrefix, wordMatches } from "@/src/lib/recite";
 
 export const RECITE_LAB_ALIGNMENT_VERSION = "recite-lab-align-v0.5";
+export const RECITE_LAB_PHRASE_TRACKER_VERSION = "recite-lab-phrase-v0.2";
 
 export type ReciteLabAlignmentDecision =
   | "pass"
@@ -58,6 +59,39 @@ export type ReciteLabLiveProgress = {
   holdReason: string;
   firstBlockingEvent: ReciteLabLiveEvent | null;
   recentEvents: ReciteLabLiveEvent[];
+};
+
+export type ReciteLabPhraseStatus =
+  | "waiting"
+  | "tracking"
+  | "complete"
+  | "repeat"
+  | "uncertain"
+  | "off_track";
+
+export type ReciteLabPhraseTracker = {
+  status: ReciteLabPhraseStatus;
+  acceptedCount: number;
+  expectedCount: number;
+  heardCount: number;
+  comparableHeardCount: number;
+  matchedCount: number;
+  missingBeforeCursorCount: number;
+  extraBeforeCursorCount: number;
+  substituteBeforeCursorCount: number;
+  repeatedExpectedExtraCount: number;
+  offTargetExtraCount: number;
+  leadingBismillahIgnored: boolean;
+  confidence: number;
+  progressRatio: number;
+  acceptedThroughWord: string | null;
+  acceptedThroughIndex: number | null;
+  nextExpectedWord: string | null;
+  nextExpectedIndex: number | null;
+  lastHeardWord: string | null;
+  recentPhrase: string;
+  holdReason: string;
+  firstIssues: ReciteLabAlignmentOp[];
 };
 
 export type ReciteLabComparison = {
@@ -479,6 +513,200 @@ export function getReciteLabLiveProgress(
     holdReason,
     firstBlockingEvent,
     recentEvents: events.slice(-5),
+  };
+}
+
+function getOpsThroughExpectedIndex(operations: ReciteLabAlignmentOp[], expectedIndex: number) {
+  return operations.filter((op) => {
+    if (op.expectedIndex !== undefined) return op.expectedIndex <= expectedIndex;
+    const heardIndex = op.heardIndex ?? Number.POSITIVE_INFINITY;
+    const firstLaterExpected = operations.find(
+      (candidate) =>
+        candidate.expectedIndex !== undefined &&
+        candidate.heardIndex !== undefined &&
+        candidate.heardIndex > heardIndex,
+    );
+    return (firstLaterExpected?.expectedIndex ?? expectedIndex) <= expectedIndex;
+  });
+}
+
+function decidePhraseStatus({
+  acceptedCount,
+  expectedCount,
+  comparableHeardCount,
+  confidence,
+  missingBeforeCursorCount,
+  substituteBeforeCursorCount,
+  extraBeforeCursorCount,
+  repeatedExpectedExtraCount,
+  offTargetExtraCount,
+}: {
+  acceptedCount: number;
+  expectedCount: number;
+  comparableHeardCount: number;
+  confidence: number;
+  missingBeforeCursorCount: number;
+  substituteBeforeCursorCount: number;
+  extraBeforeCursorCount: number;
+  repeatedExpectedExtraCount: number;
+  offTargetExtraCount: number;
+}): { status: ReciteLabPhraseStatus; holdReason: string } {
+  if (comparableHeardCount === 0) {
+    return { status: "waiting", holdReason: "Waiting for recitation." };
+  }
+
+  if (acceptedCount === 0 || confidence < 0.42) {
+    return { status: "off_track", holdReason: "The heard phrase is not anchored to this range yet." };
+  }
+
+  const issueCount =
+    missingBeforeCursorCount + substituteBeforeCursorCount + offTargetExtraCount;
+  const cursorComplete = acceptedCount >= expectedCount && expectedCount > 0;
+  const repeatDominant =
+    extraBeforeCursorCount > 0 &&
+    repeatedExpectedExtraCount >= Math.max(1, extraBeforeCursorCount - 1) &&
+    offTargetExtraCount <= 1 &&
+    confidence >= 0.72;
+
+  if (cursorComplete && confidence >= 0.78 && issueCount === 0) {
+    return repeatDominant
+      ? { status: "repeat", holdReason: "Completed, with repeated expected words in the transcript." }
+      : { status: "complete", holdReason: "Expected phrase reached." };
+  }
+
+  if (cursorComplete && confidence >= 0.78 && issueCount <= 2) {
+    return {
+      status: "uncertain",
+      holdReason: "Phrase reached, but missing or substituted words need another signal.",
+    };
+  }
+
+  if (repeatDominant) {
+    return { status: "repeat", holdReason: "Tracking through a repeated expected phrase." };
+  }
+
+  if (confidence >= 0.72) {
+    return { status: "tracking", holdReason: "Phrase context is strong enough to move the cursor." };
+  }
+
+  return {
+    status: "uncertain",
+    holdReason: "Some phrase context matched, but the signal is not clean yet.",
+  };
+}
+
+function getDirectPrefixAcceptedCount(expectedWords: string[], heardTokens: string[]) {
+  let acceptedCount = 0;
+  const limit = Math.min(expectedWords.length, heardTokens.length);
+  while (
+    acceptedCount < limit &&
+    liveWordsMatch(heardTokens[acceptedCount] ?? "", expectedWords[acceptedCount] ?? "")
+  ) {
+    acceptedCount += 1;
+  }
+  return acceptedCount;
+}
+
+export function getReciteLabPhraseTracker(
+  expectedWords: string[],
+  heardTokens: string[],
+): ReciteLabPhraseTracker {
+  const { leadingBismillahIgnored, tokens: comparableHeardTokens } = getComparableHeardTokens(
+    expectedWords,
+    heardTokens,
+  );
+  const operations = buildAlignment(expectedWords, comparableHeardTokens);
+  const matchedOps = operations.filter((op) => op.type === "match" && op.expectedIndex !== undefined);
+  const alignedAcceptedCount = Math.min(
+    expectedWords.length,
+    Math.max(0, ...matchedOps.map((op) => op.expectedIndex ?? 0)),
+  );
+  const alignedOpsThroughCursor = getOpsThroughExpectedIndex(operations, alignedAcceptedCount);
+  const alignedMatchedCount = alignedOpsThroughCursor.filter((op) => op.type === "match").length;
+  const alignedMissingCount = alignedOpsThroughCursor.filter((op) => op.type === "missing").length;
+  const alignedExtraCount = alignedOpsThroughCursor.filter((op) => op.type === "extra").length;
+  const alignedSubstituteCount = alignedOpsThroughCursor.filter(
+    (op) => op.type === "substitute",
+  ).length;
+  const alignedErrorWeight =
+    alignedMissingCount * 0.6 +
+    alignedSubstituteCount * 0.75 +
+    alignedExtraCount * 0.25;
+  const alignedConfidence =
+    alignedAcceptedCount === 0
+      ? 0
+      : Math.max(0, Math.min(1, (alignedMatchedCount - alignedErrorWeight) / alignedAcceptedCount));
+  const prefixAcceptedCount = getDirectPrefixAcceptedCount(expectedWords, comparableHeardTokens);
+  const usePrefixCursor =
+    prefixAcceptedCount > 0 &&
+    alignedAcceptedCount - comparableHeardTokens.length > 4 &&
+    alignedConfidence < 0.72;
+  const acceptedCount = usePrefixCursor ? prefixAcceptedCount : alignedAcceptedCount;
+  const opsThroughCursor = usePrefixCursor
+    ? Array.from({ length: acceptedCount }, (_, index) => ({
+        type: "match" as const,
+        expected: expectedWords[index],
+        heard: comparableHeardTokens[index],
+        expectedIndex: index + 1,
+        heardIndex: index + 1,
+      }))
+    : alignedOpsThroughCursor;
+  const matchedCount = opsThroughCursor.filter((op) => op.type === "match").length;
+  const missingBeforeCursorCount = opsThroughCursor.filter((op) => op.type === "missing").length;
+  const extraOps = opsThroughCursor.filter((op) => op.type === "extra");
+  const extraBeforeCursorCount = extraOps.length;
+  const substituteBeforeCursorCount = opsThroughCursor.filter(
+    (op) => op.type === "substitute",
+  ).length;
+  const repeatedExpectedExtraCount = extraOps.filter((op) =>
+    expectedWords.some((expected) => labWordsMatch(op.heard ?? "", expected)),
+  ).length;
+  const offTargetExtraCount = Math.max(0, extraBeforeCursorCount - repeatedExpectedExtraCount);
+  const errorWeight =
+    missingBeforeCursorCount * 0.6 +
+    substituteBeforeCursorCount * 0.75 +
+    offTargetExtraCount * 0.8 +
+    Math.max(0, extraBeforeCursorCount - offTargetExtraCount) * 0.25;
+  const confidence =
+    acceptedCount === 0
+      ? 0
+      : Math.max(0, Math.min(1, (matchedCount - errorWeight) / acceptedCount));
+  const { status, holdReason } = decidePhraseStatus({
+    acceptedCount,
+    expectedCount: expectedWords.length,
+    comparableHeardCount: comparableHeardTokens.length,
+    confidence,
+    missingBeforeCursorCount,
+    substituteBeforeCursorCount,
+    extraBeforeCursorCount,
+    repeatedExpectedExtraCount,
+    offTargetExtraCount,
+  });
+
+  return {
+    status,
+    acceptedCount,
+    expectedCount: expectedWords.length,
+    heardCount: heardTokens.length,
+    comparableHeardCount: comparableHeardTokens.length,
+    matchedCount,
+    missingBeforeCursorCount,
+    extraBeforeCursorCount,
+    substituteBeforeCursorCount,
+    repeatedExpectedExtraCount,
+    offTargetExtraCount,
+    leadingBismillahIgnored,
+    confidence,
+    progressRatio:
+      expectedWords.length === 0 ? 0 : Math.max(0, Math.min(1, acceptedCount / expectedWords.length)),
+    acceptedThroughWord: acceptedCount > 0 ? expectedWords[acceptedCount - 1] ?? null : null,
+    acceptedThroughIndex: acceptedCount > 0 ? acceptedCount : null,
+    nextExpectedWord: acceptedCount < expectedWords.length ? expectedWords[acceptedCount] ?? null : null,
+    nextExpectedIndex: acceptedCount < expectedWords.length ? acceptedCount + 1 : null,
+    lastHeardWord: comparableHeardTokens[comparableHeardTokens.length - 1] ?? null,
+    recentPhrase: comparableHeardTokens.slice(-8).join(" "),
+    holdReason,
+    firstIssues: opsThroughCursor.filter((op) => op.type !== "match").slice(0, 5),
   };
 }
 
