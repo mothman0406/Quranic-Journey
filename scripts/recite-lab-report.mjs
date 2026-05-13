@@ -39,7 +39,9 @@ function parseArgs(argv) {
 
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
-    if (arg === "--write") {
+    if (arg === "--") {
+      continue;
+    } else if (arg === "--write") {
       options.write = true;
     } else if (arg === "--json") {
       options.json = true;

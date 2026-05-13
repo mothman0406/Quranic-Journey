@@ -170,7 +170,8 @@ async function unsetOverride(args) {
 }
 
 async function main() {
-  const [command, ...args] = process.argv.slice(2);
+  const argv = process.argv.slice(2).filter((arg) => arg !== "--");
+  const [command, ...args] = argv;
   if (!command || command === "--help" || command === "-h") {
     console.log(usage());
     return;
