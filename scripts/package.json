@@ -6,6 +6,7 @@
   "scripts": {
     "recite-lab:analyze": "node ./analyze-recite-lab.mjs",
     "recite-lab:audio-experiment": "node ./recite-lab-audio-experiment.mjs",
+    "recite-lab:acoustic-similarity": "node ./recite-lab-acoustic-similarity.mjs",
     "hello": "tsx ./src/hello.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
