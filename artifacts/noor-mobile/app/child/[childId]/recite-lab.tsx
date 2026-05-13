@@ -21,16 +21,17 @@ import { clampMushafPage, getMushafPageForVerse } from "@/src/lib/mushaf";
 import { fetchSurahVerses, type ApiWord } from "@/src/lib/quran";
 import { stripTashkeel, tokenize } from "@/src/lib/recite";
 import {
-  compareReciteLabTokens,
+  analyzeReciteLabTokens,
   getReciteLabLiveProgress,
-  getReciteLabPhraseTracker,
   RECITE_LAB_ALIGNMENT_VERSION,
   RECITE_LAB_PHRASE_TRACKER_VERSION,
+  RECITE_LAB_WINDOW_TRACKER_VERSION,
   type ReciteLabAlignmentDecision,
   type ReciteLabAlignmentOp,
   type ReciteLabLiveEvent,
   type ReciteLabLiveStatus,
   type ReciteLabPhraseStatus,
+  type ReciteLabWindowStatus,
 } from "@/src/lib/recite-lab-align";
 import {
   getReciteLabLoggingBaseURL,
@@ -86,6 +87,21 @@ type PhraseSnapshot = {
   nextExpectedIndex: number | null;
   confidence: number;
   recentPhrase: string;
+};
+
+type WindowSnapshot = {
+  timestamp: string;
+  elapsedMs: number | null;
+  status: ReciteLabWindowStatus;
+  acceptedCount: number;
+  expectedCount: number;
+  transcriptTokenCount: number;
+  currentWindowIndex: number | null;
+  confidence: number;
+  passedWindowCount: number;
+  uncertainWindowCount: number;
+  blockedWindowCount: number;
+  pendingWindowCount: number;
 };
 
 const ATTEMPT_LABELS: Array<{ value: ReciteLabAttemptLabel; label: string }> = [
@@ -203,6 +219,23 @@ function getPhraseStatusLabel(status: ReciteLabPhraseStatus) {
   }
 }
 
+function getWindowStatusLabel(status: ReciteLabWindowStatus) {
+  switch (status) {
+    case "waiting":
+      return "Wait";
+    case "tracking":
+      return "Tracking";
+    case "complete":
+      return "Complete";
+    case "incomplete":
+      return "Partial";
+    case "needs_audio":
+      return "Audio";
+    case "off_track":
+      return "Off";
+  }
+}
+
 function describeIssue(issue: ReciteLabAlignmentOp) {
   if (issue.type === "missing") return `Missing ${issue.expected ?? ""}`.trim();
   if (issue.type === "extra") return `Extra ${issue.heard ?? ""}`.trim();
@@ -272,6 +305,7 @@ export default function ReciteLabScreen() {
   const [firstResultAt, setFirstResultAt] = useState<string | null>(null);
   const [liveSnapshotCount, setLiveSnapshotCount] = useState(0);
   const [phraseSnapshotCount, setPhraseSnapshotCount] = useState(0);
+  const [windowSnapshotCount, setWindowSnapshotCount] = useState(0);
   const captureStartedAtRef = useRef<string | null>(null);
   const recognitionStartedAtRef = useRef<string | null>(null);
   const audioStartedAtRef = useRef<string | null>(null);
@@ -282,6 +316,8 @@ export default function ReciteLabScreen() {
   const expectedWordsRef = useRef<string[]>([]);
   const liveSnapshotsRef = useRef<LiveSnapshot[]>([]);
   const phraseSnapshotsRef = useRef<PhraseSnapshot[]>([]);
+  const windowSnapshotsRef = useRef<WindowSnapshot[]>([]);
+  const lastSnapshotTranscriptRef = useRef<string | null>(null);
   const lastAutoSavedKeyRef = useRef<string | null>(null);
   const lastSavedAttemptKeyRef = useRef<string | null>(null);
 
@@ -349,14 +385,13 @@ export default function ReciteLabScreen() {
     () => getReciteLabLiveProgress(expectedWords, transcriptTokens),
     [expectedWords, transcriptTokens],
   );
-  const phraseTracker = useMemo(
-    () => getReciteLabPhraseTracker(expectedWords, transcriptTokens),
+  const tokenAnalysis = useMemo(
+    () => analyzeReciteLabTokens(expectedWords, transcriptTokens),
     [expectedWords, transcriptTokens],
   );
-  const comparison = useMemo(
-    () => compareReciteLabTokens(expectedWords, transcriptTokens),
-    [expectedWords, transcriptTokens],
-  );
+  const phraseTracker = tokenAnalysis.phraseTracker;
+  const windowTracker = tokenAnalysis.windowTracker;
+  const comparison = tokenAnalysis.comparison;
   const currentAttemptKey = useMemo(() => {
     const startedAt = captureStartedAtRef.current;
     const trimmedTranscript = transcript.trim();
@@ -452,9 +487,13 @@ export default function ReciteLabScreen() {
   }
 
   function appendLiveSnapshot(rawTranscript: string, timestamp: string) {
+    if (lastSnapshotTranscriptRef.current === rawTranscript) return;
+    lastSnapshotTranscriptRef.current = rawTranscript;
     const snapshotTokens = tokenize(stripTashkeel(rawTranscript));
     const snapshotProgress = getReciteLabLiveProgress(expectedWordsRef.current, snapshotTokens);
-    const snapshotPhrase = getReciteLabPhraseTracker(expectedWordsRef.current, snapshotTokens);
+    const snapshotAnalysis = analyzeReciteLabTokens(expectedWordsRef.current, snapshotTokens);
+    const snapshotPhrase = snapshotAnalysis.phraseTracker;
+    const snapshotWindow = snapshotAnalysis.windowTracker;
     const snapshot: LiveSnapshot = {
       timestamp,
       elapsedMs: diffMs(captureStartedAtRef.current, timestamp),
@@ -497,18 +536,45 @@ export default function ReciteLabScreen() {
     };
     const previousPhrase =
       phraseSnapshotsRef.current[phraseSnapshotsRef.current.length - 1] ?? null;
-    if (
+    const phraseDuplicate =
       previousPhrase &&
       previousPhrase.status === phraseSnapshot.status &&
       previousPhrase.acceptedCount === phraseSnapshot.acceptedCount &&
       previousPhrase.transcriptTokenCount === phraseSnapshot.transcriptTokenCount &&
-      previousPhrase.nextExpectedIndex === phraseSnapshot.nextExpectedIndex
+      previousPhrase.nextExpectedIndex === phraseSnapshot.nextExpectedIndex;
+    if (!phraseDuplicate) {
+      phraseSnapshotsRef.current = [...phraseSnapshotsRef.current, phraseSnapshot].slice(-80);
+      setPhraseSnapshotCount(phraseSnapshotsRef.current.length);
+    }
+
+    const windowSnapshot: WindowSnapshot = {
+      timestamp,
+      elapsedMs: diffMs(captureStartedAtRef.current, timestamp),
+      status: snapshotWindow.status,
+      acceptedCount: snapshotWindow.acceptedCount,
+      expectedCount: snapshotWindow.expectedCount,
+      transcriptTokenCount: snapshotTokens.length,
+      currentWindowIndex: snapshotWindow.currentWindow?.index ?? null,
+      confidence: snapshotWindow.confidence,
+      passedWindowCount: snapshotWindow.passedWindowCount,
+      uncertainWindowCount: snapshotWindow.uncertainWindowCount,
+      blockedWindowCount: snapshotWindow.blockedWindowCount,
+      pendingWindowCount: snapshotWindow.pendingWindowCount,
+    };
+    const previousWindow =
+      windowSnapshotsRef.current[windowSnapshotsRef.current.length - 1] ?? null;
+    if (
+      previousWindow &&
+      previousWindow.status === windowSnapshot.status &&
+      previousWindow.acceptedCount === windowSnapshot.acceptedCount &&
+      previousWindow.transcriptTokenCount === windowSnapshot.transcriptTokenCount &&
+      previousWindow.currentWindowIndex === windowSnapshot.currentWindowIndex
     ) {
       return;
     }
 
-    phraseSnapshotsRef.current = [...phraseSnapshotsRef.current, phraseSnapshot].slice(-80);
-    setPhraseSnapshotCount(phraseSnapshotsRef.current.length);
+    windowSnapshotsRef.current = [...windowSnapshotsRef.current, windowSnapshot].slice(-80);
+    setWindowSnapshotCount(windowSnapshotsRef.current.length);
   }
 
   const saveCurrentAttempt = useCallback(
@@ -545,6 +611,7 @@ export default function ReciteLabScreen() {
             alignment: RECITE_LAB_ALIGNMENT_VERSION,
             liveProgress: RECITE_LAB_ALIGNMENT_VERSION,
             phraseTracker: RECITE_LAB_PHRASE_TRACKER_VERSION,
+            windowTracker: RECITE_LAB_WINDOW_TRACKER_VERSION,
             logging: "recite-lab-logging-v0.5",
           },
           label: attemptLabel,
@@ -580,6 +647,8 @@ export default function ReciteLabScreen() {
           liveProgress,
           phraseSnapshots: phraseSnapshotsRef.current,
           phraseTracker,
+          windowSnapshots: windowSnapshotsRef.current,
+          windowTracker,
           comparison,
           audioUri,
           recordingSupported,
@@ -626,6 +695,7 @@ export default function ReciteLabScreen() {
       lastSavedAttemptKey,
       liveProgress,
       phraseTracker,
+      windowTracker,
       mushafViewMode,
       normalizedTranscript,
       recordingSupported,
@@ -726,6 +796,7 @@ export default function ReciteLabScreen() {
       setFirstResultAt(null);
       setLiveSnapshotCount(0);
       setPhraseSnapshotCount(0);
+      setWindowSnapshotCount(0);
       recognitionStartedAtRef.current = null;
       audioStartedAtRef.current = null;
       audioEndedAtRef.current = null;
@@ -734,6 +805,8 @@ export default function ReciteLabScreen() {
       recognitionEndedAtRef.current = null;
       liveSnapshotsRef.current = [];
       phraseSnapshotsRef.current = [];
+      windowSnapshotsRef.current = [];
+      lastSnapshotTranscriptRef.current = null;
       lastAutoSavedKeyRef.current = null;
       lastSavedAttemptKeyRef.current = null;
       captureStartedAtRef.current = new Date().toISOString();
@@ -864,6 +937,22 @@ export default function ReciteLabScreen() {
     (phraseTracker.status === "repeat" || phraseTracker.status === "uncertain") &&
       styles.decisionBadgeTextRepeat,
     phraseTracker.status === "off_track" && styles.decisionBadgeTextWrong,
+  ];
+  const windowBadgeStyle = [
+    styles.decisionBadge,
+    (windowTracker.status === "tracking" || windowTracker.status === "complete") &&
+      styles.decisionBadgePass,
+    (windowTracker.status === "incomplete" || windowTracker.status === "needs_audio") &&
+      styles.decisionBadgeRepeat,
+    windowTracker.status === "off_track" && styles.decisionBadgeWrong,
+  ];
+  const windowBadgeTextStyle = [
+    styles.decisionBadgeText,
+    (windowTracker.status === "tracking" || windowTracker.status === "complete") &&
+      styles.decisionBadgeTextPass,
+    (windowTracker.status === "incomplete" || windowTracker.status === "needs_audio") &&
+      styles.decisionBadgeTextRepeat,
+    windowTracker.status === "off_track" && styles.decisionBadgeTextWrong,
   ];
   const rangeLabel =
     endSurahNumber === surahNumber
@@ -1063,6 +1152,10 @@ export default function ReciteLabScreen() {
             <Text style={styles.detailValue}>{phraseSnapshotCount}</Text>
           </View>
           <View style={styles.detailRow}>
+            <Text style={styles.detailLabel}>Window snaps</Text>
+            <Text style={styles.detailValue}>{windowSnapshotCount}</Text>
+          </View>
+          <View style={styles.detailRow}>
             <Text style={styles.detailLabel}>Audio</Text>
             <Text style={styles.detailValue}>
               {audioUri ? "Captured locally" : recordingSupported ? "Armed" : "Transcript only"}
@@ -1084,6 +1177,78 @@ export default function ReciteLabScreen() {
           <View style={styles.detailRow}>
             <Text style={styles.detailLabel}>Logging</Text>
             <Text style={styles.detailValue}>{loggingLabel}</Text>
+          </View>
+          <View style={styles.liveProgressCard}>
+            <View style={styles.comparisonHeader}>
+              <View>
+                <Text style={styles.comparisonTitle}>Window Tracker</Text>
+                <Text style={styles.comparisonMeta}>
+                  Cursor {windowTracker.acceptedCount}/{windowTracker.expectedCount} |{" "}
+                  {formatPercent(windowTracker.confidence)}
+                </Text>
+              </View>
+              <View style={windowBadgeStyle}>
+                <Text style={windowBadgeTextStyle}>
+                  {getWindowStatusLabel(windowTracker.status)}
+                </Text>
+              </View>
+            </View>
+            <View style={styles.progressTrack}>
+              <View
+                style={[
+                  styles.progressFill,
+                  { width: `${Math.round(windowTracker.progressRatio * 100)}%` },
+                ]}
+              />
+            </View>
+            <View style={styles.liveWordRow}>
+              <View style={styles.liveWordBlock}>
+                <Text style={styles.liveWordLabel}>Through</Text>
+                <Text style={styles.liveWordValue} numberOfLines={1}>
+                  {windowTracker.acceptedThroughIndex
+                    ? `${windowTracker.acceptedThroughIndex}. ${
+                        windowTracker.acceptedThroughWord ?? ""
+                      }`
+                    : "-"}
+                </Text>
+              </View>
+              <View style={styles.liveWordBlock}>
+                <Text style={styles.liveWordLabel}>Next</Text>
+                <Text style={styles.liveWordValue} numberOfLines={1}>
+                  {windowTracker.nextExpectedIndex
+                    ? `${windowTracker.nextExpectedIndex}. ${
+                        windowTracker.nextExpectedWord ?? ""
+                      }`
+                    : "-"}
+                </Text>
+              </View>
+            </View>
+            <Text style={styles.liveReason}>{windowTracker.holdReason}</Text>
+            <View style={styles.comparisonStatsRow}>
+              <Text style={styles.comparisonStat}>Pass {windowTracker.passedWindowCount}</Text>
+              <Text style={styles.comparisonStat}>
+                Unclear {windowTracker.uncertainWindowCount}
+              </Text>
+              <Text style={styles.comparisonStat}>
+                Blocked {windowTracker.blockedWindowCount}
+              </Text>
+              <Text style={styles.comparisonStat}>
+                Pending {windowTracker.pendingWindowCount}
+              </Text>
+            </View>
+            {windowTracker.currentWindow ? (
+              <Text style={styles.issueText} numberOfLines={1}>
+                Window {windowTracker.currentWindow.index}:{" "}
+                {windowTracker.currentWindow.startExpectedIndex}-
+                {windowTracker.currentWindow.endExpectedIndex} ·{" "}
+                {windowTracker.currentWindow.decision}
+              </Text>
+            ) : null}
+            {windowTracker.leadingBismillahIgnored ? (
+              <Text style={styles.comparisonNote}>
+                Leading Bismillah ignored for window tracking.
+              </Text>
+            ) : null}
           </View>
           <View style={styles.liveProgressCard}>
             <View style={styles.comparisonHeader}>

@@ -12,6 +12,8 @@ const AUDIO_DIR = path.join(LAB_DIR, "audio");
 const ANALYSIS_DIR = path.join(LAB_DIR, "analysis");
 const AUDIO_EXTENSIONS = [".wav", ".audio", ".m4a", ".aac", ".mp3", ".caf"];
 const ANALYSIS_ALIGNMENT_VERSION = "recite-lab-align-v0.5";
+const ANALYSIS_WINDOW_VERSION = "recite-lab-window-v0.2";
+const WINDOW_TRACKER_SIZE = 10;
 
 function parseArgs(argv) {
   const options = {
@@ -254,6 +256,279 @@ function getCurrentComparison(comparison, expectedWords) {
   };
 }
 
+function clamp01(value) {
+  return Math.max(0, Math.min(1, value));
+}
+
+function getWindowDecision({
+  matchedCount,
+  missingCount,
+  extraCount,
+  substituteCount,
+  evaluatedExpectedCount,
+  score,
+}) {
+  if (evaluatedExpectedCount === 0) return "pending";
+
+  const matchedRatio = matchedCount / evaluatedExpectedCount;
+  const uncertainSubstituteLimit = Math.max(2, Math.ceil(evaluatedExpectedCount * 0.45));
+
+  if (
+    missingCount === 0 &&
+    extraCount <= 1 &&
+    substituteCount === 0 &&
+    score >= 0.82
+  ) {
+    return "pass";
+  }
+
+  if (
+    missingCount <= 1 &&
+    extraCount <= 2 &&
+    substituteCount <= uncertainSubstituteLimit &&
+    matchedRatio >= 0.42 &&
+    score >= 0.56
+  ) {
+    return "uncertain";
+  }
+
+  if (matchedRatio >= 0.55 && score >= 0.52) return "uncertain";
+  return "blocked";
+}
+
+function getWindowStatus({
+  comparableHeardCount,
+  expectedCount,
+  acceptedCount,
+  confidence,
+  passedWindowCount,
+  uncertainWindowCount,
+  blockedWindowCount,
+  pendingWindowCount,
+}) {
+  if (comparableHeardCount === 0) {
+    return { status: "waiting", holdReason: "Waiting for recitation." };
+  }
+
+  const trackableWindowCount = passedWindowCount + uncertainWindowCount;
+  const progressRatio = expectedCount === 0 ? 0 : acceptedCount / expectedCount;
+  if (trackableWindowCount === 0 || confidence < 0.35) {
+    return {
+      status: "off_track",
+      holdReason: "No reliable window is anchored to this passage yet.",
+    };
+  }
+
+  if (acceptedCount >= expectedCount && expectedCount > 0) {
+    if (blockedWindowCount > 0 || uncertainWindowCount > 0) {
+      return {
+        status: "needs_audio",
+        holdReason: "Reached the end, but one or more windows need another signal.",
+      };
+    }
+
+    return { status: "complete", holdReason: "All windows verified cleanly." };
+  }
+
+  if (pendingWindowCount > 0 && blockedWindowCount === 0) {
+    return {
+      status: "incomplete",
+      holdReason: "Tracking is clean so far, but the capture ended before the range did.",
+    };
+  }
+
+  if (pendingWindowCount > 0) {
+    return {
+      status: "incomplete",
+      holdReason: "Tracking reached part of the range, but the capture ended before the rest.",
+    };
+  }
+
+  if (acceptedCount < expectedCount && blockedWindowCount === 0) {
+    return {
+      status: "incomplete",
+      holdReason: "Tracking is clean so far, but the expected range is not complete yet.",
+    };
+  }
+
+  if (progressRatio >= 0.75 && blockedWindowCount > 0) {
+    return {
+      status: "needs_audio",
+      holdReason: "The range was mostly reached, but the transcript windows need another signal.",
+    };
+  }
+
+  if (blockedWindowCount > Math.max(1, trackableWindowCount)) {
+    return {
+      status: "off_track",
+      holdReason: "Too many windows disagree with the expected passage.",
+    };
+  }
+
+  return {
+    status: "tracking",
+    holdReason: "Window context is strong enough to move the cursor.",
+  };
+}
+
+function getWindowTracker(comparison, expectedWords, transcriptTokens) {
+  const operations = Array.isArray(comparison.operations) ? comparison.operations : [];
+  const comparableHeardCount = comparison.comparableHeardCount ?? transcriptTokens.length;
+  const expectedCount = expectedWords.length;
+  if (operations.length === 0) {
+    return {
+      status: comparableHeardCount > 0 ? "off_track" : "waiting",
+      holdReason: comparableHeardCount > 0 ? "No alignment operations were saved." : "Waiting for recitation.",
+      acceptedCount: 0,
+      expectedCount,
+      heardCount: transcriptTokens.length,
+      comparableHeardCount,
+      windowSize: WINDOW_TRACKER_SIZE,
+      windowCount: expectedCount === 0 ? 0 : Math.ceil(expectedCount / WINDOW_TRACKER_SIZE),
+      passedWindowCount: 0,
+      uncertainWindowCount: 0,
+      blockedWindowCount: 0,
+      pendingWindowCount: expectedCount === 0 ? 0 : Math.ceil(expectedCount / WINDOW_TRACKER_SIZE),
+      confidence: 0,
+      progressRatio: 0,
+      currentWindow: null,
+      version: ANALYSIS_WINDOW_VERSION,
+    };
+  }
+
+  const lastEvidenceIndex = Math.max(
+    0,
+    ...operations
+      .filter((op) => op.expectedIndex !== undefined && (op.type === "match" || op.type === "substitute"))
+      .map((op) => op.expectedIndex ?? 0),
+  );
+  const windowCount = expectedCount === 0 ? 0 : Math.ceil(expectedCount / WINDOW_TRACKER_SIZE);
+  const buckets = Array.from({ length: windowCount }, (_, index) => ({
+    index,
+    startExpectedIndex: index * WINDOW_TRACKER_SIZE + 1,
+    endExpectedIndex: Math.min(expectedCount, (index + 1) * WINDOW_TRACKER_SIZE),
+    matchedCount: 0,
+    missingCount: 0,
+    extraCount: 0,
+    substituteCount: 0,
+  }));
+  let lastAnchoredExpectedIndex = 0;
+
+  for (const op of operations) {
+    const opExpectedIndex = op.expectedIndex ?? null;
+    const anchorExpectedIndex =
+      opExpectedIndex ?? Math.max(1, Math.min(expectedCount, lastAnchoredExpectedIndex || 1));
+    const bucketIndex = Math.floor((anchorExpectedIndex - 1) / WINDOW_TRACKER_SIZE);
+    const bucket = buckets[bucketIndex];
+    if (!bucket) continue;
+
+    if (op.type === "match") {
+      bucket.matchedCount += 1;
+    } else if (op.type === "substitute") {
+      bucket.substituteCount += 1;
+    } else if (op.type === "extra") {
+      bucket.extraCount += 1;
+    } else if ((op.expectedIndex ?? 0) <= lastEvidenceIndex) {
+      bucket.missingCount += 1;
+    }
+
+    if (opExpectedIndex !== null) {
+      lastAnchoredExpectedIndex = opExpectedIndex;
+    }
+  }
+
+  const windows = buckets.map((bucket) => {
+    const reachedWindow = lastEvidenceIndex >= bucket.startExpectedIndex;
+    const reachedThrough = reachedWindow
+      ? Math.min(bucket.endExpectedIndex, lastEvidenceIndex)
+      : bucket.startExpectedIndex - 1;
+    const evaluatedExpectedCount = reachedWindow
+      ? Math.max(1, reachedThrough - bucket.startExpectedIndex + 1)
+      : 0;
+    const errorWeight =
+      bucket.missingCount * 0.85 + bucket.substituteCount * 0.45 + bucket.extraCount * 0.35;
+    const score =
+      evaluatedExpectedCount === 0
+        ? 0
+        : clamp01(1 - errorWeight / Math.max(1, evaluatedExpectedCount));
+    const decision = reachedWindow
+      ? getWindowDecision({
+          matchedCount: bucket.matchedCount,
+          missingCount: bucket.missingCount,
+          extraCount: bucket.extraCount,
+          substituteCount: bucket.substituteCount,
+          evaluatedExpectedCount,
+          score,
+        })
+      : "pending";
+
+    return {
+      index: bucket.index + 1,
+      startExpectedIndex: bucket.startExpectedIndex,
+      endExpectedIndex: bucket.endExpectedIndex,
+      decision,
+      score,
+      matchedCount: bucket.matchedCount,
+      missingCount: bucket.missingCount,
+      extraCount: bucket.extraCount,
+      substituteCount: bucket.substituteCount,
+      evaluatedExpectedCount,
+    };
+  });
+
+  const passedWindowCount = windows.filter((window) => window.decision === "pass").length;
+  const uncertainWindowCount = windows.filter((window) => window.decision === "uncertain").length;
+  const blockedWindowCount = windows.filter((window) => window.decision === "blocked").length;
+  const pendingWindowCount = windows.filter((window) => window.decision === "pending").length;
+  const acceptedCount = Math.min(expectedCount, Math.max(0, lastEvidenceIndex));
+  const evaluatedWindows = windows.filter((window) => window.decision !== "pending");
+  const confidence =
+    evaluatedWindows.length === 0
+      ? 0
+      : clamp01(
+          evaluatedWindows.reduce((sum, window) => sum + window.score, 0) /
+            evaluatedWindows.length,
+        );
+  const currentWindow =
+    windows.find(
+      (window) =>
+        acceptedCount >= window.startExpectedIndex && acceptedCount <= window.endExpectedIndex,
+    ) ??
+    windows.find((window) => window.decision === "pending") ??
+    windows[windows.length - 1] ??
+    null;
+  const { status, holdReason } = getWindowStatus({
+    comparableHeardCount,
+    expectedCount,
+    acceptedCount,
+    confidence,
+    passedWindowCount,
+    uncertainWindowCount,
+    blockedWindowCount,
+    pendingWindowCount,
+  });
+
+  return {
+    status,
+    holdReason,
+    acceptedCount,
+    expectedCount,
+    heardCount: transcriptTokens.length,
+    comparableHeardCount,
+    windowSize: WINDOW_TRACKER_SIZE,
+    windowCount,
+    passedWindowCount,
+    uncertainWindowCount,
+    blockedWindowCount,
+    pendingWindowCount,
+    confidence,
+    progressRatio: expectedCount === 0 ? 0 : clamp01(acceptedCount / expectedCount),
+    currentWindow,
+    windows,
+    version: ANALYSIS_WINDOW_VERSION,
+  };
+}
+
 function summarizeIssue(issue) {
   if (!issue || typeof issue !== "object") return null;
   return {
@@ -275,6 +550,12 @@ function toDatasetRow(record, overrides, audioIndex) {
   const currentComparison = getCurrentComparison(comparison, expectedWords);
   const liveProgress = payload.liveProgress ?? {};
   const phraseTracker = payload.phraseTracker ?? {};
+  const usePayloadWindowTracker =
+    payload.windowTracker?.status &&
+    payload.algorithmVersions?.windowTracker === ANALYSIS_WINDOW_VERSION;
+  const windowTracker = usePayloadWindowTracker
+    ? { ...payload.windowTracker, version: "payload" }
+    : getWindowTracker(comparison, expectedWords, payload.transcriptTokens ?? []);
   const route = payload.route ?? {};
   const expectedScope = payload.expectedScope ?? null;
   const timing = payload.timing ?? {};
@@ -353,6 +634,19 @@ function toDatasetRow(record, overrides, audioIndex) {
       substituteBeforeCursorCount: phraseTracker.substituteBeforeCursorCount ?? null,
       recentPhrase: phraseTracker.recentPhrase ?? null,
     },
+    window: {
+      status: windowTracker.status ?? null,
+      holdReason: windowTracker.holdReason ?? null,
+      acceptedCount: windowTracker.acceptedCount ?? null,
+      confidence: windowTracker.confidence ?? null,
+      windowCount: windowTracker.windowCount ?? null,
+      passedWindowCount: windowTracker.passedWindowCount ?? null,
+      uncertainWindowCount: windowTracker.uncertainWindowCount ?? null,
+      blockedWindowCount: windowTracker.blockedWindowCount ?? null,
+      pendingWindowCount: windowTracker.pendingWindowCount ?? null,
+      currentWindow: windowTracker.currentWindow ?? null,
+      version: windowTracker.version ?? null,
+    },
     comparison: {
       decision,
       rawDecision,
@@ -393,9 +687,11 @@ function buildSummary(rows, totalRawAttempts) {
   const byRawDecision = {};
   const byExpectedScopeMode = {};
   const byPhraseStatus = {};
+  const byWindowStatus = {};
   const audioByEffectiveLabel = {};
   const audioByDecision = {};
   const audioByPhraseStatus = {};
+  const audioByWindowStatus = {};
   const audioLabelDecisionMatrix = {};
   const labelDecisionMatrix = {};
   const needsReview = [];
@@ -409,11 +705,13 @@ function buildSummary(rows, totalRawAttempts) {
     increment(byRawDecision, row.comparison.rawDecision ?? "unknown");
     increment(byExpectedScopeMode, row.expectedScope.mode ?? "unknown");
     increment(byPhraseStatus, row.phrase.status ?? "unknown");
+    increment(byWindowStatus, row.window.status ?? "unknown");
     if (row.audio.hasAudio) {
       withAudio += 1;
       increment(audioByEffectiveLabel, row.labels.effective);
       increment(audioByDecision, row.comparison.decision ?? "unknown");
       increment(audioByPhraseStatus, row.phrase.status ?? "unknown");
+      increment(audioByWindowStatus, row.window.status ?? "unknown");
       increment(
         audioLabelDecisionMatrix,
         `${row.labels.effective}:${row.comparison.decision ?? "unknown"}`,
@@ -459,9 +757,11 @@ function buildSummary(rows, totalRawAttempts) {
     byRawDecision,
     byExpectedScopeMode,
     byPhraseStatus,
+    byWindowStatus,
     audioByEffectiveLabel,
     audioByDecision,
     audioByPhraseStatus,
+    audioByWindowStatus,
     audioLabelDecisionMatrix,
     labelDecisionMatrix,
     needsReview,
@@ -490,6 +790,14 @@ function toAudioManifestRow(row) {
     phraseAcceptedCount: row.phrase.acceptedCount,
     phraseStatus: row.phrase.status,
     phraseConfidence: row.phrase.confidence,
+    windowAcceptedCount: row.window.acceptedCount,
+    windowStatus: row.window.status,
+    windowConfidence: row.window.confidence,
+    windowCount: row.window.windowCount,
+    windowPassedCount: row.window.passedWindowCount,
+    windowUncertainCount: row.window.uncertainWindowCount,
+    windowBlockedCount: row.window.blockedWindowCount,
+    windowPendingCount: row.window.pendingWindowCount,
     score: row.comparison.score,
     missingCount: row.counts.missing,
     extraCount: row.counts.extra,
@@ -545,7 +853,7 @@ function printTextSummary(summary, rows) {
     const shortId = row.id.slice(0, 8);
     const audio = row.audio.hasAudio ? "audio" : "no-audio";
     const override = row.labels.overridden ? `${row.labels.raw}->${row.labels.effective}` : row.labels.effective;
-    return `${shortId} ${override} scope=${row.expectedScope.label ?? row.expectedScope.mode} decision=${row.comparison.decision} phrase=${row.phrase.status} phraseAccepted=${row.phrase.acceptedCount}/${row.counts.expected} live=${row.live.status} ${audio}`;
+    return `${shortId} ${override} scope=${row.expectedScope.label ?? row.expectedScope.mode} decision=${row.comparison.decision} window=${row.window.status} windowAccepted=${row.window.acceptedCount}/${row.counts.expected} phrase=${row.phrase.status} live=${row.live.status} ${audio}`;
   });
 
   console.log("Recite Lab analysis");
@@ -555,6 +863,7 @@ function printTextSummary(summary, rows) {
   console.log(`Effective labels: ${JSON.stringify(summary.byEffectiveLabel)}`);
   console.log(`Decisions: ${JSON.stringify(summary.byDecision)}`);
   console.log(`Phrase: ${JSON.stringify(summary.byPhraseStatus)}`);
+  console.log(`Window: ${JSON.stringify(summary.byWindowStatus)}`);
   console.log(`Scopes: ${JSON.stringify(summary.byExpectedScopeMode)}`);
   console.log(`Audio labels: ${JSON.stringify(summary.audioByEffectiveLabel)}`);
   console.log("");

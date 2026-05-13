@@ -2,6 +2,7 @@ import { stripAlPrefix, wordMatches } from "@/src/lib/recite";
 
 export const RECITE_LAB_ALIGNMENT_VERSION = "recite-lab-align-v0.5";
 export const RECITE_LAB_PHRASE_TRACKER_VERSION = "recite-lab-phrase-v0.2";
+export const RECITE_LAB_WINDOW_TRACKER_VERSION = "recite-lab-window-v0.2";
 
 export type ReciteLabAlignmentDecision =
   | "pass"
@@ -94,6 +95,56 @@ export type ReciteLabPhraseTracker = {
   firstIssues: ReciteLabAlignmentOp[];
 };
 
+export type ReciteLabWindowStatus =
+  | "waiting"
+  | "tracking"
+  | "complete"
+  | "incomplete"
+  | "needs_audio"
+  | "off_track";
+
+export type ReciteLabWindowDecision = "pass" | "uncertain" | "blocked" | "pending";
+
+export type ReciteLabWindowSummary = {
+  index: number;
+  startExpectedIndex: number;
+  endExpectedIndex: number;
+  startWord: string | null;
+  endWord: string | null;
+  decision: ReciteLabWindowDecision;
+  score: number;
+  matchedCount: number;
+  missingCount: number;
+  extraCount: number;
+  substituteCount: number;
+  heardEvidenceCount: number;
+  evaluatedExpectedCount: number;
+};
+
+export type ReciteLabWindowTracker = {
+  status: ReciteLabWindowStatus;
+  acceptedCount: number;
+  expectedCount: number;
+  heardCount: number;
+  comparableHeardCount: number;
+  windowSize: number;
+  windowCount: number;
+  passedWindowCount: number;
+  uncertainWindowCount: number;
+  blockedWindowCount: number;
+  pendingWindowCount: number;
+  leadingBismillahIgnored: boolean;
+  confidence: number;
+  progressRatio: number;
+  acceptedThroughWord: string | null;
+  acceptedThroughIndex: number | null;
+  nextExpectedWord: string | null;
+  nextExpectedIndex: number | null;
+  currentWindow: ReciteLabWindowSummary | null;
+  windows: ReciteLabWindowSummary[];
+  holdReason: string;
+};
+
 export type ReciteLabComparison = {
   decision: ReciteLabAlignmentDecision;
   score: number;
@@ -113,6 +164,12 @@ export type ReciteLabComparison = {
   firstIssues: ReciteLabAlignmentOp[];
 };
 
+export type ReciteLabTokenAnalysis = {
+  comparison: ReciteLabComparison;
+  phraseTracker: ReciteLabPhraseTracker;
+  windowTracker: ReciteLabWindowTracker;
+};
+
 type Cell = {
   cost: number;
   op: ReciteLabAlignmentOpType | "start";
@@ -120,6 +177,7 @@ type Cell = {
 
 const BISMILLAH_TOKENS = ["بسم", "الله", "الرحمان", "الرحيم"];
 const LIVE_LOOKAHEAD_WORDS = 3;
+const WINDOW_TRACKER_SIZE = 10;
 const LIVE_SPEECH_EQUIVALENTS: Record<string, readonly string[]> = {
   نباني: ["نبهني"],
   نبهني: ["نباني"],
@@ -707,6 +765,647 @@ export function getReciteLabPhraseTracker(
     recentPhrase: comparableHeardTokens.slice(-8).join(" "),
     holdReason,
     firstIssues: opsThroughCursor.filter((op) => op.type !== "match").slice(0, 5),
+  };
+}
+
+function clamp01(value: number) {
+  return Math.max(0, Math.min(1, value));
+}
+
+function getWindowDecision({
+  matchedCount,
+  missingCount,
+  extraCount,
+  substituteCount,
+  evaluatedExpectedCount,
+  score,
+}: {
+  matchedCount: number;
+  missingCount: number;
+  extraCount: number;
+  substituteCount: number;
+  evaluatedExpectedCount: number;
+  score: number;
+}): ReciteLabWindowDecision {
+  if (evaluatedExpectedCount === 0) return "pending";
+
+  const matchedRatio = matchedCount / evaluatedExpectedCount;
+  const uncertainSubstituteLimit = Math.max(2, Math.ceil(evaluatedExpectedCount * 0.45));
+
+  if (
+    missingCount === 0 &&
+    extraCount <= 1 &&
+    substituteCount === 0 &&
+    score >= 0.82
+  ) {
+    return "pass";
+  }
+
+  if (
+    missingCount <= 1 &&
+    extraCount <= 2 &&
+    substituteCount <= uncertainSubstituteLimit &&
+    matchedRatio >= 0.42 &&
+    score >= 0.56
+  ) {
+    return "uncertain";
+  }
+
+  if (matchedRatio >= 0.55 && score >= 0.52) return "uncertain";
+  return "blocked";
+}
+
+function getWindowStatus({
+  comparableHeardCount,
+  expectedCount,
+  acceptedCount,
+  confidence,
+  passedWindowCount,
+  uncertainWindowCount,
+  blockedWindowCount,
+  pendingWindowCount,
+}: {
+  comparableHeardCount: number;
+  expectedCount: number;
+  acceptedCount: number;
+  confidence: number;
+  passedWindowCount: number;
+  uncertainWindowCount: number;
+  blockedWindowCount: number;
+  pendingWindowCount: number;
+}): { status: ReciteLabWindowStatus; holdReason: string } {
+  if (comparableHeardCount === 0) {
+    return { status: "waiting", holdReason: "Waiting for recitation." };
+  }
+
+  const trackableWindowCount = passedWindowCount + uncertainWindowCount;
+  const progressRatio = expectedCount === 0 ? 0 : acceptedCount / expectedCount;
+  if (trackableWindowCount === 0 || confidence < 0.35) {
+    return {
+      status: "off_track",
+      holdReason: "No reliable window is anchored to this passage yet.",
+    };
+  }
+
+  if (acceptedCount >= expectedCount && expectedCount > 0) {
+    if (blockedWindowCount > 0 || uncertainWindowCount > 0) {
+      return {
+        status: "needs_audio",
+        holdReason: "Reached the end, but one or more windows need another signal.",
+      };
+    }
+
+    return { status: "complete", holdReason: "All windows verified cleanly." };
+  }
+
+  if (pendingWindowCount > 0 && blockedWindowCount === 0) {
+    return {
+      status: "incomplete",
+      holdReason: "Tracking is clean so far, but the capture ended before the range did.",
+    };
+  }
+
+  if (pendingWindowCount > 0) {
+    return {
+      status: "incomplete",
+      holdReason: "Tracking reached part of the range, but the capture ended before the rest.",
+    };
+  }
+
+  if (acceptedCount < expectedCount && blockedWindowCount === 0) {
+    return {
+      status: "incomplete",
+      holdReason: "Tracking is clean so far, but the expected range is not complete yet.",
+    };
+  }
+
+  if (progressRatio >= 0.75 && blockedWindowCount > 0) {
+    return {
+      status: "needs_audio",
+      holdReason: "The range was mostly reached, but the transcript windows need another signal.",
+    };
+  }
+
+  if (blockedWindowCount > Math.max(1, trackableWindowCount)) {
+    return {
+      status: "off_track",
+      holdReason: "Too many windows disagree with the expected passage.",
+    };
+  }
+
+  return {
+    status: "tracking",
+    holdReason: "Window context is strong enough to move the cursor.",
+  };
+}
+
+export function getReciteLabWindowTracker(
+  expectedWords: string[],
+  heardTokens: string[],
+): ReciteLabWindowTracker {
+  const { leadingBismillahIgnored, tokens: comparableHeardTokens } = getComparableHeardTokens(
+    expectedWords,
+    heardTokens,
+  );
+  const operations = buildAlignment(expectedWords, comparableHeardTokens);
+  const lastEvidenceIndex = Math.max(
+    0,
+    ...operations
+      .filter((op) => op.expectedIndex !== undefined && (op.type === "match" || op.type === "substitute"))
+      .map((op) => op.expectedIndex ?? 0),
+  );
+  const windowCount =
+    expectedWords.length === 0 ? 0 : Math.ceil(expectedWords.length / WINDOW_TRACKER_SIZE);
+  const buckets = Array.from({ length: windowCount }, (_, index) => ({
+    index,
+    startExpectedIndex: index * WINDOW_TRACKER_SIZE + 1,
+    endExpectedIndex: Math.min(expectedWords.length, (index + 1) * WINDOW_TRACKER_SIZE),
+    matchedCount: 0,
+    missingCount: 0,
+    extraCount: 0,
+    substituteCount: 0,
+  }));
+  let lastAnchoredExpectedIndex = 0;
+
+  for (const op of operations) {
+    const opExpectedIndex = op.expectedIndex ?? null;
+    const anchorExpectedIndex =
+      opExpectedIndex ??
+      Math.max(1, Math.min(expectedWords.length, lastAnchoredExpectedIndex || 1));
+    const bucketIndex = Math.floor((anchorExpectedIndex - 1) / WINDOW_TRACKER_SIZE);
+    const bucket = buckets[bucketIndex];
+    if (!bucket) continue;
+
+    if (op.type === "match") {
+      bucket.matchedCount += 1;
+    } else if (op.type === "substitute") {
+      bucket.substituteCount += 1;
+    } else if (op.type === "extra") {
+      bucket.extraCount += 1;
+    } else if ((op.expectedIndex ?? 0) <= lastEvidenceIndex) {
+      bucket.missingCount += 1;
+    }
+
+    if (opExpectedIndex !== null) {
+      lastAnchoredExpectedIndex = opExpectedIndex;
+    }
+  }
+
+  const windows: ReciteLabWindowSummary[] = buckets.map((bucket) => {
+    const reachedWindow = lastEvidenceIndex >= bucket.startExpectedIndex;
+    const reachedThrough = reachedWindow
+      ? Math.min(bucket.endExpectedIndex, lastEvidenceIndex)
+      : bucket.startExpectedIndex - 1;
+    const evaluatedExpectedCount = reachedWindow
+      ? Math.max(1, reachedThrough - bucket.startExpectedIndex + 1)
+      : 0;
+    const errorWeight =
+      bucket.missingCount * 0.85 +
+      bucket.substituteCount * 0.45 +
+      bucket.extraCount * 0.35;
+    const score =
+      evaluatedExpectedCount === 0
+        ? 0
+        : clamp01(1 - errorWeight / Math.max(1, evaluatedExpectedCount));
+    const decision = reachedWindow
+      ? getWindowDecision({
+          matchedCount: bucket.matchedCount,
+          missingCount: bucket.missingCount,
+          extraCount: bucket.extraCount,
+          substituteCount: bucket.substituteCount,
+          evaluatedExpectedCount,
+          score,
+        })
+      : "pending";
+
+    return {
+      index: bucket.index + 1,
+      startExpectedIndex: bucket.startExpectedIndex,
+      endExpectedIndex: bucket.endExpectedIndex,
+      startWord: expectedWords[bucket.startExpectedIndex - 1] ?? null,
+      endWord: expectedWords[bucket.endExpectedIndex - 1] ?? null,
+      decision,
+      score,
+      matchedCount: bucket.matchedCount,
+      missingCount: bucket.missingCount,
+      extraCount: bucket.extraCount,
+      substituteCount: bucket.substituteCount,
+      heardEvidenceCount: bucket.matchedCount + bucket.substituteCount + bucket.extraCount,
+      evaluatedExpectedCount,
+    };
+  });
+
+  const passedWindowCount = windows.filter((window) => window.decision === "pass").length;
+  const uncertainWindowCount = windows.filter((window) => window.decision === "uncertain").length;
+  const blockedWindowCount = windows.filter((window) => window.decision === "blocked").length;
+  const pendingWindowCount = windows.filter((window) => window.decision === "pending").length;
+  const acceptedCount = Math.min(expectedWords.length, Math.max(0, lastEvidenceIndex));
+  const evaluatedWindows = windows.filter((window) => window.decision !== "pending");
+  const confidence =
+    evaluatedWindows.length === 0
+      ? 0
+      : clamp01(
+          evaluatedWindows.reduce((sum, window) => sum + window.score, 0) /
+            evaluatedWindows.length,
+        );
+  const currentWindow =
+    windows.find(
+      (window) =>
+        acceptedCount >= window.startExpectedIndex && acceptedCount <= window.endExpectedIndex,
+    ) ??
+    windows.find((window) => window.decision === "pending") ??
+    windows[windows.length - 1] ??
+    null;
+  const { status, holdReason } = getWindowStatus({
+    comparableHeardCount: comparableHeardTokens.length,
+    expectedCount: expectedWords.length,
+    acceptedCount,
+    confidence,
+    passedWindowCount,
+    uncertainWindowCount,
+    blockedWindowCount,
+    pendingWindowCount,
+  });
+
+  return {
+    status,
+    acceptedCount,
+    expectedCount: expectedWords.length,
+    heardCount: heardTokens.length,
+    comparableHeardCount: comparableHeardTokens.length,
+    windowSize: WINDOW_TRACKER_SIZE,
+    windowCount,
+    passedWindowCount,
+    uncertainWindowCount,
+    blockedWindowCount,
+    pendingWindowCount,
+    leadingBismillahIgnored,
+    confidence,
+    progressRatio:
+      expectedWords.length === 0 ? 0 : Math.max(0, Math.min(1, acceptedCount / expectedWords.length)),
+    acceptedThroughWord: acceptedCount > 0 ? expectedWords[acceptedCount - 1] ?? null : null,
+    acceptedThroughIndex: acceptedCount > 0 ? acceptedCount : null,
+    nextExpectedWord: acceptedCount < expectedWords.length ? expectedWords[acceptedCount] ?? null : null,
+    nextExpectedIndex: acceptedCount < expectedWords.length ? acceptedCount + 1 : null,
+    currentWindow,
+    windows,
+    holdReason,
+  };
+}
+
+function buildComparisonFromOperations({
+  expectedWords,
+  heardTokens,
+  comparableHeardTokens,
+  leadingBismillahIgnored,
+  operations,
+}: {
+  expectedWords: string[];
+  heardTokens: string[];
+  comparableHeardTokens: string[];
+  leadingBismillahIgnored: boolean;
+  operations: ReciteLabAlignmentOp[];
+}): ReciteLabComparison {
+  const matchedCount = operations.filter((op) => op.type === "match").length;
+  const missingCount = operations.filter((op) => op.type === "missing").length;
+  const extraOps = operations.filter((op) => op.type === "extra");
+  const extraCount = extraOps.length;
+  const substituteCount = operations.filter((op) => op.type === "substitute").length;
+  const repeatedExpectedExtraCount = extraOps.filter((op) =>
+    expectedWords.some((expected) => labWordsMatch(op.heard ?? "", expected)),
+  ).length;
+  const offTargetExtraCount = extraCount - repeatedExpectedExtraCount;
+  const leadingExtraCount = operations.findIndex((op) => op.type !== "extra");
+  const normalizedLeadingExtraCount = leadingExtraCount === -1 ? operations.length : leadingExtraCount;
+  let trailingExtraCount = 0;
+  for (let index = operations.length - 1; index >= 0; index -= 1) {
+    if (operations[index]?.type !== "extra") break;
+    trailingExtraCount += 1;
+  }
+  const errorWeight = missingCount + extraCount * 0.65 + substituteCount * 1.15;
+  const score =
+    expectedWords.length === 0
+      ? 0
+      : Math.max(0, Math.min(1, 1 - errorWeight / expectedWords.length));
+  const decision = decide({
+    expectedCount: expectedWords.length,
+    comparableHeardCount: comparableHeardTokens.length,
+    matchedCount,
+    missingCount,
+    extraCount,
+    leadingExtraCount: normalizedLeadingExtraCount,
+    repeatedExpectedExtraCount,
+    offTargetExtraCount,
+    substituteCount,
+    score,
+  });
+
+  return {
+    decision,
+    score,
+    expectedCount: expectedWords.length,
+    heardCount: heardTokens.length,
+    comparableHeardCount: comparableHeardTokens.length,
+    matchedCount,
+    missingCount,
+    extraCount,
+    substituteCount,
+    leadingExtraCount: normalizedLeadingExtraCount,
+    trailingExtraCount,
+    repeatedExpectedExtraCount,
+    offTargetExtraCount,
+    leadingBismillahIgnored,
+    operations,
+    firstIssues: operations.filter((op) => op.type !== "match").slice(0, 5),
+  };
+}
+
+function buildPhraseTrackerFromOperations({
+  expectedWords,
+  heardTokens,
+  comparableHeardTokens,
+  leadingBismillahIgnored,
+  operations,
+}: {
+  expectedWords: string[];
+  heardTokens: string[];
+  comparableHeardTokens: string[];
+  leadingBismillahIgnored: boolean;
+  operations: ReciteLabAlignmentOp[];
+}): ReciteLabPhraseTracker {
+  const matchedOps = operations.filter((op) => op.type === "match" && op.expectedIndex !== undefined);
+  const alignedAcceptedCount = Math.min(
+    expectedWords.length,
+    Math.max(0, ...matchedOps.map((op) => op.expectedIndex ?? 0)),
+  );
+  const alignedOpsThroughCursor = getOpsThroughExpectedIndex(operations, alignedAcceptedCount);
+  const alignedMatchedCount = alignedOpsThroughCursor.filter((op) => op.type === "match").length;
+  const alignedMissingCount = alignedOpsThroughCursor.filter((op) => op.type === "missing").length;
+  const alignedExtraCount = alignedOpsThroughCursor.filter((op) => op.type === "extra").length;
+  const alignedSubstituteCount = alignedOpsThroughCursor.filter(
+    (op) => op.type === "substitute",
+  ).length;
+  const alignedErrorWeight =
+    alignedMissingCount * 0.6 +
+    alignedSubstituteCount * 0.75 +
+    alignedExtraCount * 0.25;
+  const alignedConfidence =
+    alignedAcceptedCount === 0
+      ? 0
+      : Math.max(0, Math.min(1, (alignedMatchedCount - alignedErrorWeight) / alignedAcceptedCount));
+  const prefixAcceptedCount = getDirectPrefixAcceptedCount(expectedWords, comparableHeardTokens);
+  const usePrefixCursor =
+    prefixAcceptedCount > 0 &&
+    alignedAcceptedCount - comparableHeardTokens.length > 4 &&
+    alignedConfidence < 0.72;
+  const acceptedCount = usePrefixCursor ? prefixAcceptedCount : alignedAcceptedCount;
+  const opsThroughCursor = usePrefixCursor
+    ? Array.from({ length: acceptedCount }, (_, index) => ({
+        type: "match" as const,
+        expected: expectedWords[index],
+        heard: comparableHeardTokens[index],
+        expectedIndex: index + 1,
+        heardIndex: index + 1,
+      }))
+    : alignedOpsThroughCursor;
+  const matchedCount = opsThroughCursor.filter((op) => op.type === "match").length;
+  const missingBeforeCursorCount = opsThroughCursor.filter((op) => op.type === "missing").length;
+  const extraOps = opsThroughCursor.filter((op) => op.type === "extra");
+  const extraBeforeCursorCount = extraOps.length;
+  const substituteBeforeCursorCount = opsThroughCursor.filter(
+    (op) => op.type === "substitute",
+  ).length;
+  const repeatedExpectedExtraCount = extraOps.filter((op) =>
+    expectedWords.some((expected) => labWordsMatch(op.heard ?? "", expected)),
+  ).length;
+  const offTargetExtraCount = Math.max(0, extraBeforeCursorCount - repeatedExpectedExtraCount);
+  const errorWeight =
+    missingBeforeCursorCount * 0.6 +
+    substituteBeforeCursorCount * 0.75 +
+    offTargetExtraCount * 0.8 +
+    Math.max(0, extraBeforeCursorCount - offTargetExtraCount) * 0.25;
+  const confidence =
+    acceptedCount === 0
+      ? 0
+      : Math.max(0, Math.min(1, (matchedCount - errorWeight) / acceptedCount));
+  const { status, holdReason } = decidePhraseStatus({
+    acceptedCount,
+    expectedCount: expectedWords.length,
+    comparableHeardCount: comparableHeardTokens.length,
+    confidence,
+    missingBeforeCursorCount,
+    substituteBeforeCursorCount,
+    extraBeforeCursorCount,
+    repeatedExpectedExtraCount,
+    offTargetExtraCount,
+  });
+
+  return {
+    status,
+    acceptedCount,
+    expectedCount: expectedWords.length,
+    heardCount: heardTokens.length,
+    comparableHeardCount: comparableHeardTokens.length,
+    matchedCount,
+    missingBeforeCursorCount,
+    extraBeforeCursorCount,
+    substituteBeforeCursorCount,
+    repeatedExpectedExtraCount,
+    offTargetExtraCount,
+    leadingBismillahIgnored,
+    confidence,
+    progressRatio:
+      expectedWords.length === 0 ? 0 : Math.max(0, Math.min(1, acceptedCount / expectedWords.length)),
+    acceptedThroughWord: acceptedCount > 0 ? expectedWords[acceptedCount - 1] ?? null : null,
+    acceptedThroughIndex: acceptedCount > 0 ? acceptedCount : null,
+    nextExpectedWord: acceptedCount < expectedWords.length ? expectedWords[acceptedCount] ?? null : null,
+    nextExpectedIndex: acceptedCount < expectedWords.length ? acceptedCount + 1 : null,
+    lastHeardWord: comparableHeardTokens[comparableHeardTokens.length - 1] ?? null,
+    recentPhrase: comparableHeardTokens.slice(-8).join(" "),
+    holdReason,
+    firstIssues: opsThroughCursor.filter((op) => op.type !== "match").slice(0, 5),
+  };
+}
+
+function buildWindowTrackerFromOperations({
+  expectedWords,
+  heardTokens,
+  comparableHeardTokens,
+  leadingBismillahIgnored,
+  operations,
+}: {
+  expectedWords: string[];
+  heardTokens: string[];
+  comparableHeardTokens: string[];
+  leadingBismillahIgnored: boolean;
+  operations: ReciteLabAlignmentOp[];
+}): ReciteLabWindowTracker {
+  const lastEvidenceIndex = Math.max(
+    0,
+    ...operations
+      .filter((op) => op.expectedIndex !== undefined && (op.type === "match" || op.type === "substitute"))
+      .map((op) => op.expectedIndex ?? 0),
+  );
+  const windowCount =
+    expectedWords.length === 0 ? 0 : Math.ceil(expectedWords.length / WINDOW_TRACKER_SIZE);
+  const buckets = Array.from({ length: windowCount }, (_, index) => ({
+    index,
+    startExpectedIndex: index * WINDOW_TRACKER_SIZE + 1,
+    endExpectedIndex: Math.min(expectedWords.length, (index + 1) * WINDOW_TRACKER_SIZE),
+    matchedCount: 0,
+    missingCount: 0,
+    extraCount: 0,
+    substituteCount: 0,
+  }));
+  let lastAnchoredExpectedIndex = 0;
+
+  for (const op of operations) {
+    const opExpectedIndex = op.expectedIndex ?? null;
+    const anchorExpectedIndex =
+      opExpectedIndex ??
+      Math.max(1, Math.min(expectedWords.length, lastAnchoredExpectedIndex || 1));
+    const bucketIndex = Math.floor((anchorExpectedIndex - 1) / WINDOW_TRACKER_SIZE);
+    const bucket = buckets[bucketIndex];
+    if (!bucket) continue;
+
+    if (op.type === "match") {
+      bucket.matchedCount += 1;
+    } else if (op.type === "substitute") {
+      bucket.substituteCount += 1;
+    } else if (op.type === "extra") {
+      bucket.extraCount += 1;
+    } else if ((op.expectedIndex ?? 0) <= lastEvidenceIndex) {
+      bucket.missingCount += 1;
+    }
+
+    if (opExpectedIndex !== null) {
+      lastAnchoredExpectedIndex = opExpectedIndex;
+    }
+  }
+
+  const windows: ReciteLabWindowSummary[] = buckets.map((bucket) => {
+    const reachedWindow = lastEvidenceIndex >= bucket.startExpectedIndex;
+    const reachedThrough = reachedWindow
+      ? Math.min(bucket.endExpectedIndex, lastEvidenceIndex)
+      : bucket.startExpectedIndex - 1;
+    const evaluatedExpectedCount = reachedWindow
+      ? Math.max(1, reachedThrough - bucket.startExpectedIndex + 1)
+      : 0;
+    const errorWeight =
+      bucket.missingCount * 0.85 +
+      bucket.substituteCount * 0.45 +
+      bucket.extraCount * 0.35;
+    const score =
+      evaluatedExpectedCount === 0
+        ? 0
+        : clamp01(1 - errorWeight / Math.max(1, evaluatedExpectedCount));
+    const decision = reachedWindow
+      ? getWindowDecision({
+          matchedCount: bucket.matchedCount,
+          missingCount: bucket.missingCount,
+          extraCount: bucket.extraCount,
+          substituteCount: bucket.substituteCount,
+          evaluatedExpectedCount,
+          score,
+        })
+      : "pending";
+
+    return {
+      index: bucket.index + 1,
+      startExpectedIndex: bucket.startExpectedIndex,
+      endExpectedIndex: bucket.endExpectedIndex,
+      startWord: expectedWords[bucket.startExpectedIndex - 1] ?? null,
+      endWord: expectedWords[bucket.endExpectedIndex - 1] ?? null,
+      decision,
+      score,
+      matchedCount: bucket.matchedCount,
+      missingCount: bucket.missingCount,
+      extraCount: bucket.extraCount,
+      substituteCount: bucket.substituteCount,
+      heardEvidenceCount: bucket.matchedCount + bucket.substituteCount + bucket.extraCount,
+      evaluatedExpectedCount,
+    };
+  });
+
+  const passedWindowCount = windows.filter((window) => window.decision === "pass").length;
+  const uncertainWindowCount = windows.filter((window) => window.decision === "uncertain").length;
+  const blockedWindowCount = windows.filter((window) => window.decision === "blocked").length;
+  const pendingWindowCount = windows.filter((window) => window.decision === "pending").length;
+  const acceptedCount = Math.min(expectedWords.length, Math.max(0, lastEvidenceIndex));
+  const evaluatedWindows = windows.filter((window) => window.decision !== "pending");
+  const confidence =
+    evaluatedWindows.length === 0
+      ? 0
+      : clamp01(
+          evaluatedWindows.reduce((sum, window) => sum + window.score, 0) /
+            evaluatedWindows.length,
+        );
+  const currentWindow =
+    windows.find(
+      (window) =>
+        acceptedCount >= window.startExpectedIndex && acceptedCount <= window.endExpectedIndex,
+    ) ??
+    windows.find((window) => window.decision === "pending") ??
+    windows[windows.length - 1] ??
+    null;
+  const { status, holdReason } = getWindowStatus({
+    comparableHeardCount: comparableHeardTokens.length,
+    expectedCount: expectedWords.length,
+    acceptedCount,
+    confidence,
+    passedWindowCount,
+    uncertainWindowCount,
+    blockedWindowCount,
+    pendingWindowCount,
+  });
+
+  return {
+    status,
+    acceptedCount,
+    expectedCount: expectedWords.length,
+    heardCount: heardTokens.length,
+    comparableHeardCount: comparableHeardTokens.length,
+    windowSize: WINDOW_TRACKER_SIZE,
+    windowCount,
+    passedWindowCount,
+    uncertainWindowCount,
+    blockedWindowCount,
+    pendingWindowCount,
+    leadingBismillahIgnored,
+    confidence,
+    progressRatio:
+      expectedWords.length === 0 ? 0 : Math.max(0, Math.min(1, acceptedCount / expectedWords.length)),
+    acceptedThroughWord: acceptedCount > 0 ? expectedWords[acceptedCount - 1] ?? null : null,
+    acceptedThroughIndex: acceptedCount > 0 ? acceptedCount : null,
+    nextExpectedWord: acceptedCount < expectedWords.length ? expectedWords[acceptedCount] ?? null : null,
+    nextExpectedIndex: acceptedCount < expectedWords.length ? acceptedCount + 1 : null,
+    currentWindow,
+    windows,
+    holdReason,
+  };
+}
+
+export function analyzeReciteLabTokens(
+  expectedWords: string[],
+  heardTokens: string[],
+): ReciteLabTokenAnalysis {
+  const { leadingBismillahIgnored, tokens: comparableHeardTokens } = getComparableHeardTokens(
+    expectedWords,
+    heardTokens,
+  );
+  const operations = buildAlignment(expectedWords, comparableHeardTokens);
+  const shared = {
+    expectedWords,
+    heardTokens,
+    comparableHeardTokens,
+    leadingBismillahIgnored,
+    operations,
+  };
+
+  return {
+    comparison: buildComparisonFromOperations(shared),
+    phraseTracker: buildPhraseTrackerFromOperations(shared),
+    windowTracker: buildWindowTrackerFromOperations(shared),
   };
 }
 

@@ -5,6 +5,8 @@ import type {
   ReciteLabLiveStatus,
   ReciteLabPhraseStatus,
   ReciteLabPhraseTracker,
+  ReciteLabWindowStatus,
+  ReciteLabWindowTracker,
 } from "@/src/lib/recite-lab-align";
 
 export type ReciteLabAttemptLabel =
@@ -92,6 +94,21 @@ export type SaveReciteLabAttemptPayload = {
     recentPhrase: string;
   }>;
   phraseTracker: ReciteLabPhraseTracker;
+  windowSnapshots: Array<{
+    timestamp: string;
+    elapsedMs: number | null;
+    status: ReciteLabWindowStatus;
+    acceptedCount: number;
+    expectedCount: number;
+    transcriptTokenCount: number;
+    currentWindowIndex: number | null;
+    confidence: number;
+    passedWindowCount: number;
+    uncertainWindowCount: number;
+    blockedWindowCount: number;
+    pendingWindowCount: number;
+  }>;
+  windowTracker: ReciteLabWindowTracker;
   comparison: ReciteLabComparison;
   audioUri: string | null;
   recordingSupported: boolean;
