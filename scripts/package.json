@@ -11,6 +11,7 @@
     "recite-lab:window-acoustic-rescue": "node ./recite-lab-window-acoustic-rescue.mjs",
     "recite-lab:report": "node ./recite-lab-report.mjs",
     "recite-lab:label": "node ./recite-lab-label.mjs",
+    "recite-lab:policy-sim": "node ./recite-lab-policy-sim.mjs",
     "hello": "tsx ./src/hello.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
