@@ -14,6 +14,7 @@
     "recite-lab:policy-sim": "node ./recite-lab-policy-sim.mjs",
     "recite-lab:review-page": "node ./recite-lab-review-page.mjs",
     "recite-lab:refresh": "node ./recite-lab-refresh.mjs",
+    "recite-lab:faster-whisper": "../artifacts/recite-lab/.venv/bin/python ./recite-lab-faster-whisper.py",
     "hello": "tsx ./src/hello.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
