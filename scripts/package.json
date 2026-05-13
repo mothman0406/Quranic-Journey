@@ -12,6 +12,7 @@
     "recite-lab:report": "node ./recite-lab-report.mjs",
     "recite-lab:label": "node ./recite-lab-label.mjs",
     "recite-lab:policy-sim": "node ./recite-lab-policy-sim.mjs",
+    "recite-lab:review-page": "node ./recite-lab-review-page.mjs",
     "recite-lab:refresh": "node ./recite-lab-refresh.mjs",
     "hello": "tsx ./src/hello.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"

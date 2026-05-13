@@ -87,6 +87,7 @@ async function main() {
   await runNode("scripts/recite-lab-report.mjs", ["--write"]);
   await runNode("scripts/recite-lab-report.mjs", [...reportArgs, "--write"]);
   await runNode("scripts/recite-lab-policy-sim.mjs", [...reportArgs, "--write"]);
+  await runNode("scripts/recite-lab-review-page.mjs");
 
   const scopes = await inferScopes(options);
   for (const scope of scopes) {
