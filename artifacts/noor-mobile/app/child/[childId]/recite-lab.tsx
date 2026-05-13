@@ -22,23 +22,54 @@ import { fetchSurahVerses, type ApiWord } from "@/src/lib/quran";
 import { stripTashkeel, tokenize } from "@/src/lib/recite";
 import {
   compareReciteLabTokens,
+  getReciteLabLiveProgress,
+  RECITE_LAB_ALIGNMENT_VERSION,
   type ReciteLabAlignmentDecision,
   type ReciteLabAlignmentOp,
+  type ReciteLabLiveEvent,
+  type ReciteLabLiveStatus,
 } from "@/src/lib/recite-lab-align";
 import {
   getReciteLabLoggingBaseURL,
   saveReciteLabAttempt,
+  uploadReciteLabAudio,
   type ReciteLabAttemptLabel,
 } from "@/src/lib/recite-lab";
 import type { MushafViewMode } from "@/src/lib/settings";
 
 type CaptureState = "idle" | "starting" | "listening" | "stopping";
 type SaveState = "idle" | "saving" | "saved" | "error";
+type AudioUploadState = "idle" | "uploading" | "uploaded" | "error" | "skipped";
+type ExpectedScopeMode = "full" | "selectedAyah" | "customRange";
 
 type LabWordTarget = {
   surah: number;
   ayah: number;
   position: number;
+};
+
+type ExpectedScopeTarget = {
+  mode: ExpectedScopeMode;
+  surahNumber: number;
+  ayahStart: number;
+  ayahEnd: number;
+  label: string;
+};
+
+type LiveSnapshot = {
+  timestamp: string;
+  elapsedMs: number | null;
+  status: ReciteLabLiveStatus;
+  acceptedCount: number;
+  expectedCount: number;
+  transcriptTokenCount: number;
+  nextExpectedWord: string | null;
+  nextExpectedIndex: number | null;
+  lastHeardWord: string | null;
+  repeatCount: number;
+  skippedCount: number;
+  mismatchCount: number;
+  firstBlockingEventType: string | null;
 };
 
 const ATTEMPT_LABELS: Array<{ value: ReciteLabAttemptLabel; label: string }> = [
@@ -49,6 +80,12 @@ const ATTEMPT_LABELS: Array<{ value: ReciteLabAttemptLabel; label: string }> = [
   { value: "noisy", label: "Noisy" },
 ];
 
+const EXPECTED_SCOPE_OPTIONS: Array<{ value: ExpectedScopeMode; label: string }> = [
+  { value: "full", label: "Full" },
+  { value: "selectedAyah", label: "Ayah" },
+  { value: "customRange", label: "Range" },
+];
+
 function parseRouteInt(value: string | undefined, fallback: number) {
   if (value === undefined) return fallback;
   const parsed = Number.parseInt(value, 10);
@@ -57,6 +94,10 @@ function parseRouteInt(value: string | undefined, fallback: number) {
 
 function formatAyahRange(start: number, end: number) {
   return start === end ? `Ayah ${start}` : `Ayahs ${start}-${end}`;
+}
+
+function clampAyah(value: number, min: number, max: number) {
+  return Math.min(Math.max(value, min), max);
 }
 
 function normalizeExpectedWord(word: ApiWord) {
@@ -73,6 +114,26 @@ function getRecordingSupport() {
 
 function formatPercent(value: number) {
   return `${Math.round(value * 100)}%`;
+}
+
+function diffMs(start: string | null, end: string | null) {
+  if (!start || !end) return null;
+  const delta = Date.parse(end) - Date.parse(start);
+  return Number.isFinite(delta) && delta >= 0 ? delta : null;
+}
+
+function formatDuration(ms: number | null) {
+  if (ms === null) return "-";
+  if (ms < 1000) return `${ms}ms`;
+  return `${(ms / 1000).toFixed(1)}s`;
+}
+
+function formatBytes(bytes: number) {
+  if (bytes < 1024) return `${bytes} B`;
+  const kib = bytes / 1024;
+  if (kib < 1024) return `${kib.toFixed(kib >= 100 ? 0 : 1)} KB`;
+  const mib = kib / 1024;
+  return `${mib.toFixed(mib >= 100 ? 0 : 1)} MB`;
 }
 
 function getDecisionLabel(decision: ReciteLabAlignmentDecision) {
@@ -92,6 +153,23 @@ function getDecisionLabel(decision: ReciteLabAlignmentDecision) {
   }
 }
 
+function getLiveStatusLabel(status: ReciteLabLiveStatus) {
+  switch (status) {
+    case "waiting":
+      return "Wait";
+    case "advancing":
+      return "Advance";
+    case "complete":
+      return "Complete";
+    case "repeat":
+      return "Repeat";
+    case "skip":
+      return "Skip";
+    case "mismatch":
+      return "Mismatch";
+  }
+}
+
 function describeIssue(issue: ReciteLabAlignmentOp) {
   if (issue.type === "missing") return `Missing ${issue.expected ?? ""}`.trim();
   if (issue.type === "extra") return `Extra ${issue.heard ?? ""}`.trim();
@@ -99,6 +177,17 @@ function describeIssue(issue: ReciteLabAlignmentOp) {
     return `${issue.expected ?? ""} -> ${issue.heard ?? ""}`.trim();
   }
   return "";
+}
+
+function describeLiveEvent(event: ReciteLabLiveEvent) {
+  if (event.type === "match") return `Accepted ${event.heard}`;
+  if (event.type === "repeat") return `Repeat ${event.heard}`;
+  if (event.type === "extra") return `Extra ${event.heard}`;
+  if (event.type === "skip") {
+    const skipped = event.skippedWords?.join(" ") ?? "";
+    return skipped ? `Skipped ${skipped}` : `Skipped to ${event.heard}`;
+  }
+  return `${event.expected ?? ""} -> ${event.heard}`.trim();
 }
 
 export default function ReciteLabScreen() {
@@ -134,22 +223,96 @@ export default function ReciteLabScreen() {
   const [captureError, setCaptureError] = useState<string | null>(null);
   const [recordingSupported, setRecordingSupported] = useState(false);
   const [selectedWord, setSelectedWord] = useState<LabWordTarget | null>(null);
-  const [expectedWords, setExpectedWords] = useState<string[]>([]);
+  const [expectedWordsByAyah, setExpectedWordsByAyah] = useState<Record<number, string[]>>({});
+  const [expectedScopeMode, setExpectedScopeMode] = useState<ExpectedScopeMode>("full");
+  const [customScopeStartAyah, setCustomScopeStartAyah] = useState(ayahStart);
+  const [customScopeEndAyah, setCustomScopeEndAyah] = useState(ayahEnd);
   const [expectedLoading, setExpectedLoading] = useState(true);
   const [expectedError, setExpectedError] = useState<string | null>(null);
   const [attemptLabel, setAttemptLabel] = useState<ReciteLabAttemptLabel>("correct");
   const [autoSave, setAutoSave] = useState(true);
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
+  const [audioUploadState, setAudioUploadState] = useState<AudioUploadState>("idle");
+  const [audioUploadMessage, setAudioUploadMessage] = useState<string | null>(null);
   const [lastSavedAttemptKey, setLastSavedAttemptKey] = useState<string | null>(null);
+  const [firstResultAt, setFirstResultAt] = useState<string | null>(null);
+  const [liveSnapshotCount, setLiveSnapshotCount] = useState(0);
   const captureStartedAtRef = useRef<string | null>(null);
+  const recognitionStartedAtRef = useRef<string | null>(null);
+  const audioStartedAtRef = useRef<string | null>(null);
+  const audioEndedAtRef = useRef<string | null>(null);
+  const firstResultAtRef = useRef<string | null>(null);
+  const lastResultAtRef = useRef<string | null>(null);
+  const recognitionEndedAtRef = useRef<string | null>(null);
+  const expectedWordsRef = useRef<string[]>([]);
+  const liveSnapshotsRef = useRef<LiveSnapshot[]>([]);
   const lastAutoSavedKeyRef = useRef<string | null>(null);
   const lastSavedAttemptKeyRef = useRef<string | null>(null);
+
+  const expectedScopeTarget = useMemo<ExpectedScopeTarget>(() => {
+    if (expectedScopeMode === "selectedAyah") {
+      const selectedAyah =
+        selectedWord?.surah === surahNumber
+          ? clampAyah(selectedWord.ayah, ayahStart, ayahEnd)
+          : ayahStart;
+      return {
+        mode: expectedScopeMode,
+        surahNumber,
+        ayahStart: selectedAyah,
+        ayahEnd: selectedAyah,
+        label: `${surahNumber}:${selectedAyah}`,
+      };
+    }
+
+    if (expectedScopeMode === "customRange") {
+      const start = clampAyah(customScopeStartAyah, ayahStart, ayahEnd);
+      const end = clampAyah(Math.max(start, customScopeEndAyah), ayahStart, ayahEnd);
+      return {
+        mode: expectedScopeMode,
+        surahNumber,
+        ayahStart: start,
+        ayahEnd: end,
+        label: `${surahNumber}:${start}${start === end ? "" : `-${end}`}`,
+      };
+    }
+
+    return {
+      mode: expectedScopeMode,
+      surahNumber,
+      ayahStart,
+      ayahEnd,
+      label: `${surahNumber}:${ayahStart}${ayahStart === ayahEnd ? "" : `-${ayahEnd}`}`,
+    };
+  }, [
+    ayahEnd,
+    ayahStart,
+    customScopeEndAyah,
+    customScopeStartAyah,
+    expectedScopeMode,
+    selectedWord,
+    surahNumber,
+  ]);
+  const expectedWords = useMemo(() => {
+    const words: string[] = [];
+    for (
+      let ayah = expectedScopeTarget.ayahStart;
+      ayah <= expectedScopeTarget.ayahEnd;
+      ayah += 1
+    ) {
+      words.push(...(expectedWordsByAyah[ayah] ?? []));
+    }
+    return words;
+  }, [expectedScopeTarget, expectedWordsByAyah]);
 
   const normalizedTranscript = useMemo(() => stripTashkeel(transcript), [transcript]);
   const transcriptTokens = useMemo(
     () => tokenize(normalizedTranscript),
     [normalizedTranscript],
+  );
+  const liveProgress = useMemo(
+    () => getReciteLabLiveProgress(expectedWords, transcriptTokens),
+    [expectedWords, transcriptTokens],
   );
   const comparison = useMemo(
     () => compareReciteLabTokens(expectedWords, transcriptTokens),
@@ -158,8 +321,10 @@ export default function ReciteLabScreen() {
   const currentAttemptKey = useMemo(() => {
     const startedAt = captureStartedAtRef.current;
     const trimmedTranscript = transcript.trim();
-    return startedAt && trimmedTranscript ? `${startedAt}:${trimmedTranscript}` : null;
-  }, [transcript]);
+    return startedAt && trimmedTranscript
+      ? `${startedAt}:${expectedScopeTarget.mode}:${expectedScopeTarget.ayahStart}-${expectedScopeTarget.ayahEnd}:${trimmedTranscript}`
+      : null;
+  }, [expectedScopeTarget, transcript]);
   const currentAttemptSaved =
     currentAttemptKey !== null && lastSavedAttemptKey === currentAttemptKey;
   const expectedContextStrings = useMemo(() => {
@@ -173,23 +338,33 @@ export default function ReciteLabScreen() {
   }, []);
 
   useEffect(() => {
+    expectedWordsRef.current = expectedWords;
+  }, [expectedWords]);
+
+  useEffect(() => {
     let cancelled = false;
     setExpectedLoading(true);
     setExpectedError(null);
     fetchSurahVerses(surahNumber)
       .then((verses) => {
         if (cancelled) return;
-        const words = verses
-          .filter((verse) => verse.verse_number >= ayahStart && verse.verse_number <= ayahEnd)
-          .flatMap((verse) => verse.words)
-          .filter((word) => word.char_type_name === "word")
-          .map(normalizeExpectedWord)
-          .filter(Boolean);
-        setExpectedWords(words);
+        const wordsByAyah = Object.fromEntries(
+          verses
+            .filter((verse) => verse.verse_number >= ayahStart && verse.verse_number <= ayahEnd)
+            .map((verse) => [
+              verse.verse_number,
+              verse.words
+                .filter((word) => word.char_type_name === "word")
+                .map(normalizeExpectedWord)
+                .filter(Boolean),
+            ]),
+        );
+        setExpectedWordsByAyah(wordsByAyah);
       })
       .catch((error) => {
         if (cancelled) return;
         setExpectedError(error instanceof Error ? error.message : "Expected words unavailable.");
+        setExpectedWordsByAyah({});
       })
       .finally(() => {
         if (!cancelled) setExpectedLoading(false);
@@ -201,6 +376,13 @@ export default function ReciteLabScreen() {
   }, [ayahEnd, ayahStart, surahNumber]);
 
   useEffect(() => {
+    setExpectedScopeMode("full");
+    setCustomScopeStartAyah(ayahStart);
+    setCustomScopeEndAyah(ayahEnd);
+    setSelectedWord(null);
+  }, [ayahEnd, ayahStart, surahNumber]);
+
+  useEffect(() => {
     return () => {
       try {
         ExpoSpeechRecognitionModule.stop();
@@ -209,6 +391,60 @@ export default function ReciteLabScreen() {
       }
     };
   }, []);
+
+  function buildTiming(clientSavedAt: string, captureStartedAt: string) {
+    return {
+      captureStartedAt,
+      recognitionStartedAt: recognitionStartedAtRef.current,
+      audioStartedAt: audioStartedAtRef.current,
+      firstResultAt: firstResultAtRef.current,
+      lastResultAt: lastResultAtRef.current,
+      audioEndedAt: audioEndedAtRef.current,
+      recognitionEndedAt: recognitionEndedAtRef.current,
+      clientSavedAt,
+      firstResultLatencyMs: diffMs(captureStartedAt, firstResultAtRef.current),
+      recognitionDurationMs: diffMs(
+        recognitionStartedAtRef.current ?? captureStartedAt,
+        recognitionEndedAtRef.current ?? clientSavedAt,
+      ),
+      audioDurationMs: diffMs(audioStartedAtRef.current, audioEndedAtRef.current),
+      saveDelayMs: diffMs(lastResultAtRef.current ?? recognitionEndedAtRef.current, clientSavedAt),
+    };
+  }
+
+  function appendLiveSnapshot(rawTranscript: string, timestamp: string) {
+    const snapshotTokens = tokenize(stripTashkeel(rawTranscript));
+    const snapshotProgress = getReciteLabLiveProgress(expectedWordsRef.current, snapshotTokens);
+    const snapshot: LiveSnapshot = {
+      timestamp,
+      elapsedMs: diffMs(captureStartedAtRef.current, timestamp),
+      status: snapshotProgress.status,
+      acceptedCount: snapshotProgress.acceptedCount,
+      expectedCount: snapshotProgress.expectedCount,
+      transcriptTokenCount: snapshotTokens.length,
+      nextExpectedWord: snapshotProgress.nextExpectedWord,
+      nextExpectedIndex: snapshotProgress.nextExpectedIndex,
+      lastHeardWord: snapshotProgress.lastHeardWord,
+      repeatCount: snapshotProgress.repeatCount,
+      skippedCount: snapshotProgress.skippedCount,
+      mismatchCount: snapshotProgress.mismatchCount,
+      firstBlockingEventType: snapshotProgress.firstBlockingEvent?.type ?? null,
+    };
+    const previous = liveSnapshotsRef.current[liveSnapshotsRef.current.length - 1] ?? null;
+    if (
+      previous &&
+      previous.status === snapshot.status &&
+      previous.acceptedCount === snapshot.acceptedCount &&
+      previous.transcriptTokenCount === snapshot.transcriptTokenCount &&
+      previous.nextExpectedIndex === snapshot.nextExpectedIndex &&
+      previous.lastHeardWord === snapshot.lastHeardWord
+    ) {
+      return;
+    }
+
+    liveSnapshotsRef.current = [...liveSnapshotsRef.current, snapshot].slice(-80);
+    setLiveSnapshotCount(liveSnapshotsRef.current.length);
+  }
 
   const saveCurrentAttempt = useCallback(
     async (saveMode: "auto" | "manual") => {
@@ -231,18 +467,25 @@ export default function ReciteLabScreen() {
       try {
         setSaveState("saving");
         setSaveMessage(null);
-        const clientRecordedAt = captureStartedAtRef.current ?? new Date().toISOString();
-        const attemptKey = `${clientRecordedAt}:${trimmedTranscript}`;
+        const clientSavedAt = new Date().toISOString();
+        const clientRecordedAt = captureStartedAtRef.current ?? clientSavedAt;
+        const attemptKey = `${clientRecordedAt}:${expectedScopeTarget.mode}:${expectedScopeTarget.ayahStart}-${expectedScopeTarget.ayahEnd}:${trimmedTranscript}`;
         if (lastSavedAttemptKeyRef.current === attemptKey) {
           setSaveState("saved");
           if (saveMode === "manual") setSaveMessage("Already saved");
           return;
         }
         const result = await saveReciteLabAttempt({
+          algorithmVersions: {
+            alignment: RECITE_LAB_ALIGNMENT_VERSION,
+            liveProgress: RECITE_LAB_ALIGNMENT_VERSION,
+            logging: "recite-lab-logging-v0.5",
+          },
           label: attemptLabel,
           saveMode,
           clientRecordedAt,
-          clientSavedAt: new Date().toISOString(),
+          clientSavedAt,
+          timing: buildTiming(clientSavedAt, clientRecordedAt),
           route: {
             surahNumber,
             ayahStart,
@@ -251,12 +494,24 @@ export default function ReciteLabScreen() {
             page: currentPage,
             mushafViewMode,
           },
+          expectedScope: {
+            mode: expectedScopeTarget.mode,
+            surahNumber: expectedScopeTarget.surahNumber,
+            ayahStart: expectedScopeTarget.ayahStart,
+            ayahEnd: expectedScopeTarget.ayahEnd,
+            label: expectedScopeTarget.label,
+            routeAyahStart: ayahStart,
+            routeAyahEnd: ayahEnd,
+            selectedWord,
+          },
           expectedWords,
           expectedWordCount: expectedWords.length,
           transcript: trimmedTranscript,
           normalizedTranscript,
           transcriptTokens,
           heardTokenCount: transcriptTokens.length,
+          liveSnapshots: liveSnapshotsRef.current,
+          liveProgress,
           comparison,
           audioUri,
           recordingSupported,
@@ -266,6 +521,24 @@ export default function ReciteLabScreen() {
         setLastSavedAttemptKey(attemptKey);
         setSaveState("saved");
         setSaveMessage(`Saved ${result.id.slice(0, 8)}`);
+
+        if (audioUri) {
+          setAudioUploadState("uploading");
+          setAudioUploadMessage(null);
+          try {
+            const audioResult = await uploadReciteLabAudio(result.id, audioUri);
+            setAudioUploadState("uploaded");
+            setAudioUploadMessage(`Uploaded ${formatBytes(audioResult.bytes)}`);
+          } catch (audioError) {
+            setAudioUploadState("error");
+            setAudioUploadMessage(
+              audioError instanceof Error ? audioError.message : "Audio upload failed.",
+            );
+          }
+        } else {
+          setAudioUploadState("skipped");
+          setAudioUploadMessage(recordingSupported ? "No audio file" : "Unsupported");
+        }
       } catch (error) {
         setSaveState("error");
         setSaveMessage(error instanceof Error ? error.message : "Save failed.");
@@ -281,11 +554,14 @@ export default function ReciteLabScreen() {
       endSurahNumber,
       expectedWords,
       expectedLoading,
+      expectedScopeTarget,
       lastSavedAttemptKey,
+      liveProgress,
       mushafViewMode,
       normalizedTranscript,
       recordingSupported,
       surahNumber,
+      selectedWord,
       transcript,
       transcriptTokens,
     ],
@@ -301,7 +577,7 @@ export default function ReciteLabScreen() {
     ) return;
     const startedAt = captureStartedAtRef.current;
     if (!startedAt) return;
-    const autoSaveKey = `${startedAt}:${transcript.trim()}`;
+    const autoSaveKey = `${startedAt}:${expectedScopeTarget.mode}:${expectedScopeTarget.ayahStart}-${expectedScopeTarget.ayahEnd}:${transcript.trim()}`;
     if (
       lastAutoSavedKeyRef.current === autoSaveKey ||
       lastSavedAttemptKeyRef.current === autoSaveKey ||
@@ -321,36 +597,50 @@ export default function ReciteLabScreen() {
     captureState,
     expectedLoading,
     expectedWords.length,
+    expectedScopeTarget,
     saveCurrentAttempt,
     saveState,
     transcript,
   ]);
 
   useSpeechRecognitionEvent("start", () => {
+    recognitionStartedAtRef.current = new Date().toISOString();
     setCaptureState("listening");
     setCaptureError(null);
   });
 
   useSpeechRecognitionEvent("audiostart", (event) => {
+    audioStartedAtRef.current = new Date().toISOString();
     setAudioUri(event.uri);
   });
 
   useSpeechRecognitionEvent("audioend", (event) => {
+    audioEndedAtRef.current = new Date().toISOString();
     setAudioUri(event.uri);
   });
 
   useSpeechRecognitionEvent("result", (event) => {
     const result = event.results?.[0];
     if (!result) return;
-    setTranscript(result.transcript ?? "");
+    const nextTranscript = result.transcript ?? "";
+    const now = new Date().toISOString();
+    if (!firstResultAtRef.current) {
+      firstResultAtRef.current = now;
+      setFirstResultAt(now);
+    }
+    lastResultAtRef.current = now;
+    appendLiveSnapshot(nextTranscript, now);
+    setTranscript(nextTranscript);
   });
 
   useSpeechRecognitionEvent("error", (event) => {
+    recognitionEndedAtRef.current = new Date().toISOString();
     setCaptureState("idle");
     setCaptureError(event.message ?? event.error ?? "Recognition error.");
   });
 
   useSpeechRecognitionEvent("end", () => {
+    recognitionEndedAtRef.current = new Date().toISOString();
     setCaptureState("idle");
   });
 
@@ -361,7 +651,18 @@ export default function ReciteLabScreen() {
       setTranscript("");
       setSaveState("idle");
       setSaveMessage(null);
+      setAudioUploadState("idle");
+      setAudioUploadMessage(null);
       setLastSavedAttemptKey(null);
+      setFirstResultAt(null);
+      setLiveSnapshotCount(0);
+      recognitionStartedAtRef.current = null;
+      audioStartedAtRef.current = null;
+      audioEndedAtRef.current = null;
+      firstResultAtRef.current = null;
+      lastResultAtRef.current = null;
+      recognitionEndedAtRef.current = null;
+      liveSnapshotsRef.current = [];
       lastAutoSavedKeyRef.current = null;
       lastSavedAttemptKeyRef.current = null;
       captureStartedAtRef.current = new Date().toISOString();
@@ -397,14 +698,56 @@ export default function ReciteLabScreen() {
     ExpoSpeechRecognitionModule.stop();
   }
 
+  function scopeControlsLocked() {
+    return captureState === "starting" || captureState === "listening" || captureState === "stopping";
+  }
+
+  function chooseExpectedScopeMode(mode: ExpectedScopeMode) {
+    if (scopeControlsLocked()) return;
+    setExpectedScopeMode(mode);
+  }
+
+  function adjustCustomScopeStart(delta: number) {
+    if (scopeControlsLocked()) return;
+    setCustomScopeStartAyah((current) => {
+      const next = clampAyah(current + delta, ayahStart, customScopeEndAyah);
+      return next;
+    });
+  }
+
+  function adjustCustomScopeEnd(delta: number) {
+    if (scopeControlsLocked()) return;
+    setCustomScopeEndAyah((current) => {
+      const next = clampAyah(current + delta, customScopeStartAyah, ayahEnd);
+      return next;
+    });
+  }
+
+  function handleWordPress(target: LabWordTarget) {
+    setSelectedWord(target);
+  }
+
   const listening = captureState === "listening" || captureState === "starting";
+  const scopeLocked = scopeControlsLocked();
   const canSave =
     transcript.trim().length > 0 &&
     !expectedLoading &&
     expectedWords.length > 0 &&
     !currentAttemptSaved &&
     saveState !== "saving";
+  const firstResultLatencyMs = diffMs(captureStartedAtRef.current, firstResultAt);
   const loggingLabel = loggingBaseURL ? loggingBaseURL.replace(/^https?:\/\//, "") : "off";
+  const audioUploadLabel =
+    audioUploadMessage ??
+    (audioUploadState === "uploading"
+      ? "Uploading..."
+      : audioUploadState === "uploaded"
+        ? "Uploaded"
+        : audioUploadState === "error"
+          ? "Failed"
+          : audioUploadState === "skipped"
+            ? "Skipped"
+            : "Waiting");
   const decisionBadgeStyle = [
     styles.decisionBadge,
     comparison.decision === "pass" && styles.decisionBadgePass,
@@ -418,6 +761,22 @@ export default function ReciteLabScreen() {
     comparison.decision === "repeat" && styles.decisionBadgeTextRepeat,
     comparison.decision === "skip" && styles.decisionBadgeTextSkip,
     comparison.decision === "wrong" && styles.decisionBadgeTextWrong,
+  ];
+  const liveBadgeStyle = [
+    styles.decisionBadge,
+    (liveProgress.status === "advancing" || liveProgress.status === "complete") &&
+      styles.decisionBadgePass,
+    (liveProgress.status === "repeat" || liveProgress.status === "skip") &&
+      styles.decisionBadgeRepeat,
+    liveProgress.status === "mismatch" && styles.decisionBadgeWrong,
+  ];
+  const liveBadgeTextStyle = [
+    styles.decisionBadgeText,
+    (liveProgress.status === "advancing" || liveProgress.status === "complete") &&
+      styles.decisionBadgeTextPass,
+    (liveProgress.status === "repeat" || liveProgress.status === "skip") &&
+      styles.decisionBadgeTextRepeat,
+    liveProgress.status === "mismatch" && styles.decisionBadgeTextWrong,
   ];
   const rangeLabel =
     endSurahNumber === surahNumber
@@ -453,7 +812,7 @@ export default function ReciteLabScreen() {
             endSurah: endSurahNumber,
             endAyah: ayahEnd,
           }}
-          onWordPress={setSelectedWord}
+          onWordPress={handleWordPress}
         />
       </View>
 
@@ -487,6 +846,109 @@ export default function ReciteLabScreen() {
             <Text style={styles.detailLabel}>Page</Text>
             <Text style={styles.detailValue}>{currentPage}</Text>
           </View>
+          <View style={styles.scopeCard}>
+            <View style={styles.scopeHeader}>
+              <Text style={styles.scopeTitle}>Expected Scope</Text>
+              <Text style={styles.scopeValue}>{expectedScopeTarget.label}</Text>
+            </View>
+            <View style={styles.scopeModeRow}>
+              {EXPECTED_SCOPE_OPTIONS.map((option) => {
+                const selected = expectedScopeMode === option.value;
+                return (
+                  <Pressable
+                    key={option.value}
+                    style={[
+                      styles.scopeModeButton,
+                      selected && styles.scopeModeButtonSelected,
+                      scopeLocked && styles.scopeModeButtonDisabled,
+                    ]}
+                    disabled={scopeLocked}
+                    onPress={() => chooseExpectedScopeMode(option.value)}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected, disabled: scopeLocked }}
+                    accessibilityLabel={`Use ${option.label} expected scope`}
+                  >
+                    <Text
+                      style={[
+                        styles.scopeModeButtonText,
+                        selected && styles.scopeModeButtonTextSelected,
+                      ]}
+                    >
+                      {option.label}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+            {expectedScopeMode === "customRange" ? (
+              <View style={styles.scopeStepperRow}>
+                <View style={styles.scopeStepper}>
+                  <Text style={styles.scopeStepperLabel}>Start</Text>
+                  <View style={styles.scopeStepperControls}>
+                    <Pressable
+                      style={[
+                        styles.scopeIconButton,
+                        (scopeLocked || customScopeStartAyah <= ayahStart) &&
+                          styles.scopeIconButtonDisabled,
+                      ]}
+                      disabled={scopeLocked || customScopeStartAyah <= ayahStart}
+                      onPress={() => adjustCustomScopeStart(-1)}
+                      accessibilityRole="button"
+                      accessibilityLabel="Decrease expected range start ayah"
+                    >
+                      <Ionicons name="remove" size={14} color={colors.text} />
+                    </Pressable>
+                    <Text style={styles.scopeStepperValue}>{expectedScopeTarget.ayahStart}</Text>
+                    <Pressable
+                      style={[
+                        styles.scopeIconButton,
+                        (scopeLocked || customScopeStartAyah >= customScopeEndAyah) &&
+                          styles.scopeIconButtonDisabled,
+                      ]}
+                      disabled={scopeLocked || customScopeStartAyah >= customScopeEndAyah}
+                      onPress={() => adjustCustomScopeStart(1)}
+                      accessibilityRole="button"
+                      accessibilityLabel="Increase expected range start ayah"
+                    >
+                      <Ionicons name="add" size={14} color={colors.text} />
+                    </Pressable>
+                  </View>
+                </View>
+                <View style={styles.scopeStepper}>
+                  <Text style={styles.scopeStepperLabel}>End</Text>
+                  <View style={styles.scopeStepperControls}>
+                    <Pressable
+                      style={[
+                        styles.scopeIconButton,
+                        (scopeLocked || customScopeEndAyah <= customScopeStartAyah) &&
+                          styles.scopeIconButtonDisabled,
+                      ]}
+                      disabled={scopeLocked || customScopeEndAyah <= customScopeStartAyah}
+                      onPress={() => adjustCustomScopeEnd(-1)}
+                      accessibilityRole="button"
+                      accessibilityLabel="Decrease expected range end ayah"
+                    >
+                      <Ionicons name="remove" size={14} color={colors.text} />
+                    </Pressable>
+                    <Text style={styles.scopeStepperValue}>{expectedScopeTarget.ayahEnd}</Text>
+                    <Pressable
+                      style={[
+                        styles.scopeIconButton,
+                        (scopeLocked || customScopeEndAyah >= ayahEnd) &&
+                          styles.scopeIconButtonDisabled,
+                      ]}
+                      disabled={scopeLocked || customScopeEndAyah >= ayahEnd}
+                      onPress={() => adjustCustomScopeEnd(1)}
+                      accessibilityRole="button"
+                      accessibilityLabel="Increase expected range end ayah"
+                    >
+                      <Ionicons name="add" size={14} color={colors.text} />
+                    </Pressable>
+                  </View>
+                </View>
+              </View>
+            ) : null}
+          </View>
           <View style={styles.detailRow}>
             <Text style={styles.detailLabel}>Expected</Text>
             <Text style={styles.detailValue}>
@@ -502,14 +964,96 @@ export default function ReciteLabScreen() {
             <Text style={styles.detailValue}>{transcriptTokens.length} tokens</Text>
           </View>
           <View style={styles.detailRow}>
+            <Text style={styles.detailLabel}>First result</Text>
+            <Text style={styles.detailValue}>{formatDuration(firstResultLatencyMs)}</Text>
+          </View>
+          <View style={styles.detailRow}>
+            <Text style={styles.detailLabel}>Snapshots</Text>
+            <Text style={styles.detailValue}>{liveSnapshotCount}</Text>
+          </View>
+          <View style={styles.detailRow}>
             <Text style={styles.detailLabel}>Audio</Text>
             <Text style={styles.detailValue}>
               {audioUri ? "Captured locally" : recordingSupported ? "Armed" : "Transcript only"}
             </Text>
           </View>
           <View style={styles.detailRow}>
+            <Text style={styles.detailLabel}>Audio upload</Text>
+            <Text
+              style={[
+                styles.detailValue,
+                audioUploadState === "uploaded" && styles.detailValueOk,
+                audioUploadState === "error" && styles.detailValueError,
+              ]}
+              numberOfLines={1}
+            >
+              {audioUploadLabel}
+            </Text>
+          </View>
+          <View style={styles.detailRow}>
             <Text style={styles.detailLabel}>Logging</Text>
             <Text style={styles.detailValue}>{loggingLabel}</Text>
+          </View>
+          <View style={styles.liveProgressCard}>
+            <View style={styles.comparisonHeader}>
+              <View>
+                <Text style={styles.comparisonTitle}>Live Progress</Text>
+                <Text style={styles.comparisonMeta}>
+                  Accepted {liveProgress.acceptedCount}/{liveProgress.expectedCount}
+                </Text>
+              </View>
+              <View style={liveBadgeStyle}>
+                <Text style={liveBadgeTextStyle}>{getLiveStatusLabel(liveProgress.status)}</Text>
+              </View>
+            </View>
+            <View style={styles.progressTrack}>
+              <View
+                style={[
+                  styles.progressFill,
+                  { width: `${Math.round(liveProgress.progressRatio * 100)}%` },
+                ]}
+              />
+            </View>
+            <View style={styles.liveWordRow}>
+              <View style={styles.liveWordBlock}>
+                <Text style={styles.liveWordLabel}>Through</Text>
+                <Text style={styles.liveWordValue} numberOfLines={1}>
+                  {liveProgress.acceptedThroughIndex
+                    ? `${liveProgress.acceptedThroughIndex}. ${liveProgress.acceptedThroughWord ?? ""}`
+                    : "-"}
+                </Text>
+              </View>
+              <View style={styles.liveWordBlock}>
+                <Text style={styles.liveWordLabel}>Next</Text>
+                <Text style={styles.liveWordValue} numberOfLines={1}>
+                  {liveProgress.nextExpectedIndex
+                    ? `${liveProgress.nextExpectedIndex}. ${liveProgress.nextExpectedWord ?? ""}`
+                    : "-"}
+                </Text>
+              </View>
+            </View>
+            <Text style={styles.liveReason}>{liveProgress.holdReason}</Text>
+            <View style={styles.comparisonStatsRow}>
+              <Text style={styles.comparisonStat}>Repeat {liveProgress.repeatCount}</Text>
+              <Text style={styles.comparisonStat}>Skip {liveProgress.skippedCount}</Text>
+              <Text style={styles.comparisonStat}>Mismatch {liveProgress.mismatchCount}</Text>
+            </View>
+            {liveProgress.leadingBismillahIgnored ? (
+              <Text style={styles.comparisonNote}>Leading Bismillah ignored for live progress.</Text>
+            ) : null}
+            {liveProgress.recentEvents.length > 0 ? (
+              <View style={styles.issueList}>
+                {liveProgress.recentEvents.slice(-3).map((event, index) => (
+                  <Text
+                    key={`${event.type}-${event.expectedIndex ?? "x"}-${event.heardIndex}-${index}`}
+                    style={styles.issueText}
+                    numberOfLines={1}
+                  >
+                    {describeLiveEvent(event)}
+                  </Text>
+                ))}
+              </View>
+            ) : null}
           </View>
           <View style={styles.comparisonCard}>
             <View style={styles.comparisonHeader}>
@@ -768,6 +1312,158 @@ function makeStyles(colors: AppThemeColors) {
       fontSize: 12,
       fontWeight: "900",
       color: colors.text,
+    },
+    detailValueOk: {
+      color: colors.success,
+    },
+    detailValueError: {
+      color: colors.danger,
+    },
+    scopeCard: {
+      borderRadius: 10,
+      borderWidth: 1,
+      borderColor: colors.border,
+      backgroundColor: colors.surfaceSubtle,
+      padding: 10,
+      gap: 8,
+    },
+    scopeHeader: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: 10,
+    },
+    scopeTitle: {
+      fontSize: 12,
+      fontWeight: "900",
+      color: colors.text,
+    },
+    scopeValue: {
+      flexShrink: 1,
+      textAlign: "right",
+      fontSize: 12,
+      fontWeight: "900",
+      color: colors.primary,
+    },
+    scopeModeRow: {
+      flexDirection: "row",
+      gap: 6,
+    },
+    scopeModeButton: {
+      flex: 1,
+      minHeight: 34,
+      borderRadius: 8,
+      borderWidth: 1,
+      borderColor: colors.border,
+      backgroundColor: colors.surface,
+      alignItems: "center",
+      justifyContent: "center",
+      paddingHorizontal: 8,
+    },
+    scopeModeButtonSelected: {
+      borderColor: colors.primaryBorder,
+      backgroundColor: colors.primarySoft,
+    },
+    scopeModeButtonDisabled: {
+      opacity: 0.6,
+    },
+    scopeModeButtonText: {
+      fontSize: 12,
+      fontWeight: "900",
+      color: colors.textMuted,
+    },
+    scopeModeButtonTextSelected: {
+      color: colors.primary,
+    },
+    scopeStepperRow: {
+      flexDirection: "row",
+      gap: 8,
+    },
+    scopeStepper: {
+      flex: 1,
+      gap: 5,
+    },
+    scopeStepperLabel: {
+      fontSize: 10,
+      fontWeight: "900",
+      color: colors.textMuted,
+      textTransform: "uppercase",
+    },
+    scopeStepperControls: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 6,
+    },
+    scopeIconButton: {
+      width: 30,
+      height: 30,
+      borderRadius: 8,
+      borderWidth: 1,
+      borderColor: colors.border,
+      backgroundColor: colors.surface,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    scopeIconButtonDisabled: {
+      opacity: 0.4,
+    },
+    scopeStepperValue: {
+      flex: 1,
+      minWidth: 26,
+      textAlign: "center",
+      fontSize: 14,
+      fontWeight: "900",
+      color: colors.text,
+    },
+    liveProgressCard: {
+      borderRadius: 10,
+      borderWidth: 1,
+      borderColor: colors.primaryBorder,
+      backgroundColor: colors.primarySoft,
+      padding: 10,
+      gap: 8,
+    },
+    progressTrack: {
+      height: 7,
+      borderRadius: 999,
+      overflow: "hidden",
+      backgroundColor: colors.surface,
+    },
+    progressFill: {
+      height: "100%",
+      borderRadius: 999,
+      backgroundColor: colors.primary,
+    },
+    liveWordRow: {
+      flexDirection: "row",
+      gap: 8,
+    },
+    liveWordBlock: {
+      flex: 1,
+      minWidth: 0,
+      borderRadius: 8,
+      borderWidth: 1,
+      borderColor: colors.primaryBorder,
+      backgroundColor: colors.surface,
+      padding: 8,
+      gap: 3,
+    },
+    liveWordLabel: {
+      fontSize: 10,
+      fontWeight: "900",
+      color: colors.textMuted,
+      textTransform: "uppercase",
+    },
+    liveWordValue: {
+      fontSize: 14,
+      fontWeight: "900",
+      color: colors.text,
+      textAlign: "right",
+    },
+    liveReason: {
+      fontSize: 12,
+      fontWeight: "800",
+      color: colors.textMuted,
     },
     comparisonCard: {
       borderRadius: 10,

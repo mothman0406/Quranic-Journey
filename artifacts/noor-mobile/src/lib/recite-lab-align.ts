@@ -1,5 +1,7 @@
 import { stripAlPrefix, wordMatches } from "@/src/lib/recite";
 
+export const RECITE_LAB_ALIGNMENT_VERSION = "recite-lab-align-v0.5";
+
 export type ReciteLabAlignmentDecision =
   | "pass"
   | "repeat"
@@ -18,6 +20,46 @@ export type ReciteLabAlignmentOp = {
   heardIndex?: number;
 };
 
+export type ReciteLabLiveStatus =
+  | "waiting"
+  | "advancing"
+  | "complete"
+  | "repeat"
+  | "skip"
+  | "mismatch";
+
+export type ReciteLabLiveEventType = "match" | "repeat" | "skip" | "mismatch" | "extra";
+
+export type ReciteLabLiveEvent = {
+  type: ReciteLabLiveEventType;
+  heard: string;
+  heardIndex: number;
+  expected?: string;
+  expectedIndex?: number;
+  skippedWords?: string[];
+};
+
+export type ReciteLabLiveProgress = {
+  status: ReciteLabLiveStatus;
+  acceptedCount: number;
+  expectedCount: number;
+  heardCount: number;
+  comparableHeardCount: number;
+  acceptedThroughWord: string | null;
+  acceptedThroughIndex: number | null;
+  nextExpectedWord: string | null;
+  nextExpectedIndex: number | null;
+  lastHeardWord: string | null;
+  repeatCount: number;
+  skippedCount: number;
+  mismatchCount: number;
+  leadingBismillahIgnored: boolean;
+  progressRatio: number;
+  holdReason: string;
+  firstBlockingEvent: ReciteLabLiveEvent | null;
+  recentEvents: ReciteLabLiveEvent[];
+};
+
 export type ReciteLabComparison = {
   decision: ReciteLabAlignmentDecision;
   score: number;
@@ -28,6 +70,10 @@ export type ReciteLabComparison = {
   missingCount: number;
   extraCount: number;
   substituteCount: number;
+  leadingExtraCount: number;
+  trailingExtraCount: number;
+  repeatedExpectedExtraCount: number;
+  offTargetExtraCount: number;
   leadingBismillahIgnored: boolean;
   operations: ReciteLabAlignmentOp[];
   firstIssues: ReciteLabAlignmentOp[];
@@ -39,6 +85,15 @@ type Cell = {
 };
 
 const BISMILLAH_TOKENS = ["بسم", "الله", "الرحمان", "الرحيم"];
+const LIVE_LOOKAHEAD_WORDS = 3;
+const LIVE_SPEECH_EQUIVALENTS: Record<string, readonly string[]> = {
+  نباني: ["نبهني"],
+  نبهني: ["نباني"],
+};
+
+function areLiveSpeechEquivalent(a: string, b: string) {
+  return LIVE_SPEECH_EQUIVALENTS[a]?.includes(b) || LIVE_SPEECH_EQUIVALENTS[b]?.includes(a) || false;
+}
 
 function labWordsMatch(heard: string, expected: string) {
   if (wordMatches(heard, expected, "")) return true;
@@ -48,9 +103,81 @@ function labWordsMatch(heard: string, expected: string) {
   return wordMatches(heardNoAl, expectedNoAl, "");
 }
 
+function finalTSafe(value: string) {
+  return value.replace(/ت$/, "ه");
+}
+
+function editDistanceAtMostOne(a: string, b: string) {
+  if (Math.abs(a.length - b.length) > 1) return false;
+  let edits = 0;
+  let i = 0;
+  let j = 0;
+  while (i < a.length && j < b.length) {
+    if (a[i] === b[j]) {
+      i += 1;
+      j += 1;
+      continue;
+    }
+
+    edits += 1;
+    if (edits > 1) return false;
+    if (a.length > b.length) {
+      i += 1;
+    } else if (b.length > a.length) {
+      j += 1;
+    } else {
+      i += 1;
+      j += 1;
+    }
+  }
+
+  if (i < a.length || j < b.length) edits += 1;
+  return edits <= 1;
+}
+
+function liveWordsMatch(heard: string, expected: string) {
+  if (!heard || !expected) return false;
+  if (heard === expected || areLiveSpeechEquivalent(heard, expected)) return true;
+
+  const heardNoAl = stripAlPrefix(heard);
+  const expectedNoAl = stripAlPrefix(expected);
+  if (heardNoAl === expectedNoAl) return true;
+
+  const heardFinalT = finalTSafe(heard);
+  const expectedFinalT = finalTSafe(expected);
+  if (heardFinalT === expectedFinalT) return true;
+
+  if (heard.length >= 4 && expected.length >= 4 && editDistanceAtMostOne(heard, expected)) {
+    return true;
+  }
+  return (
+    heardNoAl.length >= 4 &&
+    expectedNoAl.length >= 4 &&
+    editDistanceAtMostOne(heardNoAl, expectedNoAl)
+  );
+}
+
 function startsWithBismillah(tokens: string[]) {
   if (tokens.length < BISMILLAH_TOKENS.length) return false;
   return BISMILLAH_TOKENS.every((expected, index) => labWordsMatch(tokens[index] ?? "", expected));
+}
+
+function getComparableHeardTokens(expectedWords: string[], heardTokens: string[]) {
+  const expectedStartsWithBismillah = startsWithBismillah(expectedWords);
+  const heardStartsWithBismillah = startsWithBismillah(heardTokens);
+  const leadingBismillahIgnored = !expectedStartsWithBismillah && heardStartsWithBismillah;
+  return {
+    leadingBismillahIgnored,
+    tokens: leadingBismillahIgnored ? heardTokens.slice(BISMILLAH_TOKENS.length) : heardTokens,
+  };
+}
+
+function findLookaheadMatch(expectedWords: string[], heard: string, expectedIndex: number) {
+  const end = Math.min(expectedWords.length, expectedIndex + LIVE_LOOKAHEAD_WORDS + 1);
+  for (let index = expectedIndex + 1; index < end; index += 1) {
+    if (liveWordsMatch(heard, expectedWords[index] ?? "")) return index;
+  }
+  return null;
 }
 
 function chooseCell(candidates: Cell[]) {
@@ -143,6 +270,9 @@ function decide({
   matchedCount,
   missingCount,
   extraCount,
+  leadingExtraCount,
+  repeatedExpectedExtraCount,
+  offTargetExtraCount,
   substituteCount,
   score,
 }: {
@@ -151,19 +281,42 @@ function decide({
   matchedCount: number;
   missingCount: number;
   extraCount: number;
+  leadingExtraCount: number;
+  repeatedExpectedExtraCount: number;
+  offTargetExtraCount: number;
   substituteCount: number;
   score: number;
 }): ReciteLabAlignmentDecision {
   if (comparableHeardCount === 0) return "empty";
   if (expectedCount === 0) return "uncertain";
-  if (score >= 0.92 && missingCount === 0 && substituteCount === 0 && extraCount <= 1) {
+  if (
+    score >= 0.92 &&
+    missingCount === 0 &&
+    substituteCount === 0 &&
+    (extraCount <= 1 || (extraCount === leadingExtraCount && leadingExtraCount <= 3))
+  ) {
     return "pass";
   }
 
   const matchRatio = matchedCount / expectedCount;
-  if (extraCount >= 2 && extraCount >= missingCount && extraCount >= substituteCount) {
+  const cleanRepeat =
+    extraCount > 0 &&
+    repeatedExpectedExtraCount >= Math.max(1, extraCount - 1) &&
+    substituteCount <= 1 &&
+    missingCount <= 1 &&
+    matchRatio >= 0.9;
+
+  if (cleanRepeat) {
     return "repeat";
   }
+
+  if (
+    offTargetExtraCount >= 3 &&
+    (substituteCount >= 1 || score < 0.65 || matchRatio < 0.85)
+  ) {
+    return "wrong";
+  }
+
   if (substituteCount >= 3) return "wrong";
   if (missingCount >= 2 && substituteCount === 0 && missingCount >= extraCount) {
     return "skip";
@@ -173,26 +326,187 @@ function decide({
     return "skip";
   }
   if (substituteCount >= 1) return "wrong";
+  if (extraCount >= 2 && extraCount >= missingCount && extraCount >= substituteCount) {
+    return "repeat";
+  }
   if (extraCount > 0) return "repeat";
   if (missingCount > 0) return "skip";
   return "uncertain";
+}
+
+export function getReciteLabLiveProgress(
+  expectedWords: string[],
+  heardTokens: string[],
+): ReciteLabLiveProgress {
+  const { leadingBismillahIgnored, tokens: comparableHeardTokens } = getComparableHeardTokens(
+    expectedWords,
+    heardTokens,
+  );
+  let expectedIndex = 0;
+  let repeatCount = 0;
+  const skippedIndices = new Set<number>();
+  let mismatchCount = 0;
+  const events: ReciteLabLiveEvent[] = [];
+  let firstBlockingEvent: ReciteLabLiveEvent | null = null;
+
+  for (let heardOffset = 0; heardOffset < comparableHeardTokens.length; heardOffset += 1) {
+    const heard = comparableHeardTokens[heardOffset] ?? "";
+    const heardIndex = leadingBismillahIgnored ? heardOffset + BISMILLAH_TOKENS.length + 1 : heardOffset + 1;
+    const expected = expectedWords[expectedIndex] ?? null;
+
+    if (expected && liveWordsMatch(heard, expected)) {
+      events.push({
+        type: "match",
+        heard,
+        heardIndex,
+        expected,
+        expectedIndex: expectedIndex + 1,
+      });
+      expectedIndex += 1;
+      continue;
+    }
+
+    const previousExpected = expectedIndex > 0 ? expectedWords[expectedIndex - 1] : null;
+    if (previousExpected && liveWordsMatch(heard, previousExpected)) {
+      repeatCount += 1;
+      events.push({
+        type: "repeat",
+        heard,
+        heardIndex,
+        expected: previousExpected,
+        expectedIndex,
+      });
+      continue;
+    }
+
+    if (expected) {
+      const lookaheadIndex = findLookaheadMatch(expectedWords, heard, expectedIndex);
+      if (lookaheadIndex !== null) {
+        const skippedWords = expectedWords.slice(expectedIndex, lookaheadIndex);
+        for (let index = expectedIndex; index < lookaheadIndex; index += 1) {
+          skippedIndices.add(index);
+        }
+        const event: ReciteLabLiveEvent = {
+          type: "skip",
+          heard,
+          heardIndex,
+          expected: expectedWords[lookaheadIndex],
+          expectedIndex: lookaheadIndex + 1,
+          skippedWords,
+        };
+        firstBlockingEvent ??= event;
+        events.push(event);
+        continue;
+      }
+
+      mismatchCount += 1;
+      const event: ReciteLabLiveEvent = {
+        type: "mismatch",
+        heard,
+        heardIndex,
+        expected,
+        expectedIndex: expectedIndex + 1,
+      };
+      firstBlockingEvent ??= event;
+      events.push(event);
+      continue;
+    }
+
+    repeatCount += 1;
+    events.push({
+      type: "extra",
+      heard,
+      heardIndex,
+      expected: expectedWords[expectedWords.length - 1],
+      expectedIndex: expectedWords.length,
+    });
+  }
+
+  const acceptedCount = Math.min(expectedIndex, expectedWords.length);
+  const lastEvent = events[events.length - 1] ?? null;
+  const skippedCount = skippedIndices.size;
+  let status: ReciteLabLiveStatus = "waiting";
+  let holdReason = "Waiting for recitation.";
+
+  if (comparableHeardTokens.length === 0) {
+    status = "waiting";
+  } else if (acceptedCount >= expectedWords.length && expectedWords.length > 0) {
+    status = "complete";
+    holdReason = "All expected words accepted.";
+  } else if (firstBlockingEvent?.type === "skip") {
+    status = "skip";
+    holdReason = "A later word matched before one or more expected words.";
+  } else if (firstBlockingEvent?.type === "mismatch") {
+    status = "mismatch";
+    holdReason = "Heard word does not match the expected position.";
+  } else if (lastEvent?.type === "mismatch") {
+    status = "mismatch";
+    holdReason = "Heard word does not match the expected position.";
+  } else if (lastEvent?.type === "skip") {
+    status = "skip";
+    holdReason = "A later word matched before one or more expected words.";
+  } else if (lastEvent?.type === "repeat" || lastEvent?.type === "extra") {
+    status = "repeat";
+    holdReason = "Repeated or extra word heard; cursor stays put.";
+  } else if (lastEvent?.type === "match") {
+    status = "advancing";
+    holdReason = "Latest word accepted; cursor can advance.";
+  } else if (mismatchCount > 0) {
+    status = "mismatch";
+    holdReason = "Heard word does not match the expected position.";
+  } else if (skippedCount > 0) {
+    status = "skip";
+    holdReason = "A later word matched before one or more expected words.";
+  }
+
+  return {
+    status,
+    acceptedCount,
+    expectedCount: expectedWords.length,
+    heardCount: heardTokens.length,
+    comparableHeardCount: comparableHeardTokens.length,
+    acceptedThroughWord: acceptedCount > 0 ? expectedWords[acceptedCount - 1] ?? null : null,
+    acceptedThroughIndex: acceptedCount > 0 ? acceptedCount : null,
+    nextExpectedWord: acceptedCount < expectedWords.length ? expectedWords[acceptedCount] ?? null : null,
+    nextExpectedIndex: acceptedCount < expectedWords.length ? acceptedCount + 1 : null,
+    lastHeardWord: comparableHeardTokens[comparableHeardTokens.length - 1] ?? null,
+    repeatCount,
+    skippedCount,
+    mismatchCount,
+    leadingBismillahIgnored,
+    progressRatio:
+      expectedWords.length === 0 ? 0 : Math.max(0, Math.min(1, acceptedCount / expectedWords.length)),
+    holdReason,
+    firstBlockingEvent,
+    recentEvents: events.slice(-5),
+  };
 }
 
 export function compareReciteLabTokens(
   expectedWords: string[],
   heardTokens: string[],
 ): ReciteLabComparison {
-  const expectedStartsWithBismillah = startsWithBismillah(expectedWords);
-  const heardStartsWithBismillah = startsWithBismillah(heardTokens);
-  const leadingBismillahIgnored = !expectedStartsWithBismillah && heardStartsWithBismillah;
-  const comparableHeardTokens = leadingBismillahIgnored
-    ? heardTokens.slice(BISMILLAH_TOKENS.length)
-    : heardTokens;
+  const { leadingBismillahIgnored, tokens: comparableHeardTokens } = getComparableHeardTokens(
+    expectedWords,
+    heardTokens,
+  );
   const operations = buildAlignment(expectedWords, comparableHeardTokens);
   const matchedCount = operations.filter((op) => op.type === "match").length;
   const missingCount = operations.filter((op) => op.type === "missing").length;
-  const extraCount = operations.filter((op) => op.type === "extra").length;
+  const extraOps = operations.filter((op) => op.type === "extra");
+  const extraCount = extraOps.length;
   const substituteCount = operations.filter((op) => op.type === "substitute").length;
+  const repeatedExpectedExtraCount = extraOps.filter((op) =>
+    expectedWords.some((expected) => labWordsMatch(op.heard ?? "", expected)),
+  ).length;
+  const offTargetExtraCount = extraCount - repeatedExpectedExtraCount;
+  const leadingExtraCount = operations.findIndex((op) => op.type !== "extra");
+  const normalizedLeadingExtraCount = leadingExtraCount === -1 ? operations.length : leadingExtraCount;
+  let trailingExtraCount = 0;
+  for (let index = operations.length - 1; index >= 0; index -= 1) {
+    if (operations[index]?.type !== "extra") break;
+    trailingExtraCount += 1;
+  }
   const errorWeight = missingCount + extraCount * 0.65 + substituteCount * 1.15;
   const score =
     expectedWords.length === 0
@@ -204,6 +518,9 @@ export function compareReciteLabTokens(
     matchedCount,
     missingCount,
     extraCount,
+    leadingExtraCount: normalizedLeadingExtraCount,
+    repeatedExpectedExtraCount,
+    offTargetExtraCount,
     substituteCount,
     score,
   });
@@ -218,6 +535,10 @@ export function compareReciteLabTokens(
     missingCount,
     extraCount,
     substituteCount,
+    leadingExtraCount: normalizedLeadingExtraCount,
+    trailingExtraCount,
+    repeatedExpectedExtraCount,
+    offTargetExtraCount,
     leadingBismillahIgnored,
     operations,
     firstIssues: operations.filter((op) => op.type !== "match").slice(0, 5),
