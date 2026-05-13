@@ -4,6 +4,7 @@ import pinoHttp from "pino-http";
 import { toNodeHandler } from "better-auth/node";
 import { auth, getAuthPublicConfig } from "./auth.js";
 import router from "./routes/index.js";
+import devReciteLabRouter from "./routes/dev-recite-lab.js";
 import healthRouter from "./routes/health.js";
 import { requireAuth } from "./middlewares/requireAuth.js";
 import { logger } from "./lib/logger.js";
@@ -84,6 +85,10 @@ app.use(express.urlencoded({ extended: true }));
 
 // Public health check — must be BEFORE requireAuth
 app.use("/api", healthRouter);
+
+if (process.env.NODE_ENV !== "production") {
+  app.use("/api/dev/recite-lab", devReciteLabRouter);
+}
 
 // All other /api/* routes require a valid session
 app.use("/api", requireAuth, router);

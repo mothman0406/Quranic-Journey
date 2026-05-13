@@ -7018,6 +7018,29 @@ export default function MemorizationScreen() {
   const testMushafPage = clampMushafPage(
     displayedMushafPage ?? activeMushafPage ?? pageStart ?? 1,
   );
+
+  async function openReciteLab() {
+    if (surahNumber === null || ayahStart === null || ayahEnd === null) return;
+    await pausePlaybackForMushafNavigation();
+    setSettingsOpen(false);
+    setTranslationPopup(null);
+    setTappedAyah(null);
+    setTestMushafSheetTarget(null);
+    router.push({
+      pathname: "/child/[childId]/recite-lab",
+      params: {
+        childId,
+        name: params.name ?? "",
+        surahNumber: String(surahNumber),
+        ayahStart: String(ayahStart),
+        ayahEnd: String(ayahEnd),
+        endSurahNumber: String(surahNumber),
+        page: String(testMushafPage),
+        mushafViewMode,
+      },
+    } as unknown as Href);
+  }
+
   // Derives a word pointer from the RAF-updated highlightedPage state so
   // MushafTestPageView can highlight the active audio word.
   // highlightedPage.verseKey is "surah:ayah" and position is 1-based audio wordIdx.
@@ -7964,6 +7987,26 @@ export default function MemorizationScreen() {
           <Ionicons name={readingReciteReturnIcon} size={16} color="#ffffff" />
           <Text style={styles.readingReciteReturnText}>Current ayah</Text>
         </Pressable>
+      ) : null}
+
+      {viewMode === "test-mushaf" &&
+      !reciteMode &&
+      surahNumber !== null &&
+      ayahStart !== null &&
+      ayahEnd !== null ? (
+        <View style={styles.reciteLabRow}>
+          <Pressable
+            style={styles.reciteLabButton}
+            onPress={() => {
+              void openReciteLab();
+            }}
+            accessibilityRole="button"
+            accessibilityLabel="Open Recite Lab"
+          >
+            <Ionicons name="flask-outline" size={15} color={appColors.primary as string} />
+            <Text style={styles.reciteLabButtonText}>Recite Lab</Text>
+          </Pressable>
+        </View>
       ) : null}
 
       {reciteMode && currentReciteExpectedIndex !== null && (
@@ -12600,6 +12643,34 @@ const styles = StyleSheet.create({
   },
   mushafEndMarkerDisabledText: {
     opacity: 0.45,
+  },
+  reciteLabRow: {
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    paddingBottom: 8,
+    backgroundColor: appColors.surface,
+    borderTopWidth: 1,
+    borderTopColor: appColors.border,
+  },
+  reciteLabButton: {
+    minHeight: 40,
+    borderRadius: 999,
+    borderWidth: 1,
+    paddingHorizontal: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 7,
+    backgroundColor: appColors.primarySoft,
+    borderColor: appColors.primaryBorder,
+  },
+  reciteLabButtonText: {
+    color: appColors.primary,
+    fontSize: 13,
+    fontWeight: "900",
   },
   reciteAssistRow: {
     flexDirection: "row",

@@ -51,3 +51,4 @@ Thumbs.db
 # Environment files
 artifacts/api-server/.env
 artifacts/noor-path/.env
+artifacts/recite-lab/

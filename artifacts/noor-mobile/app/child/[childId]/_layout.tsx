@@ -11,6 +11,7 @@ export default function ChildLayout() {
       <Stack.Screen name="review" />
       <Stack.Screen name="review-session" />
       <Stack.Screen name="memorization" />
+      <Stack.Screen name="recite-lab" />
       <Stack.Screen name="progress" />
       <Stack.Screen name="plan" />
       <Stack.Screen name="notes-bookmarks" />
