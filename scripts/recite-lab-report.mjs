@@ -147,6 +147,7 @@ function summarizeRows(rows) {
   const byPhraseStatus = {};
   const byVerifierStatus = {};
   const byVerifierReason = {};
+  const byAudioUploadStatus = {};
   const byAlignmentVersion = {};
   const byWindowVersion = {};
   const passMatrix = {};
@@ -182,6 +183,11 @@ function summarizeRows(rows) {
       increment(byVerifierStatus, row.verifier.status ?? "unknown");
       increment(byVerifierReason, row.verifier.reason ?? "unknown");
     }
+    increment(
+      byAudioUploadStatus,
+      row.audioUpload?.latestStatus ??
+        (row.audio?.hasAudio ? "file_present" : row.audioUpload?.plan?.willUpload ? "missing_event" : "none"),
+    );
     increment(byAlignmentVersion, alignmentVersion);
     increment(byWindowVersion, windowVersion);
 
@@ -232,6 +238,7 @@ function summarizeRows(rows) {
     byPhraseStatus,
     byVerifierStatus,
     byVerifierReason,
+    byAudioUploadStatus,
     byAlignmentVersion,
     byWindowVersion,
     passNotPass: {
@@ -317,6 +324,9 @@ function compactRow(row) {
     verifierReason: row.verifier?.reason ?? null,
     verifierConfidence: row.verifier?.confidence ?? null,
     verifierRescuedBy: row.verifier?.rescuedBy ?? null,
+    audioUploadStatus: row.audioUpload?.latestStatus ?? null,
+    audioUploadReason: row.audioUpload?.latestReason ?? null,
+    audioUploadError: row.audioUpload?.latestError ?? null,
     windowStatus: row.window?.status ?? null,
     windowAccepted: row.window?.acceptedCount ?? null,
     expectedCount: row.counts?.expected ?? null,
@@ -496,6 +506,12 @@ function renderMarkdown(report) {
   lines.push("");
   lines.push("```json");
   lines.push(JSON.stringify(summary.byVerifierReason, null, 2));
+  lines.push("```");
+  lines.push("");
+  lines.push("Audio upload statuses:");
+  lines.push("");
+  lines.push("```json");
+  lines.push(JSON.stringify(summary.byAudioUploadStatus, null, 2));
   lines.push("```");
   lines.push("");
   lines.push("Exact labels:");

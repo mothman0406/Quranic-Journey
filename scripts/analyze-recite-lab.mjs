@@ -7,6 +7,7 @@ const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const ROOT_DIR = path.resolve(SCRIPT_DIR, "..");
 const LAB_DIR = path.join(ROOT_DIR, "artifacts", "recite-lab");
 const ATTEMPTS_FILE = path.join(LAB_DIR, "attempts.jsonl");
+const AUDIO_EVENTS_FILE = path.join(LAB_DIR, "audio-events.jsonl");
 const OVERRIDES_FILE = path.join(LAB_DIR, "label-overrides.json");
 const AUDIO_DIR = path.join(LAB_DIR, "audio");
 const ANALYSIS_DIR = path.join(LAB_DIR, "analysis");
@@ -101,6 +102,68 @@ async function readAudioIndex() {
   }
 
   return index;
+}
+
+async function readAudioEventIndex() {
+  if (!existsSync(AUDIO_EVENTS_FILE)) return new Map();
+  const content = await readFile(AUDIO_EVENTS_FILE, "utf8");
+  const index = new Map();
+  const events = content
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line, lineIndex) => {
+      try {
+        return JSON.parse(line);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        throw new Error(`Could not parse audio-events.jsonl line ${lineIndex + 1}: ${message}`);
+      }
+    });
+
+  for (const event of events) {
+    const attemptId = event.attemptId;
+    if (!attemptId) continue;
+    if (!index.has(attemptId)) index.set(attemptId, []);
+    index.get(attemptId).push(event);
+  }
+
+  return index;
+}
+
+function compactAudioEvent(event) {
+  const payload = event.payload ?? {};
+  return {
+    id: event.id ?? null,
+    savedAt: event.savedAt ?? null,
+    status: payload.status ?? null,
+    reason: payload.reason ?? null,
+    bytes: payload.bytes ?? null,
+    contentType: payload.contentType ?? null,
+    localBytes: payload.localBytes ?? null,
+    localContentType: payload.localContentType ?? null,
+    localReadAttempts: payload.localReadAttempts ?? null,
+    uploadDurationMs: payload.uploadDurationMs ?? null,
+    error: payload.error ?? null,
+  };
+}
+
+function summarizeAudioUploadEvents(events) {
+  const compactEvents = events.map(compactAudioEvent);
+  const latest = compactEvents[compactEvents.length - 1] ?? null;
+  const byStatus = {};
+  for (const event of compactEvents) increment(byStatus, event.status ?? "unknown");
+
+  return {
+    eventCount: compactEvents.length,
+    latestStatus: latest?.status ?? null,
+    latestReason: latest?.reason ?? null,
+    latestAt: latest?.savedAt ?? null,
+    latestError: latest?.error ?? null,
+    serverReceivedCount: compactEvents.filter((event) => event.status === "server_received").length,
+    byStatus,
+    events: compactEvents.slice(-8),
+  };
 }
 
 function increment(map, key) {
@@ -540,7 +603,7 @@ function summarizeIssue(issue) {
   };
 }
 
-function toDatasetRow(record, overrides, audioIndex) {
+function toDatasetRow(record, overrides, audioIndex, audioEventIndex) {
   const payload = record.payload ?? {};
   const override = overrides[record.id] ?? null;
   const rawLabel = payload.label ?? "unlabeled";
@@ -560,6 +623,8 @@ function toDatasetRow(record, overrides, audioIndex) {
   const expectedScope = payload.expectedScope ?? null;
   const timing = payload.timing ?? {};
   const audio = audioIndex.get(record.id) ?? null;
+  const audioEvents = audioEventIndex.get(record.id) ?? [];
+  const audioUpload = summarizeAudioUploadEvents(audioEvents);
   const expectedDecision = expectedDecisionForLabel(effectiveLabel);
   const rawDecision = comparison.decision ?? null;
   const decision = currentComparison.decision ?? rawDecision;
@@ -674,6 +739,10 @@ function toDatasetRow(record, overrides, audioIndex) {
       contentType: audio?.contentType ?? null,
       receivedAt: audio?.receivedAt ?? null,
     },
+    audioUpload: {
+      plan: payload.audioUploadPlan ?? null,
+      ...audioUpload,
+    },
     review: {
       expectedDecision,
       labelDecisionMismatch: Boolean(expectedDecision && decision && expectedDecision !== decision),
@@ -690,6 +759,7 @@ function buildSummary(rows, totalRawAttempts) {
   const byExpectedScopeMode = {};
   const byPhraseStatus = {};
   const byWindowStatus = {};
+  const byAudioUploadStatus = {};
   const audioByEffectiveLabel = {};
   const audioByDecision = {};
   const audioByPhraseStatus = {};
@@ -708,6 +778,11 @@ function buildSummary(rows, totalRawAttempts) {
     increment(byExpectedScopeMode, row.expectedScope.mode ?? "unknown");
     increment(byPhraseStatus, row.phrase.status ?? "unknown");
     increment(byWindowStatus, row.window.status ?? "unknown");
+    increment(
+      byAudioUploadStatus,
+      row.audioUpload.latestStatus ??
+        (row.audio.hasAudio ? "file_present" : row.audioUpload.plan?.willUpload ? "missing_event" : "none"),
+    );
     if (row.audio.hasAudio) {
       withAudio += 1;
       increment(audioByEffectiveLabel, row.labels.effective);
@@ -734,6 +809,8 @@ function buildSummary(rows, totalRawAttempts) {
         liveStatus: row.live.status,
         score: row.comparison.score,
         firstIssues: row.comparison.firstIssues,
+        audioUploadStatus: row.audioUpload.latestStatus,
+        audioUploadReason: row.audioUpload.latestReason,
         reason: row.labels.overridden
           ? "label_override"
           : row.review.missingAudio
@@ -746,6 +823,7 @@ function buildSummary(rows, totalRawAttempts) {
   return {
     generatedAt: new Date().toISOString(),
     attemptsFile: path.relative(ROOT_DIR, ATTEMPTS_FILE),
+    audioEventsFile: path.relative(ROOT_DIR, AUDIO_EVENTS_FILE),
     overridesFile: path.relative(ROOT_DIR, OVERRIDES_FILE),
     audioDir: path.relative(ROOT_DIR, AUDIO_DIR),
     totalRawAttempts,
@@ -760,6 +838,7 @@ function buildSummary(rows, totalRawAttempts) {
     byExpectedScopeMode,
     byPhraseStatus,
     byWindowStatus,
+    byAudioUploadStatus,
     audioByEffectiveLabel,
     audioByDecision,
     audioByPhraseStatus,
@@ -802,6 +881,7 @@ function toAudioManifestRow(row) {
     windowPendingCount: row.window.pendingWindowCount,
     windowDetails: row.window.windows,
     verifierVerdict: row.verifier,
+    audioUpload: row.audioUpload,
     score: row.comparison.score,
     missingCount: row.counts.missing,
     extraCount: row.counts.extra,
@@ -870,6 +950,7 @@ function printTextSummary(summary, rows) {
   console.log(`Window: ${JSON.stringify(summary.byWindowStatus)}`);
   console.log(`Scopes: ${JSON.stringify(summary.byExpectedScopeMode)}`);
   console.log(`Audio labels: ${JSON.stringify(summary.audioByEffectiveLabel)}`);
+  console.log(`Audio upload: ${JSON.stringify(summary.byAudioUploadStatus)}`);
   console.log("");
   console.log("Latest:");
   for (const line of latest) console.log(`- ${line}`);
@@ -887,13 +968,16 @@ function printTextSummary(summary, rows) {
 
 async function main() {
   const options = parseArgs(process.argv.slice(2));
-  const [attempts, overrides, audioIndex] = await Promise.all([
+  const [attempts, overrides, audioIndex, audioEventIndex] = await Promise.all([
     readAttempts(),
     readOverrides(),
     readAudioIndex(),
+    readAudioEventIndex(),
   ]);
   const selectedAttempts = options.latest ? attempts.slice(-options.latest) : attempts;
-  const rows = selectedAttempts.map((record) => toDatasetRow(record, overrides, audioIndex));
+  const rows = selectedAttempts.map((record) =>
+    toDatasetRow(record, overrides, audioIndex, audioEventIndex),
+  );
   const summary = buildSummary(rows, attempts.length);
   const audioManifestRows = rows.filter((row) => row.audio.hasAudio).map(toAudioManifestRow);
   const audioBaseline = buildAudioBaseline(rows);

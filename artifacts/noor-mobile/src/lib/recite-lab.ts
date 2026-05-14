@@ -114,6 +114,12 @@ export type SaveReciteLabAttemptPayload = {
   comparison: ReciteLabComparison;
   audioUri: string | null;
   recordingSupported: boolean;
+  audioUploadPlan: {
+    willUpload: boolean;
+    reason: "audio_uri_present" | "no_audio_uri_at_save" | "recording_unsupported";
+    audioUriPresent: boolean;
+    recordingSupported: boolean;
+  };
   deviceSessionId: string | null;
 };
 
@@ -131,6 +137,49 @@ export type UploadReciteLabAudioResult = {
   file: string;
   bytes: number;
   contentType: string;
+  localBytes: number;
+  localContentType: string;
+  localReadAttempts: number;
+  durationMs: number;
+};
+
+export type ReciteLabAudioUploadErrorStep =
+  | "base_url"
+  | "read_local_audio"
+  | "empty_local_audio"
+  | "upload_request"
+  | "server_response"
+  | "parse_response";
+
+export type ReciteLabAudioUploadErrorDetails = {
+  step: ReciteLabAudioUploadErrorStep;
+  audioUri?: string;
+  localBytes?: number;
+  localContentType?: string;
+  localReadAttempts?: number;
+  durationMs?: number;
+  responseStatus?: number;
+  responseText?: string;
+  errorName?: string;
+  errorMessage?: string;
+};
+
+export type LogReciteLabAudioUploadEventPayload = {
+  status: "started" | "uploaded" | "skipped" | "error";
+  clientEventAt: string;
+  reason?: string;
+  audioUriPresent: boolean;
+  recordingSupported: boolean;
+  audioStartedAt: string | null;
+  audioEndedAt: string | null;
+  audioDurationMs: number | null;
+  uploadDurationMs?: number | null;
+  bytes?: number | null;
+  contentType?: string | null;
+  localBytes?: number | null;
+  localContentType?: string | null;
+  localReadAttempts?: number | null;
+  error?: ReciteLabAudioUploadErrorDetails | null;
 };
 
 const PRIVATE_HOST_PATTERN =
@@ -208,37 +257,174 @@ function getAudioContentType(audioUri: string, blob: Blob) {
   return "audio/wav";
 }
 
+function wait(ms: number) {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
+
+function describeUnknownError(error: unknown) {
+  return {
+    errorName: error instanceof Error ? error.name : typeof error,
+    errorMessage: error instanceof Error ? error.message : String(error),
+  };
+}
+
+export class ReciteLabAudioUploadError extends Error {
+  details: ReciteLabAudioUploadErrorDetails;
+
+  constructor(message: string, details: ReciteLabAudioUploadErrorDetails) {
+    super(message);
+    this.name = "ReciteLabAudioUploadError";
+    this.details = details;
+  }
+}
+
+export function getReciteLabAudioUploadErrorDetails(
+  error: unknown,
+): ReciteLabAudioUploadErrorDetails {
+  if (error instanceof ReciteLabAudioUploadError) return error.details;
+  return {
+    step: "upload_request",
+    ...describeUnknownError(error),
+  };
+}
+
+async function readAudioBlobWithRetry(audioUri: string) {
+  const delays = [0, 350, 900];
+  let lastError: unknown = null;
+
+  for (let attempt = 1; attempt <= delays.length; attempt += 1) {
+    const delay = delays[attempt - 1] ?? 0;
+    if (delay > 0) await wait(delay);
+
+    try {
+      const audioResponse = await fetch(audioUri);
+      const blob = await audioResponse.blob();
+      if (blob.size > 0) {
+        return {
+          blob,
+          attempts: attempt,
+        };
+      }
+      lastError = new Error("Captured audio file is empty.");
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  const last = describeUnknownError(lastError);
+  throw new ReciteLabAudioUploadError(
+    last.errorMessage || "Could not read captured audio file.",
+    {
+      step:
+        last.errorMessage === "Captured audio file is empty."
+          ? "empty_local_audio"
+          : "read_local_audio",
+      audioUri,
+      localReadAttempts: delays.length,
+      ...last,
+    },
+  );
+}
+
 export async function uploadReciteLabAudio(
   attemptId: string,
   audioUri: string,
 ): Promise<UploadReciteLabAudioResult> {
+  const startedAtMs = Date.now();
   const baseURL = getReciteLabLoggingBaseURL();
   if (!baseURL) {
-    throw new Error("Recite Lab logging URL unavailable.");
+    throw new ReciteLabAudioUploadError("Recite Lab logging URL unavailable.", {
+      step: "base_url",
+      audioUri,
+      durationMs: Date.now() - startedAtMs,
+    });
   }
 
-  const audioResponse = await fetch(audioUri);
-  const blob = await audioResponse.blob();
-  if (blob.size === 0) {
-    throw new Error("Captured audio file is empty.");
-  }
-
+  const { blob, attempts } = await readAudioBlobWithRetry(audioUri);
   const contentType = getAudioContentType(audioUri, blob);
-  const response = await fetch(
-    `${baseURL}/api/dev/recite-lab/attempts/${encodeURIComponent(attemptId)}/audio`,
+
+  let response: Response;
+  try {
+    response = await fetch(
+      `${baseURL}/api/dev/recite-lab/attempts/${encodeURIComponent(attemptId)}/audio`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": contentType,
+        },
+        body: blob,
+      },
+    );
+  } catch (error) {
+    throw new ReciteLabAudioUploadError("Could not upload captured audio.", {
+      step: "upload_request",
+      audioUri,
+      localBytes: blob.size,
+      localContentType: contentType,
+      localReadAttempts: attempts,
+      durationMs: Date.now() - startedAtMs,
+      ...describeUnknownError(error),
+    });
+  }
+
+  const responseText = await response.text();
+
+  if (!response.ok) {
+    throw new ReciteLabAudioUploadError(
+      responseText.trim() || `Recite Lab audio upload failed: ${response.status}`,
+      {
+        step: "server_response",
+        audioUri,
+        localBytes: blob.size,
+        localContentType: contentType,
+        localReadAttempts: attempts,
+        durationMs: Date.now() - startedAtMs,
+        responseStatus: response.status,
+        responseText: responseText.slice(0, 500),
+      },
+    );
+  }
+
+  try {
+    const parsed = JSON.parse(responseText) as UploadReciteLabAudioResult;
+    return {
+      ...parsed,
+      localBytes: blob.size,
+      localContentType: contentType,
+      localReadAttempts: attempts,
+      durationMs: Date.now() - startedAtMs,
+    };
+  } catch (error) {
+    throw new ReciteLabAudioUploadError("Could not parse audio upload response.", {
+      step: "parse_response",
+      audioUri,
+      localBytes: blob.size,
+      localContentType: contentType,
+      localReadAttempts: attempts,
+      durationMs: Date.now() - startedAtMs,
+      responseText: responseText.slice(0, 500),
+      ...describeUnknownError(error),
+    });
+  }
+}
+
+export async function logReciteLabAudioUploadEvent(
+  attemptId: string,
+  payload: LogReciteLabAudioUploadEventPayload,
+): Promise<void> {
+  const baseURL = getReciteLabLoggingBaseURL();
+  if (!baseURL) return;
+
+  await fetch(
+    `${baseURL}/api/dev/recite-lab/attempts/${encodeURIComponent(attemptId)}/audio-events`,
     {
       method: "POST",
       headers: {
-        "Content-Type": contentType,
+        "Content-Type": "application/json",
       },
-      body: blob,
+      body: JSON.stringify(payload),
     },
   );
-
-  if (!response.ok) {
-    const text = await response.text();
-    throw new Error(text.trim() || `Recite Lab audio upload failed: ${response.status}`);
-  }
-
-  return response.json() as Promise<UploadReciteLabAudioResult>;
 }

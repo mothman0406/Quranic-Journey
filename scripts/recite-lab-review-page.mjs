@@ -106,6 +106,8 @@ function reviewReason(row) {
   if (expected && expected !== predictedPassDecision(row)) {
     return expected === "not_pass" ? "alignment false pass" : "alignment false reject";
   }
+  if (!row.audio?.hasAudio && row.audioUpload?.latestStatus === "error") return "audio upload error";
+  if (!row.audio?.hasAudio && row.audioUpload?.latestStatus === "skipped") return "audio skipped";
   if (row.review?.missingAudio) return "missing audio";
   return "context";
 }
@@ -134,6 +136,7 @@ function renderRow(row) {
   const rawLabel = row.labels?.raw ?? label;
   const decision = row.comparison?.decision ?? "unknown";
   const verifier = row.verifier;
+  const audioUpload = row.audioUpload;
   const reason = reviewReason(row);
   const issue = summarizeIssue(row.comparison?.firstIssues?.[0]);
   const expectedText = (row.expectedWords ?? []).join(" ");
@@ -167,6 +170,9 @@ function renderRow(row) {
         <div><dt>Verifier</dt><dd>${escapeHtml(verifier?.status)} ${escapeHtml(
           verifier?.rescuedBy ? `via ${verifier.rescuedBy}` : "",
         )}</dd></div>
+        <div><dt>Audio upload</dt><dd>${escapeHtml(audioUpload?.latestStatus)} ${escapeHtml(
+          audioUpload?.latestReason ? `· ${audioUpload.latestReason}` : "",
+        )}</dd></div>
         <div><dt>Window</dt><dd>${escapeHtml(row.window?.status)} ${escapeHtml(
           row.window?.acceptedCount,
         )}/${escapeHtml(row.counts?.expected)}</dd></div>
@@ -182,6 +188,14 @@ function renderRow(row) {
         <summary>Expected</summary>
         <p dir="rtl">${escapeHtml(expectedText)}</p>
       </details>
+      ${
+        audioUpload?.latestError
+          ? `<details>
+        <summary>Audio Upload Error</summary>
+        <pre>${escapeHtml(JSON.stringify(audioUpload.latestError, null, 2))}</pre>
+      </details>`
+          : ""
+      }
       <details>
         <summary>Label commands</summary>
         <pre>${escapeHtml(labelCommand(row, "correct"))}
@@ -248,7 +262,9 @@ function renderHtml(rows, options) {
       border-color: #b98100;
     }
     .verifier-false-reject,
-    .capture-issue {
+    .capture-issue,
+    .audio-upload-error,
+    .audio-skipped {
       border-color: #b98100;
     }
     header {

@@ -34,10 +34,13 @@ import {
   type ReciteLabWindowStatus,
 } from "@/src/lib/recite-lab-align";
 import {
+  getReciteLabAudioUploadErrorDetails,
   getReciteLabLoggingBaseURL,
+  logReciteLabAudioUploadEvent,
   saveReciteLabAttempt,
   uploadReciteLabAudio,
   type ReciteLabAttemptLabel,
+  type LogReciteLabAudioUploadEventPayload,
 } from "@/src/lib/recite-lab";
 import {
   evaluateReciteLabVerifier,
@@ -318,6 +321,7 @@ export default function ReciteLabScreen() {
   const [audioUploadState, setAudioUploadState] = useState<AudioUploadState>("idle");
   const [audioUploadMessage, setAudioUploadMessage] = useState<string | null>(null);
   const [lastSavedAttemptKey, setLastSavedAttemptKey] = useState<string | null>(null);
+  const [lastSavedAttemptId, setLastSavedAttemptId] = useState<string | null>(null);
   const [firstResultAt, setFirstResultAt] = useState<string | null>(null);
   const [liveSnapshotCount, setLiveSnapshotCount] = useState(0);
   const [phraseSnapshotCount, setPhraseSnapshotCount] = useState(0);
@@ -516,6 +520,33 @@ export default function ReciteLabScreen() {
     };
   }
 
+  function buildAudioUploadPlan(uri: string | null) {
+    return {
+      willUpload: Boolean(uri),
+      reason: uri
+        ? "audio_uri_present"
+        : recordingSupported
+          ? "no_audio_uri_at_save"
+          : "recording_unsupported",
+      audioUriPresent: Boolean(uri),
+      recordingSupported,
+    } as const;
+  }
+
+  async function logAudioUploadEventSafely(
+    attemptId: string,
+    payload: Omit<LogReciteLabAudioUploadEventPayload, "clientEventAt">,
+  ) {
+    try {
+      await logReciteLabAudioUploadEvent(attemptId, {
+        clientEventAt: new Date().toISOString(),
+        ...payload,
+      });
+    } catch {
+      // The attempt itself is already saved; upload-event logging is diagnostic only.
+    }
+  }
+
   function appendLiveSnapshot(rawTranscript: string, timestamp: string) {
     if (lastSnapshotTranscriptRef.current === rawTranscript) return;
     lastSnapshotTranscriptRef.current = rawTranscript;
@@ -646,6 +677,7 @@ export default function ReciteLabScreen() {
             audioDurationMs: timing.audioDurationMs,
           },
         });
+        const audioUploadPlan = buildAudioUploadPlan(audioUri);
         const result = await saveReciteLabAttempt({
           algorithmVersions: {
             alignment: RECITE_LAB_ALIGNMENT_VERSION,
@@ -653,7 +685,7 @@ export default function ReciteLabScreen() {
             phraseTracker: RECITE_LAB_PHRASE_TRACKER_VERSION,
             windowTracker: RECITE_LAB_WINDOW_TRACKER_VERSION,
             verifierVerdict: RECITE_LAB_VERDICT_VERSION,
-            logging: "recite-lab-logging-v0.5",
+            logging: "recite-lab-logging-v0.6",
           },
           label: attemptLabel,
           saveMode,
@@ -694,29 +726,80 @@ export default function ReciteLabScreen() {
           comparison,
           audioUri,
           recordingSupported,
+          audioUploadPlan,
           deviceSessionId: Constants.sessionId ?? null,
         });
         lastSavedAttemptKeyRef.current = attemptKey;
         setLastSavedAttemptKey(attemptKey);
+        setLastSavedAttemptId(result.id);
         setSaveState("saved");
         setSaveMessage(`Saved ${result.id.slice(0, 8)}`);
 
         if (audioUri) {
           setAudioUploadState("uploading");
           setAudioUploadMessage(null);
+          const uploadStartedAt = new Date().toISOString();
+          await logAudioUploadEventSafely(result.id, {
+            status: "started",
+            reason: "audio_uri_present",
+            audioUriPresent: true,
+            recordingSupported,
+            audioStartedAt: audioStartedAtRef.current,
+            audioEndedAt: audioEndedAtRef.current,
+            audioDurationMs: timing.audioDurationMs,
+          });
           try {
             const audioResult = await uploadReciteLabAudio(result.id, audioUri);
             setAudioUploadState("uploaded");
             setAudioUploadMessage(`Uploaded ${formatBytes(audioResult.bytes)}`);
+            await logAudioUploadEventSafely(result.id, {
+              status: "uploaded",
+              reason: "uploaded",
+              audioUriPresent: true,
+              recordingSupported,
+              audioStartedAt: audioStartedAtRef.current,
+              audioEndedAt: audioEndedAtRef.current,
+              audioDurationMs: timing.audioDurationMs,
+              uploadDurationMs: diffMs(uploadStartedAt, new Date().toISOString()),
+              bytes: audioResult.bytes,
+              contentType: audioResult.contentType,
+              localBytes: audioResult.localBytes,
+              localContentType: audioResult.localContentType,
+              localReadAttempts: audioResult.localReadAttempts,
+            });
           } catch (audioError) {
+            const errorDetails = getReciteLabAudioUploadErrorDetails(audioError);
             setAudioUploadState("error");
             setAudioUploadMessage(
               audioError instanceof Error ? audioError.message : "Audio upload failed.",
             );
+            await logAudioUploadEventSafely(result.id, {
+              status: "error",
+              reason: errorDetails.step,
+              audioUriPresent: true,
+              recordingSupported,
+              audioStartedAt: audioStartedAtRef.current,
+              audioEndedAt: audioEndedAtRef.current,
+              audioDurationMs: timing.audioDurationMs,
+              uploadDurationMs: errorDetails.durationMs ?? diffMs(uploadStartedAt, new Date().toISOString()),
+              localBytes: errorDetails.localBytes ?? null,
+              localContentType: errorDetails.localContentType ?? null,
+              localReadAttempts: errorDetails.localReadAttempts ?? null,
+              error: errorDetails,
+            });
           }
         } else {
           setAudioUploadState("skipped");
           setAudioUploadMessage(recordingSupported ? "No audio file" : "Unsupported");
+          await logAudioUploadEventSafely(result.id, {
+            status: "skipped",
+            reason: audioUploadPlan.reason,
+            audioUriPresent: false,
+            recordingSupported,
+            audioStartedAt: audioStartedAtRef.current,
+            audioEndedAt: audioEndedAtRef.current,
+            audioDurationMs: timing.audioDurationMs,
+          });
         }
       } catch (error) {
         setSaveState("error");
@@ -835,6 +918,7 @@ export default function ReciteLabScreen() {
       setAudioUploadState("idle");
       setAudioUploadMessage(null);
       setLastSavedAttemptKey(null);
+      setLastSavedAttemptId(null);
       setFirstResultAt(null);
       setLiveSnapshotCount(0);
       setPhraseSnapshotCount(0);
@@ -923,6 +1007,7 @@ export default function ReciteLabScreen() {
     saveState !== "saving";
   const firstResultLatencyMs = diffMs(captureStartedAtRef.current, firstResultAt);
   const loggingLabel = loggingBaseURL ? loggingBaseURL.replace(/^https?:\/\//, "") : "off";
+  const savedAttemptShortId = lastSavedAttemptId?.slice(0, 8) ?? null;
   const audioUploadLabel =
     audioUploadMessage ??
     (audioUploadState === "uploading"
@@ -1230,6 +1315,12 @@ export default function ReciteLabScreen() {
             <Text style={styles.detailLabel}>Logging</Text>
             <Text style={styles.detailValue}>{loggingLabel}</Text>
           </View>
+          {savedAttemptShortId ? (
+            <View style={styles.detailRow}>
+              <Text style={styles.detailLabel}>Attempt</Text>
+              <Text style={styles.detailValue}>{savedAttemptShortId}</Text>
+            </View>
+          ) : null}
           <View style={styles.liveProgressCard}>
             <View style={styles.comparisonHeader}>
               <View>
