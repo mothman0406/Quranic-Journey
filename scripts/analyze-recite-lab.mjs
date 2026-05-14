@@ -14,8 +14,11 @@ const ANALYSIS_DIR = path.join(LAB_DIR, "analysis");
 const AUDIO_EXTENSIONS = [".wav", ".audio", ".m4a", ".aac", ".mp3", ".caf"];
 const ANALYSIS_ALIGNMENT_VERSION = "recite-lab-align-v0.5";
 const ANALYSIS_WINDOW_VERSION = "recite-lab-window-v0.2";
-const ANALYSIS_VERIFIER_VERSION = "recite-lab-verdict-v0.2";
+const ANALYSIS_VERIFIER_VERSION = "recite-lab-verdict-v0.3";
 const ANALYSIS_VERIFIER_POLICY_ID = "capture_tail_long_rescue";
+const CAPTURE_DURATION_RATIO_THRESHOLD = 0.44;
+const CAPTURE_HEARD_RATIO_THRESHOLD = 0.45;
+const CAPTURE_ACCEPTED_RATIO_THRESHOLD = 0.9;
 const WINDOW_TRACKER_SIZE = 10;
 const DURATION_BASELINES_MS = {
   "1:1-3": { count: 2, medianDurationMs: 26140 },
@@ -676,10 +679,12 @@ function buildReplayVerifierDiagnostics(row) {
 function isReplayLikelyCaptureCutoff(diagnostics) {
   if (diagnostics.durationRatio === null) return false;
 
-  const durationLooksShort = diagnostics.durationRatio < 0.68;
-  const sparseTranscript = diagnostics.heardRatio !== null && diagnostics.heardRatio <= 0.5;
+  const durationLooksShort = diagnostics.durationRatio < CAPTURE_DURATION_RATIO_THRESHOLD;
+  const sparseTranscript =
+    diagnostics.heardRatio !== null && diagnostics.heardRatio <= CAPTURE_HEARD_RATIO_THRESHOLD;
   const lowProgress =
-    (diagnostics.acceptedRatio !== null && diagnostics.acceptedRatio < 0.95) ||
+    (diagnostics.acceptedRatio !== null &&
+      diagnostics.acceptedRatio < CAPTURE_ACCEPTED_RATIO_THRESHOLD) ||
     diagnostics.windowStatus === "off_track";
 
   return durationLooksShort && (sparseTranscript || lowProgress);

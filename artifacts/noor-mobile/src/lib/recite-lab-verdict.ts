@@ -3,8 +3,11 @@ import type {
   ReciteLabWindowTracker,
 } from "@/src/lib/recite-lab-align";
 
-export const RECITE_LAB_VERDICT_VERSION = "recite-lab-verdict-v0.2";
+export const RECITE_LAB_VERDICT_VERSION = "recite-lab-verdict-v0.3";
 export const RECITE_LAB_VERDICT_POLICY_ID = "capture_tail_long_rescue";
+const CAPTURE_DURATION_RATIO_THRESHOLD = 0.44;
+const CAPTURE_HEARD_RATIO_THRESHOLD = 0.45;
+const CAPTURE_ACCEPTED_RATIO_THRESHOLD = 0.9;
 
 const DURATION_BASELINES_MS: Record<string, { count: number; medianDurationMs: number }> = {
   "1:1-3": { count: 2, medianDurationMs: 26140 },
@@ -154,10 +157,12 @@ function buildDiagnostics(input: ReciteLabVerifierInput): ReciteLabVerifierDiagn
 function isLikelyCaptureCutoff(diagnostics: ReciteLabVerifierDiagnostics) {
   if (diagnostics.durationRatio === null) return false;
 
-  const durationLooksShort = diagnostics.durationRatio < 0.68;
-  const sparseTranscript = diagnostics.heardRatio !== null && diagnostics.heardRatio <= 0.5;
+  const durationLooksShort = diagnostics.durationRatio < CAPTURE_DURATION_RATIO_THRESHOLD;
+  const sparseTranscript =
+    diagnostics.heardRatio !== null && diagnostics.heardRatio <= CAPTURE_HEARD_RATIO_THRESHOLD;
   const lowProgress =
-    (diagnostics.acceptedRatio !== null && diagnostics.acceptedRatio < 0.95) ||
+    (diagnostics.acceptedRatio !== null &&
+      diagnostics.acceptedRatio < CAPTURE_ACCEPTED_RATIO_THRESHOLD) ||
     diagnostics.windowStatus === "off_track";
 
   return durationLooksShort && (sparseTranscript || lowProgress);

@@ -11,7 +11,10 @@ const DATASET_FILE = path.join(ANALYSIS_DIR, "dataset.jsonl");
 const PASS_LABELS = new Set(["correct"]);
 const NOT_PASS_LABELS = new Set(["skip", "repeat", "wrong"]);
 const KNOWN_LABELS = new Set([...PASS_LABELS, ...NOT_PASS_LABELS]);
-const POLICY_VERSION = "recite-lab-policy-sim-v0.2";
+const POLICY_VERSION = "recite-lab-policy-sim-v0.3";
+const CAPTURE_DURATION_RATIO_THRESHOLD = 0.44;
+const CAPTURE_HEARD_RATIO_THRESHOLD = 0.45;
+const CAPTURE_ACCEPTED_RATIO_THRESHOLD = 0.9;
 
 function parseArgs(argv) {
   const options = {
@@ -183,9 +186,10 @@ function likelyCaptureIssue(row, context) {
     features.expectedCount === 0 ? 0 : features.heardCount / features.expectedCount;
   const acceptedRatio =
     features.expectedCount === 0 ? 0 : features.acceptedCount / features.expectedCount;
-  const sparseTranscript = heardRatio <= 0.5;
-  const lowProgress = acceptedRatio < 0.95 || features.windowStatus === "off_track";
-  return durationRatio < 0.68 && (sparseTranscript || lowProgress);
+  const sparseTranscript = heardRatio <= CAPTURE_HEARD_RATIO_THRESHOLD;
+  const lowProgress =
+    acceptedRatio < CAPTURE_ACCEPTED_RATIO_THRESHOLD || features.windowStatus === "off_track";
+  return durationRatio < CAPTURE_DURATION_RATIO_THRESHOLD && (sparseTranscript || lowProgress);
 }
 
 function normalizeArabic(value) {

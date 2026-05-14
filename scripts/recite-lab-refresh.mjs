@@ -87,6 +87,7 @@ async function main() {
   await runNode("scripts/recite-lab-report.mjs", ["--write"]);
   await runNode("scripts/recite-lab-report.mjs", [...reportArgs, "--write"]);
   await runNode("scripts/recite-lab-policy-sim.mjs", [...reportArgs, "--write"]);
+  await runNode("scripts/recite-lab-capture-sweep.mjs", [...reportArgs, "--write"]);
   await runNode("scripts/recite-lab-review-page.mjs");
 
   const scopes = await inferScopes(options);
@@ -95,6 +96,12 @@ async function main() {
     console.log(`Refreshing scope ${scope}...`);
     await runNode("scripts/recite-lab-report.mjs", ["--scope", scope, ...reportArgs, "--write"]);
     await runNode("scripts/recite-lab-policy-sim.mjs", ["--scope", scope, ...reportArgs, "--write"]);
+    await runNode("scripts/recite-lab-capture-sweep.mjs", [
+      "--scope",
+      scope,
+      ...reportArgs,
+      "--write",
+    ]);
     if (!options.skipAcoustic) {
       await runNode("scripts/recite-lab-window-acoustic-rescue.mjs", ["--scope", scope, "--write"]);
     }
@@ -104,6 +111,7 @@ async function main() {
   console.log("Done. Main outputs:");
   console.log(`- ${path.relative(ROOT_DIR, path.join(ANALYSIS_DIR, "report-audio-only.md"))}`);
   console.log(`- ${path.relative(ROOT_DIR, path.join(ANALYSIS_DIR, "policy-sim-audio-only.md"))}`);
+  console.log(`- ${path.relative(ROOT_DIR, path.join(ANALYSIS_DIR, "capture-sweep-audio-only.md"))}`);
 }
 
 main().catch((error) => {
