@@ -137,6 +137,13 @@ function renderRow(row) {
   const decision = row.comparison?.decision ?? "unknown";
   const verifier = row.verifier;
   const audioUpload = row.audioUpload;
+  const verifierDiagnostics = verifier?.diagnostics ?? null;
+  const durationRatio = verifierDiagnostics?.durationRatio;
+  const durationText = Number.isFinite(durationRatio)
+    ? `${Number(durationRatio).toFixed(2)}x ${
+        verifierDiagnostics?.durationBaselineSource ?? ""
+      }`.trim()
+    : "";
   const reason = reviewReason(row);
   const issue = summarizeIssue(row.comparison?.firstIssues?.[0]);
   const expectedText = (row.expectedWords ?? []).join(" ");
@@ -170,6 +177,10 @@ function renderRow(row) {
         <div><dt>Verifier</dt><dd>${escapeHtml(verifier?.status)} ${escapeHtml(
           verifier?.rescuedBy ? `via ${verifier.rescuedBy}` : "",
         )}</dd></div>
+        <div><dt>Verifier policy</dt><dd>${escapeHtml(verifier?.policyId)} ${escapeHtml(
+          verifier?.version ? `· ${verifier.version}` : "",
+        )}</dd></div>
+        <div><dt>Verifier duration</dt><dd>${escapeHtml(durationText)}</dd></div>
         <div><dt>Audio upload</dt><dd>${escapeHtml(audioUpload?.latestStatus)} ${escapeHtml(
           audioUpload?.latestReason ? `· ${audioUpload.latestReason}` : "",
         )}</dd></div>

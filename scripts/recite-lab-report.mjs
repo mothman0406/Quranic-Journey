@@ -147,6 +147,8 @@ function summarizeRows(rows) {
   const byPhraseStatus = {};
   const byVerifierStatus = {};
   const byVerifierReason = {};
+  const byVerifierPolicy = {};
+  const byVerifierVersion = {};
   const byAudioUploadStatus = {};
   const byAlignmentVersion = {};
   const byWindowVersion = {};
@@ -182,6 +184,8 @@ function summarizeRows(rows) {
     if (row.verifier) {
       increment(byVerifierStatus, row.verifier.status ?? "unknown");
       increment(byVerifierReason, row.verifier.reason ?? "unknown");
+      increment(byVerifierPolicy, row.verifier.policyId ?? "unknown");
+      increment(byVerifierVersion, row.verifier.version ?? "unknown");
     }
     increment(
       byAudioUploadStatus,
@@ -238,6 +242,8 @@ function summarizeRows(rows) {
     byPhraseStatus,
     byVerifierStatus,
     byVerifierReason,
+    byVerifierPolicy,
+    byVerifierVersion,
     byAudioUploadStatus,
     byAlignmentVersion,
     byWindowVersion,
@@ -324,6 +330,11 @@ function compactRow(row) {
     verifierReason: row.verifier?.reason ?? null,
     verifierConfidence: row.verifier?.confidence ?? null,
     verifierRescuedBy: row.verifier?.rescuedBy ?? null,
+    verifierPolicyId: row.verifier?.policyId ?? null,
+    verifierVersion: row.verifier?.version ?? null,
+    verifierDurationRatio: row.verifier?.diagnostics?.durationRatio ?? null,
+    verifierDurationBaselineSource:
+      row.verifier?.diagnostics?.durationBaselineSource ?? null,
     audioUploadStatus: row.audioUpload?.latestStatus ?? null,
     audioUploadReason: row.audioUpload?.latestReason ?? null,
     audioUploadError: row.audioUpload?.latestError ?? null,
@@ -338,7 +349,18 @@ function compactRow(row) {
 function renderVerifierRows(rows) {
   if (rows.length === 0) return "_None._";
   return renderTable(
-    ["ID", "Label", "Verifier", "Reason", "Rescue", "Confidence", "Scope", "Window"],
+    [
+      "ID",
+      "Label",
+      "Verifier",
+      "Reason",
+      "Rescue",
+      "Confidence",
+      "Policy",
+      "Dur",
+      "Scope",
+      "Window",
+    ],
     rows.slice(-12).map((row) => {
       const compact = compactRow(row);
       return [
@@ -349,6 +371,12 @@ function renderVerifierRows(rows) {
         compact.verifierRescuedBy,
         Number.isFinite(compact.verifierConfidence)
           ? Number(compact.verifierConfidence).toFixed(3)
+          : "",
+        compact.verifierPolicyId,
+        Number.isFinite(compact.verifierDurationRatio)
+          ? `${Number(compact.verifierDurationRatio).toFixed(2)}x ${
+              compact.verifierDurationBaselineSource ?? ""
+            }`.trim()
           : "",
         compact.scope,
         `${compact.windowStatus ?? "?"} ${compact.windowAccepted ?? "?"}/${
@@ -506,6 +534,18 @@ function renderMarkdown(report) {
   lines.push("");
   lines.push("```json");
   lines.push(JSON.stringify(summary.byVerifierReason, null, 2));
+  lines.push("```");
+  lines.push("");
+  lines.push("Verifier policies:");
+  lines.push("");
+  lines.push("```json");
+  lines.push(JSON.stringify(summary.byVerifierPolicy, null, 2));
+  lines.push("```");
+  lines.push("");
+  lines.push("Verifier versions:");
+  lines.push("");
+  lines.push("```json");
+  lines.push(JSON.stringify(summary.byVerifierVersion, null, 2));
   lines.push("```");
   lines.push("");
   lines.push("Audio upload statuses:");

@@ -420,11 +420,19 @@ export default function ReciteLabScreen() {
         transcriptTokens,
         comparison,
         windowTracker,
+        expectedScopeLabel: expectedScopeTarget.label,
         timing: {
           audioDurationMs: currentAudioDurationMs,
         },
       }),
-    [comparison, currentAudioDurationMs, expectedWords, transcriptTokens, windowTracker],
+    [
+      comparison,
+      currentAudioDurationMs,
+      expectedScopeTarget.label,
+      expectedWords,
+      transcriptTokens,
+      windowTracker,
+    ],
   );
   const currentAttemptKey = useMemo(() => {
     const startedAt = captureStartedAtRef.current;
@@ -673,6 +681,7 @@ export default function ReciteLabScreen() {
           transcriptTokens,
           comparison,
           windowTracker,
+          expectedScopeLabel: expectedScopeTarget.label,
           timing: {
             audioDurationMs: timing.audioDurationMs,
           },
@@ -1019,6 +1028,10 @@ export default function ReciteLabScreen() {
           : audioUploadState === "skipped"
             ? "Skipped"
             : "Waiting");
+  const verifierDurationLabel =
+    verifierVerdict.diagnostics.durationRatio === null
+      ? "Duration baseline unavailable"
+      : `Duration ${verifierVerdict.diagnostics.durationRatio.toFixed(2)}x ${verifierVerdict.diagnostics.durationBaselineSource}`;
   const decisionBadgeStyle = [
     styles.decisionBadge,
     comparison.decision === "pass" && styles.decisionBadgePass,
@@ -1336,6 +1349,10 @@ export default function ReciteLabScreen() {
               </View>
             </View>
             <Text style={styles.liveReason}>{verifierVerdict.message}</Text>
+            <Text style={styles.comparisonNote}>
+              Policy: {verifierVerdict.policyId} | {verifierVerdict.version}
+            </Text>
+            <Text style={styles.comparisonNote}>{verifierDurationLabel}</Text>
             {verifierVerdict.rescuedBy ? (
               <Text style={styles.comparisonNote}>Rescue: {verifierVerdict.rescuedBy}</Text>
             ) : null}

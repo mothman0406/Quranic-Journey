@@ -3,7 +3,17 @@ import type {
   ReciteLabWindowTracker,
 } from "@/src/lib/recite-lab-align";
 
-export const RECITE_LAB_VERDICT_VERSION = "recite-lab-verdict-v0.1";
+export const RECITE_LAB_VERDICT_VERSION = "recite-lab-verdict-v0.2";
+export const RECITE_LAB_VERDICT_POLICY_ID = "capture_tail_long_rescue";
+
+const DURATION_BASELINES_MS: Record<string, { count: number; medianDurationMs: number }> = {
+  "1:1-3": { count: 2, medianDurationMs: 26140 },
+  "1:1-4": { count: 1, medianDurationMs: 39344 },
+  "1:1-6": { count: 1, medianDurationMs: 39344 },
+  "1:1-7": { count: 54, medianDurationMs: 28629 },
+  "1:3-7": { count: 1, medianDurationMs: 23697 },
+  "66:1-7": { count: 5, medianDurationMs: 99713 },
+};
 
 export type ReciteLabVerifierStatus = "pass" | "hold" | "capture_issue";
 
@@ -21,7 +31,31 @@ export type ReciteLabVerifierVerdict = {
   message: string;
   confidence: number;
   rescuedBy: "transcript" | "window" | "policy" | null;
+  policyId: string;
+  diagnostics: ReciteLabVerifierDiagnostics;
   version: string;
+};
+
+export type ReciteLabVerifierDiagnostics = {
+  expectedCount: number;
+  heardCount: number;
+  acceptedCount: number;
+  heardRatio: number | null;
+  acceptedRatio: number | null;
+  audioDurationMs: number | null;
+  durationBaselineMs: number | null;
+  durationBaselineSource: "scope" | "fallback" | "none";
+  durationRatio: number | null;
+  reachedEnd: boolean;
+  nearEnd: boolean;
+  comparisonDecision: string;
+  windowStatus: string;
+  comparisonScore: number;
+  windowConfidence: number;
+  missingCount: number;
+  extraCount: number;
+  substituteCount: number;
+  offTargetExtraCount: number;
 };
 
 type ReciteLabVerifierInput = {
@@ -29,6 +63,7 @@ type ReciteLabVerifierInput = {
   transcriptTokens: string[];
   comparison: ReciteLabComparison;
   windowTracker: ReciteLabWindowTracker;
+  expectedScopeLabel?: string | null;
   timing: {
     audioDurationMs: number | null;
   };
@@ -50,20 +85,80 @@ function compactArabic(value: string) {
   return normalizeArabic(value).replace(/ا/g, "");
 }
 
-function isLikelyCaptureCutoff({
-  comparison,
-  windowTracker,
-  timing,
-}: ReciteLabVerifierInput) {
-  const expectedCount = comparison.expectedCount;
-  if (expectedCount <= 0 || timing.audioDurationMs === null) return false;
+function clamp01(value: number) {
+  return Math.max(0, Math.min(1, value));
+}
 
-  const minimumExpectedDurationMs = expectedCount * (expectedCount >= 60 ? 500 : 480);
-  const durationLooksShort = timing.audioDurationMs < minimumExpectedDurationMs;
-  const heardRatio = comparison.heardCount / expectedCount;
-  const acceptedRatio = windowTracker.acceptedCount / expectedCount;
-  const sparseTranscript = heardRatio <= 0.5;
-  const lowProgress = acceptedRatio < 0.95 || windowTracker.status === "off_track";
+function getDurationBaselineMs(input: ReciteLabVerifierInput) {
+  const scopeBaseline = input.expectedScopeLabel
+    ? DURATION_BASELINES_MS[input.expectedScopeLabel]
+    : null;
+  if (scopeBaseline?.medianDurationMs) {
+    return {
+      durationBaselineMs: scopeBaseline.medianDurationMs,
+      durationBaselineSource: "scope" as const,
+    };
+  }
+
+  const expectedCount = input.comparison.expectedCount;
+  if (expectedCount <= 0) {
+    return {
+      durationBaselineMs: null,
+      durationBaselineSource: "none" as const,
+    };
+  }
+
+  return {
+    durationBaselineMs: expectedCount * (expectedCount >= 60 ? 800 : 850),
+    durationBaselineSource: "fallback" as const,
+  };
+}
+
+function buildDiagnostics(input: ReciteLabVerifierInput): ReciteLabVerifierDiagnostics {
+  const { comparison, windowTracker, timing } = input;
+  const expectedCount = comparison.expectedCount;
+  const heardRatio = expectedCount > 0 ? comparison.heardCount / expectedCount : null;
+  const acceptedRatio = expectedCount > 0 ? windowTracker.acceptedCount / expectedCount : null;
+  const nearEnd =
+    expectedCount > 0 &&
+    windowTracker.acceptedCount >= expectedCount - Math.max(1, Math.ceil(expectedCount * 0.04));
+  const { durationBaselineMs, durationBaselineSource } = getDurationBaselineMs(input);
+  const durationRatio =
+    durationBaselineMs && timing.audioDurationMs !== null
+      ? timing.audioDurationMs / durationBaselineMs
+      : null;
+
+  return {
+    expectedCount,
+    heardCount: comparison.heardCount,
+    acceptedCount: windowTracker.acceptedCount,
+    heardRatio,
+    acceptedRatio,
+    audioDurationMs: timing.audioDurationMs,
+    durationBaselineMs,
+    durationBaselineSource,
+    durationRatio,
+    reachedEnd: expectedCount > 0 && windowTracker.acceptedCount >= expectedCount,
+    nearEnd,
+    comparisonDecision: comparison.decision,
+    windowStatus: windowTracker.status,
+    comparisonScore: comparison.score,
+    windowConfidence: windowTracker.confidence,
+    missingCount: comparison.missingCount,
+    extraCount: comparison.extraCount,
+    substituteCount: comparison.substituteCount,
+    offTargetExtraCount: comparison.offTargetExtraCount,
+  };
+}
+
+function isLikelyCaptureCutoff(diagnostics: ReciteLabVerifierDiagnostics) {
+  if (diagnostics.durationRatio === null) return false;
+
+  const durationLooksShort = diagnostics.durationRatio < 0.68;
+  const sparseTranscript = diagnostics.heardRatio !== null && diagnostics.heardRatio <= 0.5;
+  const lowProgress =
+    (diagnostics.acceptedRatio !== null && diagnostics.acceptedRatio < 0.95) ||
+    diagnostics.windowStatus === "off_track";
 
   return durationLooksShort && (sparseTranscript || lowProgress);
 }
@@ -117,72 +212,98 @@ function isFinalTailMerge({
   return heardCompact.startsWith(previousPrefix) && heardCompact.endsWith(finalSuffix);
 }
 
+function makeVerdict(
+  verdict: Omit<ReciteLabVerifierVerdict, "diagnostics" | "policyId" | "version">,
+  diagnostics: ReciteLabVerifierDiagnostics,
+): ReciteLabVerifierVerdict {
+  return {
+    ...verdict,
+    confidence: clamp01(verdict.confidence),
+    diagnostics,
+    policyId: RECITE_LAB_VERDICT_POLICY_ID,
+    version: RECITE_LAB_VERDICT_VERSION,
+  };
+}
+
 export function evaluateReciteLabVerifier(
   input: ReciteLabVerifierInput,
 ): ReciteLabVerifierVerdict {
   const { comparison, windowTracker } = input;
+  const diagnostics = buildDiagnostics(input);
 
-  if (isLikelyCaptureCutoff(input)) {
-    return {
-      status: "capture_issue",
-      reason: "capture_cutoff",
-      message: "Capture cut off before enough usable evidence.",
-      confidence: Math.max(0, Math.min(1, windowTracker.confidence)),
-      rescuedBy: null,
-      version: RECITE_LAB_VERDICT_VERSION,
-    };
+  if (isLikelyCaptureCutoff(diagnostics)) {
+    return makeVerdict(
+      {
+        status: "capture_issue",
+        reason: "capture_cutoff",
+        message: "Capture cut off before enough usable evidence.",
+        confidence: windowTracker.confidence,
+        rescuedBy: null,
+      },
+      diagnostics,
+    );
   }
 
   if (comparison.decision === "pass") {
-    return {
-      status: "pass",
-      reason: "strict_pass",
-      message: "Transcript alignment passed.",
-      confidence: Math.max(0, Math.min(1, comparison.score)),
-      rescuedBy: "transcript",
-      version: RECITE_LAB_VERDICT_VERSION,
-    };
+    return makeVerdict(
+      {
+        status: "pass",
+        reason: "strict_pass",
+        message: "Transcript alignment passed.",
+        confidence: comparison.score,
+        rescuedBy: "transcript",
+      },
+      diagnostics,
+    );
   }
 
   if (windowTracker.status === "complete") {
-    return {
-      status: "pass",
-      reason: "clean_window",
-      message: "All transcript windows passed cleanly.",
-      confidence: Math.max(0, Math.min(1, windowTracker.confidence)),
-      rescuedBy: "window",
-      version: RECITE_LAB_VERDICT_VERSION,
-    };
+    return makeVerdict(
+      {
+        status: "pass",
+        reason: "clean_window",
+        message: "All transcript windows passed cleanly.",
+        confidence: windowTracker.confidence,
+        rescuedBy: "window",
+      },
+      diagnostics,
+    );
   }
 
   if (isLongRangeRescue(input)) {
-    return {
-      status: "pass",
-      reason: "long_range_rescue",
-      message: "Full long passage reached with strong window evidence.",
-      confidence: Math.max(0, Math.min(1, Math.min(windowTracker.confidence, comparison.score))),
-      rescuedBy: "policy",
-      version: RECITE_LAB_VERDICT_VERSION,
-    };
+    return makeVerdict(
+      {
+        status: "pass",
+        reason: "long_range_rescue",
+        message: "Full long passage reached with strong window evidence.",
+        confidence: Math.min(windowTracker.confidence, comparison.score),
+        rescuedBy: "policy",
+      },
+      diagnostics,
+    );
   }
 
   if (isFinalTailMerge(input)) {
-    return {
-      status: "pass",
-      reason: "final_tail_merge",
-      message: "Final word appears merged in the transcript.",
-      confidence: Math.max(0, Math.min(1, comparison.score)),
-      rescuedBy: "policy",
-      version: RECITE_LAB_VERDICT_VERSION,
-    };
+    return makeVerdict(
+      {
+        status: "pass",
+        reason: "final_tail_merge",
+        message: "Final word appears merged in the transcript.",
+        confidence: comparison.score,
+        rescuedBy: "policy",
+      },
+      diagnostics,
+    );
   }
 
-  return {
-    status: "hold",
-    reason: "needs_more_evidence",
-    message: "Verifier is holding for more evidence.",
-    confidence: Math.max(0, Math.min(1, Math.min(windowTracker.confidence, comparison.score))),
-    rescuedBy: null,
-    version: RECITE_LAB_VERDICT_VERSION,
-  };
+  return makeVerdict(
+    {
+      status: "hold",
+      reason: "needs_more_evidence",
+      message: "Verifier is holding for more evidence.",
+      confidence: Math.min(windowTracker.confidence, comparison.score),
+      rescuedBy: null,
+    },
+    diagnostics,
+  );
 }
