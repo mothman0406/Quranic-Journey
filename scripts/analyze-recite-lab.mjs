@@ -14,7 +14,17 @@ const ANALYSIS_DIR = path.join(LAB_DIR, "analysis");
 const AUDIO_EXTENSIONS = [".wav", ".audio", ".m4a", ".aac", ".mp3", ".caf"];
 const ANALYSIS_ALIGNMENT_VERSION = "recite-lab-align-v0.5";
 const ANALYSIS_WINDOW_VERSION = "recite-lab-window-v0.2";
+const ANALYSIS_VERIFIER_VERSION = "recite-lab-verdict-v0.2";
+const ANALYSIS_VERIFIER_POLICY_ID = "capture_tail_long_rescue";
 const WINDOW_TRACKER_SIZE = 10;
+const DURATION_BASELINES_MS = {
+  "1:1-3": { count: 2, medianDurationMs: 26140 },
+  "1:1-4": { count: 1, medianDurationMs: 39344 },
+  "1:1-6": { count: 1, medianDurationMs: 39344 },
+  "1:1-7": { count: 54, medianDurationMs: 28629 },
+  "1:3-7": { count: 1, medianDurationMs: 23697 },
+  "66:1-7": { count: 5, medianDurationMs: 99713 },
+};
 
 function parseArgs(argv) {
   const options = {
@@ -603,6 +613,215 @@ function summarizeIssue(issue) {
   };
 }
 
+function getReplayDurationBaseline(row) {
+  const scopeLabel = row.expectedScope?.label ?? null;
+  const scopeBaseline = scopeLabel ? DURATION_BASELINES_MS[scopeLabel] : null;
+  if (scopeBaseline?.medianDurationMs) {
+    return {
+      durationBaselineMs: scopeBaseline.medianDurationMs,
+      durationBaselineSource: "scope",
+    };
+  }
+
+  const expectedCount = row.counts?.expected ?? row.expectedWords?.length ?? 0;
+  if (expectedCount <= 0) {
+    return {
+      durationBaselineMs: null,
+      durationBaselineSource: "none",
+    };
+  }
+
+  return {
+    durationBaselineMs: expectedCount * (expectedCount >= 60 ? 800 : 850),
+    durationBaselineSource: "fallback",
+  };
+}
+
+function buildReplayVerifierDiagnostics(row) {
+  const expectedCount = row.counts?.expected ?? row.expectedWords?.length ?? 0;
+  const heardCount = row.counts?.heard ?? row.transcriptTokens?.length ?? 0;
+  const acceptedCount = row.window?.acceptedCount ?? 0;
+  const heardRatio = expectedCount > 0 ? heardCount / expectedCount : null;
+  const acceptedRatio = expectedCount > 0 ? acceptedCount / expectedCount : null;
+  const { durationBaselineMs, durationBaselineSource } = getReplayDurationBaseline(row);
+  const audioDurationMs = row.timing?.audioDurationMs ?? null;
+  const durationRatio =
+    durationBaselineMs && audioDurationMs !== null ? audioDurationMs / durationBaselineMs : null;
+
+  return {
+    expectedCount,
+    heardCount,
+    acceptedCount,
+    heardRatio,
+    acceptedRatio,
+    audioDurationMs,
+    durationBaselineMs,
+    durationBaselineSource,
+    durationRatio,
+    reachedEnd: expectedCount > 0 && acceptedCount >= expectedCount,
+    nearEnd:
+      expectedCount > 0 &&
+      acceptedCount >= expectedCount - Math.max(1, Math.ceil(expectedCount * 0.04)),
+    comparisonDecision: row.comparison?.decision ?? "unknown",
+    windowStatus: row.window?.status ?? "unknown",
+    comparisonScore: row.comparison?.score ?? 0,
+    windowConfidence: row.window?.confidence ?? 0,
+    missingCount: row.counts?.missing ?? 0,
+    extraCount: row.counts?.extra ?? 0,
+    substituteCount: row.counts?.substitute ?? 0,
+    offTargetExtraCount: row.comparison?.offTargetExtraCount ?? 0,
+  };
+}
+
+function isReplayLikelyCaptureCutoff(diagnostics) {
+  if (diagnostics.durationRatio === null) return false;
+
+  const durationLooksShort = diagnostics.durationRatio < 0.68;
+  const sparseTranscript = diagnostics.heardRatio !== null && diagnostics.heardRatio <= 0.5;
+  const lowProgress =
+    (diagnostics.acceptedRatio !== null && diagnostics.acceptedRatio < 0.95) ||
+    diagnostics.windowStatus === "off_track";
+
+  return durationLooksShort && (sparseTranscript || lowProgress);
+}
+
+function isReplayLongRangeRescue(row, diagnostics) {
+  return (
+    diagnostics.expectedCount >= 60 &&
+    diagnostics.windowStatus === "needs_audio" &&
+    diagnostics.acceptedCount >= diagnostics.expectedCount &&
+    diagnostics.windowConfidence >= 0.88 &&
+    diagnostics.comparisonScore >= 0.77 &&
+    diagnostics.offTargetExtraCount <= 4
+  );
+}
+
+function isReplayFinalTailMerge(row, diagnostics) {
+  if (
+    diagnostics.expectedCount < 3 ||
+    diagnostics.missingCount !== 1 ||
+    diagnostics.extraCount !== 0 ||
+    diagnostics.substituteCount !== 0 ||
+    diagnostics.offTargetExtraCount !== 0 ||
+    diagnostics.acceptedCount < diagnostics.expectedCount - 1 ||
+    diagnostics.comparisonScore < 0.94
+  ) {
+    return false;
+  }
+
+  const missingFinal = (row.comparison?.firstIssues ?? []).some(
+    (issue) => issue?.type === "missing" && issue?.expectedIndex === diagnostics.expectedCount,
+  );
+  if (!missingFinal) return false;
+
+  const expectedWords = Array.isArray(row.expectedWords) ? row.expectedWords : [];
+  const transcriptTokens = Array.isArray(row.transcriptTokens) ? row.transcriptTokens : [];
+  const previousExpected = expectedWords[diagnostics.expectedCount - 2] ?? "";
+  const finalExpected = expectedWords[diagnostics.expectedCount - 1] ?? "";
+  const finalHeard = transcriptTokens[transcriptTokens.length - 1] ?? "";
+  const previousCompact = compactAlef(previousExpected);
+  const finalCompact = compactAlef(finalExpected);
+  const heardCompact = compactAlef(finalHeard);
+  if (previousCompact.length < 2 || finalCompact.length < 3 || heardCompact.length < 3) {
+    return false;
+  }
+
+  const previousPrefix = previousCompact.slice(0, Math.min(3, previousCompact.length));
+  const finalSuffix = finalCompact.slice(-Math.min(3, finalCompact.length));
+  return heardCompact.startsWith(previousPrefix) && heardCompact.endsWith(finalSuffix);
+}
+
+function makeReplayVerifier(verdict, diagnostics) {
+  return {
+    ...verdict,
+    confidence: clamp01(verdict.confidence),
+    policyId: ANALYSIS_VERIFIER_POLICY_ID,
+    diagnostics,
+    version: ANALYSIS_VERIFIER_VERSION,
+    source: "analysis_replay",
+  };
+}
+
+function evaluateReplayedVerifier(row) {
+  const diagnostics = buildReplayVerifierDiagnostics(row);
+
+  if (isReplayLikelyCaptureCutoff(diagnostics)) {
+    return makeReplayVerifier(
+      {
+        status: "capture_issue",
+        reason: "capture_cutoff",
+        message: "Capture cut off before enough usable evidence.",
+        confidence: diagnostics.windowConfidence,
+        rescuedBy: null,
+      },
+      diagnostics,
+    );
+  }
+
+  if (diagnostics.comparisonDecision === "pass") {
+    return makeReplayVerifier(
+      {
+        status: "pass",
+        reason: "strict_pass",
+        message: "Transcript alignment passed.",
+        confidence: diagnostics.comparisonScore,
+        rescuedBy: "transcript",
+      },
+      diagnostics,
+    );
+  }
+
+  if (diagnostics.windowStatus === "complete") {
+    return makeReplayVerifier(
+      {
+        status: "pass",
+        reason: "clean_window",
+        message: "All transcript windows passed cleanly.",
+        confidence: diagnostics.windowConfidence,
+        rescuedBy: "window",
+      },
+      diagnostics,
+    );
+  }
+
+  if (isReplayLongRangeRescue(row, diagnostics)) {
+    return makeReplayVerifier(
+      {
+        status: "pass",
+        reason: "long_range_rescue",
+        message: "Full long passage reached with strong window evidence.",
+        confidence: Math.min(diagnostics.windowConfidence, diagnostics.comparisonScore),
+        rescuedBy: "policy",
+      },
+      diagnostics,
+    );
+  }
+
+  if (isReplayFinalTailMerge(row, diagnostics)) {
+    return makeReplayVerifier(
+      {
+        status: "pass",
+        reason: "final_tail_merge",
+        message: "Final word appears merged in the transcript.",
+        confidence: diagnostics.comparisonScore,
+        rescuedBy: "policy",
+      },
+      diagnostics,
+    );
+  }
+
+  return makeReplayVerifier(
+    {
+      status: "hold",
+      reason: "needs_more_evidence",
+      message: "Verifier is holding for more evidence.",
+      confidence: Math.min(diagnostics.windowConfidence, diagnostics.comparisonScore),
+      rescuedBy: null,
+    },
+    diagnostics,
+  );
+}
+
 function toDatasetRow(record, overrides, audioIndex, audioEventIndex) {
   const payload = record.payload ?? {};
   const override = overrides[record.id] ?? null;
@@ -628,8 +847,32 @@ function toDatasetRow(record, overrides, audioIndex, audioEventIndex) {
   const expectedDecision = expectedDecisionForLabel(effectiveLabel);
   const rawDecision = comparison.decision ?? null;
   const decision = currentComparison.decision ?? rawDecision;
+  const normalizedExpectedScope = expectedScope
+    ? {
+        mode: expectedScope.mode ?? null,
+        surahNumber: expectedScope.surahNumber ?? null,
+        ayahStart: expectedScope.ayahStart ?? null,
+        ayahEnd: expectedScope.ayahEnd ?? null,
+        label: expectedScope.label ?? null,
+        routeAyahStart: expectedScope.routeAyahStart ?? null,
+        routeAyahEnd: expectedScope.routeAyahEnd ?? null,
+      }
+    : {
+        mode: "legacy",
+        surahNumber: route.surahNumber ?? null,
+        ayahStart: route.ayahStart ?? null,
+        ayahEnd: route.ayahEnd ?? null,
+        label:
+          route.surahNumber && route.ayahStart
+            ? `${route.surahNumber}:${route.ayahStart}${
+                route.ayahEnd && route.ayahEnd !== route.ayahStart ? `-${route.ayahEnd}` : ""
+              }`
+            : null,
+        routeAyahStart: route.ayahStart ?? null,
+        routeAyahEnd: route.ayahEnd ?? null,
+      };
 
-  return {
+  const row = {
     id: record.id,
     savedAt: record.savedAt ?? null,
     source: record.source ?? null,
@@ -641,28 +884,7 @@ function toDatasetRow(record, overrides, audioIndex, audioEventIndex) {
       page: route.page ?? null,
       mushafViewMode: route.mushafViewMode ?? null,
     },
-    expectedScope: expectedScope
-      ? {
-          mode: expectedScope.mode ?? null,
-          surahNumber: expectedScope.surahNumber ?? null,
-          ayahStart: expectedScope.ayahStart ?? null,
-          ayahEnd: expectedScope.ayahEnd ?? null,
-          label: expectedScope.label ?? null,
-          routeAyahStart: expectedScope.routeAyahStart ?? null,
-          routeAyahEnd: expectedScope.routeAyahEnd ?? null,
-        }
-      : {
-          mode: "legacy",
-          surahNumber: route.surahNumber ?? null,
-          ayahStart: route.ayahStart ?? null,
-          ayahEnd: route.ayahEnd ?? null,
-          label:
-            route.surahNumber && route.ayahStart
-              ? `${route.surahNumber}:${route.ayahStart}${route.ayahEnd && route.ayahEnd !== route.ayahStart ? `-${route.ayahEnd}` : ""}`
-              : null,
-          routeAyahStart: route.ayahStart ?? null,
-          routeAyahEnd: route.ayahEnd ?? null,
-        },
+    expectedScope: normalizedExpectedScope,
     labels: {
       raw: rawLabel,
       effective: effectiveLabel,
@@ -749,6 +971,11 @@ function toDatasetRow(record, overrides, audioIndex, audioEventIndex) {
       missingAudio: !audio,
     },
   };
+
+  return {
+    ...row,
+    verifierReplay: evaluateReplayedVerifier(row),
+  };
 }
 
 function buildSummary(rows, totalRawAttempts) {
@@ -759,6 +986,8 @@ function buildSummary(rows, totalRawAttempts) {
   const byExpectedScopeMode = {};
   const byPhraseStatus = {};
   const byWindowStatus = {};
+  const byVerifierReplayStatus = {};
+  const byVerifierReplayReason = {};
   const byAudioUploadStatus = {};
   const audioByEffectiveLabel = {};
   const audioByDecision = {};
@@ -778,6 +1007,8 @@ function buildSummary(rows, totalRawAttempts) {
     increment(byExpectedScopeMode, row.expectedScope.mode ?? "unknown");
     increment(byPhraseStatus, row.phrase.status ?? "unknown");
     increment(byWindowStatus, row.window.status ?? "unknown");
+    increment(byVerifierReplayStatus, row.verifierReplay?.status ?? "unknown");
+    increment(byVerifierReplayReason, row.verifierReplay?.reason ?? "unknown");
     increment(
       byAudioUploadStatus,
       row.audioUpload.latestStatus ??
@@ -838,6 +1069,8 @@ function buildSummary(rows, totalRawAttempts) {
     byExpectedScopeMode,
     byPhraseStatus,
     byWindowStatus,
+    byVerifierReplayStatus,
+    byVerifierReplayReason,
     byAudioUploadStatus,
     audioByEffectiveLabel,
     audioByDecision,
@@ -881,6 +1114,7 @@ function toAudioManifestRow(row) {
     windowPendingCount: row.window.pendingWindowCount,
     windowDetails: row.window.windows,
     verifierVerdict: row.verifier,
+    verifierReplay: row.verifierReplay,
     audioUpload: row.audioUpload,
     score: row.comparison.score,
     missingCount: row.counts.missing,
@@ -948,6 +1182,7 @@ function printTextSummary(summary, rows) {
   console.log(`Decisions: ${JSON.stringify(summary.byDecision)}`);
   console.log(`Phrase: ${JSON.stringify(summary.byPhraseStatus)}`);
   console.log(`Window: ${JSON.stringify(summary.byWindowStatus)}`);
+  console.log(`Verifier replay: ${JSON.stringify(summary.byVerifierReplayStatus)}`);
   console.log(`Scopes: ${JSON.stringify(summary.byExpectedScopeMode)}`);
   console.log(`Audio labels: ${JSON.stringify(summary.audioByEffectiveLabel)}`);
   console.log(`Audio upload: ${JSON.stringify(summary.byAudioUploadStatus)}`);

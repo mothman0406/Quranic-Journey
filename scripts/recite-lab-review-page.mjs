@@ -88,8 +88,12 @@ function predictedPassDecision(row) {
   return row.comparison?.decision === "pass" ? "pass" : "not_pass";
 }
 
+function currentVerifier(row) {
+  return row.verifierReplay ?? row.verifier ?? null;
+}
+
 function verifierPassDecision(row) {
-  const status = row.verifier?.status;
+  const status = currentVerifier(row)?.status;
   if (status === "pass") return "pass";
   if (status === "hold") return "not_pass";
   return null;
@@ -99,7 +103,7 @@ function reviewReason(row) {
   if (row.labels?.overridden) return "label override";
   const expected = expectedPassDecision(row);
   const verifierPredicted = verifierPassDecision(row);
-  if (row.verifier?.status === "capture_issue") return "capture issue";
+  if (currentVerifier(row)?.status === "capture_issue") return "capture issue";
   if (expected && verifierPredicted && expected !== verifierPredicted) {
     return expected === "not_pass" ? "verifier false pass" : "verifier false reject";
   }
@@ -135,7 +139,8 @@ function renderRow(row) {
   const label = row.labels?.effective ?? "unlabeled";
   const rawLabel = row.labels?.raw ?? label;
   const decision = row.comparison?.decision ?? "unknown";
-  const verifier = row.verifier;
+  const verifier = currentVerifier(row);
+  const savedVerifier = row.verifier ?? null;
   const audioUpload = row.audioUpload;
   const verifierDiagnostics = verifier?.diagnostics ?? null;
   const durationRatio = verifierDiagnostics?.durationRatio;
@@ -179,6 +184,9 @@ function renderRow(row) {
         )}</dd></div>
         <div><dt>Verifier policy</dt><dd>${escapeHtml(verifier?.policyId)} ${escapeHtml(
           verifier?.version ? `· ${verifier.version}` : "",
+        )}</dd></div>
+        <div><dt>Saved verifier</dt><dd>${escapeHtml(savedVerifier?.status)} ${escapeHtml(
+          savedVerifier?.version ? `· ${savedVerifier.version}` : "",
         )}</dd></div>
         <div><dt>Verifier duration</dt><dd>${escapeHtml(durationText)}</dd></div>
         <div><dt>Audio upload</dt><dd>${escapeHtml(audioUpload?.latestStatus)} ${escapeHtml(

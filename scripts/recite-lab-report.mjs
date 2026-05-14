@@ -101,11 +101,19 @@ function predictedPassDecision(row) {
   return row.comparison?.decision === "pass" ? "pass" : "not_pass";
 }
 
-function verifierPassDecision(row) {
-  const status = row.verifier?.status;
+function passDecisionFromVerifier(verifier) {
+  const status = verifier?.status;
   if (status === "pass") return "pass";
   if (status === "hold") return "not_pass";
   return null;
+}
+
+function verifierPassDecision(row) {
+  return passDecisionFromVerifier(row.verifier);
+}
+
+function replayVerifierPassDecision(row) {
+  return passDecisionFromVerifier(row.verifierReplay);
 }
 
 function exactPrediction(row) {
@@ -149,23 +157,34 @@ function summarizeRows(rows) {
   const byVerifierReason = {};
   const byVerifierPolicy = {};
   const byVerifierVersion = {};
+  const byReplayVerifierStatus = {};
+  const byReplayVerifierReason = {};
+  const byReplayVerifierPolicy = {};
+  const byReplayVerifierVersion = {};
   const byAudioUploadStatus = {};
   const byAlignmentVersion = {};
   const byWindowVersion = {};
   const passMatrix = {};
   const verifierMatrix = {};
+  const replayVerifierMatrix = {};
   const exactMatrix = {};
   const falsePasses = [];
   const falseRejects = [];
   const verifierFalsePasses = [];
   const verifierFalseRejects = [];
   const verifierCaptureIssues = [];
+  const replayVerifierFalsePasses = [];
+  const replayVerifierFalseRejects = [];
+  const replayVerifierCaptureIssues = [];
   const exactMismatches = [];
   let knownPassRows = 0;
   let correctPassRows = 0;
   let verifierRows = 0;
   let verifierEvaluatedRows = 0;
   let verifierCorrectRows = 0;
+  let replayVerifierRows = 0;
+  let replayVerifierEvaluatedRows = 0;
+  let replayVerifierCorrectRows = 0;
   let knownExactRows = 0;
   let correctExactRows = 0;
 
@@ -186,6 +205,12 @@ function summarizeRows(rows) {
       increment(byVerifierReason, row.verifier.reason ?? "unknown");
       increment(byVerifierPolicy, row.verifier.policyId ?? "unknown");
       increment(byVerifierVersion, row.verifier.version ?? "unknown");
+    }
+    if (row.verifierReplay) {
+      increment(byReplayVerifierStatus, row.verifierReplay.status ?? "unknown");
+      increment(byReplayVerifierReason, row.verifierReplay.reason ?? "unknown");
+      increment(byReplayVerifierPolicy, row.verifierReplay.policyId ?? "unknown");
+      increment(byReplayVerifierVersion, row.verifierReplay.version ?? "unknown");
     }
     increment(
       byAudioUploadStatus,
@@ -218,6 +243,23 @@ function summarizeRows(rows) {
       }
     }
 
+    if (row.verifierReplay) {
+      replayVerifierRows += 1;
+      if (row.verifierReplay.status === "capture_issue") replayVerifierCaptureIssues.push(row);
+      const replayVerifierPredicted = replayVerifierPassDecision(row);
+      if (actualPass && replayVerifierPredicted) {
+        replayVerifierEvaluatedRows += 1;
+        if (actualPass === replayVerifierPredicted) replayVerifierCorrectRows += 1;
+        increment(replayVerifierMatrix, `${actualPass}:${replayVerifierPredicted}`);
+        if (actualPass === "not_pass" && replayVerifierPredicted === "pass") {
+          replayVerifierFalsePasses.push(row);
+        }
+        if (actualPass === "pass" && replayVerifierPredicted === "not_pass") {
+          replayVerifierFalseRejects.push(row);
+        }
+      }
+    }
+
     const expectedExact = expectedExactDecision(row);
     const predictedExact = exactPrediction(row);
     if (expectedExact) {
@@ -244,6 +286,10 @@ function summarizeRows(rows) {
     byVerifierReason,
     byVerifierPolicy,
     byVerifierVersion,
+    byReplayVerifierStatus,
+    byReplayVerifierReason,
+    byReplayVerifierPolicy,
+    byReplayVerifierVersion,
     byAudioUploadStatus,
     byAlignmentVersion,
     byWindowVersion,
@@ -268,6 +314,19 @@ function summarizeRows(rows) {
       falsePassCount: verifierFalsePasses.length,
       falseRejectCount: verifierFalseRejects.length,
       captureIssueCount: verifierCaptureIssues.length,
+    },
+    verifierReplayPolicy: {
+      rows: replayVerifierRows,
+      evaluatedRows: replayVerifierEvaluatedRows,
+      correct: replayVerifierCorrectRows,
+      accuracy:
+        replayVerifierEvaluatedRows === 0
+          ? null
+          : Number((replayVerifierCorrectRows / replayVerifierEvaluatedRows).toFixed(4)),
+      matrix: replayVerifierMatrix,
+      falsePassCount: replayVerifierFalsePasses.length,
+      falseRejectCount: replayVerifierFalseRejects.length,
+      captureIssueCount: replayVerifierCaptureIssues.length,
     },
     exact: {
       knownRows: knownExactRows,
@@ -302,6 +361,9 @@ function summarizeRows(rows) {
     verifierFalsePasses,
     verifierFalseRejects,
     verifierCaptureIssues,
+    replayVerifierFalsePasses,
+    replayVerifierFalseRejects,
+    replayVerifierCaptureIssues,
     exactMismatches,
   };
 }
@@ -335,6 +397,15 @@ function compactRow(row) {
     verifierDurationRatio: row.verifier?.diagnostics?.durationRatio ?? null,
     verifierDurationBaselineSource:
       row.verifier?.diagnostics?.durationBaselineSource ?? null,
+    replayVerifierStatus: row.verifierReplay?.status ?? null,
+    replayVerifierReason: row.verifierReplay?.reason ?? null,
+    replayVerifierConfidence: row.verifierReplay?.confidence ?? null,
+    replayVerifierRescuedBy: row.verifierReplay?.rescuedBy ?? null,
+    replayVerifierPolicyId: row.verifierReplay?.policyId ?? null,
+    replayVerifierVersion: row.verifierReplay?.version ?? null,
+    replayVerifierDurationRatio: row.verifierReplay?.diagnostics?.durationRatio ?? null,
+    replayVerifierDurationBaselineSource:
+      row.verifierReplay?.diagnostics?.durationBaselineSource ?? null,
     audioUploadStatus: row.audioUpload?.latestStatus ?? null,
     audioUploadReason: row.audioUpload?.latestReason ?? null,
     audioUploadError: row.audioUpload?.latestError ?? null,
@@ -346,8 +417,9 @@ function compactRow(row) {
   };
 }
 
-function renderVerifierRows(rows) {
+function renderVerifierRows(rows, options = {}) {
   if (rows.length === 0) return "_None._";
+  const useReplay = Boolean(options.replay);
   return renderTable(
     [
       "ID",
@@ -363,20 +435,29 @@ function renderVerifierRows(rows) {
     ],
     rows.slice(-12).map((row) => {
       const compact = compactRow(row);
+      const status = useReplay ? compact.replayVerifierStatus : compact.verifierStatus;
+      const reason = useReplay ? compact.replayVerifierReason : compact.verifierReason;
+      const rescuedBy = useReplay ? compact.replayVerifierRescuedBy : compact.verifierRescuedBy;
+      const confidence = useReplay
+        ? compact.replayVerifierConfidence
+        : compact.verifierConfidence;
+      const policyId = useReplay ? compact.replayVerifierPolicyId : compact.verifierPolicyId;
+      const durationRatio = useReplay
+        ? compact.replayVerifierDurationRatio
+        : compact.verifierDurationRatio;
+      const durationBaselineSource = useReplay
+        ? compact.replayVerifierDurationBaselineSource
+        : compact.verifierDurationBaselineSource;
       return [
         compact.shortId,
         compact.label,
-        compact.verifierStatus,
-        compact.verifierReason,
-        compact.verifierRescuedBy,
-        Number.isFinite(compact.verifierConfidence)
-          ? Number(compact.verifierConfidence).toFixed(3)
-          : "",
-        compact.verifierPolicyId,
-        Number.isFinite(compact.verifierDurationRatio)
-          ? `${Number(compact.verifierDurationRatio).toFixed(2)}x ${
-              compact.verifierDurationBaselineSource ?? ""
-            }`.trim()
+        status,
+        reason,
+        rescuedBy,
+        Number.isFinite(confidence) ? Number(confidence).toFixed(3) : "",
+        policyId,
+        Number.isFinite(durationRatio)
+          ? `${Number(durationRatio).toFixed(2)}x ${durationBaselineSource ?? ""}`.trim()
           : "",
         compact.scope,
         `${compact.windowStatus ?? "?"} ${compact.windowAccepted ?? "?"}/${
@@ -485,6 +566,12 @@ function renderMarkdown(report) {
         ["Verifier false passes", summary.verifierPolicy.falsePassCount],
         ["Verifier false rejects", summary.verifierPolicy.falseRejectCount],
         ["Verifier capture issues", summary.verifierPolicy.captureIssueCount],
+        ["Replay verifier rows", summary.verifierReplayPolicy.rows],
+        ["Replay verifier evaluated", summary.verifierReplayPolicy.evaluatedRows],
+        ["Replay verifier accuracy", summary.verifierReplayPolicy.accuracy ?? ""],
+        ["Replay verifier false passes", summary.verifierReplayPolicy.falsePassCount],
+        ["Replay verifier false rejects", summary.verifierReplayPolicy.falseRejectCount],
+        ["Replay verifier capture issues", summary.verifierReplayPolicy.captureIssueCount],
         ["Exact label accuracy", summary.exact.accuracy ?? ""],
         ["First result p50", `${summary.latency.firstResultLatencyMs.p50 ?? ""} ms`],
         ["First result p90", `${summary.latency.firstResultLatencyMs.p90 ?? ""} ms`],
@@ -524,6 +611,12 @@ function renderMarkdown(report) {
   lines.push(JSON.stringify(summary.verifierPolicy.matrix, null, 2));
   lines.push("```");
   lines.push("");
+  lines.push("Replay verifier policy:");
+  lines.push("");
+  lines.push("```json");
+  lines.push(JSON.stringify(summary.verifierReplayPolicy.matrix, null, 2));
+  lines.push("```");
+  lines.push("");
   lines.push("Verifier statuses:");
   lines.push("");
   lines.push("```json");
@@ -546,6 +639,30 @@ function renderMarkdown(report) {
   lines.push("");
   lines.push("```json");
   lines.push(JSON.stringify(summary.byVerifierVersion, null, 2));
+  lines.push("```");
+  lines.push("");
+  lines.push("Replay verifier statuses:");
+  lines.push("");
+  lines.push("```json");
+  lines.push(JSON.stringify(summary.byReplayVerifierStatus, null, 2));
+  lines.push("```");
+  lines.push("");
+  lines.push("Replay verifier reasons:");
+  lines.push("");
+  lines.push("```json");
+  lines.push(JSON.stringify(summary.byReplayVerifierReason, null, 2));
+  lines.push("```");
+  lines.push("");
+  lines.push("Replay verifier policies:");
+  lines.push("");
+  lines.push("```json");
+  lines.push(JSON.stringify(summary.byReplayVerifierPolicy, null, 2));
+  lines.push("```");
+  lines.push("");
+  lines.push("Replay verifier versions:");
+  lines.push("");
+  lines.push("```json");
+  lines.push(JSON.stringify(summary.byReplayVerifierVersion, null, 2));
   lines.push("```");
   lines.push("");
   lines.push("Audio upload statuses:");
@@ -580,6 +697,18 @@ function renderMarkdown(report) {
   lines.push("");
   lines.push(renderVerifierRows(summary.verifierCaptureIssues));
   lines.push("");
+  lines.push("## Replay Verifier False Passes");
+  lines.push("");
+  lines.push(renderVerifierRows(summary.replayVerifierFalsePasses, { replay: true }));
+  lines.push("");
+  lines.push("## Replay Verifier False Rejects");
+  lines.push("");
+  lines.push(renderVerifierRows(summary.replayVerifierFalseRejects, { replay: true }));
+  lines.push("");
+  lines.push("## Replay Verifier Capture Issues");
+  lines.push("");
+  lines.push(renderVerifierRows(summary.replayVerifierCaptureIssues, { replay: true }));
+  lines.push("");
   lines.push("## Exact Mismatches");
   lines.push("");
   lines.push(renderTopRows(summary.exactMismatches));
@@ -595,6 +724,9 @@ function stripHeavyRows(summary) {
     verifierFalsePasses: summary.verifierFalsePasses.map(compactRow),
     verifierFalseRejects: summary.verifierFalseRejects.map(compactRow),
     verifierCaptureIssues: summary.verifierCaptureIssues.map(compactRow),
+    replayVerifierFalsePasses: summary.replayVerifierFalsePasses.map(compactRow),
+    replayVerifierFalseRejects: summary.replayVerifierFalseRejects.map(compactRow),
+    replayVerifierCaptureIssues: summary.replayVerifierCaptureIssues.map(compactRow),
     exactMismatches: summary.exactMismatches.map(compactRow),
   };
 }
@@ -612,6 +744,11 @@ function printSummary(report) {
   if (summary.verifierPolicy.rows > 0) {
     console.log(
       `Verifier: ${summary.verifierPolicy.correct}/${summary.verifierPolicy.evaluatedRows} (${summary.verifierPolicy.accuracy}) falsePass=${summary.verifierPolicy.falsePassCount} falseReject=${summary.verifierPolicy.falseRejectCount} capture=${summary.verifierPolicy.captureIssueCount}`,
+    );
+  }
+  if (summary.verifierReplayPolicy.rows > 0) {
+    console.log(
+      `Replay verifier: ${summary.verifierReplayPolicy.correct}/${summary.verifierReplayPolicy.evaluatedRows} (${summary.verifierReplayPolicy.accuracy}) falsePass=${summary.verifierReplayPolicy.falsePassCount} falseReject=${summary.verifierReplayPolicy.falseRejectCount} capture=${summary.verifierReplayPolicy.captureIssueCount}`,
     );
   }
   console.log(
